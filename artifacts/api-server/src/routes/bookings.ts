@@ -258,6 +258,8 @@ router.post("/bookings/:id/transition", async (req, res) => {
       try {
         await decrementOnCompletion(existing.subscriptionId);
         await recomputeNextDueDate(existing.subscriptionId);
+        const { recomputeServicesRemaining } = await import("../subscriptions/service");
+        await recomputeServicesRemaining(existing.subscriptionId);
       } catch (subErr) {
         req.log.error({ subErr, subscriptionId: existing.subscriptionId }, "Subscription update on completion failed");
       }

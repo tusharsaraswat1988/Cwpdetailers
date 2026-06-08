@@ -641,8 +641,13 @@ paths:
                     type: integer
                   missed:
                     type: integer
+                  missedThisWeek:
+                    type: integer
                   total:
                     type: integer
+                  churnRate:
+                    type: number
+                    description: "Churn rate percentage over last 30 days"
 
   /subscriptions/daily-tick:
     post:

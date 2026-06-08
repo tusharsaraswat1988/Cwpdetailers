@@ -144,6 +144,7 @@ export default function AdminSubscriptions() {
                 <span className="bg-amber-500/10 text-amber-600 px-2 py-1 rounded-md">{health.expiring} expiring</span>
                 <span className="bg-red-500/10 text-red-600 px-2 py-1 rounded-md">{health.missed} missed</span>
                 <span className="bg-muted px-2 py-1 rounded-md">{health.expired} expired</span>
+                <span className="bg-destructive/10 text-destructive px-2 py-1 rounded-md">{health.churnRate ?? 0}% churn</span>
               </div>
             )}
           </div>

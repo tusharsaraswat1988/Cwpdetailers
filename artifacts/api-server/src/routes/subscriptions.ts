@@ -138,26 +138,54 @@ router.get("/subscriptions/health", async (req, res) => {
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
     const where = conditions.length ? and(...conditions) : undefined;
 
-    const [active, paused, expiring, expired, missed, totalResult] = await Promise.all([
+    const sevenDaysLater = new Date();
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [active, paused, expiring, expired, missed, missedThisWeek, totalResult, churnedCount, activeThirtyDaysAgo] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "active"), ...(where ? [where] : []))),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "paused"), ...(where ? [where] : []))),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
         eq(subscriptionsTable.status, "active"),
-        sql`${subscriptionsTable.endDate}::date <= ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`,
+        sql`${subscriptionsTable.endDate}::date <= ${sevenDaysLater.toISOString().split('T')[0]}`,
         ...(where ? [where] : []),
       )),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "expired"), ...(where ? [where] : []))),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "missed"), ...(where ? [where] : []))),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
+        eq(subscriptionsTable.status, "missed"),
+        sql`${subscriptionsTable.updatedAt}::date >= ${sevenDaysAgo.toISOString().split('T')[0]}`,
+        ...(where ? [where] : []),
+      )),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(where ?? sql`true`),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
+        eq(subscriptionsTable.status, "cancelled"),
+        sql`${subscriptionsTable.cancelledAt}::date >= ${thirtyDaysAgo.toISOString().split('T')[0]}`,
+        ...(where ? [where] : []),
+      )),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
+        sql`${subscriptionsTable.createdAt}::date < ${thirtyDaysAgo.toISOString().split('T')[0]}`,
+        ...(where ? [where] : []),
+      )),
     ]);
 
+    const activeCount = Number(active[0]?.count ?? 0);
+    const churned = Number(churnedCount[0]?.count ?? 0);
+    const active30 = Number(activeThirtyDaysAgo[0]?.count ?? 0);
+    const churnRate = active30 > 0 ? Math.round((churned / active30) * 1000) / 10 : 0;
+
     return res.json({
-      active: Number(active[0]?.count ?? 0),
+      active: activeCount,
       paused: Number(paused[0]?.count ?? 0),
       expiring: Number(expiring[0]?.count ?? 0),
       expired: Number(expired[0]?.count ?? 0),
       missed: Number(missed[0]?.count ?? 0),
+      missedThisWeek: Number(missedThisWeek[0]?.count ?? 0),
       total: Number(totalResult[0]?.count ?? 0),
+      churnRate,
     });
   } catch (err) {
     req.log.error({ err }, "Subscription health error");
@@ -202,7 +230,10 @@ router.patch("/subscriptions/:id", async (req, res) => {
     if (!existing || !rowInScope(req, existing)) {
       return res.status(404).json({ error: "Subscription not found" });
     }
-    const { status, endDate, nextServiceDate, nextDueDate, price, totalServices, servicesUsed, servicesRemaining, graceMinutes, notes } = req.body;
+    const { status, endDate, nextServiceDate, nextDueDate, price, totalServices, servicesUsed, graceMinutes, notes } = req.body;
+    if (req.body.servicesRemaining !== undefined) {
+      return res.status(400).json({ error: "servicesRemaining cannot be set directly; it is computed from totalServices and servicesUsed" });
+    }
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (status !== undefined) updateData.status = status;
     if (endDate !== undefined) updateData.endDate = endDate;
@@ -211,10 +242,12 @@ router.patch("/subscriptions/:id", async (req, res) => {
     if (price !== undefined) updateData.price = price.toString();
     if (totalServices !== undefined) updateData.totalServices = totalServices;
     if (servicesUsed !== undefined) updateData.servicesUsed = servicesUsed;
-    if (servicesRemaining !== undefined) updateData.servicesRemaining = servicesRemaining;
     if (graceMinutes !== undefined) updateData.graceMinutes = graceMinutes;
     if (notes !== undefined) updateData.notes = notes;
     const [sub] = await db.update(subscriptionsTable).set(updateData).where(eq(subscriptionsTable.id, id)).returning();
+    // Recompute servicesRemaining after update to maintain invariant
+    const { recomputeServicesRemaining } = await import("../subscriptions/service");
+    await recomputeServicesRemaining(id);
     return res.json(sub);
   } catch (err) {
     req.log.error({ err }, "Update subscription error");

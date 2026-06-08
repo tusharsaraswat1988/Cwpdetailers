@@ -3,7 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const bookingStatusEnum = pgEnum("booking_status", [
-  "pending", "confirmed", "scheduled", "en_route", "in_progress", "completed", "cancelled", "rescheduled",
+  "pending", "confirmed", "scheduled", "en_route", "in_progress", "completed", "cancelled", "rescheduled", "missed",
 ]);
 export const bookingServiceTypeEnum = pgEnum("booking_service_type", [
   "car_wash", "detailing", "solar_cleaning", "one_time_wash", "daily_cleaning", "subscription_wash", "pickup_drop", "emergency",

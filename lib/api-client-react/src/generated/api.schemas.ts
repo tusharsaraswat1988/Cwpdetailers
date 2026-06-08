@@ -1205,7 +1205,10 @@ export type GetSubscriptionHealth200 = {
   expiring?: number;
   expired?: number;
   missed?: number;
+  missedThisWeek?: number;
   total?: number;
+  /** Churn rate percentage over last 30 days */
+  churnRate?: number;
 };
 
 export type RunDailyTick200 = { [key: string]: unknown };

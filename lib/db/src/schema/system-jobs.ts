@@ -12,6 +12,7 @@ export const systemJobsTable = pgTable("system_jobs", {
   runAt: timestamp("run_at"),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
+  lastRunAt: timestamp("last_run_at"),
   error: text("error"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

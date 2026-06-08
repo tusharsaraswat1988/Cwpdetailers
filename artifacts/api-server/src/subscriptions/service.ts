@@ -1,7 +1,9 @@
 import { db } from "@workspace/db";
-import { subscriptionsTable, bookingsTable, systemJobsTable } from "@workspace/db";
+import { subscriptionsTable, bookingsTable, systemJobsTable, notificationsTable } from "@workspace/db";
 import { eq, and, sql, lte, gte, isNull, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
+
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Decrement subscription counters when a booking completes.
@@ -59,50 +61,87 @@ export async function recomputeNextDueDate(subscriptionId: number) {
 }
 
 /**
- * Mark subscriptions as missed if a scheduled booking was due and not completed
- * within the grace period. This is the core of the missed-service alert.
+ * Recompute servicesRemaining from totalServices and servicesUsed.
+ * Prevents invariant drift by always deriving the remaining count.
+ */
+export async function recomputeServicesRemaining(subscriptionId: number) {
+  const [sub] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
+  if (!sub || sub.totalServices == null) return;
+  const remaining = Math.max(0, sub.totalServices - (sub.servicesUsed ?? 0));
+  await db.update(subscriptionsTable)
+    .set({ servicesRemaining: remaining, updatedAt: new Date() })
+    .where(eq(subscriptionsTable.id, subscriptionId));
+}
+
+/**
+ * Mark missed bookings. Bookings with status=scheduled and scheduled_date
+ * past the grace period are marked missed, and notifications are created.
+ * Also updates subscription status to missed if all active bookings are missed.
  */
 export async function markMissed(todayStr?: string) {
   const today = todayStr ? new Date(todayStr) : new Date();
   const todayStrYMD = today.toISOString().split("T")[0];
 
-  // Find active subscriptions whose nextDueDate has passed and no completed booking
-  // within grace period. We check bookings that are either completed after due+grace
-  // or still pending/scheduled.
-  const missedSubs = await db.select({
-    id: subscriptionsTable.id,
-    nextDueDate: subscriptionsTable.nextDueDate,
-    graceMinutes: subscriptionsTable.graceMinutes,
-  }).from(subscriptionsTable)
+  // Find scheduled bookings whose scheduled_date has passed grace period
+  const graceHours = 24; // default 24h grace for booking-level
+  const missedBookings = await db.select({
+    id: bookingsTable.id,
+    subscriptionId: bookingsTable.subscriptionId,
+    customerId: bookingsTable.customerId,
+    scheduledDate: bookingsTable.scheduledDate,
+    branchId: bookingsTable.branchId,
+    companyId: bookingsTable.companyId,
+    franchiseeId: bookingsTable.franchiseeId,
+  }).from(bookingsTable)
     .where(and(
-      eq(subscriptionsTable.status, "active"),
-      isNotNull(subscriptionsTable.nextDueDate),
-      lte(subscriptionsTable.nextDueDate, todayStrYMD),
+      eq(bookingsTable.status, "scheduled"),
+      lte(bookingsTable.scheduledDate, todayStrYMD),
     ));
 
   let updated = 0;
-  for (const sub of missedSubs) {
-    const graceDays = Math.ceil((sub.graceMinutes ?? 60) / 1440);
-    const graceDeadline = new Date(sub.nextDueDate!);
-    graceDeadline.setDate(graceDeadline.getDate() + graceDays);
+  const notifiedSubIds = new Set<number>();
+
+  for (const b of missedBookings) {
+    const graceDeadline = new Date(b.scheduledDate!);
+    graceDeadline.setDate(graceDeadline.getDate() + 1); // 24h grace
 
     if (today > graceDeadline) {
-      // Check if any completed booking exists after nextDueDate
-      const [completedAfter] = await db.select({ id: bookingsTable.id })
-        .from(bookingsTable)
-        .where(and(
-          eq(bookingsTable.subscriptionId, sub.id),
-          eq(bookingsTable.status, "completed"),
-          gte(bookingsTable.scheduledDate, sub.nextDueDate!),
-        ))
-        .limit(1);
+      await db.update(bookingsTable)
+        .set({ status: "missed", updatedAt: new Date() })
+        .where(eq(bookingsTable.id, b.id));
+      updated++;
 
-      if (!completedAfter) {
-        await db.update(subscriptionsTable)
-          .set({ status: "missed", updatedAt: new Date() })
-          .where(eq(subscriptionsTable.id, sub.id));
-        updated++;
+      // Create notification for branch admin
+      if (b.companyId != null) {
+        await db.insert(notificationsTable).values({
+          title: "Missed service",
+          message: `Booking #${b.id} was missed (scheduled ${b.scheduledDate}).`,
+          type: "subscription_expiry",
+          channel: "in_app",
+          companyId: b.companyId,
+          branchId: b.branchId ?? null,
+          franchiseeId: b.franchiseeId ?? null,
+        });
       }
+
+      if (b.subscriptionId) notifiedSubIds.add(b.subscriptionId);
+    }
+  }
+
+  // Update subscription status to missed if any booking was missed
+  for (const subId of notifiedSubIds) {
+    const [activeBooking] = await db.select({ id: bookingsTable.id })
+      .from(bookingsTable)
+      .where(and(
+        eq(bookingsTable.subscriptionId, subId),
+        eq(bookingsTable.status, "scheduled"),
+      ))
+      .limit(1);
+
+    if (!activeBooking) {
+      await db.update(subscriptionsTable)
+        .set({ status: "missed", updatedAt: new Date() })
+        .where(eq(subscriptionsTable.id, subId));
     }
   }
 
@@ -111,24 +150,28 @@ export async function markMissed(todayStr?: string) {
 }
 
 /**
- * Send renewal reminders for subscriptions expiring within 7 days that haven't
- * had a reminder sent yet. This logs a notification; integrate WhatsApp API for live dispatch.
+ * Send renewal reminders for subscriptions expiring within reminderDays.
+ * Creates notification records for customer + admin.
  */
-export async function sendRenewalReminders(todayStr?: string) {
+export async function sendRenewalReminders(todayStr?: string, reminderDays = 7) {
   const today = todayStr ? new Date(todayStr) : new Date();
-  const sevenDaysLater = new Date(today);
-  sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
-  const sevenStr = sevenDaysLater.toISOString().split("T")[0];
+  const reminderEnd = new Date(today);
+  reminderEnd.setDate(reminderEnd.getDate() + reminderDays);
+  const endStr = reminderEnd.toISOString().split("T")[0];
+  const todayStrYMD = today.toISOString().split("T")[0];
 
   const targets = await db.select({
     id: subscriptionsTable.id,
     customerId: subscriptionsTable.customerId,
     endDate: subscriptionsTable.endDate,
+    companyId: subscriptionsTable.companyId,
+    branchId: subscriptionsTable.branchId,
+    franchiseeId: subscriptionsTable.franchiseeId,
   }).from(subscriptionsTable)
     .where(and(
       eq(subscriptionsTable.status, "active"),
-      lte(subscriptionsTable.endDate, sevenStr),
-      gte(subscriptionsTable.endDate, today.toISOString().split("T")[0]),
+      lte(subscriptionsTable.endDate, endStr),
+      gte(subscriptionsTable.endDate, todayStrYMD),
       isNull(subscriptionsTable.renewalReminderSentAt),
     ));
 
@@ -138,9 +181,34 @@ export async function sendRenewalReminders(todayStr?: string) {
       .set({ renewalReminderSentAt: new Date(), updatedAt: new Date() })
       .where(eq(subscriptionsTable.id, sub.id));
     sent++;
+
+    // Create notification for customer
+    await db.insert(notificationsTable).values({
+      title: "Subscription renewal reminder",
+      message: `Your subscription #${sub.id} expires on ${sub.endDate}. Please renew to continue service.`,
+      type: "subscription_expiry",
+      channel: "in_app",
+      userId: sub.customerId,
+      companyId: sub.companyId,
+      branchId: sub.branchId ?? null,
+      franchiseeId: sub.franchiseeId ?? null,
+    });
+
+    // Create notification for admin
+    if (sub.companyId != null) {
+      await db.insert(notificationsTable).values({
+        title: "Subscription expiring soon",
+        message: `Subscription #${sub.id} for customer #${sub.customerId} expires on ${sub.endDate}.`,
+        type: "subscription_expiry",
+        channel: "in_app",
+        companyId: sub.companyId,
+        branchId: sub.branchId ?? null,
+        franchiseeId: sub.franchiseeId ?? null,
+      });
+    }
   }
 
-  logger.info({ sent, periodEnd: sevenStr }, "Renewal reminders dispatched");
+  logger.info({ sent, periodEnd: endStr }, "Renewal reminders dispatched");
   return sent;
 }
 
@@ -151,17 +219,17 @@ export async function sendRenewalReminders(todayStr?: string) {
 export async function runDailyTick(todayStr?: string) {
   const today = todayStr ?? new Date().toISOString().split("T")[0];
 
-  // Idempotency check
+  // Idempotency check: last successful run within 6 hours
   const [existing] = await db.select().from(systemJobsTable)
     .where(and(
       eq(systemJobsTable.jobType, "daily_tick"),
-      sql`${systemJobsTable.createdAt}::date = ${today}::date`,
       eq(systemJobsTable.status, "success"),
+      sql`${systemJobsTable.lastRunAt} >= ${new Date(Date.now() - SIX_HOURS_MS)}`,
     ))
     .limit(1);
 
   if (existing) {
-    logger.info({ today }, "Daily tick already ran today");
+    logger.info({ today }, "Daily tick already ran within 6 hours");
     return { skipped: true };
   }
 
@@ -169,6 +237,7 @@ export async function runDailyTick(todayStr?: string) {
     jobType: "daily_tick",
     status: "running",
     runAt: new Date(),
+    lastRunAt: new Date(),
     payload: { date: today },
   }).returning();
 
@@ -186,14 +255,14 @@ export async function runDailyTick(todayStr?: string) {
       .returning();
 
     await db.update(systemJobsTable)
-      .set({ status: "success", completedAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length } })
+      .set({ status: "success", completedAt: new Date(), lastRunAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length } })
       .where(eq(systemJobsTable.id, job.id));
 
     logger.info({ today, missedCount, reminderCount, expiredCount: expired.length }, "Daily tick completed");
     return { missedCount, reminderCount, expiredCount: expired.length };
   } catch (err) {
     await db.update(systemJobsTable)
-      .set({ status: "failed", error: String(err), completedAt: new Date() })
+      .set({ status: "failed", error: String(err), completedAt: new Date(), lastRunAt: new Date() })
       .where(eq(systemJobsTable.id, job.id));
     logger.error({ err, today }, "Daily tick failed");
     throw err;

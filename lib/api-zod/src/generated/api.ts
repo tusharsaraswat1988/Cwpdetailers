@@ -1055,7 +1055,12 @@ export const GetSubscriptionHealthResponse = zod.object({
   expiring: zod.number().optional(),
   expired: zod.number().optional(),
   missed: zod.number().optional(),
+  missedThisWeek: zod.number().optional(),
   total: zod.number().optional(),
+  churnRate: zod
+    .number()
+    .optional()
+    .describe("Churn rate percentage over last 30 days"),
 });
 
 /**

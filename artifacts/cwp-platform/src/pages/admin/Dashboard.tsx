@@ -108,6 +108,9 @@ export default function AdminDashboard() {
                   <span className="flex items-center gap-1 bg-muted text-muted-foreground px-2 py-1 rounded-md">
                     <Circle size={8} fill="currentColor" /> {health.expired} expired
                   </span>
+                  <span className="flex items-center gap-1 bg-destructive/10 text-destructive px-2 py-1 rounded-md">
+                    <TrendingUp size={8} /> {health.churnRate ?? 0}% churn
+                  </span>
                   <Link href="/admin/subscriptions" className="text-primary hover:underline ml-1">View all</Link>
                 </div>
               </div>
