@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { subscriptionsTable, bookingsTable, systemJobsTable, notificationsTable } from "@workspace/db";
+import { subscriptionsTable, bookingsTable, systemJobsTable, notificationsTable, customersTable } from "@workspace/db";
 import { eq, and, sql, lte, gte, isNull, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
@@ -74,6 +74,17 @@ export async function recomputeServicesRemaining(subscriptionId: number) {
 }
 
 /**
+ * Resolve the userId linked to a customer. Returns undefined if not found.
+ */
+async function resolveCustomerUserId(customerId: number): Promise<number | undefined> {
+  const [customer] = await db.select({ userId: customersTable.userId })
+    .from(customersTable)
+    .where(eq(customersTable.id, customerId))
+    .limit(1);
+  return customer?.userId ?? undefined;
+}
+
+/**
  * Mark missed bookings. Bookings with status=scheduled and scheduled_date
  * past the grace period are marked missed, and notifications are created.
  * Also updates subscription status to missed if all active bookings are missed.
@@ -116,7 +127,24 @@ export async function markMissed() {
         .where(eq(bookingsTable.id, b.id));
       updated++;
 
-      // Create notification for branch admin
+      // Resolve customer userId for notification targeting
+      const customerUserId = await resolveCustomerUserId(b.customerId);
+
+      // Create notification for customer (if linked to a user)
+      if (customerUserId != null) {
+        await db.insert(notificationsTable).values({
+          title: "Missed service",
+          message: `Your booking #${b.id} was missed (scheduled ${b.scheduledDate} ${b.scheduledTime ?? ""}, grace ${graceMins}m).`,
+          type: "subscription_expiry",
+          channel: "in_app",
+          userId: customerUserId,
+          companyId: b.companyId,
+          branchId: b.branchId ?? null,
+          franchiseeId: b.franchiseeId ?? null,
+        });
+      }
+
+      // Create notification for branch admin (company/branch scoped)
       if (b.companyId != null) {
         await db.insert(notificationsTable).values({
           title: "Missed service",
@@ -187,19 +215,24 @@ export async function sendRenewalReminders(reminderDays = 7) {
       .where(eq(subscriptionsTable.id, sub.id));
     sent++;
 
-    // Create notification for customer
-    await db.insert(notificationsTable).values({
-      title: "Subscription renewal reminder",
-      message: `Your subscription #${sub.id} expires on ${sub.endDate}. Please renew to continue service.`,
-      type: "subscription_expiry",
-      channel: "in_app",
-      userId: sub.customerId,
-      companyId: sub.companyId,
-      branchId: sub.branchId ?? null,
-      franchiseeId: sub.franchiseeId ?? null,
-    });
+    // Resolve customer userId for proper notification targeting
+    const customerUserId = await resolveCustomerUserId(sub.customerId);
 
-    // Create notification for admin
+    // Create notification for customer (if linked to a user)
+    if (customerUserId != null) {
+      await db.insert(notificationsTable).values({
+        title: "Subscription renewal reminder",
+        message: `Your subscription #${sub.id} expires on ${sub.endDate}. Please renew to continue service.`,
+        type: "subscription_expiry",
+        channel: "in_app",
+        userId: customerUserId,
+        companyId: sub.companyId,
+        branchId: sub.branchId ?? null,
+        franchiseeId: sub.franchiseeId ?? null,
+      });
+    }
+
+    // Create notification for admin (company/branch scoped)
     if (sub.companyId != null) {
       await db.insert(notificationsTable).values({
         title: "Subscription expiring soon",

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { notificationsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, or, desc, isNull } from "drizzle-orm";
 
 const router = Router();
 
@@ -9,6 +9,10 @@ const router = Router();
  * Notifications are per-user. The current user can only read and mark their
  * own notifications; super-admins can target a specific userId via query
  * param or create on behalf of others.
+ *
+ * Admin/branch users can also see notifications scoped to their
+ * company/branch (without a userId), so missed-service alerts and
+ * renewal reminders are visible to them.
  */
 
 router.get("/notifications", async (req, res) => {
@@ -16,12 +20,33 @@ router.get("/notifications", async (req, res) => {
     const { userId, isRead } = req.query as Record<string, string>;
     const conditions = [];
 
-    // Non-super-admins are always pinned to their own userId, regardless of
-    // what they pass in the query string.
     if (req.scope?.isSuperAdmin) {
+      // Super-admins can query any userId, or all notifications if none given
       if (userId) conditions.push(eq(notificationsTable.userId, parseInt(userId)));
     } else if (req.user) {
-      conditions.push(eq(notificationsTable.userId, req.user.id));
+      // Regular users: see their own notifications OR company/branch-scoped
+      // notifications that are not tied to a specific user
+      const userPred = eq(notificationsTable.userId, req.user.id);
+      const companyPred = req.user.companyId
+        ? eq(notificationsTable.companyId, req.user.companyId)
+        : undefined;
+      const branchPred = req.user.branchId
+        ? eq(notificationsTable.branchId, req.user.branchId)
+        : undefined;
+      // Admin roles: include user notifications + scoped admin notifications
+      if (req.user.role === "admin" || req.user.role === "manager") {
+        const adminPreds: Array<ReturnType<typeof eq | typeof and>> = [userPred];
+        if (companyPred) {
+          adminPreds.push(and(companyPred, isNull(notificationsTable.userId)));
+        }
+        if (branchPred) {
+          adminPreds.push(and(branchPred, isNull(notificationsTable.userId)));
+        }
+        conditions.push(or(...adminPreds));
+      } else {
+        // Non-admin: only their own notifications
+        conditions.push(userPred);
+      }
     } else {
       return res.status(401).json({ error: "Authentication required" });
     }

@@ -255,14 +255,13 @@ router.post("/bookings/:id/transition", async (req, res) => {
     });
 
     if (toStatus === "completed" && existing.subscriptionId) {
-      try {
-        await decrementOnCompletion(existing.subscriptionId);
-        await recomputeNextDueDate(existing.subscriptionId);
-        const { recomputeServicesRemaining } = await import("../subscriptions/service");
-        await recomputeServicesRemaining(existing.subscriptionId);
-      } catch (subErr) {
-        req.log.error({ subErr, subscriptionId: existing.subscriptionId }, "Subscription update on completion failed");
-      }
+      // These updates must succeed for data consistency. If they fail, the
+      // booking is still marked completed but the subscription counters are
+      // out of sync. We throw so the caller can retry.
+      await decrementOnCompletion(existing.subscriptionId);
+      await recomputeNextDueDate(existing.subscriptionId);
+      const { recomputeServicesRemaining } = await import("../subscriptions/service");
+      await recomputeServicesRemaining(existing.subscriptionId);
     }
 
     return res.json(booking);
