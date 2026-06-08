@@ -3,7 +3,8 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, Users, CreditCard, Calendar, AlertCircle, Star, IndianRupee, Activity } from "lucide-react";
+import { TrendingUp, Users, CreditCard, Calendar, AlertCircle, Star, IndianRupee, Activity, Funnel, Clock, BarChart3 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 
@@ -32,11 +33,27 @@ function StatCard({ title, value, subtitle, icon: Icon, color = "text-primary", 
   );
 }
 
+async function fetchLeadStats(): Promise<{ total: number; converted: number; conversionRate: number; bySource: { source: string; count: number }[] }> {
+  const res = await fetch("/api/leads/stats");
+  if (!res.ok) throw new Error("Failed");
+  return res.json();
+}
+async function fetchFollowUps(): Promise<any[]> {
+  const res = await fetch("/api/leads/follow-ups");
+  if (!res.ok) throw new Error("Failed");
+  return res.json();
+}
+
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetDashboardStats({ period: "month" }, { query: { queryKey: getGetDashboardStatsQueryKey({ period: "month" }) } });
   const { data: expiring } = useGetExpiringSoonSubscriptions();
+  const { data: leadStats } = useQuery({ queryKey: ["leadStats"], queryFn: fetchLeadStats });
+  const { data: followUps } = useQuery({ queryKey: ["leadFollowUps"], queryFn: fetchFollowUps });
 
   const fmt = (n: number) => n >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : `₹${n.toLocaleString("en-IN")}`;
+  const sourceLabel: Record<string, string> = {
+    whatsapp: "WhatsApp", instagram: "Instagram", facebook: "Facebook", website: "Website", call: "Call", google: "Google", walk_in: "Walk-in", referral: "Referral",
+  };
 
   return (
     <AdminLayout>
@@ -63,6 +80,65 @@ export default function AdminDashboard() {
           <StatCard title="Active Jobs" value={stats?.activeJobs ?? "--"} icon={Activity} loading={isLoading} />
           <StatCard title="Open Complaints" value={stats?.openComplaints ?? "--"} icon={AlertCircle} color="text-amber-500" loading={isLoading} />
           <StatCard title="Repeat Customer %" value={`${stats?.repeatCustomerPercent ?? 0}%`} icon={Star} loading={isLoading} />
+        </div>
+
+        {/* Lead summary strip */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <BarChart3 size={14} className="text-primary" />Lead Source Analytics
+              </CardTitle>
+              <Link href="/admin/leads" className="text-xs text-primary hover:underline">View pipeline</Link>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-center gap-3">
+                {leadStats?.bySource?.map(s => (
+                  <div key={s.source} className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
+                    <div className="w-2 h-2 rounded-full bg-primary" />
+                    <span className="text-sm font-medium">{sourceLabel[s.source] || s.source}</span>
+                    <span className="text-sm text-muted-foreground">{s.count}</span>
+                  </div>
+                )) ?? (
+                  <p className="text-sm text-muted-foreground">No lead data yet</p>
+                )}
+                <div className="ml-auto flex items-center gap-4">
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-primary">{leadStats?.total ?? 0}</p>
+                    <p className="text-[10px] text-muted-foreground">Total Leads</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-green-400">{leadStats?.conversionRate ?? 0}%</p>
+                    <p className="text-[10px] text-muted-foreground">Conversion</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Clock size={14} className="text-amber-500" />Follow-ups
+              </CardTitle>
+              <Link href="/admin/leads" className="text-xs text-primary hover:underline">View all</Link>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {(followUps ?? []).length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-4">No upcoming follow-ups</p>
+              ) : (
+                (followUps ?? []).slice(0, 5).map(l => (
+                  <div key={l.id} className="flex items-center justify-between py-1 border-b border-border last:border-0">
+                    <div>
+                      <p className="text-sm font-medium">{l.name}</p>
+                      <p className="text-xs text-muted-foreground">{l.phone}</p>
+                    </div>
+                    <span className="text-xs text-amber-500">{l.nextFollowUpAt ? new Date(l.nextFollowUpAt).toLocaleDateString("en-IN") : "—"}</span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Charts row */}

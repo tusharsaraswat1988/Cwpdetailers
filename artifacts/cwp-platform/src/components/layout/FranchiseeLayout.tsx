@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Calendar, UserCog, LogOut, Sun,
-  ChevronRight, Menu, UserX, Bell,
+  ChevronRight, Menu, UserX, Bell, Funnel,
 } from "lucide-react";
 
 type NavItem = {
@@ -17,6 +17,7 @@ type NavItem = {
 
 const ALL_NAV: NavItem[] = [
   { href: "/franchisee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/franchisee/leads", label: "Leads", icon: Funnel, permission: { resource: "leads", action: "view" } },
   { href: "/franchisee/bookings", label: "Booking Requests", icon: Calendar, permission: { resource: "bookings", action: "view" } },
   { href: "/franchisee/staff", label: "My Staff", icon: UserCog, permission: { resource: "staff", action: "view" } },
   { href: "/franchisee/churned", label: "Churned Customers", icon: UserX, permission: { resource: "churned", action: "view" } },

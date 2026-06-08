@@ -15,6 +15,7 @@ import analyticsRouter from "./analytics";
 import notificationsRouter from "./notifications";
 import franchiseesRouter from "./franchisees";
 import churnedRouter from "./churned";
+import leadsRouter from "./leads";
 import { guardResource } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -75,6 +76,14 @@ router.use(
     { match: /\/bulk-message$/, method: "POST", action: "edit" },
   ]),
   churnedRouter,
+);
+router.use(
+  guardResource("leads", [
+    { match: /\/convert$/, method: "POST", action: "edit" },
+    { match: /\/activities$/, method: "POST", action: "edit" },
+    { match: /\/ingest$/, method: "POST", action: "create" },
+  ]),
+  leadsRouter,
 );
 
 export default router;

@@ -24,6 +24,7 @@ import AdminFranchisees from "@/pages/admin/Franchisees";
 import AdminStaffApproval from "@/pages/admin/StaffApproval";
 import AdminCredentials from "@/pages/admin/Credentials";
 import AdminChurnedCustomers from "@/pages/admin/ChurnedCustomers";
+import AdminLeads from "@/pages/admin/Leads";
 
 import CustomerDashboard from "@/pages/customer/Dashboard";
 import BookService from "@/pages/customer/BookService";
@@ -40,6 +41,7 @@ import FranchiseeDashboard from "@/pages/franchisee/Dashboard";
 import FranchiseeBookings from "@/pages/franchisee/Bookings";
 import FranchiseeStaff from "@/pages/franchisee/Staff";
 import FranchiseeChurned from "@/pages/franchisee/ChurnedCustomers";
+import FranchiseeLeads from "@/pages/franchisee/Leads";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +98,7 @@ function Router() {
       <Route path="/admin/franchisees" component={() => <ProtectedRoute component={AdminFranchisees} roles={["admin", "superadmin"]} permission={{ resource: "franchisees", action: "view" }} />} />
       <Route path="/admin/credentials" component={() => <ProtectedRoute component={AdminCredentials} roles={["admin", "superadmin"]} permission={{ resource: "staff", action: "approve" }} />} />
       <Route path="/admin/churned" component={() => <ProtectedRoute component={AdminChurnedCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "churned", action: "view" }} />} />
+      <Route path="/admin/leads" component={() => <ProtectedRoute component={AdminLeads} roles={["admin", "superadmin", "manager"]} permission={{ resource: "leads", action: "view" }} />} />
 
       {/* Customer */}
       <Route path="/customer/dashboard" component={() => <ProtectedRoute component={CustomerDashboard} roles={["customer"]} />} />
@@ -115,6 +118,7 @@ function Router() {
       <Route path="/franchisee/bookings" component={() => <ProtectedRoute component={FranchiseeBookings} roles={["franchisee"]} />} />
       <Route path="/franchisee/staff" component={() => <ProtectedRoute component={FranchiseeStaff} roles={["franchisee"]} />} />
       <Route path="/franchisee/churned" component={() => <ProtectedRoute component={FranchiseeChurned} roles={["franchisee"]} />} />
+      <Route path="/franchisee/leads" component={() => <ProtectedRoute component={FranchiseeLeads} roles={["franchisee"]} permission={{ resource: "leads", action: "view" }} />} />
 
       <Route component={NotFound} />
     </Switch>

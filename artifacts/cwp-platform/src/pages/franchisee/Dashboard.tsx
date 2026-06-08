@@ -1,7 +1,20 @@
 import FranchiseeLayout from "@/components/layout/FranchiseeLayout";
 import { useAuth } from "@/lib/auth";
 import { useListBookings, useListStaff } from "@workspace/api-client-react";
-import { Calendar, UserCog, CheckCircle, Clock, AlertCircle, TrendingUp } from "lucide-react";
+import { Calendar, UserCog, CheckCircle, Clock, AlertCircle, TrendingUp, Funnel, ArrowRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+
+async function fetchLeadStats(): Promise<{ total: number; converted: number; conversionRate: number }> {
+  const res = await fetch("/api/leads/stats");
+  if (!res.ok) throw new Error("Failed");
+  return res.json();
+}
+async function fetchFollowUps(): Promise<any[]> {
+  const res = await fetch("/api/leads/follow-ups");
+  if (!res.ok) throw new Error("Failed");
+  return res.json();
+}
 
 export default function FranchiseeDashboard() {
   const { user } = useAuth();
@@ -12,6 +25,8 @@ export default function FranchiseeDashboard() {
   const { data: staff = [] } = useListStaff({ branchId });
   const bookings = pendingResp?.data ?? [];
   const allBookings = allResp?.data ?? [];
+  const { data: leadStats } = useQuery({ queryKey: ["franchisee-leadStats"], queryFn: fetchLeadStats });
+  const { data: followUps } = useQuery({ queryKey: ["franchisee-leadFollowUps"], queryFn: fetchFollowUps });
 
   const pendingApprovals = bookings.length;
   const todayJobs = allBookings.filter(b => {
@@ -77,6 +92,61 @@ export default function FranchiseeDashboard() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+
+        {/* Lead stats + follow-ups */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div className="bg-card border border-border rounded-xl p-4 lg:col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Funnel size={16} className="text-amber-500" />
+                <h2 className="font-semibold text-sm">Leads Overview</h2>
+              </div>
+              <Link href="/franchisee/leads" className="text-xs text-amber-500 hover:underline flex items-center gap-1">
+                View pipeline <ArrowRight size={10} />
+              </Link>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-amber-500">{leadStats?.total ?? 0}</p>
+                <p className="text-[10px] text-muted-foreground">Total Leads</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-400">{leadStats?.converted ?? 0}</p>
+                <p className="text-[10px] text-muted-foreground">Converted</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-emerald-400">{leadStats?.conversionRate ?? 0}%</p>
+                <p className="text-[10px] text-muted-foreground">Conversion Rate</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Clock size={16} className="text-amber-500" />
+                <h2 className="font-semibold text-sm">Follow-ups</h2>
+              </div>
+              <Link href="/franchisee/leads" className="text-xs text-amber-500 hover:underline">View</Link>
+            </div>
+            <div className="space-y-2">
+              {(followUps ?? []).length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-4">No upcoming follow-ups</p>
+              ) : (
+                (followUps ?? []).slice(0, 4).map((l: any) => (
+                  <div key={l.id} className="flex items-center justify-between py-1 border-b border-border last:border-0">
+                    <div>
+                      <p className="text-sm font-medium">{l.name}</p>
+                      <p className="text-xs text-muted-foreground">{l.phone}</p>
+                    </div>
+                    <span className="text-xs text-amber-500">
+                      {l.nextFollowUpAt ? new Date(l.nextFollowUpAt).toLocaleDateString("en-IN") : "—"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 

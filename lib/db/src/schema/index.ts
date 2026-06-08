@@ -15,3 +15,6 @@ export * from "./complaints";
 export * from "./invoices";
 export * from "./notifications";
 export * from "./franchisees";
+export * from "./leads";
+export * from "./lead-activities";
+export * from "./lead-ingestion-log";

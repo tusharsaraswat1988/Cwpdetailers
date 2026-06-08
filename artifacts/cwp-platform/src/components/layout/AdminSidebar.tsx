@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, Wrench, BarChart3, Bell, LogOut, ChevronRight,
-  Sun, Menu, Building2, ShieldCheck, Key, UserX,
+  Sun, Menu, Building2, ShieldCheck, Key, UserX, Funnel,
 } from "lucide-react";
 
 type NavItem = {
@@ -21,6 +21,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Operations",
     items: [
       { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: null },
+      { href: "/admin/leads", label: "Leads & CRM", icon: Funnel, perm: { resource: "leads", action: "view" } },
       { href: "/admin/customers", label: "Customers", icon: Users, perm: { resource: "customers", action: "view" } },
       { href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
       { href: "/admin/bookings", label: "Bookings", icon: Calendar, perm: { resource: "bookings", action: "view" } },
