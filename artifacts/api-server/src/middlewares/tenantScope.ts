@@ -17,6 +17,9 @@ import { sql, eq, inArray, type SQL, type AnyColumn } from "drizzle-orm";
  * `enforceScopeOnRow` returns true if `row` is visible to the caller; use
  * it after fetching a single record by primary key to convert cross-tenant
  * access into a 404.
+ *
+ * `sqlTenant` returns a raw SQL fragment for use inside `db.execute()`
+ * template queries that join or query tables by tenant columns.
  */
 
 export type TenantOpts = {
@@ -93,6 +96,32 @@ export async function loadIfInScope<R extends Record<string, unknown>>(
   const row = await fetcher();
   if (!row) return null;
   return rowInScope(req, toScopeShape(row)) ? row : null;
+}
+
+/**
+ * Build a raw SQL fragment for tenant scoping in raw SQL queries.
+ * For each tenant key, provide the alias.column or table.column name.
+ * The function returns a SQL fragment that ANDs the active predicates.
+ * Use it as:  sql\`SELECT ... FROM ... WHERE ... AND \${sqlTenant(req, {c: 'c.company_id', b: 'b.branch_id'})}\`
+ */
+export function sqlTenant(req: Request, cols: { c?: string; b?: string; f?: string; cu?: string; s?: string }): SQL {
+  const s = req.scope;
+  if (!s) return sql`false`;
+  const preds: string[] = [];
+  if (s.isSuperAdmin) {
+    if (s.companyId && cols.c) preds.push(`${cols.c} = ${s.companyId}`);
+  } else {
+    if (s.companyId && cols.c) preds.push(`${cols.c} = ${s.companyId}`);
+    if (s.branchIds !== null && cols.b) {
+      if (s.branchIds.length === 0) return sql`false`;
+      preds.push(`${cols.b} IN (${s.branchIds.join(", ")})`);
+    }
+    if (s.franchiseeId && cols.f) preds.push(`${cols.f} = ${s.franchiseeId}`);
+    if (s.customerId && cols.cu) preds.push(`${cols.cu} = ${s.customerId}`);
+    if (s.staffId && cols.s) preds.push(`${cols.s} = ${s.staffId}`);
+  }
+  if (preds.length === 0) return sql``;
+  return sql.raw(preds.join(" AND "));
 }
 
 export function rowInScope(req: Request, row: {
