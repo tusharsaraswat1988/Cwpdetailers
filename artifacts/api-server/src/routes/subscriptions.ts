@@ -265,9 +265,8 @@ router.post("/subscriptions/:id/pause", async (req, res) => {
     if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Subscription not found" });
     if (existing.status !== "active") return res.status(400).json({ error: "Only active subscriptions can be paused" });
 
-    const [sub] = await db.update(subscriptionsTable)
-      .set({ status: "paused", pausedAt: new Date(), updatedAt: new Date() })
-      .where(eq(subscriptionsTable.id, id)).returning();
+    const { pauseSubscription } = await import("../subscriptions/service");
+    const sub = await pauseSubscription(id);
     return res.json(sub);
   } catch (err) {
     req.log.error({ err }, "Pause subscription error");
@@ -282,9 +281,8 @@ router.post("/subscriptions/:id/resume", async (req, res) => {
     if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Subscription not found" });
     if (existing.status !== "paused") return res.status(400).json({ error: "Only paused subscriptions can be resumed" });
 
-    const [sub] = await db.update(subscriptionsTable)
-      .set({ status: "active", resumedAt: new Date(), updatedAt: new Date() })
-      .where(eq(subscriptionsTable.id, id)).returning();
+    const { resumeSubscription } = await import("../subscriptions/service");
+    const sub = await resumeSubscription(id);
     return res.json(sub);
   } catch (err) {
     req.log.error({ err }, "Resume subscription error");
@@ -299,9 +297,8 @@ router.post("/subscriptions/:id/cancel", async (req, res) => {
     if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Subscription not found" });
     const { remark } = req.body;
 
-    const [sub] = await db.update(subscriptionsTable)
-      .set({ status: "cancelled", cancelledAt: new Date(), cancellationRemark: remark ?? null, updatedAt: new Date() })
-      .where(eq(subscriptionsTable.id, id)).returning();
+    const { cancelSubscription } = await import("../subscriptions/service");
+    const sub = await cancelSubscription(id, remark);
     return res.json(sub);
   } catch (err) {
     req.log.error({ err }, "Cancel subscription error");

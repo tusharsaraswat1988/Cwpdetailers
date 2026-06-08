@@ -78,17 +78,18 @@ export async function recomputeServicesRemaining(subscriptionId: number) {
  * past the grace period are marked missed, and notifications are created.
  * Also updates subscription status to missed if all active bookings are missed.
  */
-export async function markMissed(todayStr?: string) {
-  const today = todayStr ? new Date(todayStr) : new Date();
-  const todayStrYMD = today.toISOString().split("T")[0];
+export async function markMissed() {
+  const now = new Date();
+  const todayStrYMD = now.toISOString().split("T")[0];
 
-  // Find scheduled bookings whose scheduled_date + grace has passed.
-  // Use subscription.graceMinutes when available; otherwise 60 min.
+  // Find scheduled bookings whose scheduled_date has passed.
+  // Per-booking grace is applied via actual timestamp comparison below.
   const missedBookings = await db.select({
     id: bookingsTable.id,
     subscriptionId: bookingsTable.subscriptionId,
     customerId: bookingsTable.customerId,
     scheduledDate: bookingsTable.scheduledDate,
+    scheduledTime: bookingsTable.scheduledTime,
     branchId: bookingsTable.branchId,
     companyId: bookingsTable.companyId,
     franchiseeId: bookingsTable.franchiseeId,
@@ -105,10 +106,11 @@ export async function markMissed(todayStr?: string) {
 
   for (const b of missedBookings) {
     const graceMins = b.graceMinutes ?? 60;
-    const graceDeadline = new Date(b.scheduledDate!);
-    graceDeadline.setMinutes(graceDeadline.getMinutes() + graceMins);
+    // Combine scheduledDate + scheduledTime (or 00:00 if no time) to get actual scheduled datetime
+    const scheduledAt = new Date(`${b.scheduledDate}T${b.scheduledTime ?? "00:00"}:00`);
+    const graceDeadline = new Date(scheduledAt.getTime() + graceMins * 60 * 1000);
 
-    if (today > graceDeadline) {
+    if (now > graceDeadline) {
       await db.update(bookingsTable)
         .set({ status: "missed", updatedAt: new Date() })
         .where(eq(bookingsTable.id, b.id));
@@ -118,7 +120,7 @@ export async function markMissed(todayStr?: string) {
       if (b.companyId != null) {
         await db.insert(notificationsTable).values({
           title: "Missed service",
-          message: `Booking #${b.id} was missed (scheduled ${b.scheduledDate}, grace ${graceMins}m).`,
+          message: `Booking #${b.id} was missed (scheduled ${b.scheduledDate} ${b.scheduledTime ?? ""}, grace ${graceMins}m).`,
           type: "subscription_expiry",
           channel: "in_app",
           companyId: b.companyId,
@@ -156,8 +158,8 @@ export async function markMissed(todayStr?: string) {
  * Send renewal reminders for subscriptions expiring within reminderDays.
  * Creates notification records for customer + admin.
  */
-export async function sendRenewalReminders(todayStr?: string, reminderDays = 7) {
-  const today = todayStr ? new Date(todayStr) : new Date();
+export async function sendRenewalReminders(reminderDays = 7) {
+  const today = new Date();
   const reminderEnd = new Date(today);
   reminderEnd.setDate(reminderEnd.getDate() + reminderDays);
   const endStr = reminderEnd.toISOString().split("T")[0];
@@ -216,6 +218,39 @@ export async function sendRenewalReminders(todayStr?: string, reminderDays = 7) 
 }
 
 /**
+ * Pause an active subscription. Returns the updated subscription.
+ */
+export async function pauseSubscription(subscriptionId: number) {
+  const [sub] = await db.update(subscriptionsTable)
+    .set({ status: "paused", pausedAt: new Date(), updatedAt: new Date() })
+    .where(eq(subscriptionsTable.id, subscriptionId))
+    .returning();
+  return sub;
+}
+
+/**
+ * Resume a paused subscription. Returns the updated subscription.
+ */
+export async function resumeSubscription(subscriptionId: number) {
+  const [sub] = await db.update(subscriptionsTable)
+    .set({ status: "active", resumedAt: new Date(), updatedAt: new Date() })
+    .where(eq(subscriptionsTable.id, subscriptionId))
+    .returning();
+  return sub;
+}
+
+/**
+ * Cancel a subscription with optional remark. Returns the updated subscription.
+ */
+export async function cancelSubscription(subscriptionId: number, remark?: string) {
+  const [sub] = await db.update(subscriptionsTable)
+    .set({ status: "cancelled", cancelledAt: new Date(), cancellationRemark: remark ?? null, updatedAt: new Date() })
+    .where(eq(subscriptionsTable.id, subscriptionId))
+    .returning();
+  return sub;
+}
+
+/**
  * Daily scheduler tick. Runs missed-service check, renewal reminders, and
  * marks expired subscriptions. Uses system_jobs table for idempotency.
  */
@@ -245,8 +280,8 @@ export async function runDailyTick(todayStr?: string) {
   }).returning();
 
   try {
-    const missedCount = await markMissed(today);
-    const reminderCount = await sendRenewalReminders(today);
+    const missedCount = await markMissed();
+    const reminderCount = await sendRenewalReminders();
 
     // Also mark expired subscriptions (past endDate)
     const expired = await db.update(subscriptionsTable)
