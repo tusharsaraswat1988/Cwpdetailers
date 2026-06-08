@@ -33,18 +33,19 @@ function bootstrapDailyTick() {
     logger.error({ err }, "Startup daily tick failed");
   });
 
-  // Schedule next run at midnight IST
+  // Schedule next run at midnight IST (UTC+5:30)
   const now = new Date();
-  const nextMidnight = new Date(now);
-  nextMidnight.setHours(24, 0, 0, 0);
-  // Convert to IST: add 5h 30m
-  const nextTickMs = nextMidnight.getTime() + (5 * 60 + 30) * 60 * 1000 - now.getTime();
+  // Midnight IST in UTC = 18:30 UTC previous day
+  const nextMidnightIST = new Date(now);
+  nextMidnightIST.setHours(24, 0, 0, 0); // local midnight
+  // Convert local midnight to IST midnight: subtract 5h 30m
+  const nextTickMs = nextMidnightIST.getTime() - (5 * 60 + 30) * 60 * 1000 - now.getTime();
 
   setTimeout(() => {
     runDailyTick().catch(err => {
       logger.error({ err }, "Scheduled daily tick failed");
     });
-    // After first midnight run, repeat every 24h
+    // After first midnight IST run, repeat every 24h
     setInterval(() => {
       runDailyTick().catch(err => {
         logger.error({ err }, "Scheduled daily tick failed");

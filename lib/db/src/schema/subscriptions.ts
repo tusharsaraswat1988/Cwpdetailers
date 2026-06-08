@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, numeric, date, timestamp, pgEnum, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, date, timestamp, pgEnum, text, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -40,7 +41,9 @@ export const subscriptionsTable = pgTable("subscriptions", {
   resumedAt: timestamp("resumed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (t) => [
+  check("services_remaining_check", sql`${t.totalServices} IS NULL OR ${t.servicesRemaining} = ${t.totalServices} - ${t.servicesUsed}`),
+]);
 
 export const insertSubscriptionSchema = createInsertSchema(subscriptionsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;

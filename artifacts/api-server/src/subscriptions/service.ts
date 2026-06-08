@@ -82,8 +82,8 @@ export async function markMissed(todayStr?: string) {
   const today = todayStr ? new Date(todayStr) : new Date();
   const todayStrYMD = today.toISOString().split("T")[0];
 
-  // Find scheduled bookings whose scheduled_date has passed grace period
-  const graceHours = 24; // default 24h grace for booking-level
+  // Find scheduled bookings whose scheduled_date + grace has passed.
+  // Use subscription.graceMinutes when available; otherwise 60 min.
   const missedBookings = await db.select({
     id: bookingsTable.id,
     subscriptionId: bookingsTable.subscriptionId,
@@ -92,7 +92,9 @@ export async function markMissed(todayStr?: string) {
     branchId: bookingsTable.branchId,
     companyId: bookingsTable.companyId,
     franchiseeId: bookingsTable.franchiseeId,
+    graceMinutes: subscriptionsTable.graceMinutes,
   }).from(bookingsTable)
+    .leftJoin(subscriptionsTable, eq(bookingsTable.subscriptionId, subscriptionsTable.id))
     .where(and(
       eq(bookingsTable.status, "scheduled"),
       lte(bookingsTable.scheduledDate, todayStrYMD),
@@ -102,8 +104,9 @@ export async function markMissed(todayStr?: string) {
   const notifiedSubIds = new Set<number>();
 
   for (const b of missedBookings) {
+    const graceMins = b.graceMinutes ?? 60;
     const graceDeadline = new Date(b.scheduledDate!);
-    graceDeadline.setDate(graceDeadline.getDate() + 1); // 24h grace
+    graceDeadline.setMinutes(graceDeadline.getMinutes() + graceMins);
 
     if (today > graceDeadline) {
       await db.update(bookingsTable)
@@ -115,7 +118,7 @@ export async function markMissed(todayStr?: string) {
       if (b.companyId != null) {
         await db.insert(notificationsTable).values({
           title: "Missed service",
-          message: `Booking #${b.id} was missed (scheduled ${b.scheduledDate}).`,
+          message: `Booking #${b.id} was missed (scheduled ${b.scheduledDate}, grace ${graceMins}m).`,
           type: "subscription_expiry",
           channel: "in_app",
           companyId: b.companyId,

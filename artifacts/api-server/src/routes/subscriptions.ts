@@ -194,6 +194,9 @@ router.get("/subscriptions/health", async (req, res) => {
 });
 
 router.post("/subscriptions/daily-tick", async (req, res) => {
+  if (!req.user || (req.user.role !== "admin" && req.user.role !== "superadmin")) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
   try {
     const { runDailyTick } = await import("../subscriptions/service");
     const result = await runDailyTick();
