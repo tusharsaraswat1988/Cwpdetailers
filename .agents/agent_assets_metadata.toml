@@ -1,5 +1,4 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "v4qUDV3H_grw01CppzTTH"
@@ -36,3 +35,21 @@ id = "3TY7Kd0lmNubi3fJ-cVdd"
 uri = "file://artifacts/cwp-platform/src/assets/images/service-interior.png"
 type = "image"
 title = "Luxury interior leather cleaning"
+
+[[outputs]]
+id = "YT9Ei8q3Gfb_9myQRF0yZ"
+uri = "file://screenshots/cred-list-view.jpg"
+type = "image"
+title = "List + Tabs (Current style)"
+
+[[outputs]]
+id = "YwT4xaf-HnazvWWvfuABi"
+uri = "file://screenshots/cred-card-grid.jpg"
+type = "image"
+title = "Card Grid (Visual)"
+
+[[outputs]]
+id = "kkfL8BqgJ-U6QTjftLZTT"
+uri = "file://screenshots/cred-data-table.jpg"
+type = "image"
+title = "Data Table (Dense)"

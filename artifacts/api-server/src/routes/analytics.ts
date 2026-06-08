@@ -14,10 +14,6 @@ function toRows<T = Record<string, unknown>>(result: any): T[] {
   return [];
 }
 
-function andScope(req: any, conditions: any[]) {
-  const scope = tenantFilters(req, { companyCol: undefined, branchCol: undefined, franchiseeCol: undefined, customerCol: undefined, staffCol: undefined });
-  return conditions.length ? and(...conditions, ...scope) : and(...scope);
-}
 
 router.get("/analytics/dashboard", async (req, res) => {
   try {
@@ -32,13 +28,13 @@ router.get("/analytics/dashboard", async (req, res) => {
       db.execute(sql`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM payments WHERE DATE(created_at) = CURRENT_DATE AND ${t(req, { c: "payments.company_id", b: "payments.branch_id" })}`),
       db.execute(sql`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM payments WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "payments.company_id", b: "payments.branch_id" })}`),
       db.execute(sql`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM payments WHERE status = 'completed' AND ${t(req, { c: "payments.company_id", b: "payments.branch_id" })}`),
-      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(andScope(req, [eq(subscriptionsTable.status, "active")])),
-      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(andScope(req, [])),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "active"), ...tenantFilters(req, { companyCol: subscriptionsTable.companyId, branchCol: subscriptionsTable.branchId }))),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId }))),
       db.execute(sql`SELECT COUNT(*) as count FROM customers WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "customers.company_id", b: "customers.branch_id" })}`),
       db.execute(sql`SELECT COALESCE(SUM(due_amount::numeric), 0) as total FROM invoices WHERE status IN ('sent', 'overdue') AND ${t(req, { c: "invoices.company_id", b: "invoices.branch_id" })}`),
-      db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(andScope(req, [eq(bookingsTable.status, "in_progress")])),
+      db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(and(eq(bookingsTable.status, "in_progress"), ...tenantFilters(req, { companyCol: bookingsTable.companyId, branchCol: bookingsTable.branchId }))),
       db.execute(sql`SELECT COUNT(*) as count FROM bookings WHERE status = 'completed' AND DATE(scheduled_date) = CURRENT_DATE AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id" })}`),
-      db.select({ count: sql<number>`count(*)` }).from(complaintsTable).where(andScope(req, [eq(complaintsTable.status, "open")])),
+      db.select({ count: sql<number>`count(*)` }).from(complaintsTable).where(and(eq(complaintsTable.status, "open"), ...tenantFilters(req, { companyCol: complaintsTable.companyId, branchCol: complaintsTable.branchId }))),
       db.execute(sql`
         SELECT s.category, COALESCE(SUM(b.amount::numeric), 0) as amount
         FROM bookings b LEFT JOIN services s ON b.service_id = s.id
@@ -150,8 +146,8 @@ router.get("/analytics/customers", async (req, res) => {
   try {
     const t = sqlTenant;
     const [totalResult, activeResult, newResult, cityResult, growthResult, repeatResult] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(andScope(req, [])),
-      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(andScope(req, [eq(customersTable.status, "active")])),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId }))),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(eq(customersTable.status, "active"), ...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId }))),
       db.execute(sql`SELECT COUNT(*) as count FROM customers WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "customers.company_id", b: "customers.branch_id" })}`),
       db.execute(sql`SELECT city, COUNT(*) as count FROM customers WHERE city IS NOT NULL AND ${t(req, { c: "customers.company_id", b: "customers.branch_id" })} GROUP BY city ORDER BY count DESC LIMIT 10`),
       db.execute(sql`
