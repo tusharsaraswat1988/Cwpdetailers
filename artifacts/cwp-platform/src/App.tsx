@@ -25,6 +25,9 @@ import AdminStaffApproval from "@/pages/admin/StaffApproval";
 import AdminCredentials from "@/pages/admin/Credentials";
 import AdminChurnedCustomers from "@/pages/admin/ChurnedCustomers";
 import AdminLeads from "@/pages/admin/Leads";
+import AdminQuotationBuilder from "@/pages/admin/QuotationBuilder";
+import AdminExpenses from "@/pages/admin/Expenses";
+import AdminDues from "@/pages/admin/Dues";
 
 import CustomerDashboard from "@/pages/customer/Dashboard";
 import BookService from "@/pages/customer/BookService";
@@ -99,6 +102,9 @@ function Router() {
       <Route path="/admin/credentials" component={() => <ProtectedRoute component={AdminCredentials} roles={["admin", "superadmin"]} permission={{ resource: "staff", action: "approve" }} />} />
       <Route path="/admin/churned" component={() => <ProtectedRoute component={AdminChurnedCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "churned", action: "view" }} />} />
       <Route path="/admin/leads" component={() => <ProtectedRoute component={AdminLeads} roles={["admin", "superadmin", "manager"]} permission={{ resource: "leads", action: "view" }} />} />
+      <Route path="/admin/quotations" component={() => <ProtectedRoute component={AdminQuotationBuilder} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} />} />
+      <Route path="/admin/expenses" component={() => <ProtectedRoute component={AdminExpenses} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} />} />
+      <Route path="/admin/dues" component={() => <ProtectedRoute component={AdminDues} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} />} />
 
       {/* Customer */}
       <Route path="/customer/dashboard" component={() => <ProtectedRoute component={CustomerDashboard} roles={["customer"]} />} />

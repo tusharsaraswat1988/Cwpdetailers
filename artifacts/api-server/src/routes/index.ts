@@ -17,6 +17,9 @@ import franchiseesRouter from "./franchisees";
 import churnedRouter from "./churned";
 import leadsRouter from "./leads";
 import storageRouter from "./storage";
+import quotationsRouter from "./quotations";
+import expensesRouter from "./expenses";
+import billingRouter from "./billing";
 import { guardResource } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -72,6 +75,9 @@ router.use(
   ]),
   notificationsRouter,
 );
+router.use(guardResource("invoices"), quotationsRouter);
+router.use(guardResource("invoices"), expensesRouter);
+router.use(guardResource("invoices"), billingRouter);
 router.use(
   guardResource("franchisees", [
     { match: /\/create-account$/, method: "POST", action: "approve" },

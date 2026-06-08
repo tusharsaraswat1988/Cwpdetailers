@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, Wrench, BarChart3, Bell, LogOut, ChevronRight,
-  Sun, Menu, Building2, ShieldCheck, Key, UserX, Funnel,
+  Sun, Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee,
 } from "lucide-react";
 
 type NavItem = {
@@ -27,6 +27,9 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/admin/bookings", label: "Bookings", icon: Calendar, perm: { resource: "bookings", action: "view" } },
       { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard, perm: { resource: "subscriptions", action: "view" } },
       { href: "/admin/invoices", label: "Invoices & Payments", icon: FileText, perm: { resource: "invoices", action: "view" } },
+      { href: "/admin/quotations", label: "Quotations", icon: FileText, perm: { resource: "invoices", action: "view" } },
+      { href: "/admin/expenses", label: "Expenses", icon: IndianRupee, perm: { resource: "invoices", action: "view" } },
+      { href: "/admin/dues", label: "Dues & Collections", icon: AlertCircle, perm: { resource: "invoices", action: "view" } },
       { href: "/admin/complaints", label: "Complaints", icon: AlertCircle, perm: { resource: "complaints", action: "view" } },
     ],
   },
