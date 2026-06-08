@@ -18,3 +18,4 @@ export * from "./franchisees";
 export * from "./leads";
 export * from "./lead-activities";
 export * from "./lead-ingestion-log";
+export * from "./booking-events";

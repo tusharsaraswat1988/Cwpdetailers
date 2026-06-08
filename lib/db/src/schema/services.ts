@@ -6,6 +6,8 @@ export const serviceCategoryEnum = pgEnum("service_category", [
   "car_wash", "detailing", "ceramic_coating", "ppf", "interior", "solar_cleaning", "amc", "subscription"
 ]);
 
+export const assignmentStrategyEnum = pgEnum("assignment_strategy", ["manual", "auto", "round_robin"]);
+
 export const servicesTable = pgTable("services", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -16,6 +18,7 @@ export const servicesTable = pgTable("services", {
   isActive: boolean("is_active").notNull().default(true),
   imageUrl: text("image_url"),
   features: json("features").$type<string[]>().default([]),
+  assignmentStrategy: assignmentStrategyEnum("assignment_strategy").notNull().default("manual"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

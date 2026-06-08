@@ -1,9 +1,13 @@
-import { pgTable, serial, integer, text, numeric, date, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, numeric, date, timestamp, pgEnum, json, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const bookingStatusEnum = pgEnum("booking_status", ["pending", "confirmed", "in_progress", "completed", "cancelled"]);
-export const bookingServiceTypeEnum = pgEnum("booking_service_type", ["car_wash", "detailing", "solar_cleaning", "pickup_drop", "emergency"]);
+export const bookingStatusEnum = pgEnum("booking_status", [
+  "pending", "confirmed", "scheduled", "en_route", "in_progress", "completed", "cancelled", "rescheduled",
+]);
+export const bookingServiceTypeEnum = pgEnum("booking_service_type", [
+  "car_wash", "detailing", "solar_cleaning", "one_time_wash", "daily_cleaning", "subscription_wash", "pickup_drop", "emergency",
+]);
 
 export const bookingsTable = pgTable("bookings", {
   id: serial("id").primaryKey(),
@@ -18,16 +22,25 @@ export const bookingsTable = pgTable("bookings", {
   branchId: integer("branch_id"),
   scheduledDate: date("scheduled_date").notNull(),
   scheduledTime: text("scheduled_time"),
-  status: bookingStatusEnum("status").notNull().default("pending"),
+  status: bookingStatusEnum("status").notNull().default("scheduled"),
   serviceType: bookingServiceTypeEnum("service_type").notNull(),
   address: text("address"),
+  area: text("area"),
+  locationLat: doublePrecision("location_lat"),
+  locationLng: doublePrecision("location_lng"),
   notes: text("notes"),
+  startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
+  cancellationReason: text("cancellation_reason"),
+  proofPhotoUrls: json("proof_photo_urls").$type<string[]>().default([]),
+  customerSignatureUrl: text("customer_signature_url"),
   beforePhotoUrl: text("before_photo_url"),
   afterPhotoUrl: text("after_photo_url"),
   technicianNotes: text("technician_notes"),
   rating: integer("rating"),
   amount: numeric("amount", { precision: 10, scale: 2 }),
+  recurrenceRule: text("recurrence_rule"),
+  parentBookingId: integer("parent_booking_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

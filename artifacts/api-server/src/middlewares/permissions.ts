@@ -22,6 +22,10 @@ export function guardResource(
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
     const path = req.path;
+    const resourcePrefix = `/${resource}`;
+    if (!path.startsWith(resourcePrefix) && path !== `/${resource.replace(/-/g, "_")}`) {
+      return next();
+    }
     const method = req.method.toUpperCase();
     let action = METHOD_TO_ACTION[method] ?? "view";
     for (const o of overrides) {

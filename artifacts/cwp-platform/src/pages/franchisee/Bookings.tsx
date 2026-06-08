@@ -1,31 +1,76 @@
 import { useState } from "react";
 import FranchiseeLayout from "@/components/layout/FranchiseeLayout";
 import { useAuth } from "@/lib/auth";
-import { useListBookings } from "@workspace/api-client-react";
-import type { ListBookingsStatus } from "@workspace/api-client-react";
-import { Calendar, Clock, CheckCircle, AlertCircle, Filter } from "lucide-react";
+import {
+  useListBookings, getListBookingsQueryKey,
+  useTransitionBooking, useAssignBooking,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { Calendar, Clock, CheckCircle, MapPin, Route, ArrowRight, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import type { ListBookingsStatus } from "@workspace/api-client-react";
 
 const statusColors: Record<string, string> = {
   pending: "bg-amber-500/10 text-amber-500",
   confirmed: "bg-blue-500/10 text-blue-400",
+  scheduled: "bg-sky-500/10 text-sky-400",
+  en_route: "bg-orange-500/10 text-orange-400",
   in_progress: "bg-primary/10 text-primary",
   completed: "bg-green-500/10 text-green-500",
   cancelled: "bg-red-500/10 text-red-400",
+  rescheduled: "bg-violet-500/10 text-violet-400",
 };
+
+type B = { id: number; customerId?: number; customerName?: string; status?: string; serviceName?: string | null; serviceType?: string | null; scheduledDate?: string; scheduledTime?: string | null; staffName?: string | null; address?: string | null; area?: string | null; amount?: string | number | null };
 
 export default function FranchiseeBookings() {
   const { user } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const branchId = user?.branchId ?? undefined;
-  const [statusFilter, setStatusFilter] = useState<ListBookingsStatus | "">("pending");
+  const [statusFilter, setStatusFilter] = useState<ListBookingsStatus | "">("");
+  const [detailBooking, setDetailBooking] = useState<B | null>(null);
+  const [showAssign, setShowAssign] = useState(false);
+  const [assignStaffId, setAssignStaffId] = useState("");
+  const [assignReason, setAssignReason] = useState("");
 
   const { data, isLoading } = useListBookings({
     branchId,
     status: statusFilter || undefined,
+    limit: 100,
+  }, {
+    query: { queryKey: getListBookingsQueryKey({ branchId, status: statusFilter || undefined, limit: 100 }) },
   });
-  const bookings = data?.data ?? [];
+  const bookings = (data?.data ?? []) as B[];
 
-  const filters = ["all", "pending", "confirmed", "in_progress", "completed", "cancelled"];
+  const filters = ["all", "pending", "confirmed", "scheduled", "en_route", "in_progress", "completed", "cancelled", "rescheduled"];
+
+  const transitionMutation = useTransitionBooking({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
+        toast({ title: "Status updated" });
+        setDetailBooking(null);
+      },
+      onError: (e: any) => toast({ title: e?.response?.data?.error || "Transition failed", variant: "destructive" }),
+    },
+  });
+
+  const assignMutation = useAssignBooking({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
+        toast({ title: "Staff assigned" });
+        setShowAssign(false);
+      },
+      onError: (e: any) => toast({ title: e?.response?.data?.error || "Assign failed", variant: "destructive" }),
+    },
+  });
 
   return (
     <FranchiseeLayout>
@@ -37,12 +82,10 @@ export default function FranchiseeBookings() {
           </div>
         </div>
 
-        {/* Note: payments handled centrally */}
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 mb-5 text-sm text-amber-600">
           <strong>Note:</strong> All payments are collected and settled by CWP Admin. Your role is to coordinate job scheduling and staff dispatch.
         </div>
 
-        {/* Filters */}
         <div className="flex gap-2 flex-wrap mb-5">
           {filters.map(f => (
             <button key={f}
@@ -52,12 +95,11 @@ export default function FranchiseeBookings() {
                   ? "bg-primary text-secondary"
                   : "bg-card border border-border text-muted-foreground hover:text-foreground"
               }`}>
-              {f === "all" ? "All" : f.replace("_", " ")}
+              {f === "all" ? "All" : f.replace(/_/g, " ")}
             </button>
           ))}
         </div>
 
-        {/* Bookings list */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="divide-y divide-border">
             {isLoading ? (
@@ -65,25 +107,30 @@ export default function FranchiseeBookings() {
             ) : bookings.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground text-sm">No bookings found</div>
             ) : (
-              bookings.map((b: any) => (
-                <div key={b.id} className="px-5 py-4 flex items-start gap-4">
+              bookings.map((b) => (
+                <div key={b.id} className="px-5 py-4 flex items-start gap-4 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setDetailBooking(b)}>
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <Calendar size={16} className="text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-sm">{b.customerName || `Customer #${b.customerId}`}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[b.status] || "bg-muted text-muted-foreground"}`}>
-                        {b.status?.replace("_", " ")}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[b.status ?? "scheduled"] || "bg-muted text-muted-foreground"}`}>
+                        {b.status?.replace(/_/g, " ")}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{b.serviceName || "Service"}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{b.serviceName || b.serviceType?.replace(/_/g, " ")}</p>
                     <div className="flex gap-3 mt-1.5 text-xs text-muted-foreground">
-                      <span>{b.scheduledDate} {b.scheduledTime ? `· ${b.scheduledTime}` : ""}</span>
-                      {b.staffName && <span>· Staff: {b.staffName}</span>}
-                      {b.amount && <span>· ₹{Number(b.amount).toLocaleString("en-IN")}</span>}
+                      <span className="flex items-center gap-1"><Clock size={10} /> {b.scheduledDate} {b.scheduledTime ? `· ${b.scheduledTime}` : ""}</span>
+                      {b.staffName && <span className="flex items-center gap-1"><User size={10} /> {b.staffName}</span>}
+                      {b.amount && <span>₹{Number(b.amount).toLocaleString("en-IN")}</span>}
                     </div>
-                    {b.notes && <p className="text-xs text-muted-foreground mt-1 italic">{b.notes}</p>}
+                    {b.address && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                        <MapPin size={10} />
+                        <span>{b.area ? `${b.area}, ${b.address}` : b.address}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -91,6 +138,74 @@ export default function FranchiseeBookings() {
           </div>
         </div>
       </div>
+
+      {/* Detail Dialog */}
+      {detailBooking && (
+        <Dialog open onOpenChange={() => setDetailBooking(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <span>Booking #{detailBooking.id}</span>
+                <Badge variant="outline" className={`text-xs capitalize ${statusColors[detailBooking.status ?? "scheduled"]}`}>
+                  {detailBooking.status?.replace(/_/g, " ")}
+                </Badge>
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div><p className="text-muted-foreground">Customer</p><p className="font-medium">{detailBooking.customerName}</p></div>
+                <div><p className="text-muted-foreground">Service</p><p className="font-medium">{detailBooking.serviceName ?? detailBooking.serviceType?.replace(/_/g, " ")}</p></div>
+                <div><p className="text-muted-foreground">Date</p><p className="font-medium">{detailBooking.scheduledDate}</p></div>
+                <div><p className="text-muted-foreground">Staff</p><p className="font-medium">{detailBooking.staffName ?? "Unassigned"}</p></div>
+              </div>
+              {detailBooking.address && (
+                <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                  <MapPin size={10} /> {detailBooking.area ? `${detailBooking.area}, ${detailBooking.address}` : detailBooking.address}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 flex-wrap mt-4">
+              {detailBooking.status === "scheduled" && (
+                <Button size="sm" variant="outline" onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "en_route" } })}>
+                  <Route size={12} className="mr-1" /> En Route
+                </Button>
+              )}
+              {detailBooking.status === "en_route" && (
+                <Button size="sm" className="bg-primary text-secondary hover:bg-primary/90" onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "in_progress" } })}>
+                  <ArrowRight size={12} className="mr-1" /> Start
+                </Button>
+              )}
+              {detailBooking.status === "in_progress" && (
+                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "completed" } })}>
+                  <CheckCircle size={12} className="mr-1" /> Complete
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => setShowAssign(true)}>
+                <User size={12} className="mr-1" /> Assign Staff
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Assign Dialog */}
+      <Dialog open={showAssign} onOpenChange={setShowAssign}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Assign Staff</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Input type="number" placeholder="Staff ID" value={assignStaffId} onChange={e => setAssignStaffId(e.target.value)} />
+            <Textarea placeholder="Reason (optional)" value={assignReason} onChange={e => setAssignReason(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAssign(false)}>Cancel</Button>
+            <Button onClick={() => assignMutation.mutate({ id: detailBooking?.id ?? 0, data: { staffId: parseInt(assignStaffId), reason: assignReason } })} disabled={!assignStaffId}>
+              {assignMutation.isPending ? <Loader2 className="animate-spin mr-2" size={14} /> : null} Assign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </FranchiseeLayout>
   );
 }

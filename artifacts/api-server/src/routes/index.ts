@@ -16,6 +16,7 @@ import notificationsRouter from "./notifications";
 import franchiseesRouter from "./franchisees";
 import churnedRouter from "./churned";
 import leadsRouter from "./leads";
+import storageRouter from "./storage";
 import { guardResource } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -43,6 +44,10 @@ router.use(
     { match: /\/start$/, method: "POST", action: "edit" },
     { match: /\/complete$/, method: "POST", action: "edit" },
     { match: /\/assign$/, method: "POST", action: "edit" },
+    { match: /\/transition$/, method: "POST", action: "edit" },
+    { match: /\/proof$/, method: "POST", action: "edit" },
+    { match: /\/reschedule$/, method: "POST", action: "edit" },
+    { match: /\/regenerate-occurrences$/, method: "POST", action: "edit" },
   ]),
   bookingsRouter,
 );
@@ -85,5 +90,7 @@ router.use(
   ]),
   leadsRouter,
 );
+
+router.use(storageRouter);
 
 export default router;

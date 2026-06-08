@@ -36,6 +36,8 @@ tags:
     description: Analytics and reporting
   - name: notifications
     description: Notification operations
+  - name: Storage
+    description: Object storage upload and serving endpoints
 
 paths:
   /healthz:
@@ -582,7 +584,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [pending, confirmed, in_progress, completed, cancelled]
+            enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
         - name: serviceType
           in: query
           schema:
@@ -687,6 +689,276 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/transition:
+    post:
+      operationId: transitionBooking
+      tags: [bookings]
+      summary: Transition booking status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                toStatus:
+                  type: string
+                  enum: [scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+                reason:
+                  type: string
+              required: [toStatus]
+      responses:
+        "200":
+          description: Transitioned booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/proof:
+    post:
+      operationId: addProof
+      tags: [bookings]
+      summary: Add proof-of-work photos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                urls:
+                  type: array
+                  items:
+                    type: string
+              required: [urls]
+      responses:
+        "200":
+          description: Proof added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/assign:
+    post:
+      operationId: assignBooking
+      tags: [bookings]
+      summary: Assign or reassign staff
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                staffId:
+                  type: integer
+                reason:
+                  type: string
+              required: [staffId]
+      responses:
+        "200":
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/regenerate-occurrences:
+    post:
+      operationId: regenerateOccurrences
+      tags: [bookings]
+      summary: Regenerate child occurrences from recurrence rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Occurrences regenerated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                  bookingIds:
+                    type: array
+                    items:
+                      type: integer
+
+  /bookings/{id}/events:
+    get:
+      operationId: getBookingEvents
+      tags: [bookings]
+      summary: Get booking audit log
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookingEvent"
+
+  /bookings/{id}/reschedule:
+    post:
+      operationId: rescheduleBooking
+      tags: [bookings]
+      summary: Reschedule booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scheduledDate:
+                  type: string
+                  format: date
+                scheduledTime:
+                  type: string
+                reason:
+                  type: string
+              required: [scheduledDate]
+      responses:
+        "200":
+          description: Rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          description: Missing or invalid required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to generate upload URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [Storage]
+      operationId: getPublicObject
+      summary: Serve a public asset
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to serve public object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an object entity
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Object not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to serve object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   # STAFF
   /staff:
@@ -1788,17 +2060,36 @@ components:
           type: string
         status:
           type: string
-          enum: [pending, confirmed, in_progress, completed, cancelled]
+          enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
         serviceType:
           type: string
-          enum: [car_wash, detailing, solar_cleaning, pickup_drop, emergency]
+          enum: [car_wash, detailing, solar_cleaning, one_time_wash, daily_cleaning, subscription_wash, pickup_drop, emergency]
         address:
           type: string
+        area:
+          type: string
+        locationLat:
+          type: number
+          format: double
+        locationLng:
+          type: number
+          format: double
         notes:
           type: string
+        startedAt:
+          type: string
+          format: date-time
         completedAt:
           type: string
           format: date-time
+        cancellationReason:
+          type: string
+        proofPhotoUrls:
+          type: array
+          items:
+            type: string
+        customerSignatureUrl:
+          type: string
         beforePhotoUrl:
           type: string
         afterPhotoUrl:
@@ -1811,6 +2102,10 @@ components:
           maximum: 5
         amount:
           type: number
+        recurrenceRule:
+          type: string
+        parentBookingId:
+          type: integer
         createdAt:
           type: string
           format: date-time
@@ -1855,13 +2150,23 @@ components:
           type: string
         serviceType:
           type: string
-          enum: [car_wash, detailing, solar_cleaning, pickup_drop, emergency]
+          enum: [car_wash, detailing, solar_cleaning, one_time_wash, daily_cleaning, subscription_wash, pickup_drop, emergency]
         address:
           type: string
+        area:
+          type: string
+        locationLat:
+          type: number
+          format: double
+        locationLng:
+          type: number
+          format: double
         notes:
           type: string
         amount:
           type: number
+        recurrenceRule:
+          type: string
       required: [customerId, scheduledDate, serviceType]
 
     UpdateBookingBody:
@@ -1869,7 +2174,7 @@ components:
       properties:
         status:
           type: string
-          enum: [pending, confirmed, in_progress, completed, cancelled]
+          enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
         staffId:
           type: integer
         scheduledDate:
@@ -1885,6 +2190,14 @@ components:
           type: string
         afterPhotoUrl:
           type: string
+        proofPhotoUrls:
+          type: array
+          items:
+            type: string
+        customerSignatureUrl:
+          type: string
+        cancellationReason:
+          type: string
         rating:
           type: integer
           minimum: 1
@@ -1892,6 +2205,35 @@ components:
         completedAt:
           type: string
           format: date-time
+
+    BookingEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        bookingId:
+          type: integer
+        type:
+          type: string
+          enum: [status_change, proof_upload, reassign, reschedule, cancel, note]
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+        body:
+          type: string
+        actorId:
+          type: integer
+        actorName:
+          type: string
+        locationLat:
+          type: string
+        locationLng:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, bookingId, type, createdAt]
 
     # STAFF
     Staff:
@@ -2566,3 +2908,34 @@ components:
           type: string
           enum: [in_app, whatsapp, email, sms]
       required: [title, message, type]
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          minimum: 1
+        contentType:
+          type: string
+          minLength: 1
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/UploadUrlRequest'
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

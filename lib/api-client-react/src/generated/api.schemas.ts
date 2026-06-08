@@ -178,9 +178,12 @@ export type BookingStatus = (typeof BookingStatus)[keyof typeof BookingStatus];
 export const BookingStatus = {
   pending: "pending",
   confirmed: "confirmed",
+  scheduled: "scheduled",
+  en_route: "en_route",
   in_progress: "in_progress",
   completed: "completed",
   cancelled: "cancelled",
+  rescheduled: "rescheduled",
 } as const;
 
 export type BookingServiceType =
@@ -190,6 +193,9 @@ export const BookingServiceType = {
   car_wash: "car_wash",
   detailing: "detailing",
   solar_cleaning: "solar_cleaning",
+  one_time_wash: "one_time_wash",
+  daily_cleaning: "daily_cleaning",
+  subscription_wash: "subscription_wash",
   pickup_drop: "pickup_drop",
   emergency: "emergency",
 } as const;
@@ -213,8 +219,15 @@ export interface Booking {
   status: BookingStatus;
   serviceType: BookingServiceType;
   address?: string;
+  area?: string;
+  locationLat?: number;
+  locationLng?: number;
   notes?: string;
+  startedAt?: string;
   completedAt?: string;
+  cancellationReason?: string;
+  proofPhotoUrls?: string[];
+  customerSignatureUrl?: string;
   beforePhotoUrl?: string;
   afterPhotoUrl?: string;
   technicianNotes?: string;
@@ -224,6 +237,8 @@ export interface Booking {
    */
   rating?: number;
   amount?: number;
+  recurrenceRule?: string;
+  parentBookingId?: number;
   createdAt?: string;
 }
 
@@ -453,6 +468,9 @@ export const CreateBookingBodyServiceType = {
   car_wash: "car_wash",
   detailing: "detailing",
   solar_cleaning: "solar_cleaning",
+  one_time_wash: "one_time_wash",
+  daily_cleaning: "daily_cleaning",
+  subscription_wash: "subscription_wash",
   pickup_drop: "pickup_drop",
   emergency: "emergency",
 } as const;
@@ -469,8 +487,12 @@ export interface CreateBookingBody {
   scheduledTime?: string;
   serviceType: CreateBookingBodyServiceType;
   address?: string;
+  area?: string;
+  locationLat?: number;
+  locationLng?: number;
   notes?: string;
   amount?: number;
+  recurrenceRule?: string;
 }
 
 export type UpdateBookingBodyStatus =
@@ -479,9 +501,12 @@ export type UpdateBookingBodyStatus =
 export const UpdateBookingBodyStatus = {
   pending: "pending",
   confirmed: "confirmed",
+  scheduled: "scheduled",
+  en_route: "en_route",
   in_progress: "in_progress",
   completed: "completed",
   cancelled: "cancelled",
+  rescheduled: "rescheduled",
 } as const;
 
 export interface UpdateBookingBody {
@@ -493,12 +518,41 @@ export interface UpdateBookingBody {
   technicianNotes?: string;
   beforePhotoUrl?: string;
   afterPhotoUrl?: string;
+  proofPhotoUrls?: string[];
+  customerSignatureUrl?: string;
+  cancellationReason?: string;
   /**
    * @minimum 1
    * @maximum 5
    */
   rating?: number;
   completedAt?: string;
+}
+
+export type BookingEventType =
+  (typeof BookingEventType)[keyof typeof BookingEventType];
+
+export const BookingEventType = {
+  status_change: "status_change",
+  proof_upload: "proof_upload",
+  reassign: "reassign",
+  reschedule: "reschedule",
+  cancel: "cancel",
+  note: "note",
+} as const;
+
+export interface BookingEvent {
+  id: number;
+  bookingId: number;
+  type: BookingEventType;
+  fromStatus?: string;
+  toStatus?: string;
+  body?: string;
+  actorId?: number;
+  actorName?: string;
+  locationLat?: string;
+  locationLng?: string;
+  createdAt: string;
 }
 
 export type StaffRole = (typeof StaffRole)[keyof typeof StaffRole];
@@ -1023,6 +1077,25 @@ export interface CreateNotificationBody {
   channel?: CreateNotificationBodyChannel;
 }
 
+export interface UploadUrlRequest {
+  /** @minLength 1 */
+  name: string;
+  /** @minimum 1 */
+  size: number;
+  /** @minLength 1 */
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+  metadata?: UploadUrlRequest;
+}
+
+export interface ErrorEnvelope {
+  error: string;
+}
+
 export type ListCustomersParams = {
   search?: string;
   branchId?: number;
@@ -1112,14 +1185,54 @@ export type ListBookingsStatus =
 export const ListBookingsStatus = {
   pending: "pending",
   confirmed: "confirmed",
+  scheduled: "scheduled",
+  en_route: "en_route",
   in_progress: "in_progress",
   completed: "completed",
   cancelled: "cancelled",
+  rescheduled: "rescheduled",
 } as const;
 
 export type GetTodayBookingsParams = {
   staffId?: number;
   branchId?: number;
+};
+
+export type TransitionBookingBodyToStatus =
+  (typeof TransitionBookingBodyToStatus)[keyof typeof TransitionBookingBodyToStatus];
+
+export const TransitionBookingBodyToStatus = {
+  scheduled: "scheduled",
+  en_route: "en_route",
+  in_progress: "in_progress",
+  completed: "completed",
+  cancelled: "cancelled",
+  rescheduled: "rescheduled",
+} as const;
+
+export type TransitionBookingBody = {
+  toStatus: TransitionBookingBodyToStatus;
+  reason?: string;
+};
+
+export type AddProofBody = {
+  urls: string[];
+};
+
+export type AssignBookingBody = {
+  staffId: number;
+  reason?: string;
+};
+
+export type RegenerateOccurrences200 = {
+  created?: number;
+  bookingIds?: number[];
+};
+
+export type RescheduleBookingBody = {
+  scheduledDate: string;
+  scheduledTime?: string;
+  reason?: string;
 };
 
 export type ListStaffParams = {

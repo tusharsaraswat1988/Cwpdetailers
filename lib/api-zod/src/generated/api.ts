@@ -295,20 +295,33 @@ export const GetCustomerSummaryResponse = zod.object({
         status: zod.enum([
           "pending",
           "confirmed",
+          "scheduled",
+          "en_route",
           "in_progress",
           "completed",
           "cancelled",
+          "rescheduled",
         ]),
         serviceType: zod.enum([
           "car_wash",
           "detailing",
           "solar_cleaning",
+          "one_time_wash",
+          "daily_cleaning",
+          "subscription_wash",
           "pickup_drop",
           "emergency",
         ]),
         address: zod.string().optional(),
+        area: zod.string().optional(),
+        locationLat: zod.number().optional(),
+        locationLng: zod.number().optional(),
         notes: zod.string().optional(),
+        startedAt: zod.coerce.date().optional(),
         completedAt: zod.coerce.date().optional(),
+        cancellationReason: zod.string().optional(),
+        proofPhotoUrls: zod.array(zod.string()).optional(),
+        customerSignatureUrl: zod.string().optional(),
         beforePhotoUrl: zod.string().optional(),
         afterPhotoUrl: zod.string().optional(),
         technicianNotes: zod.string().optional(),
@@ -318,6 +331,8 @@ export const GetCustomerSummaryResponse = zod.object({
           .max(getCustomerSummaryResponseRecentBookingsItemRatingMax)
           .optional(),
         amount: zod.number().optional(),
+        recurrenceRule: zod.string().optional(),
+        parentBookingId: zod.number().optional(),
         createdAt: zod.coerce.date().optional(),
       }),
     )
@@ -776,7 +791,16 @@ export const ListBookingsQueryParams = zod.object({
   branchId: zod.coerce.number().optional(),
   date: zod.date().optional(),
   status: zod
-    .enum(["pending", "confirmed", "in_progress", "completed", "cancelled"])
+    .enum([
+      "pending",
+      "confirmed",
+      "scheduled",
+      "en_route",
+      "in_progress",
+      "completed",
+      "cancelled",
+      "rescheduled",
+    ])
     .optional(),
   serviceType: zod.coerce.string().optional(),
   limit: zod.coerce.number().default(listBookingsQueryLimitDefault),
@@ -806,20 +830,33 @@ export const ListBookingsResponse = zod.object({
       status: zod.enum([
         "pending",
         "confirmed",
+        "scheduled",
+        "en_route",
         "in_progress",
         "completed",
         "cancelled",
+        "rescheduled",
       ]),
       serviceType: zod.enum([
         "car_wash",
         "detailing",
         "solar_cleaning",
+        "one_time_wash",
+        "daily_cleaning",
+        "subscription_wash",
         "pickup_drop",
         "emergency",
       ]),
       address: zod.string().optional(),
+      area: zod.string().optional(),
+      locationLat: zod.number().optional(),
+      locationLng: zod.number().optional(),
       notes: zod.string().optional(),
+      startedAt: zod.coerce.date().optional(),
       completedAt: zod.coerce.date().optional(),
+      cancellationReason: zod.string().optional(),
+      proofPhotoUrls: zod.array(zod.string()).optional(),
+      customerSignatureUrl: zod.string().optional(),
       beforePhotoUrl: zod.string().optional(),
       afterPhotoUrl: zod.string().optional(),
       technicianNotes: zod.string().optional(),
@@ -829,6 +866,8 @@ export const ListBookingsResponse = zod.object({
         .max(listBookingsResponseDataItemRatingMax)
         .optional(),
       amount: zod.number().optional(),
+      recurrenceRule: zod.string().optional(),
+      parentBookingId: zod.number().optional(),
       createdAt: zod.coerce.date().optional(),
     }),
   ),
@@ -854,12 +893,19 @@ export const CreateBookingBody = zod.object({
     "car_wash",
     "detailing",
     "solar_cleaning",
+    "one_time_wash",
+    "daily_cleaning",
+    "subscription_wash",
     "pickup_drop",
     "emergency",
   ]),
   address: zod.string().optional(),
+  area: zod.string().optional(),
+  locationLat: zod.number().optional(),
+  locationLng: zod.number().optional(),
   notes: zod.string().optional(),
   amount: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
 });
 
 /**
@@ -890,25 +936,40 @@ export const GetBookingResponse = zod.object({
   status: zod.enum([
     "pending",
     "confirmed",
+    "scheduled",
+    "en_route",
     "in_progress",
     "completed",
     "cancelled",
+    "rescheduled",
   ]),
   serviceType: zod.enum([
     "car_wash",
     "detailing",
     "solar_cleaning",
+    "one_time_wash",
+    "daily_cleaning",
+    "subscription_wash",
     "pickup_drop",
     "emergency",
   ]),
   address: zod.string().optional(),
+  area: zod.string().optional(),
+  locationLat: zod.number().optional(),
+  locationLng: zod.number().optional(),
   notes: zod.string().optional(),
+  startedAt: zod.coerce.date().optional(),
   completedAt: zod.coerce.date().optional(),
+  cancellationReason: zod.string().optional(),
+  proofPhotoUrls: zod.array(zod.string()).optional(),
+  customerSignatureUrl: zod.string().optional(),
   beforePhotoUrl: zod.string().optional(),
   afterPhotoUrl: zod.string().optional(),
   technicianNotes: zod.string().optional(),
   rating: zod.number().min(1).max(getBookingResponseRatingMax).optional(),
   amount: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  parentBookingId: zod.number().optional(),
   createdAt: zod.coerce.date().optional(),
 });
 
@@ -923,7 +984,16 @@ export const updateBookingBodyRatingMax = 5;
 
 export const UpdateBookingBody = zod.object({
   status: zod
-    .enum(["pending", "confirmed", "in_progress", "completed", "cancelled"])
+    .enum([
+      "pending",
+      "confirmed",
+      "scheduled",
+      "en_route",
+      "in_progress",
+      "completed",
+      "cancelled",
+      "rescheduled",
+    ])
     .optional(),
   staffId: zod.number().optional(),
   scheduledDate: zod.coerce.date().optional(),
@@ -932,6 +1002,9 @@ export const UpdateBookingBody = zod.object({
   technicianNotes: zod.string().optional(),
   beforePhotoUrl: zod.string().optional(),
   afterPhotoUrl: zod.string().optional(),
+  proofPhotoUrls: zod.array(zod.string()).optional(),
+  customerSignatureUrl: zod.string().optional(),
+  cancellationReason: zod.string().optional(),
   rating: zod.number().min(1).max(updateBookingBodyRatingMax).optional(),
   completedAt: zod.coerce.date().optional(),
 });
@@ -957,25 +1030,40 @@ export const UpdateBookingResponse = zod.object({
   status: zod.enum([
     "pending",
     "confirmed",
+    "scheduled",
+    "en_route",
     "in_progress",
     "completed",
     "cancelled",
+    "rescheduled",
   ]),
   serviceType: zod.enum([
     "car_wash",
     "detailing",
     "solar_cleaning",
+    "one_time_wash",
+    "daily_cleaning",
+    "subscription_wash",
     "pickup_drop",
     "emergency",
   ]),
   address: zod.string().optional(),
+  area: zod.string().optional(),
+  locationLat: zod.number().optional(),
+  locationLng: zod.number().optional(),
   notes: zod.string().optional(),
+  startedAt: zod.coerce.date().optional(),
   completedAt: zod.coerce.date().optional(),
+  cancellationReason: zod.string().optional(),
+  proofPhotoUrls: zod.array(zod.string()).optional(),
+  customerSignatureUrl: zod.string().optional(),
   beforePhotoUrl: zod.string().optional(),
   afterPhotoUrl: zod.string().optional(),
   technicianNotes: zod.string().optional(),
   rating: zod.number().min(1).max(updateBookingResponseRatingMax).optional(),
   amount: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  parentBookingId: zod.number().optional(),
   createdAt: zod.coerce.date().optional(),
 });
 
@@ -1008,28 +1096,415 @@ export const GetTodayBookingsResponseItem = zod.object({
   status: zod.enum([
     "pending",
     "confirmed",
+    "scheduled",
+    "en_route",
     "in_progress",
     "completed",
     "cancelled",
+    "rescheduled",
   ]),
   serviceType: zod.enum([
     "car_wash",
     "detailing",
     "solar_cleaning",
+    "one_time_wash",
+    "daily_cleaning",
+    "subscription_wash",
     "pickup_drop",
     "emergency",
   ]),
   address: zod.string().optional(),
+  area: zod.string().optional(),
+  locationLat: zod.number().optional(),
+  locationLng: zod.number().optional(),
   notes: zod.string().optional(),
+  startedAt: zod.coerce.date().optional(),
   completedAt: zod.coerce.date().optional(),
+  cancellationReason: zod.string().optional(),
+  proofPhotoUrls: zod.array(zod.string()).optional(),
+  customerSignatureUrl: zod.string().optional(),
   beforePhotoUrl: zod.string().optional(),
   afterPhotoUrl: zod.string().optional(),
   technicianNotes: zod.string().optional(),
   rating: zod.number().min(1).max(getTodayBookingsResponseRatingMax).optional(),
   amount: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  parentBookingId: zod.number().optional(),
   createdAt: zod.coerce.date().optional(),
 });
 export const GetTodayBookingsResponse = zod.array(GetTodayBookingsResponseItem);
+
+/**
+ * @summary Transition booking status
+ */
+export const TransitionBookingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const TransitionBookingBody = zod.object({
+  toStatus: zod.enum([
+    "scheduled",
+    "en_route",
+    "in_progress",
+    "completed",
+    "cancelled",
+    "rescheduled",
+  ]),
+  reason: zod.string().optional(),
+});
+
+export const transitionBookingResponseRatingMax = 5;
+
+export const TransitionBookingResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string().optional(),
+  customerPhone: zod.string().optional(),
+  vehicleId: zod.number().optional(),
+  vehicleInfo: zod.string().optional(),
+  solarSiteId: zod.number().optional(),
+  subscriptionId: zod.number().optional(),
+  serviceId: zod.number().optional(),
+  serviceName: zod.string().optional(),
+  staffId: zod.number().optional(),
+  staffName: zod.string().optional(),
+  branchId: zod.number().optional(),
+  scheduledDate: zod.coerce.date(),
+  scheduledTime: zod.string().optional(),
+  status: zod.enum([
+    "pending",
+    "confirmed",
+    "scheduled",
+    "en_route",
+    "in_progress",
+    "completed",
+    "cancelled",
+    "rescheduled",
+  ]),
+  serviceType: zod.enum([
+    "car_wash",
+    "detailing",
+    "solar_cleaning",
+    "one_time_wash",
+    "daily_cleaning",
+    "subscription_wash",
+    "pickup_drop",
+    "emergency",
+  ]),
+  address: zod.string().optional(),
+  area: zod.string().optional(),
+  locationLat: zod.number().optional(),
+  locationLng: zod.number().optional(),
+  notes: zod.string().optional(),
+  startedAt: zod.coerce.date().optional(),
+  completedAt: zod.coerce.date().optional(),
+  cancellationReason: zod.string().optional(),
+  proofPhotoUrls: zod.array(zod.string()).optional(),
+  customerSignatureUrl: zod.string().optional(),
+  beforePhotoUrl: zod.string().optional(),
+  afterPhotoUrl: zod.string().optional(),
+  technicianNotes: zod.string().optional(),
+  rating: zod
+    .number()
+    .min(1)
+    .max(transitionBookingResponseRatingMax)
+    .optional(),
+  amount: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  parentBookingId: zod.number().optional(),
+  createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Add proof-of-work photos
+ */
+export const AddProofParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AddProofBody = zod.object({
+  urls: zod.array(zod.string()),
+});
+
+export const addProofResponseRatingMax = 5;
+
+export const AddProofResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string().optional(),
+  customerPhone: zod.string().optional(),
+  vehicleId: zod.number().optional(),
+  vehicleInfo: zod.string().optional(),
+  solarSiteId: zod.number().optional(),
+  subscriptionId: zod.number().optional(),
+  serviceId: zod.number().optional(),
+  serviceName: zod.string().optional(),
+  staffId: zod.number().optional(),
+  staffName: zod.string().optional(),
+  branchId: zod.number().optional(),
+  scheduledDate: zod.coerce.date(),
+  scheduledTime: zod.string().optional(),
+  status: zod.enum([
+    "pending",
+    "confirmed",
+    "scheduled",
+    "en_route",
+    "in_progress",
+    "completed",
+    "cancelled",
+    "rescheduled",
+  ]),
+  serviceType: zod.enum([
+    "car_wash",
+    "detailing",
+    "solar_cleaning",
+    "one_time_wash",
+    "daily_cleaning",
+    "subscription_wash",
+    "pickup_drop",
+    "emergency",
+  ]),
+  address: zod.string().optional(),
+  area: zod.string().optional(),
+  locationLat: zod.number().optional(),
+  locationLng: zod.number().optional(),
+  notes: zod.string().optional(),
+  startedAt: zod.coerce.date().optional(),
+  completedAt: zod.coerce.date().optional(),
+  cancellationReason: zod.string().optional(),
+  proofPhotoUrls: zod.array(zod.string()).optional(),
+  customerSignatureUrl: zod.string().optional(),
+  beforePhotoUrl: zod.string().optional(),
+  afterPhotoUrl: zod.string().optional(),
+  technicianNotes: zod.string().optional(),
+  rating: zod.number().min(1).max(addProofResponseRatingMax).optional(),
+  amount: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  parentBookingId: zod.number().optional(),
+  createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Assign or reassign staff
+ */
+export const AssignBookingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AssignBookingBody = zod.object({
+  staffId: zod.number(),
+  reason: zod.string().optional(),
+});
+
+export const assignBookingResponseRatingMax = 5;
+
+export const AssignBookingResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string().optional(),
+  customerPhone: zod.string().optional(),
+  vehicleId: zod.number().optional(),
+  vehicleInfo: zod.string().optional(),
+  solarSiteId: zod.number().optional(),
+  subscriptionId: zod.number().optional(),
+  serviceId: zod.number().optional(),
+  serviceName: zod.string().optional(),
+  staffId: zod.number().optional(),
+  staffName: zod.string().optional(),
+  branchId: zod.number().optional(),
+  scheduledDate: zod.coerce.date(),
+  scheduledTime: zod.string().optional(),
+  status: zod.enum([
+    "pending",
+    "confirmed",
+    "scheduled",
+    "en_route",
+    "in_progress",
+    "completed",
+    "cancelled",
+    "rescheduled",
+  ]),
+  serviceType: zod.enum([
+    "car_wash",
+    "detailing",
+    "solar_cleaning",
+    "one_time_wash",
+    "daily_cleaning",
+    "subscription_wash",
+    "pickup_drop",
+    "emergency",
+  ]),
+  address: zod.string().optional(),
+  area: zod.string().optional(),
+  locationLat: zod.number().optional(),
+  locationLng: zod.number().optional(),
+  notes: zod.string().optional(),
+  startedAt: zod.coerce.date().optional(),
+  completedAt: zod.coerce.date().optional(),
+  cancellationReason: zod.string().optional(),
+  proofPhotoUrls: zod.array(zod.string()).optional(),
+  customerSignatureUrl: zod.string().optional(),
+  beforePhotoUrl: zod.string().optional(),
+  afterPhotoUrl: zod.string().optional(),
+  technicianNotes: zod.string().optional(),
+  rating: zod.number().min(1).max(assignBookingResponseRatingMax).optional(),
+  amount: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  parentBookingId: zod.number().optional(),
+  createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Regenerate child occurrences from recurrence rule
+ */
+export const RegenerateOccurrencesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RegenerateOccurrencesResponse = zod.object({
+  created: zod.number().optional(),
+  bookingIds: zod.array(zod.number()).optional(),
+});
+
+/**
+ * @summary Get booking audit log
+ */
+export const GetBookingEventsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetBookingEventsResponseItem = zod.object({
+  id: zod.number(),
+  bookingId: zod.number(),
+  type: zod.enum([
+    "status_change",
+    "proof_upload",
+    "reassign",
+    "reschedule",
+    "cancel",
+    "note",
+  ]),
+  fromStatus: zod.string().optional(),
+  toStatus: zod.string().optional(),
+  body: zod.string().optional(),
+  actorId: zod.number().optional(),
+  actorName: zod.string().optional(),
+  locationLat: zod.string().optional(),
+  locationLng: zod.string().optional(),
+  createdAt: zod.coerce.date(),
+});
+export const GetBookingEventsResponse = zod.array(GetBookingEventsResponseItem);
+
+/**
+ * @summary Reschedule booking
+ */
+export const RescheduleBookingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RescheduleBookingBody = zod.object({
+  scheduledDate: zod.coerce.date(),
+  scheduledTime: zod.string().optional(),
+  reason: zod.string().optional(),
+});
+
+export const rescheduleBookingResponseRatingMax = 5;
+
+export const RescheduleBookingResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string().optional(),
+  customerPhone: zod.string().optional(),
+  vehicleId: zod.number().optional(),
+  vehicleInfo: zod.string().optional(),
+  solarSiteId: zod.number().optional(),
+  subscriptionId: zod.number().optional(),
+  serviceId: zod.number().optional(),
+  serviceName: zod.string().optional(),
+  staffId: zod.number().optional(),
+  staffName: zod.string().optional(),
+  branchId: zod.number().optional(),
+  scheduledDate: zod.coerce.date(),
+  scheduledTime: zod.string().optional(),
+  status: zod.enum([
+    "pending",
+    "confirmed",
+    "scheduled",
+    "en_route",
+    "in_progress",
+    "completed",
+    "cancelled",
+    "rescheduled",
+  ]),
+  serviceType: zod.enum([
+    "car_wash",
+    "detailing",
+    "solar_cleaning",
+    "one_time_wash",
+    "daily_cleaning",
+    "subscription_wash",
+    "pickup_drop",
+    "emergency",
+  ]),
+  address: zod.string().optional(),
+  area: zod.string().optional(),
+  locationLat: zod.number().optional(),
+  locationLng: zod.number().optional(),
+  notes: zod.string().optional(),
+  startedAt: zod.coerce.date().optional(),
+  completedAt: zod.coerce.date().optional(),
+  cancellationReason: zod.string().optional(),
+  proofPhotoUrls: zod.array(zod.string()).optional(),
+  customerSignatureUrl: zod.string().optional(),
+  beforePhotoUrl: zod.string().optional(),
+  afterPhotoUrl: zod.string().optional(),
+  technicianNotes: zod.string().optional(),
+  rating: zod
+    .number()
+    .min(1)
+    .max(rescheduleBookingResponseRatingMax)
+    .optional(),
+  amount: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  parentBookingId: zod.number().optional(),
+  createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Request a presigned URL for file upload
+ */
+
+export const RequestUploadUrlBody = zod.object({
+  name: zod.string().min(1),
+  size: zod.number().min(1),
+  contentType: zod.string().min(1),
+});
+
+export const RequestUploadUrlResponse = zod.object({
+  uploadURL: zod.string().url(),
+  objectPath: zod.string(),
+  metadata: zod
+    .object({
+      name: zod.string().min(1),
+      size: zod.number().min(1),
+      contentType: zod.string().min(1),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Serve a public asset
+ */
+export const GetPublicObjectParams = zod.object({
+  filePath: zod.coerce.string(),
+});
+
+/**
+ * @summary Serve an object entity
+ */
+export const GetStorageObjectParams = zod.object({
+  objectPath: zod.coerce.string(),
+});
 
 /**
  * @summary List staff members
@@ -1125,20 +1600,33 @@ export const GetStaffResponse = zod
             status: zod.enum([
               "pending",
               "confirmed",
+              "scheduled",
+              "en_route",
               "in_progress",
               "completed",
               "cancelled",
+              "rescheduled",
             ]),
             serviceType: zod.enum([
               "car_wash",
               "detailing",
               "solar_cleaning",
+              "one_time_wash",
+              "daily_cleaning",
+              "subscription_wash",
               "pickup_drop",
               "emergency",
             ]),
             address: zod.string().optional(),
+            area: zod.string().optional(),
+            locationLat: zod.number().optional(),
+            locationLng: zod.number().optional(),
             notes: zod.string().optional(),
+            startedAt: zod.coerce.date().optional(),
             completedAt: zod.coerce.date().optional(),
+            cancellationReason: zod.string().optional(),
+            proofPhotoUrls: zod.array(zod.string()).optional(),
+            customerSignatureUrl: zod.string().optional(),
             beforePhotoUrl: zod.string().optional(),
             afterPhotoUrl: zod.string().optional(),
             technicianNotes: zod.string().optional(),
@@ -1148,6 +1636,8 @@ export const GetStaffResponse = zod
               .max(getStaffResponseTwoRecentBookingsItemRatingMax)
               .optional(),
             amount: zod.number().optional(),
+            recurrenceRule: zod.string().optional(),
+            parentBookingId: zod.number().optional(),
             createdAt: zod.coerce.date().optional(),
           }),
         )
