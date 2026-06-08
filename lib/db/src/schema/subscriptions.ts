@@ -3,7 +3,9 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const subscriptionTypeEnum = pgEnum("subscription_type", ["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]);
-export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "expired", "cancelled", "pending"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active", "paused", "expiring", "expired", "cancelled", "pending", "missed",
+]);
 
 export const subscriptionsTable = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
@@ -16,7 +18,13 @@ export const subscriptionsTable = pgTable("subscriptions", {
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
   nextServiceDate: date("next_service_date"),
+  nextDueDate: date("next_due_date"),
   frequencyDays: integer("frequency_days"),
+  recurrenceRule: text("recurrence_rule"),
+  totalServices: integer("total_services"),
+  servicesUsed: integer("services_used").notNull().default(0),
+  servicesRemaining: integer("services_remaining"),
+  graceMinutes: integer("grace_minutes").notNull().default(60),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   paidAmount: numeric("paid_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   dueAmount: numeric("due_amount", { precision: 10, scale: 2 }).notNull().default("0"),
@@ -26,7 +34,10 @@ export const subscriptionsTable = pgTable("subscriptions", {
   notes: text("notes"),
   cancelledAt: timestamp("cancelled_at"),
   cancellationRemark: text("cancellation_remark"),
+  renewalReminderSentAt: timestamp("renewal_reminder_sent_at"),
   messageSentAt: timestamp("message_sent_at"),
+  pausedAt: timestamp("paused_at"),
+  resumedAt: timestamp("resumed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

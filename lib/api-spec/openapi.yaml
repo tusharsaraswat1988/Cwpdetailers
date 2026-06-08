@@ -556,6 +556,107 @@ paths:
                 items:
                   $ref: "#/components/schemas/Subscription"
 
+  /subscriptions/{id}/pause:
+    post:
+      operationId: pauseSubscription
+      tags: [subscriptions]
+      summary: Pause a subscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/{id}/resume:
+    post:
+      operationId: resumeSubscription
+      tags: [subscriptions]
+      summary: Resume a paused subscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/{id}/cancel:
+    post:
+      operationId: cancelSubscription
+      tags: [subscriptions]
+      summary: Cancel a subscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSubscriptionBody"
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/health:
+    get:
+      operationId: getSubscriptionHealth
+      tags: [subscriptions]
+      summary: Subscription health KPIs
+      responses:
+        "200":
+          description: Health counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active:
+                    type: integer
+                  paused:
+                    type: integer
+                  expiring:
+                    type: integer
+                  expired:
+                    type: integer
+                  missed:
+                    type: integer
+                  total:
+                    type: integer
+
+  /subscriptions/daily-tick:
+    post:
+      operationId: runDailyTick
+      tags: [subscriptions]
+      summary: Run daily scheduler tick
+      responses:
+        "200":
+          description: Tick result
+          content:
+            application/json:
+              schema:
+                type: object
+
   # BOOKINGS
   /bookings:
     get:
@@ -1940,7 +2041,7 @@ components:
           enum: [daily_wash, monthly_wash, solar_amc, detailing_plan]
         status:
           type: string
-          enum: [active, expired, cancelled, pending]
+          enum: [active, paused, expiring, expired, cancelled, pending, missed]
         startDate:
           type: string
           format: date
@@ -1950,7 +2051,20 @@ components:
         nextServiceDate:
           type: string
           format: date
+        nextDueDate:
+          type: string
+          format: date
         frequencyDays:
+          type: integer
+        recurrenceRule:
+          type: string
+        totalServices:
+          type: integer
+        servicesUsed:
+          type: integer
+        servicesRemaining:
+          type: integer
+        graceMinutes:
           type: integer
         price:
           type: number
@@ -1960,6 +2074,22 @@ components:
           type: number
         branchId:
           type: integer
+        notes:
+          type: string
+        cancelledAt:
+          type: string
+          format: date-time
+        cancellationRemark:
+          type: string
+        renewalReminderSentAt:
+          type: string
+          format: date-time
+        pausedAt:
+          type: string
+          format: date-time
+        resumedAt:
+          type: string
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -2006,6 +2136,12 @@ components:
           type: number
         branchId:
           type: integer
+        totalServices:
+          type: integer
+        recurrenceRule:
+          type: string
+        graceMinutes:
+          type: integer
       required: [customerId, type, startDate, endDate, price]
 
     UpdateSubscriptionBody:
@@ -2013,15 +2149,34 @@ components:
       properties:
         status:
           type: string
-          enum: [active, expired, cancelled, pending]
+          enum: [active, paused, expiring, expired, cancelled, pending, missed]
         endDate:
           type: string
           format: date
         nextServiceDate:
           type: string
           format: date
+        nextDueDate:
+          type: string
+          format: date
         price:
           type: number
+        totalServices:
+          type: integer
+        servicesUsed:
+          type: integer
+        servicesRemaining:
+          type: integer
+        graceMinutes:
+          type: integer
+        notes:
+          type: string
+
+    CancelSubscriptionBody:
+      type: object
+      properties:
+        remark:
+          type: string
 
     # BOOKINGS
     Booking:

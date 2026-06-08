@@ -26,13 +26,25 @@ const subSelect = {
   startDate: subscriptionsTable.startDate,
   endDate: subscriptionsTable.endDate,
   nextServiceDate: subscriptionsTable.nextServiceDate,
+  nextDueDate: subscriptionsTable.nextDueDate,
   frequencyDays: subscriptionsTable.frequencyDays,
+  recurrenceRule: subscriptionsTable.recurrenceRule,
+  totalServices: subscriptionsTable.totalServices,
+  servicesUsed: subscriptionsTable.servicesUsed,
+  servicesRemaining: subscriptionsTable.servicesRemaining,
+  graceMinutes: subscriptionsTable.graceMinutes,
   price: subscriptionsTable.price,
   paidAmount: subscriptionsTable.paidAmount,
   dueAmount: subscriptionsTable.dueAmount,
   branchId: subscriptionsTable.branchId,
   companyId: subscriptionsTable.companyId,
   franchiseeId: subscriptionsTable.franchiseeId,
+  notes: subscriptionsTable.notes,
+  cancelledAt: subscriptionsTable.cancelledAt,
+  cancellationRemark: subscriptionsTable.cancellationRemark,
+  renewalReminderSentAt: subscriptionsTable.renewalReminderSentAt,
+  pausedAt: subscriptionsTable.pausedAt,
+  resumedAt: subscriptionsTable.resumedAt,
   createdAt: subscriptionsTable.createdAt,
 };
 
@@ -65,7 +77,11 @@ router.get("/subscriptions", async (req, res) => {
 
 router.post("/subscriptions", async (req, res) => {
   try {
-    const { customerId, vehicleId, solarSiteId, serviceId, type, startDate, endDate, frequencyDays, price, branchId } = req.body;
+    const {
+      customerId, vehicleId, solarSiteId, serviceId, type,
+      startDate, endDate, frequencyDays, price, branchId,
+      totalServices, recurrenceRule, graceMinutes,
+    } = req.body;
     if (!customerId || !type || !startDate || !endDate || price === undefined) {
       return res.status(400).json({ error: "customerId, type, startDate, endDate, and price are required" });
     }
@@ -78,6 +94,13 @@ router.post("/subscriptions", async (req, res) => {
     const values = tenantStamp(req, {
       customerId, vehicleId, solarSiteId, serviceId, type, startDate, endDate,
       frequencyDays, price: price.toString(), dueAmount: price.toString(), branchId,
+      totalServices: totalServices ?? null,
+      servicesUsed: 0,
+      servicesRemaining: totalServices ?? null,
+      recurrenceRule: recurrenceRule ?? null,
+      graceMinutes: graceMinutes ?? 60,
+      nextServiceDate: startDate,
+      nextDueDate: startDate,
     });
     const [sub] = await db.insert(subscriptionsTable).values(values as typeof subscriptionsTable.$inferInsert).returning();
     return res.status(201).json(sub);
@@ -110,9 +133,53 @@ router.get("/subscriptions/expiring-soon", async (req, res) => {
   }
 });
 
+router.get("/subscriptions/health", async (req, res) => {
+  try {
+    const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const where = conditions.length ? and(...conditions) : undefined;
+
+    const [active, paused, expiring, expired, missed, totalResult] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "active"), ...(where ? [where] : []))),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "paused"), ...(where ? [where] : []))),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
+        eq(subscriptionsTable.status, "active"),
+        sql`${subscriptionsTable.endDate}::date <= ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`,
+        ...(where ? [where] : []),
+      )),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "expired"), ...(where ? [where] : []))),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "missed"), ...(where ? [where] : []))),
+      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(where ?? sql`true`),
+    ]);
+
+    return res.json({
+      active: Number(active[0]?.count ?? 0),
+      paused: Number(paused[0]?.count ?? 0),
+      expiring: Number(expiring[0]?.count ?? 0),
+      expired: Number(expired[0]?.count ?? 0),
+      missed: Number(missed[0]?.count ?? 0),
+      total: Number(totalResult[0]?.count ?? 0),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Subscription health error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/subscriptions/daily-tick", async (req, res) => {
+  try {
+    const { runDailyTick } = await import("../subscriptions/service");
+    const result = await runDailyTick();
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Daily tick error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/subscriptions/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(404).json({ error: "Subscription not found" });
     const [sub] = await db.select(subSelect).from(subscriptionsTable)
       .leftJoin(customersTable, eq(subscriptionsTable.customerId, customersTable.id))
       .leftJoin(servicesTable, eq(subscriptionsTable.serviceId, servicesTable.id))
@@ -135,16 +202,73 @@ router.patch("/subscriptions/:id", async (req, res) => {
     if (!existing || !rowInScope(req, existing)) {
       return res.status(404).json({ error: "Subscription not found" });
     }
-    const { status, endDate, nextServiceDate, price } = req.body;
+    const { status, endDate, nextServiceDate, nextDueDate, price, totalServices, servicesUsed, servicesRemaining, graceMinutes, notes } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (status !== undefined) updateData.status = status;
     if (endDate !== undefined) updateData.endDate = endDate;
     if (nextServiceDate !== undefined) updateData.nextServiceDate = nextServiceDate;
+    if (nextDueDate !== undefined) updateData.nextDueDate = nextDueDate;
     if (price !== undefined) updateData.price = price.toString();
+    if (totalServices !== undefined) updateData.totalServices = totalServices;
+    if (servicesUsed !== undefined) updateData.servicesUsed = servicesUsed;
+    if (servicesRemaining !== undefined) updateData.servicesRemaining = servicesRemaining;
+    if (graceMinutes !== undefined) updateData.graceMinutes = graceMinutes;
+    if (notes !== undefined) updateData.notes = notes;
     const [sub] = await db.update(subscriptionsTable).set(updateData).where(eq(subscriptionsTable.id, id)).returning();
     return res.json(sub);
   } catch (err) {
     req.log.error({ err }, "Update subscription error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/subscriptions/:id/pause", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Subscription not found" });
+    if (existing.status !== "active") return res.status(400).json({ error: "Only active subscriptions can be paused" });
+
+    const [sub] = await db.update(subscriptionsTable)
+      .set({ status: "paused", pausedAt: new Date(), updatedAt: new Date() })
+      .where(eq(subscriptionsTable.id, id)).returning();
+    return res.json(sub);
+  } catch (err) {
+    req.log.error({ err }, "Pause subscription error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/subscriptions/:id/resume", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Subscription not found" });
+    if (existing.status !== "paused") return res.status(400).json({ error: "Only paused subscriptions can be resumed" });
+
+    const [sub] = await db.update(subscriptionsTable)
+      .set({ status: "active", resumedAt: new Date(), updatedAt: new Date() })
+      .where(eq(subscriptionsTable.id, id)).returning();
+    return res.json(sub);
+  } catch (err) {
+    req.log.error({ err }, "Resume subscription error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/subscriptions/:id/cancel", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Subscription not found" });
+    const { remark } = req.body;
+
+    const [sub] = await db.update(subscriptionsTable)
+      .set({ status: "cancelled", cancelledAt: new Date(), cancellationRemark: remark ?? null, updatedAt: new Date() })
+      .where(eq(subscriptionsTable.id, id)).returning();
+    return res.json(sub);
+  } catch (err) {
+    req.log.error({ err }, "Cancel subscription error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

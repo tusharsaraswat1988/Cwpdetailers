@@ -1,9 +1,9 @@
-import { useGetDashboardStats, getGetDashboardStatsQueryKey, useGetExpiringSoonSubscriptions } from "@workspace/api-client-react";
+import { useGetDashboardStats, getGetDashboardStatsQueryKey, useGetExpiringSoonSubscriptions, useGetSubscriptionHealth } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, Users, CreditCard, Calendar, AlertCircle, Star, IndianRupee, Activity, Funnel, Clock, BarChart3 } from "lucide-react";
+import { TrendingUp, Users, CreditCard, Calendar, AlertCircle, Star, IndianRupee, Activity, Funnel, Clock, BarChart3, HeartPulse, Pause, Circle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
@@ -47,6 +47,7 @@ async function fetchFollowUps(): Promise<any[]> {
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetDashboardStats({ period: "month" }, { query: { queryKey: getGetDashboardStatsQueryKey({ period: "month" }) } });
   const { data: expiring } = useGetExpiringSoonSubscriptions();
+  const { data: health } = useGetSubscriptionHealth();
   const { data: leadStats } = useQuery({ queryKey: ["leadStats"], queryFn: fetchLeadStats });
   const { data: followUps } = useQuery({ queryKey: ["leadFollowUps"], queryFn: fetchFollowUps });
 
@@ -81,6 +82,38 @@ export default function AdminDashboard() {
           <StatCard title="Open Complaints" value={stats?.openComplaints ?? "--"} icon={AlertCircle} color="text-amber-500" loading={isLoading} />
           <StatCard title="Repeat Customer %" value={`${stats?.repeatCustomerPercent ?? 0}%`} icon={Star} loading={isLoading} />
         </div>
+
+        {/* Subscription Health strip */}
+        {health && (
+          <Card className="border-l-4 border-l-primary">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <HeartPulse size={18} className="text-primary" />
+                  <span className="font-semibold text-sm">Subscription Health</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="flex items-center gap-1 bg-green-500/10 text-green-600 px-2 py-1 rounded-md">
+                    <Circle size={8} fill="currentColor" /> {health.active} active
+                  </span>
+                  <span className="flex items-center gap-1 bg-blue-500/10 text-blue-600 px-2 py-1 rounded-md">
+                    <Pause size={8} /> {health.paused} paused
+                  </span>
+                  <span className="flex items-center gap-1 bg-amber-500/10 text-amber-600 px-2 py-1 rounded-md">
+                    <AlertCircle size={8} /> {health.expiring} expiring
+                  </span>
+                  <span className="flex items-center gap-1 bg-red-500/10 text-red-600 px-2 py-1 rounded-md">
+                    <AlertCircle size={8} /> {health.missed} missed
+                  </span>
+                  <span className="flex items-center gap-1 bg-muted text-muted-foreground px-2 py-1 rounded-md">
+                    <Circle size={8} fill="currentColor" /> {health.expired} expired
+                  </span>
+                  <Link href="/admin/subscriptions" className="text-primary hover:underline ml-1">View all</Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Lead summary strip */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

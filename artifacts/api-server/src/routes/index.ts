@@ -36,6 +36,8 @@ router.use(
   guardResource("subscriptions", [
     { match: /\/cancel$/, method: "POST", action: "edit" },
     { match: /\/renew$/, method: "POST", action: "edit" },
+    { match: /\/pause$/, method: "POST", action: "edit" },
+    { match: /\/resume$/, method: "POST", action: "edit" },
   ]),
   subscriptionsRouter,
 );

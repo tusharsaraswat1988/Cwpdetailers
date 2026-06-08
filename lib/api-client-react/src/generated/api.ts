@@ -25,6 +25,7 @@ import type {
   BookingEvent,
   BookingListResponse,
   Branch,
+  CancelSubscriptionBody,
   Complaint,
   ComplaintListResponse,
   CreateBookingBody,
@@ -51,6 +52,7 @@ import type {
   GetStaffAttendanceParams,
   GetStaffLeaderboardParams,
   GetStaffPerformanceParams,
+  GetSubscriptionHealth200,
   GetTodayBookingsParams,
   HealthStatus,
   Invoice,
@@ -77,6 +79,7 @@ import type {
   RegisterBody,
   RescheduleBookingBody,
   RevenueAnalytics,
+  RunDailyTick200,
   Service,
   SolarSite,
   Staff,
@@ -2263,6 +2266,417 @@ export function useGetExpiringSoonSubscriptions<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Pause a subscription
+ */
+export const getPauseSubscriptionUrl = (id: number) => {
+  return `/api/subscriptions/${id}/pause`;
+};
+
+export const pauseSubscription = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Subscription> => {
+  return customFetch<Subscription>(getPauseSubscriptionUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getPauseSubscriptionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pauseSubscription>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof pauseSubscription>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["pauseSubscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof pauseSubscription>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return pauseSubscription(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PauseSubscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof pauseSubscription>>
+>;
+
+export type PauseSubscriptionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Pause a subscription
+ */
+export const usePauseSubscription = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pauseSubscription>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof pauseSubscription>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getPauseSubscriptionMutationOptions(options));
+};
+
+/**
+ * @summary Resume a paused subscription
+ */
+export const getResumeSubscriptionUrl = (id: number) => {
+  return `/api/subscriptions/${id}/resume`;
+};
+
+export const resumeSubscription = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Subscription> => {
+  return customFetch<Subscription>(getResumeSubscriptionUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResumeSubscriptionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resumeSubscription>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resumeSubscription>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["resumeSubscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resumeSubscription>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return resumeSubscription(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResumeSubscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resumeSubscription>>
+>;
+
+export type ResumeSubscriptionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Resume a paused subscription
+ */
+export const useResumeSubscription = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resumeSubscription>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resumeSubscription>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getResumeSubscriptionMutationOptions(options));
+};
+
+/**
+ * @summary Cancel a subscription
+ */
+export const getCancelSubscriptionUrl = (id: number) => {
+  return `/api/subscriptions/${id}/cancel`;
+};
+
+export const cancelSubscription = async (
+  id: number,
+  cancelSubscriptionBody: CancelSubscriptionBody,
+  options?: RequestInit,
+): Promise<Subscription> => {
+  return customFetch<Subscription>(getCancelSubscriptionUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(cancelSubscriptionBody),
+  });
+};
+
+export const getCancelSubscriptionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelSubscription>>,
+    TError,
+    { id: number; data: BodyType<CancelSubscriptionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelSubscription>>,
+  TError,
+  { id: number; data: BodyType<CancelSubscriptionBody> },
+  TContext
+> => {
+  const mutationKey = ["cancelSubscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelSubscription>>,
+    { id: number; data: BodyType<CancelSubscriptionBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return cancelSubscription(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CancelSubscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof cancelSubscription>>
+>;
+export type CancelSubscriptionMutationBody = BodyType<CancelSubscriptionBody>;
+export type CancelSubscriptionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Cancel a subscription
+ */
+export const useCancelSubscription = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelSubscription>>,
+    TError,
+    { id: number; data: BodyType<CancelSubscriptionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof cancelSubscription>>,
+  TError,
+  { id: number; data: BodyType<CancelSubscriptionBody> },
+  TContext
+> => {
+  return useMutation(getCancelSubscriptionMutationOptions(options));
+};
+
+/**
+ * @summary Subscription health KPIs
+ */
+export const getGetSubscriptionHealthUrl = () => {
+  return `/api/subscriptions/health`;
+};
+
+export const getSubscriptionHealth = async (
+  options?: RequestInit,
+): Promise<GetSubscriptionHealth200> => {
+  return customFetch<GetSubscriptionHealth200>(getGetSubscriptionHealthUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSubscriptionHealthQueryKey = () => {
+  return [`/api/subscriptions/health`] as const;
+};
+
+export const getGetSubscriptionHealthQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSubscriptionHealth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSubscriptionHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSubscriptionHealthQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSubscriptionHealth>>
+  > = ({ signal }) => getSubscriptionHealth({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSubscriptionHealth>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSubscriptionHealthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSubscriptionHealth>>
+>;
+export type GetSubscriptionHealthQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Subscription health KPIs
+ */
+
+export function useGetSubscriptionHealth<
+  TData = Awaited<ReturnType<typeof getSubscriptionHealth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSubscriptionHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSubscriptionHealthQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Run daily scheduler tick
+ */
+export const getRunDailyTickUrl = () => {
+  return `/api/subscriptions/daily-tick`;
+};
+
+export const runDailyTick = async (
+  options?: RequestInit,
+): Promise<RunDailyTick200> => {
+  return customFetch<RunDailyTick200>(getRunDailyTickUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunDailyTickMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runDailyTick>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runDailyTick>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["runDailyTick"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runDailyTick>>,
+    void
+  > = () => {
+    return runDailyTick(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunDailyTickMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runDailyTick>>
+>;
+
+export type RunDailyTickMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Run daily scheduler tick
+ */
+export const useRunDailyTick = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runDailyTick>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runDailyTick>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRunDailyTickMutationOptions(options));
+};
 
 /**
  * @summary List bookings

@@ -1,0 +1,1 @@
+- [Express static route ordering](express-static-routes.md) — Static API routes (e.g., /health, /daily-tick) must be declared BEFORE parameterized routes (/:id), or the parameter route will match the static path name and cause NaN parse errors.

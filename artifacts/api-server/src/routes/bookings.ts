@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { bookingsTable, customersTable, staffTable, servicesTable, bookingEventsTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { decrementOnCompletion, recomputeNextDueDate } from "../subscriptions/service";
 
 const router = Router();
 
@@ -252,6 +253,16 @@ router.post("/bookings/:id/transition", async (req, res) => {
       actorId: req.user?.id ?? req.scope?.staffId,
       actorName: req.user?.name ?? "system",
     });
+
+    if (toStatus === "completed" && existing.subscriptionId) {
+      try {
+        await decrementOnCompletion(existing.subscriptionId);
+        await recomputeNextDueDate(existing.subscriptionId);
+      } catch (subErr) {
+        req.log.error({ subErr, subscriptionId: existing.subscriptionId }, "Subscription update on completion failed");
+      }
+    }
+
     return res.json(booking);
   } catch (err) {
     req.log.error({ err }, "Transition booking error");

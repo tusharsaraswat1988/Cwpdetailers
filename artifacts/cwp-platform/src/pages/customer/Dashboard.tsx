@@ -61,15 +61,21 @@ export default function CustomerDashboard() {
             </Link>
           </div>
           <div className="space-y-3">
-            {(subs?.data ?? []).filter(s => s.status === "active").slice(0, 3).map(sub => (
+            {(subs?.data ?? []).filter(s => s.status === "active" || s.status === "paused").slice(0, 3).map(sub => (
               <Card key={sub.id} data-testid={`sub-card-${sub.id}`}>
                 <CardContent className="p-4 flex items-center justify-between gap-4">
                   <div>
                     <p className="font-medium text-sm capitalize">{sub.type?.replace(/_/g, " ")}</p>
                     <p className="text-xs text-muted-foreground">{sub.serviceName} · Expires {sub.endDate}</p>
+                    {sub.nextDueDate && <p className="text-xs text-muted-foreground">Next due: {sub.nextDueDate}</p>}
+                    {sub.totalServices != null && (
+                      <p className="text-xs text-muted-foreground">{sub.servicesRemaining ?? 0}/{sub.totalServices} services remaining</p>
+                    )}
                   </div>
                   <div className="text-right">
-                    <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>
+                    <Badge variant="outline" className={`text-xs ${sub.status === "active" ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-blue-500/10 text-blue-600 border-blue-500/20"}`}>
+                      {sub.status}
+                    </Badge>
                     {Number(sub.dueAmount) > 0 && (
                       <p className="text-xs text-destructive mt-1">₹{Number(sub.dueAmount).toLocaleString("en-IN")} due</p>
                     )}
@@ -77,7 +83,7 @@ export default function CustomerDashboard() {
                 </CardContent>
               </Card>
             ))}
-            {(subs?.data ?? []).filter(s => s.status === "active").length === 0 && (
+            {(subs?.data ?? []).filter(s => s.status === "active" || s.status === "paused").length === 0 && (
               <div className="text-center py-8 bg-card rounded-xl border border-border">
                 <p className="text-muted-foreground text-sm mb-3">No active subscriptions</p>
                 <Link href="/customer/bookings">

@@ -2,7 +2,7 @@ import { useListBookings, getListBookingsQueryKey } from "@workspace/api-client-
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Star } from "lucide-react";
+import { Calendar, Star, Image } from "lucide-react";
 
 const statusColors: Record<string, string> = {
   pending: "bg-amber-500/10 text-amber-600 border-amber-500/20",
@@ -10,12 +10,22 @@ const statusColors: Record<string, string> = {
   in_progress: "bg-primary/10 text-primary border-primary/20",
   completed: "bg-green-500/10 text-green-600 border-green-500/20",
   cancelled: "bg-muted text-muted-foreground border-muted",
+  scheduled: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  en_route: "bg-primary/10 text-primary border-primary/20",
+  rescheduled: "bg-amber-500/10 text-amber-600 border-amber-500/20",
 };
 
 export default function CustomerHistory() {
   const { data, isLoading } = useListBookings({ customerId: "1" } as any, {
     query: { queryKey: getListBookingsQueryKey({ customerId: "1" } as any) }
   });
+
+  const photos = (b: any) => {
+    const urls: string[] = (b.proofPhotoUrls as string[] | null) ?? [];
+    if (b.beforePhotoUrl) urls.unshift(b.beforePhotoUrl);
+    if (b.afterPhotoUrl) urls.push(b.afterPhotoUrl);
+    return urls;
+  };
 
   return (
     <CustomerLayout>
@@ -52,6 +62,20 @@ export default function CustomerHistory() {
                     )}
                   </div>
                 </div>
+                {/* Proof thumbnails */}
+                {photos(b).length > 0 && (
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
+                    <Image size={12} className="text-muted-foreground" />
+                    <div className="flex items-center gap-1.5">
+                      {photos(b).slice(0, 3).map((url: string, i: number) => (
+                        <img key={i} src={url} alt="" className="w-10 h-10 rounded-lg object-cover border border-border" />
+                      ))}
+                      {photos(b).length > 3 && (
+                        <span className="text-xs text-muted-foreground">+{photos(b).length - 3} more</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           {!isLoading && (data?.data ?? []).length === 0 && (

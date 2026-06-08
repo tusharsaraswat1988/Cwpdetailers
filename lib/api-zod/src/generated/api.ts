@@ -209,15 +209,35 @@ export const GetCustomerResponse = zod
               "solar_amc",
               "detailing_plan",
             ]),
-            status: zod.enum(["active", "expired", "cancelled", "pending"]),
+            status: zod.enum([
+              "active",
+              "paused",
+              "expiring",
+              "expired",
+              "cancelled",
+              "pending",
+              "missed",
+            ]),
             startDate: zod.coerce.date(),
             endDate: zod.coerce.date(),
             nextServiceDate: zod.coerce.date().optional(),
+            nextDueDate: zod.coerce.date().optional(),
             frequencyDays: zod.number().optional(),
+            recurrenceRule: zod.string().optional(),
+            totalServices: zod.number().optional(),
+            servicesUsed: zod.number().optional(),
+            servicesRemaining: zod.number().optional(),
+            graceMinutes: zod.number().optional(),
             price: zod.number(),
             paidAmount: zod.number().optional(),
             dueAmount: zod.number().optional(),
             branchId: zod.number().optional(),
+            notes: zod.string().optional(),
+            cancelledAt: zod.coerce.date().optional(),
+            cancellationRemark: zod.string().optional(),
+            renewalReminderSentAt: zod.coerce.date().optional(),
+            pausedAt: zod.coerce.date().optional(),
+            resumedAt: zod.coerce.date().optional(),
             createdAt: zod.coerce.date().optional(),
           }),
         )
@@ -656,15 +676,35 @@ export const ListSubscriptionsResponse = zod.object({
         "solar_amc",
         "detailing_plan",
       ]),
-      status: zod.enum(["active", "expired", "cancelled", "pending"]),
+      status: zod.enum([
+        "active",
+        "paused",
+        "expiring",
+        "expired",
+        "cancelled",
+        "pending",
+        "missed",
+      ]),
       startDate: zod.coerce.date(),
       endDate: zod.coerce.date(),
       nextServiceDate: zod.coerce.date().optional(),
+      nextDueDate: zod.coerce.date().optional(),
       frequencyDays: zod.number().optional(),
+      recurrenceRule: zod.string().optional(),
+      totalServices: zod.number().optional(),
+      servicesUsed: zod.number().optional(),
+      servicesRemaining: zod.number().optional(),
+      graceMinutes: zod.number().optional(),
       price: zod.number(),
       paidAmount: zod.number().optional(),
       dueAmount: zod.number().optional(),
       branchId: zod.number().optional(),
+      notes: zod.string().optional(),
+      cancelledAt: zod.coerce.date().optional(),
+      cancellationRemark: zod.string().optional(),
+      renewalReminderSentAt: zod.coerce.date().optional(),
+      pausedAt: zod.coerce.date().optional(),
+      resumedAt: zod.coerce.date().optional(),
       createdAt: zod.coerce.date().optional(),
     }),
   ),
@@ -687,6 +727,9 @@ export const CreateSubscriptionBody = zod.object({
   frequencyDays: zod.number().optional(),
   price: zod.number(),
   branchId: zod.number().optional(),
+  totalServices: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  graceMinutes: zod.number().optional(),
 });
 
 /**
@@ -705,15 +748,35 @@ export const GetSubscriptionResponse = zod.object({
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
   type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
-  status: zod.enum(["active", "expired", "cancelled", "pending"]),
+  status: zod.enum([
+    "active",
+    "paused",
+    "expiring",
+    "expired",
+    "cancelled",
+    "pending",
+    "missed",
+  ]),
   startDate: zod.coerce.date(),
   endDate: zod.coerce.date(),
   nextServiceDate: zod.coerce.date().optional(),
+  nextDueDate: zod.coerce.date().optional(),
   frequencyDays: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  totalServices: zod.number().optional(),
+  servicesUsed: zod.number().optional(),
+  servicesRemaining: zod.number().optional(),
+  graceMinutes: zod.number().optional(),
   price: zod.number(),
   paidAmount: zod.number().optional(),
   dueAmount: zod.number().optional(),
   branchId: zod.number().optional(),
+  notes: zod.string().optional(),
+  cancelledAt: zod.coerce.date().optional(),
+  cancellationRemark: zod.string().optional(),
+  renewalReminderSentAt: zod.coerce.date().optional(),
+  pausedAt: zod.coerce.date().optional(),
+  resumedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date().optional(),
 });
 
@@ -725,10 +788,26 @@ export const UpdateSubscriptionParams = zod.object({
 });
 
 export const UpdateSubscriptionBody = zod.object({
-  status: zod.enum(["active", "expired", "cancelled", "pending"]).optional(),
+  status: zod
+    .enum([
+      "active",
+      "paused",
+      "expiring",
+      "expired",
+      "cancelled",
+      "pending",
+      "missed",
+    ])
+    .optional(),
   endDate: zod.coerce.date().optional(),
   nextServiceDate: zod.coerce.date().optional(),
+  nextDueDate: zod.coerce.date().optional(),
   price: zod.number().optional(),
+  totalServices: zod.number().optional(),
+  servicesUsed: zod.number().optional(),
+  servicesRemaining: zod.number().optional(),
+  graceMinutes: zod.number().optional(),
+  notes: zod.string().optional(),
 });
 
 export const UpdateSubscriptionResponse = zod.object({
@@ -740,15 +819,35 @@ export const UpdateSubscriptionResponse = zod.object({
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
   type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
-  status: zod.enum(["active", "expired", "cancelled", "pending"]),
+  status: zod.enum([
+    "active",
+    "paused",
+    "expiring",
+    "expired",
+    "cancelled",
+    "pending",
+    "missed",
+  ]),
   startDate: zod.coerce.date(),
   endDate: zod.coerce.date(),
   nextServiceDate: zod.coerce.date().optional(),
+  nextDueDate: zod.coerce.date().optional(),
   frequencyDays: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  totalServices: zod.number().optional(),
+  servicesUsed: zod.number().optional(),
+  servicesRemaining: zod.number().optional(),
+  graceMinutes: zod.number().optional(),
   price: zod.number(),
   paidAmount: zod.number().optional(),
   dueAmount: zod.number().optional(),
   branchId: zod.number().optional(),
+  notes: zod.string().optional(),
+  cancelledAt: zod.coerce.date().optional(),
+  cancellationRemark: zod.string().optional(),
+  renewalReminderSentAt: zod.coerce.date().optional(),
+  pausedAt: zod.coerce.date().optional(),
+  resumedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date().optional(),
 });
 
@@ -764,20 +863,205 @@ export const GetExpiringSoonSubscriptionsResponseItem = zod.object({
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
   type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
-  status: zod.enum(["active", "expired", "cancelled", "pending"]),
+  status: zod.enum([
+    "active",
+    "paused",
+    "expiring",
+    "expired",
+    "cancelled",
+    "pending",
+    "missed",
+  ]),
   startDate: zod.coerce.date(),
   endDate: zod.coerce.date(),
   nextServiceDate: zod.coerce.date().optional(),
+  nextDueDate: zod.coerce.date().optional(),
   frequencyDays: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  totalServices: zod.number().optional(),
+  servicesUsed: zod.number().optional(),
+  servicesRemaining: zod.number().optional(),
+  graceMinutes: zod.number().optional(),
   price: zod.number(),
   paidAmount: zod.number().optional(),
   dueAmount: zod.number().optional(),
   branchId: zod.number().optional(),
+  notes: zod.string().optional(),
+  cancelledAt: zod.coerce.date().optional(),
+  cancellationRemark: zod.string().optional(),
+  renewalReminderSentAt: zod.coerce.date().optional(),
+  pausedAt: zod.coerce.date().optional(),
+  resumedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date().optional(),
 });
 export const GetExpiringSoonSubscriptionsResponse = zod.array(
   GetExpiringSoonSubscriptionsResponseItem,
 );
+
+/**
+ * @summary Pause a subscription
+ */
+export const PauseSubscriptionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const PauseSubscriptionResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string().optional(),
+  vehicleId: zod.number().optional(),
+  solarSiteId: zod.number().optional(),
+  serviceId: zod.number().optional(),
+  serviceName: zod.string().optional(),
+  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  status: zod.enum([
+    "active",
+    "paused",
+    "expiring",
+    "expired",
+    "cancelled",
+    "pending",
+    "missed",
+  ]),
+  startDate: zod.coerce.date(),
+  endDate: zod.coerce.date(),
+  nextServiceDate: zod.coerce.date().optional(),
+  nextDueDate: zod.coerce.date().optional(),
+  frequencyDays: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  totalServices: zod.number().optional(),
+  servicesUsed: zod.number().optional(),
+  servicesRemaining: zod.number().optional(),
+  graceMinutes: zod.number().optional(),
+  price: zod.number(),
+  paidAmount: zod.number().optional(),
+  dueAmount: zod.number().optional(),
+  branchId: zod.number().optional(),
+  notes: zod.string().optional(),
+  cancelledAt: zod.coerce.date().optional(),
+  cancellationRemark: zod.string().optional(),
+  renewalReminderSentAt: zod.coerce.date().optional(),
+  pausedAt: zod.coerce.date().optional(),
+  resumedAt: zod.coerce.date().optional(),
+  createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Resume a paused subscription
+ */
+export const ResumeSubscriptionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ResumeSubscriptionResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string().optional(),
+  vehicleId: zod.number().optional(),
+  solarSiteId: zod.number().optional(),
+  serviceId: zod.number().optional(),
+  serviceName: zod.string().optional(),
+  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  status: zod.enum([
+    "active",
+    "paused",
+    "expiring",
+    "expired",
+    "cancelled",
+    "pending",
+    "missed",
+  ]),
+  startDate: zod.coerce.date(),
+  endDate: zod.coerce.date(),
+  nextServiceDate: zod.coerce.date().optional(),
+  nextDueDate: zod.coerce.date().optional(),
+  frequencyDays: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  totalServices: zod.number().optional(),
+  servicesUsed: zod.number().optional(),
+  servicesRemaining: zod.number().optional(),
+  graceMinutes: zod.number().optional(),
+  price: zod.number(),
+  paidAmount: zod.number().optional(),
+  dueAmount: zod.number().optional(),
+  branchId: zod.number().optional(),
+  notes: zod.string().optional(),
+  cancelledAt: zod.coerce.date().optional(),
+  cancellationRemark: zod.string().optional(),
+  renewalReminderSentAt: zod.coerce.date().optional(),
+  pausedAt: zod.coerce.date().optional(),
+  resumedAt: zod.coerce.date().optional(),
+  createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Cancel a subscription
+ */
+export const CancelSubscriptionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CancelSubscriptionBody = zod.object({
+  remark: zod.string().optional(),
+});
+
+export const CancelSubscriptionResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string().optional(),
+  vehicleId: zod.number().optional(),
+  solarSiteId: zod.number().optional(),
+  serviceId: zod.number().optional(),
+  serviceName: zod.string().optional(),
+  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  status: zod.enum([
+    "active",
+    "paused",
+    "expiring",
+    "expired",
+    "cancelled",
+    "pending",
+    "missed",
+  ]),
+  startDate: zod.coerce.date(),
+  endDate: zod.coerce.date(),
+  nextServiceDate: zod.coerce.date().optional(),
+  nextDueDate: zod.coerce.date().optional(),
+  frequencyDays: zod.number().optional(),
+  recurrenceRule: zod.string().optional(),
+  totalServices: zod.number().optional(),
+  servicesUsed: zod.number().optional(),
+  servicesRemaining: zod.number().optional(),
+  graceMinutes: zod.number().optional(),
+  price: zod.number(),
+  paidAmount: zod.number().optional(),
+  dueAmount: zod.number().optional(),
+  branchId: zod.number().optional(),
+  notes: zod.string().optional(),
+  cancelledAt: zod.coerce.date().optional(),
+  cancellationRemark: zod.string().optional(),
+  renewalReminderSentAt: zod.coerce.date().optional(),
+  pausedAt: zod.coerce.date().optional(),
+  resumedAt: zod.coerce.date().optional(),
+  createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Subscription health KPIs
+ */
+export const GetSubscriptionHealthResponse = zod.object({
+  active: zod.number().optional(),
+  paused: zod.number().optional(),
+  expiring: zod.number().optional(),
+  expired: zod.number().optional(),
+  missed: zod.number().optional(),
+  total: zod.number().optional(),
+});
+
+/**
+ * @summary Run daily scheduler tick
+ */
+export const RunDailyTickResponse = zod.object({}).passthrough();
 
 /**
  * @summary List bookings

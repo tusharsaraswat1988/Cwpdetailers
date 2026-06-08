@@ -141,9 +141,12 @@ export type SubscriptionStatus =
 
 export const SubscriptionStatus = {
   active: "active",
+  paused: "paused",
+  expiring: "expiring",
   expired: "expired",
   cancelled: "cancelled",
   pending: "pending",
+  missed: "missed",
 } as const;
 
 export interface Subscription {
@@ -159,11 +162,23 @@ export interface Subscription {
   startDate: string;
   endDate: string;
   nextServiceDate?: string;
+  nextDueDate?: string;
   frequencyDays?: number;
+  recurrenceRule?: string;
+  totalServices?: number;
+  servicesUsed?: number;
+  servicesRemaining?: number;
+  graceMinutes?: number;
   price: number;
   paidAmount?: number;
   dueAmount?: number;
   branchId?: number;
+  notes?: string;
+  cancelledAt?: string;
+  cancellationRemark?: string;
+  renewalReminderSentAt?: string;
+  pausedAt?: string;
+  resumedAt?: string;
   createdAt?: string;
 }
 
@@ -435,6 +450,9 @@ export interface CreateSubscriptionBody {
   frequencyDays?: number;
   price: number;
   branchId?: number;
+  totalServices?: number;
+  recurrenceRule?: string;
+  graceMinutes?: number;
 }
 
 export type UpdateSubscriptionBodyStatus =
@@ -442,16 +460,29 @@ export type UpdateSubscriptionBodyStatus =
 
 export const UpdateSubscriptionBodyStatus = {
   active: "active",
+  paused: "paused",
+  expiring: "expiring",
   expired: "expired",
   cancelled: "cancelled",
   pending: "pending",
+  missed: "missed",
 } as const;
 
 export interface UpdateSubscriptionBody {
   status?: UpdateSubscriptionBodyStatus;
   endDate?: string;
   nextServiceDate?: string;
+  nextDueDate?: string;
   price?: number;
+  totalServices?: number;
+  servicesUsed?: number;
+  servicesRemaining?: number;
+  graceMinutes?: number;
+  notes?: string;
+}
+
+export interface CancelSubscriptionBody {
+  remark?: string;
 }
 
 export interface BookingListResponse {
@@ -1167,6 +1198,17 @@ export const ListSubscriptionsType = {
   solar_amc: "solar_amc",
   detailing_plan: "detailing_plan",
 } as const;
+
+export type GetSubscriptionHealth200 = {
+  active?: number;
+  paused?: number;
+  expiring?: number;
+  expired?: number;
+  missed?: number;
+  total?: number;
+};
+
+export type RunDailyTick200 = { [key: string]: unknown };
 
 export type ListBookingsParams = {
   customerId?: number;
