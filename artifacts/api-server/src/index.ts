@@ -27,31 +27,36 @@ app.listen(port, (err) => {
   bootstrapDailyTick();
 });
 
+function getNextMidnightIST(now: Date): Date {
+  // Midnight IST = 18:30 UTC
+  const next = new Date(now);
+  next.setUTCHours(18, 30, 0, 0);
+  if (next <= now) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+  return next;
+}
+
 function bootstrapDailyTick() {
-  // Run immediately on startup if today's tick hasn't run yet
+  // Run once immediately at startup (idempotent via 6h window)
   runDailyTick().catch(err => {
     logger.error({ err }, "Startup daily tick failed");
   });
 
-  // Schedule next run at midnight IST (UTC+5:30)
+  // Schedule next run at midnight IST, then recompute each cycle to avoid drift
+  scheduleNextTick();
+  logger.info("Daily tick scheduler bootstrapped");
+}
+
+function scheduleNextTick() {
   const now = new Date();
-  // Midnight IST in UTC = 18:30 UTC previous day
-  const nextMidnightIST = new Date(now);
-  nextMidnightIST.setHours(24, 0, 0, 0); // local midnight
-  // Convert local midnight to IST midnight: subtract 5h 30m
-  const nextTickMs = nextMidnightIST.getTime() - (5 * 60 + 30) * 60 * 1000 - now.getTime();
+  const nextMidnight = getNextMidnightIST(now);
+  const delay = nextMidnight.getTime() - now.getTime();
 
   setTimeout(() => {
     runDailyTick().catch(err => {
       logger.error({ err }, "Scheduled daily tick failed");
     });
-    // After first midnight IST run, repeat every 24h
-    setInterval(() => {
-      runDailyTick().catch(err => {
-        logger.error({ err }, "Scheduled daily tick failed");
-      });
-    }, 24 * 60 * 60 * 1000);
-  }, Math.max(0, nextTickMs));
-
-  logger.info("Daily tick scheduler bootstrapped");
+    scheduleNextTick();
+  }, delay);
 }

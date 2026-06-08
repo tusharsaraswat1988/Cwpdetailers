@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { subscriptionsTable, customersTable, servicesTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { getDaysAgoIST, getDaysAheadIST } from "../subscriptions/service";
 
 const router = Router();
 
@@ -112,13 +113,10 @@ router.post("/subscriptions", async (req, res) => {
 
 router.get("/subscriptions/expiring-soon", async (req, res) => {
   try {
-    const sevenDaysLater = new Date();
-    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
-
     const conditions = [
       ...tenantFilters(req, SCOPE_COLS),
       eq(subscriptionsTable.status, "active"),
-      sql`${subscriptionsTable.endDate}::date <= ${sevenDaysLater.toISOString().split('T')[0]}`,
+      sql`${subscriptionsTable.endDate}::date <= ${getDaysAheadIST(7)}`,
     ];
 
     const data = await db.select(subSelect).from(subscriptionsTable)
@@ -138,36 +136,28 @@ router.get("/subscriptions/health", async (req, res) => {
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
     const where = conditions.length ? and(...conditions) : undefined;
 
-    const sevenDaysLater = new Date();
-    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
     const [active, paused, expiring, expired, missed, missedThisWeek, totalResult, churnedCount, activeThirtyDaysAgo] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "active"), ...(where ? [where] : []))),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "paused"), ...(where ? [where] : []))),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
-        eq(subscriptionsTable.status, "active"),
-        sql`${subscriptionsTable.endDate}::date <= ${sevenDaysLater.toISOString().split('T')[0]}`,
+        eq(subscriptionsTable.status, "expiring"),
         ...(where ? [where] : []),
       )),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "expired"), ...(where ? [where] : []))),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "missed"), ...(where ? [where] : []))),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
         eq(subscriptionsTable.status, "missed"),
-        sql`${subscriptionsTable.updatedAt}::date >= ${sevenDaysAgo.toISOString().split('T')[0]}`,
+        sql`${subscriptionsTable.updatedAt}::date >= ${getDaysAgoIST(7)}`,
         ...(where ? [where] : []),
       )),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(where ?? sql`true`),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
         eq(subscriptionsTable.status, "cancelled"),
-        sql`${subscriptionsTable.cancelledAt}::date >= ${thirtyDaysAgo.toISOString().split('T')[0]}`,
+        sql`${subscriptionsTable.cancelledAt}::date >= ${getDaysAgoIST(30)}`,
         ...(where ? [where] : []),
       )),
       db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(
-        sql`${subscriptionsTable.createdAt}::date < ${thirtyDaysAgo.toISOString().split('T')[0]}`,
+        sql`${subscriptionsTable.createdAt}::date < ${getDaysAgoIST(30)}`,
         ...(where ? [where] : []),
       )),
     ]);

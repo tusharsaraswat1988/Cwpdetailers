@@ -1,17 +1,48 @@
 import { db } from "@workspace/db";
 import { subscriptionsTable, bookingsTable, systemJobsTable, notificationsTable, customersTable } from "@workspace/db";
-import { eq, and, sql, lte, gte, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, or, sql, lte, gte, isNull, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const IST_OFFSET_MS = 5 * 60 * 60 * 1000 + 30 * 60 * 1000; // 5h30m
+
+/** Return YYYY-MM-DD for the current date in IST (UTC+5:30). */
+export function getTodayIST(d = new Date()): string {
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
+  return ist.toISOString().split("T")[0];
+}
+
+/** Return YYYY-MM-DD for N days ago in IST. */
+export function getDaysAgoIST(days: number, d = new Date()): string {
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
+  ist.setDate(ist.getDate() - days);
+  return ist.toISOString().split("T")[0];
+}
+
+/** Return YYYY-MM-DD for N days ahead in IST. */
+export function getDaysAheadIST(days: number, d = new Date()): string {
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
+  ist.setDate(ist.getDate() + days);
+  return ist.toISOString().split("T")[0];
+}
+
+/** Return UTC ISO timestamp for a given IST date string at midnight IST. */
+export function getISSTimestamp(dateStr: string): string {
+  return new Date(`${dateStr}T00:00:00+05:30`).toISOString();
+}
+
+// Transaction helper type — db or the tx parameter from db.transaction()
+export type Transaction = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Decrement subscription counters when a booking completes.
  * Called from the booking transition handler (status -> completed).
+ * Accepts an optional transaction for atomicity.
  */
-export async function decrementOnCompletion(subscriptionId: number) {
+export async function decrementOnCompletion(subscriptionId: number, tx?: Transaction) {
   if (!subscriptionId) return;
-  const [sub] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
+  const ctx = tx ?? db;
+  const [sub] = await ctx.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
   if (!sub) return;
 
   const used = (sub.servicesUsed ?? 0) + 1;
@@ -28,18 +59,20 @@ export async function decrementOnCompletion(subscriptionId: number) {
     }
   }
 
-  await db.update(subscriptionsTable).set(updateData).where(eq(subscriptionsTable.id, subscriptionId));
+  await ctx.update(subscriptionsTable).set(updateData).where(eq(subscriptionsTable.id, subscriptionId));
   logger.info({ subscriptionId, used, remaining }, "Subscription counters decremented");
 }
 
 /**
  * Recompute nextDueDate based on frequencyDays and the most recent completed booking.
+ * Accepts an optional transaction for atomicity.
  */
-export async function recomputeNextDueDate(subscriptionId: number) {
-  const [sub] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
+export async function recomputeNextDueDate(subscriptionId: number, tx?: Transaction) {
+  const ctx = tx ?? db;
+  const [sub] = await ctx.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
   if (!sub || !sub.frequencyDays) return;
 
-  const [lastBooking] = await db.select({ completedAt: bookingsTable.completedAt })
+  const [lastBooking] = await ctx.select({ completedAt: bookingsTable.completedAt })
     .from(bookingsTable)
     .where(and(
       eq(bookingsTable.subscriptionId, subscriptionId),
@@ -53,22 +86,25 @@ export async function recomputeNextDueDate(subscriptionId: number) {
   const nextDue = new Date(baseDate);
   nextDue.setDate(nextDue.getDate() + sub.frequencyDays);
 
-  await db.update(subscriptionsTable)
-    .set({ nextDueDate: nextDue.toISOString().split("T")[0], updatedAt: new Date() })
+  const nextDueIST = getTodayIST(nextDue);
+  await ctx.update(subscriptionsTable)
+    .set({ nextDueDate: nextDueIST, updatedAt: new Date() })
     .where(eq(subscriptionsTable.id, subscriptionId));
 
-  logger.info({ subscriptionId, nextDueDate: nextDue.toISOString().split("T")[0] }, "Next due date recomputed");
+  logger.info({ subscriptionId, nextDueDate: nextDueIST }, "Next due date recomputed");
 }
 
 /**
  * Recompute servicesRemaining from totalServices and servicesUsed.
  * Prevents invariant drift by always deriving the remaining count.
+ * Accepts an optional transaction for atomicity.
  */
-export async function recomputeServicesRemaining(subscriptionId: number) {
-  const [sub] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
+export async function recomputeServicesRemaining(subscriptionId: number, tx?: Transaction) {
+  const ctx = tx ?? db;
+  const [sub] = await ctx.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
   if (!sub || sub.totalServices == null) return;
   const remaining = Math.max(0, sub.totalServices - (sub.servicesUsed ?? 0));
-  await db.update(subscriptionsTable)
+  await ctx.update(subscriptionsTable)
     .set({ servicesRemaining: remaining, updatedAt: new Date() })
     .where(eq(subscriptionsTable.id, subscriptionId));
 }
@@ -91,7 +127,7 @@ async function resolveCustomerUserId(customerId: number): Promise<number | undef
  */
 export async function markMissed() {
   const now = new Date();
-  const todayStrYMD = now.toISOString().split("T")[0];
+  const todayStrYMD = getTodayIST(now);
 
   // Find scheduled bookings whose scheduled_date has passed.
   // Per-booking grace is applied via actual timestamp comparison below.
@@ -117,8 +153,8 @@ export async function markMissed() {
 
   for (const b of missedBookings) {
     const graceMins = b.graceMinutes ?? 60;
-    // Combine scheduledDate + scheduledTime (or 00:00 if no time) to get actual scheduled datetime
-    const scheduledAt = new Date(`${b.scheduledDate}T${b.scheduledTime ?? "00:00"}:00`);
+    // Combine scheduledDate + scheduledTime as IST (+05:30) for accurate deadline
+    const scheduledAt = new Date(`${b.scheduledDate}T${b.scheduledTime ?? "00:00"}:00+05:30`);
     const graceDeadline = new Date(scheduledAt.getTime() + graceMins * 60 * 1000);
 
     if (now > graceDeadline) {
@@ -172,9 +208,16 @@ export async function markMissed() {
       .limit(1);
 
     if (!activeBooking) {
-      await db.update(subscriptionsTable)
-        .set({ status: "missed", updatedAt: new Date() })
-        .where(eq(subscriptionsTable.id, subId));
+      // Only mark subscription as missed if it is currently active or expiring
+      const [sub] = await db.select({ status: subscriptionsTable.status })
+        .from(subscriptionsTable)
+        .where(eq(subscriptionsTable.id, subId))
+        .limit(1);
+      if (sub && (sub.status === "active" || sub.status === "expiring")) {
+        await db.update(subscriptionsTable)
+          .set({ status: "missed", updatedAt: new Date() })
+          .where(eq(subscriptionsTable.id, subId));
+      }
     }
   }
 
@@ -190,8 +233,8 @@ export async function sendRenewalReminders(reminderDays = 7) {
   const today = new Date();
   const reminderEnd = new Date(today);
   reminderEnd.setDate(reminderEnd.getDate() + reminderDays);
-  const endStr = reminderEnd.toISOString().split("T")[0];
-  const todayStrYMD = today.toISOString().split("T")[0];
+  const endStr = getTodayIST(reminderEnd);
+  const todayStrYMD = getTodayIST(today);
 
   const targets = await db.select({
     id: subscriptionsTable.id,
@@ -288,7 +331,7 @@ export async function cancelSubscription(subscriptionId: number, remark?: string
  * marks expired subscriptions. Uses system_jobs table for idempotency.
  */
 export async function runDailyTick(todayStr?: string) {
-  const today = todayStr ?? new Date().toISOString().split("T")[0];
+  const today = todayStr ?? getTodayIST();
 
   // Idempotency check: last successful run within 6 hours
   const [existing] = await db.select().from(systemJobsTable)
@@ -316,21 +359,33 @@ export async function runDailyTick(todayStr?: string) {
     const missedCount = await markMissed();
     const reminderCount = await sendRenewalReminders();
 
-    // Also mark expired subscriptions (past endDate)
+    // Mark active subscriptions as expiring when endDate <= 7 days
+    const sevenDaysLater = new Date();
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+    const expiring = await db.update(subscriptionsTable)
+      .set({ status: "expiring", updatedAt: new Date() })
+      .where(and(
+        eq(subscriptionsTable.status, "active"),
+        lte(subscriptionsTable.endDate, getTodayIST(sevenDaysLater)),
+        gte(subscriptionsTable.endDate, today),
+      ))
+      .returning();
+
+    // Mark expired subscriptions (past endDate)
     const expired = await db.update(subscriptionsTable)
       .set({ status: "expired", updatedAt: new Date() })
       .where(and(
-        eq(subscriptionsTable.status, "active"),
+        or(eq(subscriptionsTable.status, "active"), eq(subscriptionsTable.status, "expiring")),
         lte(subscriptionsTable.endDate, today),
       ))
       .returning();
 
     await db.update(systemJobsTable)
-      .set({ status: "success", completedAt: new Date(), lastRunAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length } })
+      .set({ status: "success", completedAt: new Date(), lastRunAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length } })
       .where(eq(systemJobsTable.id, job.id));
 
-    logger.info({ today, missedCount, reminderCount, expiredCount: expired.length }, "Daily tick completed");
-    return { missedCount, reminderCount, expiredCount: expired.length };
+    logger.info({ today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length }, "Daily tick completed");
+    return { missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length };
   } catch (err) {
     await db.update(systemJobsTable)
       .set({ status: "failed", error: String(err), completedAt: new Date(), lastRunAt: new Date() })

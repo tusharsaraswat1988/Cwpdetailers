@@ -165,8 +165,10 @@ export default function AdminSubscriptions() {
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="active">Active</TabsTrigger>
             <TabsTrigger value="paused">Paused</TabsTrigger>
+            <TabsTrigger value="expiring">Expiring</TabsTrigger>
             <TabsTrigger value="expired">Expired</TabsTrigger>
             <TabsTrigger value="missed">Missed</TabsTrigger>
+            <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
           </TabsList>
           <TabsContent value="all" className="mt-4">
             {isLoading ? <Skeleton className="h-64 w-full" /> : <SubTable items={data?.data} />}
@@ -177,11 +179,17 @@ export default function AdminSubscriptions() {
           <TabsContent value="paused" className="mt-4">
             <SubTable items={(data?.data ?? []).filter(s => s.status === "paused")} />
           </TabsContent>
+          <TabsContent value="expiring" className="mt-4">
+            <SubTable items={(data?.data ?? []).filter(s => s.status === "expiring")} />
+          </TabsContent>
           <TabsContent value="expired" className="mt-4">
-            <SubTable items={(data?.data ?? []).filter(s => s.status === "expired" || s.status === "cancelled")} />
+            <SubTable items={(data?.data ?? []).filter(s => s.status === "expired")} />
           </TabsContent>
           <TabsContent value="missed" className="mt-4">
             <SubTable items={(data?.data ?? []).filter(s => s.status === "missed")} />
+          </TabsContent>
+          <TabsContent value="cancelled" className="mt-4">
+            <SubTable items={(data?.data ?? []).filter(s => s.status === "cancelled")} />
           </TabsContent>
         </Tabs>
 

@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { bookingsTable, customersTable, staffTable, servicesTable, bookingEventsTable } from "@workspace/db";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
-import { decrementOnCompletion, recomputeNextDueDate } from "../subscriptions/service";
+import { decrementOnCompletion, recomputeNextDueDate, getTodayIST } from "../subscriptions/service";
 
 const router = Router();
 
@@ -69,8 +69,10 @@ async function logEvent(
   bookingId: number,
   type: string,
   opts?: { fromStatus?: string; toStatus?: string; body?: string; actorId?: number | null; actorName?: string; locationLat?: string; locationLng?: string },
+  tx?: any,
 ) {
-  await db.insert(bookingEventsTable).values({
+  const ctx = tx ?? db;
+  await ctx.insert(bookingEventsTable).values({
     bookingId,
     type: type as any,
     fromStatus: opts?.fromStatus ?? null,
@@ -96,7 +98,7 @@ async function getBookingWithScope(req: any, id: number) {
 router.get("/bookings/today", async (req, res) => {
   try {
     const { staffId, branchId } = req.query as Record<string, string>;
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayIST();
     const conditions = [
       ...tenantFilters(req, SCOPE_COLS),
       sql`${bookingsTable.scheduledDate}::text = ${today}`,
@@ -245,6 +247,32 @@ router.post("/bookings/:id/transition", async (req, res) => {
     if (toStatus === "in_progress") updateData.startedAt = new Date();
     if (toStatus === "completed") updateData.completedAt = new Date();
 
+    if (toStatus === "completed" && existing.subscriptionId) {
+      // Atomic booking completion: booking status + subscription counters in
+      // a single transaction. If subscription updates fail, the booking is
+      // NOT marked completed, so the caller can retry without transition
+      // rule violations.
+      const subId = existing.subscriptionId as number;
+      const booking = await db.transaction(async (tx) => {
+        const [b] = await tx.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
+        await logEvent(id, "status_change", {
+          fromStatus: existing.status,
+          toStatus,
+          body: reason,
+          actorId: req.user?.id ?? req.scope?.staffId,
+          actorName: req.user?.name ?? "system",
+        }, tx);
+
+        const { recomputeServicesRemaining } = await import("../subscriptions/service");
+        await decrementOnCompletion(subId, tx);
+        await recomputeNextDueDate(subId, tx);
+        await recomputeServicesRemaining(subId, tx);
+
+        return b;
+      });
+      return res.json(booking);
+    }
+
     const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
     await logEvent(id, "status_change", {
       fromStatus: existing.status,
@@ -253,16 +281,6 @@ router.post("/bookings/:id/transition", async (req, res) => {
       actorId: req.user?.id ?? req.scope?.staffId,
       actorName: req.user?.name ?? "system",
     });
-
-    if (toStatus === "completed" && existing.subscriptionId) {
-      // These updates must succeed for data consistency. If they fail, the
-      // booking is still marked completed but the subscription counters are
-      // out of sync. We throw so the caller can retry.
-      await decrementOnCompletion(existing.subscriptionId);
-      await recomputeNextDueDate(existing.subscriptionId);
-      const { recomputeServicesRemaining } = await import("../subscriptions/service");
-      await recomputeServicesRemaining(existing.subscriptionId);
-    }
 
     return res.json(booking);
   } catch (err) {
@@ -363,7 +381,7 @@ router.post("/bookings/:id/regenerate-occurrences", async (req, res) => {
     for (let i = 1; i <= count; i++) {
       const nextDate = new Date(startDate);
       nextDate.setDate(nextDate.getDate() + days * i);
-      const nextDateStr = nextDate.toISOString().split("T")[0];
+      const nextDateStr = getTodayIST(nextDate);
 
       const dup = tenantStamp(req, {
         customerId: existing.customerId,

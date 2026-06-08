@@ -103,7 +103,7 @@ export default function AdminDashboard() {
                     <AlertCircle size={8} /> {health.expiring} expiring
                   </span>
                   <span className="flex items-center gap-1 bg-red-500/10 text-red-600 px-2 py-1 rounded-md">
-                    <AlertCircle size={8} /> {health.missed} missed
+                    <AlertCircle size={8} /> {health.missedThisWeek} missed this week
                   </span>
                   <span className="flex items-center gap-1 bg-muted text-muted-foreground px-2 py-1 rounded-md">
                     <Circle size={8} fill="currentColor" /> {health.expired} expired
