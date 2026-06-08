@@ -14,6 +14,10 @@ export const leadServiceInterestEnum = pgEnum("lead_service_interest", [
   "one_time_wash", "detailing", "daily_cleaning", "solar", "accessories",
 ]);
 
+export const leadLostReasonEnum = pgEnum("lead_lost_reason", [
+  "too_expensive", "not_interested", "no_response", "chose_competitor", "location_issue", "other",
+]);
+
 export const leadsTable = pgTable("leads", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -27,7 +31,7 @@ export const leadsTable = pgTable("leads", {
   notes: text("notes"),
   nextFollowUpAt: timestamp("next_follow_up_at"),
   valueEstimate: numeric("value_estimate", { precision: 10, scale: 2 }),
-  lostReason: text("lost_reason"),
+  lostReason: leadLostReasonEnum("lost_reason"),
   companyId: integer("company_id"),
   franchiseeId: integer("franchisee_id"),
   branchId: integer("branch_id"),

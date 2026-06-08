@@ -58,7 +58,7 @@ router.get("/leads", async (req, res) => {
     if (source) conditions.push(eq(leadsTable.source, source as any));
     if (assignedTo) conditions.push(eq(leadsTable.assignedToStaffId, parseInt(assignedTo)));
     if (dueFollowUp === "true") {
-      conditions.push(gte(leadsTable.nextFollowUpAt, new Date()));
+      conditions.push(lte(leadsTable.nextFollowUpAt, new Date()));
     }
     if (from) {
       conditions.push(gte(leadsTable.createdAt, new Date(from)));
@@ -211,8 +211,8 @@ router.get("/leads/follow-ups", async (req, res) => {
   try {
     const conditions = [
       ...tenantFilters(req, SCOPE_COLS),
-      gte(leadsTable.nextFollowUpAt, new Date()),
-      lte(leadsTable.nextFollowUpAt, sql`CURRENT_DATE + INTERVAL '7 days'`),
+      lte(leadsTable.nextFollowUpAt, sql`CURRENT_DATE + INTERVAL '1 day'`),
+      gte(leadsTable.nextFollowUpAt, sql`CURRENT_DATE`),
     ];
     const where = and(...conditions);
 
@@ -378,13 +378,8 @@ router.patch("/leads/:id", async (req, res) => {
     }
 
     if (status !== undefined && status !== existing.status) {
-      updateData.status = status;
-      await db.insert(leadActivitiesTable).values({
-        leadId: id,
-        type: "status_change",
-        body: `Status changed from ${existing.status} to ${status}`,
-        createdBy: req.user?.id ?? null,
-      });
+      await changeLeadStatus(id, status, req.user?.id ?? null, `Status changed from ${existing.status} to ${status}`);
+      delete updateData.status; // changeLeadStatus already handled it
     }
 
     const [lead] = await db.update(leadsTable).set(updateData).where(eq(leadsTable.id, id)).returning();
@@ -493,10 +488,19 @@ router.post("/leads/:id/convert", async (req, res) => {
 
     // Create subscription
     if (createSubscription && customerId && subscriptionType) {
+      const { startDate, endDate, price } = req.body;
+      if (!startDate || !endDate || !price) {
+        return res.status(400).json({ error: "startDate, endDate, and price are required for subscription creation" });
+      }
       const subValues = tenantStamp(req, {
         customerId: customerId,
         type: subscriptionType as any,
         status: "active" as const,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        price: String(price),
+        paidAmount: "0",
+        dueAmount: String(price),
       });
       const [subscription] = await db.insert(subscriptionsTable).values(subValues as any).returning();
       result.subscription = subscription;
