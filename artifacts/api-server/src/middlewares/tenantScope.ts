@@ -120,7 +120,7 @@ export function sqlTenant(req: Request, cols: { c?: string; b?: string; f?: stri
     if (s.customerId && cols.cu) preds.push(`${cols.cu} = ${s.customerId}`);
     if (s.staffId && cols.s) preds.push(`${cols.s} = ${s.staffId}`);
   }
-  if (preds.length === 0) return sql``;
+  if (preds.length === 0) return sql`true`;
   return sql.raw(preds.join(" AND "));
 }
 
