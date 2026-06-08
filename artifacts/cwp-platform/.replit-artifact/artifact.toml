@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "CWP Detailers + Kleansolar Platform"
+version = "1.0.0"
+id = "artifacts/cwp-platform"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21456
+
+[services.development]
+run = "pnpm --filter @workspace/cwp-platform run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cwp-platform", "run", "build" ]
+publicDir = "artifacts/cwp-platform/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21456"
+BASE_PATH = "/"
