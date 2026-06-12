@@ -1,0 +1,34 @@
+---
+description: Mandatory responsive UI standards for all CWP platform panels and pages
+globs: artifacts/cwp-platform/src/**/*.{tsx,ts,css}
+alwaysApply: false
+---
+
+# Responsive UI — No Compromise
+
+Every UI in `cwp-platform` MUST work on **mobile (320px+)** and **desktop**. No panel may ship desktop-only.
+
+## Layout rules
+
+- Use `PanelShell` for sidebar panels (Admin, Staff, Franchisee) — mobile gets hamburger + slide-out nav.
+- Customer portal uses bottom tab nav on mobile (`md:hidden`), top nav on desktop.
+- Main content: `p-4 sm:p-6`, `min-w-0`, `overflow-x-hidden`. Use `100dvh` not `100vh`.
+- Never rely on fixed pixel widths for critical content; use `max-w-*`, `min-w-0`, `truncate`, `break-words`.
+
+## Components
+
+- `PageHeader`: stack title/actions vertically on mobile (`flex-col sm:flex-row`).
+- `DataTable`: always wrapped in `overflow-x-auto`; tables must scroll horizontally on small screens.
+- Grids: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3` — never assume 3+ columns on mobile.
+- Forms/dialogs: full-width on mobile (`w-full max-w-md`), touch-friendly targets (`py-2.5` minimum).
+- Charts: use `ResponsiveContainer` from Recharts.
+
+## Tailwind breakpoints
+
+- Mobile-first: base styles = mobile, then `sm:`, `md:`, `lg:` for larger screens.
+- Test mentally at 375px and 1280px before finishing any page.
+
+## Auth flows
+
+- Public login (`/login`): phone + password only; backend role determines redirect (customer → `/customer/*`, staff → `/staff/*`).
+- Admin login is separate at `/admin/login` — never link from public pages.

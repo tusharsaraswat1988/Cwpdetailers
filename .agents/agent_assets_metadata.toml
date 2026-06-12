@@ -1,0 +1,55 @@
+uploads = []
+
+[[generated]]
+id = "v4qUDV3H_grw01CppzTTH"
+uri = "file://artifacts/cwp-platform/src/assets/images/hero-bg.png"
+type = "image"
+title = "Cinematic car detailing garage"
+
+[[generated]]
+id = "1IRHFMuwnkJizGVsPmNMt"
+uri = "file://artifacts/cwp-platform/src/assets/images/service-wash.png"
+type = "image"
+title = "Luxury SUV snow foam"
+
+[[generated]]
+id = "zaZxpCW-rVc2ZqV8X7otq"
+uri = "file://artifacts/cwp-platform/src/assets/images/service-ceramic.png"
+type = "image"
+title = "Glossy ceramic coating reflection"
+
+[[generated]]
+id = "WZzDJCzvhQ69hxkKnDCpo"
+uri = "file://artifacts/cwp-platform/src/assets/images/service-solar.png"
+type = "image"
+title = "Solar panel cleaning service"
+
+[[generated]]
+id = "PVanZ81xlB24ihlOb3NaD"
+uri = "file://artifacts/cwp-platform/src/assets/images/before-after.png"
+type = "image"
+title = "Perfectly polished glossy paint"
+
+[[generated]]
+id = "3TY7Kd0lmNubi3fJ-cVdd"
+uri = "file://artifacts/cwp-platform/src/assets/images/service-interior.png"
+type = "image"
+title = "Luxury interior leather cleaning"
+
+[[outputs]]
+id = "YT9Ei8q3Gfb_9myQRF0yZ"
+uri = "file://screenshots/cred-list-view.jpg"
+type = "image"
+title = "List + Tabs (Current style)"
+
+[[outputs]]
+id = "YwT4xaf-HnazvWWvfuABi"
+uri = "file://screenshots/cred-card-grid.jpg"
+type = "image"
+title = "Card Grid (Visual)"
+
+[[outputs]]
+id = "kkfL8BqgJ-U6QTjftLZTT"
+uri = "file://screenshots/cred-data-table.jpg"
+type = "image"
+title = "Data Table (Dense)"

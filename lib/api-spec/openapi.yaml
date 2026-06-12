@@ -1,0 +1,3101 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: CWP Detailers + Kleansolar Business Platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: customers
+    description: Customer management
+  - name: vehicles
+    description: Vehicle management
+  - name: solar-sites
+    description: Solar site management
+  - name: services
+    description: Service catalog
+  - name: subscriptions
+    description: Subscription management
+  - name: bookings
+    description: Booking operations
+  - name: staff
+    description: Staff management
+  - name: complaints
+    description: Complaint management
+  - name: payments
+    description: Payment operations
+  - name: branches
+    description: Branch management
+  - name: analytics
+    description: Analytics and reporting
+  - name: notifications
+    description: Notification operations
+  - name: Storage
+    description: Object storage upload and serving endpoints
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # AUTH
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with phone/email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBody"
+      responses:
+        "201":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # CUSTOMERS
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List all customers
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, suspended]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerListResponse"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a new customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerBody"
+      responses:
+        "201":
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get customer by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerDetail"
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerBody"
+      responses:
+        "200":
+          description: Updated customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}/summary:
+    get:
+      operationId: getCustomerSummary
+      tags: [customers]
+      summary: Get customer dashboard summary
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSummary"
+
+  # VEHICLES
+  /vehicles:
+    get:
+      operationId: listVehicles
+      tags: [vehicles]
+      summary: List vehicles
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of vehicles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vehicle"
+    post:
+      operationId: createVehicle
+      tags: [vehicles]
+      summary: Add a vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVehicleBody"
+      responses:
+        "201":
+          description: Vehicle created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+
+  /vehicles/{id}:
+    patch:
+      operationId: updateVehicle
+      tags: [vehicles]
+      summary: Update vehicle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVehicleBody"
+      responses:
+        "200":
+          description: Updated vehicle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+    delete:
+      operationId: deleteVehicle
+      tags: [vehicles]
+      summary: Delete vehicle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # SOLAR SITES
+  /solar-sites:
+    get:
+      operationId: listSolarSites
+      tags: [solar-sites]
+      summary: List solar sites
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of solar sites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SolarSite"
+    post:
+      operationId: createSolarSite
+      tags: [solar-sites]
+      summary: Add a solar site
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSolarSiteBody"
+      responses:
+        "201":
+          description: Solar site created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SolarSite"
+
+  /solar-sites/{id}:
+    patch:
+      operationId: updateSolarSite
+      tags: [solar-sites]
+      summary: Update solar site
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSolarSiteBody"
+      responses:
+        "200":
+          description: Updated solar site
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SolarSite"
+
+  # SERVICES
+  /services:
+    get:
+      operationId: listServices
+      tags: [services]
+      summary: List all services
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [car_wash, detailing, ceramic_coating, ppf, interior, solar_cleaning, amc, subscription]
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Service"
+    post:
+      operationId: createService
+      tags: [services]
+      summary: Create a service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceBody"
+      responses:
+        "201":
+          description: Service created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+
+  /services/{id}:
+    patch:
+      operationId: updateService
+      tags: [services]
+      summary: Update service
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceBody"
+      responses:
+        "200":
+          description: Updated service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+    delete:
+      operationId: deleteService
+      tags: [services]
+      summary: Delete service
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # SUBSCRIPTIONS
+  /subscriptions:
+    get:
+      operationId: listSubscriptions
+      tags: [subscriptions]
+      summary: List subscriptions
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, expired, cancelled, pending]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [daily_wash, monthly_wash, solar_amc, detailing_plan]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of subscriptions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListResponse"
+    post:
+      operationId: createSubscription
+      tags: [subscriptions]
+      summary: Create a subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionBody"
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/{id}:
+    get:
+      operationId: getSubscription
+      tags: [subscriptions]
+      summary: Get subscription details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Subscription details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+    patch:
+      operationId: updateSubscription
+      tags: [subscriptions]
+      summary: Update subscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubscriptionBody"
+      responses:
+        "200":
+          description: Updated subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/expiring-soon:
+    get:
+      operationId: getExpiringSoonSubscriptions
+      tags: [subscriptions]
+      summary: Get subscriptions expiring within 7 days
+      responses:
+        "200":
+          description: Expiring subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/{id}/pause:
+    post:
+      operationId: pauseSubscription
+      tags: [subscriptions]
+      summary: Pause a subscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/{id}/resume:
+    post:
+      operationId: resumeSubscription
+      tags: [subscriptions]
+      summary: Resume a paused subscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/{id}/cancel:
+    post:
+      operationId: cancelSubscription
+      tags: [subscriptions]
+      summary: Cancel a subscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSubscriptionBody"
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /subscriptions/health:
+    get:
+      operationId: getSubscriptionHealth
+      tags: [subscriptions]
+      summary: Subscription health KPIs
+      responses:
+        "200":
+          description: Health counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active:
+                    type: integer
+                  paused:
+                    type: integer
+                  expiring:
+                    type: integer
+                  expired:
+                    type: integer
+                  missed:
+                    type: integer
+                  missedThisWeek:
+                    type: integer
+                  total:
+                    type: integer
+                  churnRate:
+                    type: number
+                    description: "Churn rate percentage over last 30 days"
+
+  /subscriptions/daily-tick:
+    post:
+      operationId: runDailyTick
+      tags: [subscriptions]
+      summary: Run daily scheduler tick
+      responses:
+        "200":
+          description: Tick result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # BOOKINGS
+  /bookings:
+    get:
+      operationId: listBookings
+      tags: [bookings]
+      summary: List bookings
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: staffId
+          in: query
+          schema:
+            type: integer
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+        - name: serviceType
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingListResponse"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingBody"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get booking details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+    patch:
+      operationId: updateBooking
+      tags: [bookings]
+      summary: Update booking status/details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookingBody"
+      responses:
+        "200":
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/today:
+    get:
+      operationId: getTodayBookings
+      tags: [bookings]
+      summary: Get today's bookings
+      parameters:
+        - name: staffId
+          in: query
+          schema:
+            type: integer
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Today's bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/transition:
+    post:
+      operationId: transitionBooking
+      tags: [bookings]
+      summary: Transition booking status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                toStatus:
+                  type: string
+                  enum: [scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+                reason:
+                  type: string
+              required: [toStatus]
+      responses:
+        "200":
+          description: Transitioned booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/proof:
+    post:
+      operationId: addProof
+      tags: [bookings]
+      summary: Add proof-of-work photos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                urls:
+                  type: array
+                  items:
+                    type: string
+              required: [urls]
+      responses:
+        "200":
+          description: Proof added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/assign:
+    post:
+      operationId: assignBooking
+      tags: [bookings]
+      summary: Assign or reassign staff
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                staffId:
+                  type: integer
+                reason:
+                  type: string
+              required: [staffId]
+      responses:
+        "200":
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}/regenerate-occurrences:
+    post:
+      operationId: regenerateOccurrences
+      tags: [bookings]
+      summary: Regenerate child occurrences from recurrence rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Occurrences regenerated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                  bookingIds:
+                    type: array
+                    items:
+                      type: integer
+
+  /bookings/{id}/events:
+    get:
+      operationId: getBookingEvents
+      tags: [bookings]
+      summary: Get booking audit log
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookingEvent"
+
+  /bookings/{id}/reschedule:
+    post:
+      operationId: rescheduleBooking
+      tags: [bookings]
+      summary: Reschedule booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scheduledDate:
+                  type: string
+                  format: date
+                scheduledTime:
+                  type: string
+                reason:
+                  type: string
+              required: [scheduledDate]
+      responses:
+        "200":
+          description: Rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          description: Missing or invalid required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to generate upload URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [Storage]
+      operationId: getPublicObject
+      summary: Serve a public asset
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to serve public object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an object entity
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Object not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to serve object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  # STAFF
+  /staff:
+    get:
+      operationId: listStaff
+      tags: [staff]
+      summary: List staff members
+      parameters:
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of staff
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Staff"
+    post:
+      operationId: createStaff
+      tags: [staff]
+      summary: Add staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaffBody"
+      responses:
+        "201":
+          description: Staff created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+
+  /staff/{id}:
+    get:
+      operationId: getStaff
+      tags: [staff]
+      summary: Get staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Staff details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffDetail"
+    patch:
+      operationId: updateStaff
+      tags: [staff]
+      summary: Update staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStaffBody"
+      responses:
+        "200":
+          description: Updated staff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+
+  /staff/{id}/performance:
+    get:
+      operationId: getStaffPerformance
+      tags: [staff]
+      summary: Get staff performance metrics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: string
+            description: "YYYY-MM format"
+      responses:
+        "200":
+          description: Staff performance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffPerformance"
+
+  /staff/{id}/attendance:
+    get:
+      operationId: getStaffAttendance
+      tags: [staff]
+      summary: Get staff attendance records
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attendance"
+    post:
+      operationId: markAttendance
+      tags: [staff]
+      summary: Mark attendance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAttendanceBody"
+      responses:
+        "201":
+          description: Attendance marked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
+
+  # COMPLAINTS
+  /complaints:
+    get:
+      operationId: listComplaints
+      tags: [complaints]
+      summary: List complaints
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, in_progress, resolved, closed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of complaints
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplaintListResponse"
+    post:
+      operationId: createComplaint
+      tags: [complaints]
+      summary: Create a complaint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateComplaintBody"
+      responses:
+        "201":
+          description: Complaint created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+
+  /complaints/{id}:
+    patch:
+      operationId: updateComplaint
+      tags: [complaints]
+      summary: Update complaint status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateComplaintBody"
+      responses:
+        "200":
+          description: Updated complaint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+
+  # PAYMENTS / INVOICES
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [payments]
+      summary: List invoices
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, sent, paid, overdue, cancelled]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceListResponse"
+    post:
+      operationId: createInvoice
+      tags: [payments]
+      summary: Create an invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceBody"
+      responses:
+        "201":
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [payments]
+      summary: Get invoice details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+    patch:
+      operationId: updateInvoice
+      tags: [payments]
+      summary: Update invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceBody"
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payment transactions
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentListResponse"
+    post:
+      operationId: recordPayment
+      tags: [payments]
+      summary: Record a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPaymentBody"
+      responses:
+        "201":
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  # BRANCHES
+  /branches:
+    get:
+      operationId: listBranches
+      tags: [branches]
+      summary: List all branches
+      responses:
+        "200":
+          description: List of branches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Branch"
+    post:
+      operationId: createBranch
+      tags: [branches]
+      summary: Create a branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBranchBody"
+      responses:
+        "201":
+          description: Branch created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Branch"
+
+  /branches/{id}:
+    patch:
+      operationId: updateBranch
+      tags: [branches]
+      summary: Update branch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBranchBody"
+      responses:
+        "200":
+          description: Updated branch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Branch"
+
+  # ANALYTICS
+  /analytics/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [analytics]
+      summary: Get master dashboard statistics
+      parameters:
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [today, week, month, year]
+            default: month
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /analytics/revenue:
+    get:
+      operationId: getRevenueAnalytics
+      tags: [analytics]
+      summary: Get revenue analytics
+      parameters:
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, quarter, year]
+            default: month
+      responses:
+        "200":
+          description: Revenue analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevenueAnalytics"
+
+  /analytics/customers:
+    get:
+      operationId: getCustomerAnalytics
+      tags: [analytics]
+      summary: Get customer analytics
+      responses:
+        "200":
+          description: Customer analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAnalytics"
+
+  /analytics/staff-leaderboard:
+    get:
+      operationId: getStaffLeaderboard
+      tags: [analytics]
+      summary: Get staff performance leaderboard
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Staff leaderboard
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffLeaderboardEntry"
+
+  /analytics/outstanding-dues:
+    get:
+      operationId: getOutstandingDues
+      tags: [analytics]
+      summary: Get outstanding dues summary
+      parameters:
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Outstanding dues
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutstandingDues"
+
+  # NOTIFICATIONS
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: isRead
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+    post:
+      operationId: createNotification
+      tags: [notifications]
+      summary: Create/send a notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNotificationBody"
+      responses:
+        "201":
+          description: Notification created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notification marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    # AUTH
+    LoginBody:
+      type: object
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [customer, staff, admin]
+      required: [password]
+
+    RegisterBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        branchId:
+          type: integer
+      required: [name, phone, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required: [token, user]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [customer, staff, admin, superadmin, franchisee, manager]
+        branchId:
+          type: integer
+        companyId:
+          type: integer
+        franchiseeId:
+          type: integer
+        staffId:
+          type: integer
+        customerId:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, phone, role]
+
+    # CUSTOMERS
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+        walletBalance:
+          type: number
+        totalDues:
+          type: number
+        branchId:
+          type: integer
+        branchName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, phone, status]
+
+    CustomerDetail:
+      allOf:
+        - $ref: "#/components/schemas/Customer"
+        - type: object
+          properties:
+            vehicles:
+              type: array
+              items:
+                $ref: "#/components/schemas/Vehicle"
+            solarSites:
+              type: array
+              items:
+                $ref: "#/components/schemas/SolarSite"
+            activeSubscriptions:
+              type: array
+              items:
+                $ref: "#/components/schemas/Subscription"
+
+    CustomerSummary:
+      type: object
+      properties:
+        activeSubscriptions:
+          type: integer
+        upcomingServices:
+          type: integer
+        walletBalance:
+          type: number
+        pendingDues:
+          type: number
+        totalServicesThisMonth:
+          type: integer
+        totalSpend:
+          type: number
+        recentBookings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
+        recentPayments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+      required: [activeSubscriptions, upcomingServices, walletBalance, pendingDues]
+
+    CustomerListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Customer"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [data, total]
+
+    CreateCustomerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        branchId:
+          type: integer
+        password:
+          type: string
+      required: [name, phone]
+
+    UpdateCustomerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+        walletBalance:
+          type: number
+        branchId:
+          type: integer
+
+    # VEHICLES
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        make:
+          type: string
+        model:
+          type: string
+        year:
+          type: integer
+        color:
+          type: string
+        registrationNumber:
+          type: string
+        vehicleType:
+          type: string
+          enum: [sedan, suv, hatchback, luxury, van, truck]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, customerId, make, model, registrationNumber]
+
+    CreateVehicleBody:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        make:
+          type: string
+        model:
+          type: string
+        year:
+          type: integer
+        color:
+          type: string
+        registrationNumber:
+          type: string
+        vehicleType:
+          type: string
+          enum: [sedan, suv, hatchback, luxury, van, truck]
+      required: [customerId, make, model, registrationNumber]
+
+    # SOLAR SITES
+    SolarSite:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        address:
+          type: string
+        city:
+          type: string
+        panelCount:
+          type: integer
+        panelCapacityKw:
+          type: number
+        installationDate:
+          type: string
+          format: date
+        lastCleanedDate:
+          type: string
+          format: date
+        nextServiceDate:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, customerId, address, panelCount]
+
+    CreateSolarSiteBody:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        address:
+          type: string
+        city:
+          type: string
+        panelCount:
+          type: integer
+        panelCapacityKw:
+          type: number
+        installationDate:
+          type: string
+          format: date
+        nextServiceDate:
+          type: string
+          format: date
+      required: [customerId, address, panelCount]
+
+    # SERVICES
+    Service:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [car_wash, detailing, ceramic_coating, ppf, interior, solar_cleaning, amc, subscription]
+        basePrice:
+          type: number
+        durationMinutes:
+          type: integer
+        isActive:
+          type: boolean
+        imageUrl:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, category, basePrice]
+
+    CreateServiceBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [car_wash, detailing, ceramic_coating, ppf, interior, solar_cleaning, amc, subscription]
+        basePrice:
+          type: number
+        durationMinutes:
+          type: integer
+        isActive:
+          type: boolean
+        imageUrl:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+      required: [name, category, basePrice]
+
+    # SUBSCRIPTIONS
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        vehicleId:
+          type: integer
+        solarSiteId:
+          type: integer
+        serviceId:
+          type: integer
+        serviceName:
+          type: string
+        type:
+          type: string
+          enum: [daily_wash, monthly_wash, solar_amc, detailing_plan]
+        status:
+          type: string
+          enum: [active, paused, expiring, expired, cancelled, pending, missed]
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        nextServiceDate:
+          type: string
+          format: date
+        nextDueDate:
+          type: string
+          format: date
+        frequencyDays:
+          type: integer
+        recurrenceRule:
+          type: string
+        totalServices:
+          type: integer
+        servicesUsed:
+          type: integer
+        servicesRemaining:
+          type: integer
+        graceMinutes:
+          type: integer
+        price:
+          type: number
+        paidAmount:
+          type: number
+        dueAmount:
+          type: number
+        branchId:
+          type: integer
+        notes:
+          type: string
+        cancelledAt:
+          type: string
+          format: date-time
+        cancellationRemark:
+          type: string
+        renewalReminderSentAt:
+          type: string
+          format: date-time
+        pausedAt:
+          type: string
+          format: date-time
+        resumedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, customerId, type, status, startDate, endDate, price]
+
+    SubscriptionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subscription"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [data, total]
+
+    CreateSubscriptionBody:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        vehicleId:
+          type: integer
+        solarSiteId:
+          type: integer
+        serviceId:
+          type: integer
+        type:
+          type: string
+          enum: [daily_wash, monthly_wash, solar_amc, detailing_plan]
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        frequencyDays:
+          type: integer
+        price:
+          type: number
+        branchId:
+          type: integer
+        totalServices:
+          type: integer
+        recurrenceRule:
+          type: string
+        graceMinutes:
+          type: integer
+      required: [customerId, type, startDate, endDate, price]
+
+    UpdateSubscriptionBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, paused, expiring, expired, cancelled, pending, missed]
+        endDate:
+          type: string
+          format: date
+        nextServiceDate:
+          type: string
+          format: date
+        nextDueDate:
+          type: string
+          format: date
+        price:
+          type: number
+        totalServices:
+          type: integer
+        servicesUsed:
+          type: integer
+        servicesRemaining:
+          type: integer
+        graceMinutes:
+          type: integer
+        notes:
+          type: string
+
+    CancelSubscriptionBody:
+      type: object
+      properties:
+        remark:
+          type: string
+
+    # BOOKINGS
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        customerPhone:
+          type: string
+        vehicleId:
+          type: integer
+        vehicleInfo:
+          type: string
+        solarSiteId:
+          type: integer
+        subscriptionId:
+          type: integer
+        serviceId:
+          type: integer
+        serviceName:
+          type: string
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        branchId:
+          type: integer
+        scheduledDate:
+          type: string
+          format: date
+        scheduledTime:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+        serviceType:
+          type: string
+          enum: [car_wash, detailing, solar_cleaning, one_time_wash, daily_cleaning, subscription_wash, pickup_drop, emergency]
+        address:
+          type: string
+        area:
+          type: string
+        locationLat:
+          type: number
+          format: double
+        locationLng:
+          type: number
+          format: double
+        notes:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        cancellationReason:
+          type: string
+        proofPhotoUrls:
+          type: array
+          items:
+            type: string
+        customerSignatureUrl:
+          type: string
+        beforePhotoUrl:
+          type: string
+        afterPhotoUrl:
+          type: string
+        technicianNotes:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        amount:
+          type: number
+        recurrenceRule:
+          type: string
+        parentBookingId:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, customerId, scheduledDate, status, serviceType]
+
+    BookingListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [data, total]
+
+    CreateBookingBody:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        vehicleId:
+          type: integer
+        solarSiteId:
+          type: integer
+        subscriptionId:
+          type: integer
+        serviceId:
+          type: integer
+        staffId:
+          type: integer
+        branchId:
+          type: integer
+        scheduledDate:
+          type: string
+          format: date
+        scheduledTime:
+          type: string
+        serviceType:
+          type: string
+          enum: [car_wash, detailing, solar_cleaning, one_time_wash, daily_cleaning, subscription_wash, pickup_drop, emergency]
+        address:
+          type: string
+        area:
+          type: string
+        locationLat:
+          type: number
+          format: double
+        locationLng:
+          type: number
+          format: double
+        notes:
+          type: string
+        amount:
+          type: number
+        recurrenceRule:
+          type: string
+      required: [customerId, scheduledDate, serviceType]
+
+    UpdateBookingBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+        staffId:
+          type: integer
+        scheduledDate:
+          type: string
+          format: date
+        scheduledTime:
+          type: string
+        notes:
+          type: string
+        technicianNotes:
+          type: string
+        beforePhotoUrl:
+          type: string
+        afterPhotoUrl:
+          type: string
+        proofPhotoUrls:
+          type: array
+          items:
+            type: string
+        customerSignatureUrl:
+          type: string
+        cancellationReason:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        completedAt:
+          type: string
+          format: date-time
+
+    BookingEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        bookingId:
+          type: integer
+        type:
+          type: string
+          enum: [status_change, proof_upload, reassign, reschedule, cancel, note]
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+        body:
+          type: string
+        actorId:
+          type: integer
+        actorName:
+          type: string
+        locationLat:
+          type: string
+        locationLng:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, bookingId, type, createdAt]
+
+    # STAFF
+    Staff:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [technician, supervisor, driver, solar_technician]
+        branchId:
+          type: integer
+        branchName:
+          type: string
+        monthlySalary:
+          type: number
+        joiningDate:
+          type: string
+          format: date
+        isActive:
+          type: boolean
+        jobsCompletedThisMonth:
+          type: integer
+        rating:
+          type: number
+        verificationStatus:
+          type: string
+          enum: [pending, verified, rejected]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, phone, role]
+
+    StaffDetail:
+      allOf:
+        - $ref: "#/components/schemas/Staff"
+        - type: object
+          properties:
+            recentBookings:
+              type: array
+              items:
+                $ref: "#/components/schemas/Booking"
+            attendanceSummary:
+              type: object
+              properties:
+                presentDays:
+                  type: integer
+                absentDays:
+                  type: integer
+                lateDays:
+                  type: integer
+
+    CreateStaffBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [technician, supervisor, driver, solar_technician]
+        branchId:
+          type: integer
+        monthlySalary:
+          type: number
+        joiningDate:
+          type: string
+          format: date
+        password:
+          type: string
+      required: [name, phone, role, branchId]
+
+    UpdateStaffBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+        branchId:
+          type: integer
+        monthlySalary:
+          type: number
+        isActive:
+          type: boolean
+
+    StaffPerformance:
+      type: object
+      properties:
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        jobsCompleted:
+          type: integer
+        revenueGenerated:
+          type: number
+        averageRating:
+          type: number
+        attendanceDays:
+          type: integer
+        efficiencyScore:
+          type: number
+        month:
+          type: string
+      required: [staffId, jobsCompleted, revenueGenerated, averageRating]
+
+    StaffLeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        jobsCompleted:
+          type: integer
+        revenueGenerated:
+          type: number
+        averageRating:
+          type: number
+        efficiencyScore:
+          type: number
+      required: [rank, staffId, staffName, jobsCompleted]
+
+    Attendance:
+      type: object
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [present, absent, late, half_day]
+        checkInTime:
+          type: string
+        checkOutTime:
+          type: string
+        notes:
+          type: string
+      required: [id, staffId, date, status]
+
+    MarkAttendanceBody:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [present, absent, late, half_day]
+        checkInTime:
+          type: string
+        checkOutTime:
+          type: string
+        notes:
+          type: string
+      required: [date, status]
+
+    # COMPLAINTS
+    Complaint:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        bookingId:
+          type: integer
+        type:
+          type: string
+          enum: [quality, delay, reclean, damage, billing, other]
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed]
+        priority:
+          type: string
+          enum: [low, medium, high]
+        resolution:
+          type: string
+        resolvedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, customerId, type, title, status]
+
+    ComplaintListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Complaint"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [data, total]
+
+    CreateComplaintBody:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        bookingId:
+          type: integer
+        type:
+          type: string
+          enum: [quality, delay, reclean, damage, billing, other]
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high]
+      required: [customerId, type, title, description]
+
+    UpdateComplaintBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed]
+        priority:
+          type: string
+          enum: [low, medium, high]
+        resolution:
+          type: string
+        resolvedAt:
+          type: string
+          format: date-time
+
+    # PAYMENTS / INVOICES
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceNumber:
+          type: string
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        subscriptionId:
+          type: integer
+        bookingId:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+        subtotal:
+          type: number
+        tax:
+          type: number
+        discount:
+          type: number
+        totalAmount:
+          type: number
+        paidAmount:
+          type: number
+        dueAmount:
+          type: number
+        status:
+          type: string
+          enum: [draft, sent, paid, overdue, cancelled]
+        dueDate:
+          type: string
+          format: date
+        issuedAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, invoiceNumber, customerId, totalAmount, status]
+
+    InvoiceItem:
+      type: object
+      properties:
+        description:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+        total:
+          type: number
+      required: [description, quantity, unitPrice, total]
+
+    InvoiceListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [data, total]
+
+    CreateInvoiceBody:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        subscriptionId:
+          type: integer
+        bookingId:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+        discount:
+          type: number
+        dueDate:
+          type: string
+          format: date
+      required: [customerId, items]
+
+    UpdateInvoiceBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, sent, paid, overdue, cancelled]
+        paidAmount:
+          type: number
+        paidAt:
+          type: string
+          format: date-time
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        invoiceId:
+          type: integer
+        amount:
+          type: number
+        method:
+          type: string
+          enum: [cash, upi, card, bank_transfer, wallet, razorpay]
+        transactionId:
+          type: string
+        status:
+          type: string
+          enum: [pending, completed, failed, refunded]
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, customerId, amount, method, status]
+
+    PaymentListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [data, total]
+
+    RecordPaymentBody:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        invoiceId:
+          type: integer
+        amount:
+          type: number
+        method:
+          type: string
+          enum: [cash, upi, card, bank_transfer, wallet, razorpay]
+        transactionId:
+          type: string
+        notes:
+          type: string
+      required: [customerId, amount, method]
+
+    # BRANCHES
+    Branch:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        managerName:
+          type: string
+        isActive:
+          type: boolean
+        customerCount:
+          type: integer
+        staffCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, city]
+
+    CreateBranchBody:
+      type: object
+      properties:
+        name:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        managerName:
+          type: string
+      required: [name, city]
+
+    # ANALYTICS
+    DashboardStats:
+      type: object
+      properties:
+        todayRevenue:
+          type: number
+        monthRevenue:
+          type: number
+        totalRevenue:
+          type: number
+        activeSubscriptions:
+          type: integer
+        totalCustomers:
+          type: integer
+        newCustomersThisMonth:
+          type: integer
+        pendingDuesTotal:
+          type: number
+        activeJobs:
+          type: integer
+        completedJobsToday:
+          type: integer
+        totalStaff:
+          type: integer
+        openComplaints:
+          type: integer
+        repeatCustomerPercent:
+          type: number
+        revenueByCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              amount:
+                type: number
+        cityWiseStats:
+          type: array
+          items:
+            type: object
+            properties:
+              city:
+                type: string
+              revenue:
+                type: number
+              customers:
+                type: integer
+        subscriptionBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              count:
+                type: integer
+      required: [todayRevenue, monthRevenue, activeSubscriptions, totalCustomers, pendingDuesTotal]
+
+    RevenueAnalytics:
+      type: object
+      properties:
+        period:
+          type: string
+        totalRevenue:
+          type: number
+        paidRevenue:
+          type: number
+        pendingRevenue:
+          type: number
+        revenueByPeriod:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              revenue:
+                type: number
+        revenueByService:
+          type: array
+          items:
+            type: object
+            properties:
+              serviceName:
+                type: string
+              revenue:
+                type: number
+              bookings:
+                type: integer
+        revenueByBranch:
+          type: array
+          items:
+            type: object
+            properties:
+              branchName:
+                type: string
+              revenue:
+                type: number
+      required: [totalRevenue, paidRevenue, pendingRevenue]
+
+    CustomerAnalytics:
+      type: object
+      properties:
+        totalCustomers:
+          type: integer
+        activeCustomers:
+          type: integer
+        newThisMonth:
+          type: integer
+        repeatCustomerPercent:
+          type: number
+        churnRate:
+          type: number
+        customersByCity:
+          type: array
+          items:
+            type: object
+            properties:
+              city:
+                type: string
+              count:
+                type: integer
+        customerGrowth:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+              count:
+                type: integer
+              newCustomers:
+                type: integer
+      required: [totalCustomers, activeCustomers, newThisMonth, repeatCustomerPercent]
+
+    OutstandingDues:
+      type: object
+      properties:
+        totalDues:
+          type: number
+        customersWithDues:
+          type: integer
+        overdueInvoices:
+          type: integer
+        topDebtors:
+          type: array
+          items:
+            type: object
+            properties:
+              customerId:
+                type: integer
+              customerName:
+                type: string
+              dueAmount:
+                type: number
+              daysPastDue:
+                type: integer
+      required: [totalDues, customersWithDues, overdueInvoices]
+
+    # NOTIFICATIONS
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+          enum: [booking_confirmation, payment_reminder, subscription_expiry, service_complete, complaint_update, broadcast]
+        channel:
+          type: string
+          enum: [in_app, whatsapp, email, sms]
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, title, message, type, isRead]
+
+    CreateNotificationBody:
+      type: object
+      properties:
+        userId:
+          type: integer
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+          enum: [booking_confirmation, payment_reminder, subscription_expiry, service_complete, complaint_update, broadcast]
+        channel:
+          type: string
+          enum: [in_app, whatsapp, email, sms]
+      required: [title, message, type]
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          minimum: 1
+        contentType:
+          type: string
+          minLength: 1
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/UploadUrlRequest'
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
