@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useListComplaints, getListComplaintsQueryKey, useCreateComplaint } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAccountScope } from "@/lib/account-scope";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,11 +24,15 @@ const statusColors: Record<string, string> = {
 export default function CustomerComplaints() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ type: "quality", title: "", description: "" });
 
-  const { data, isLoading } = useListComplaints({ customerId: "1" } as any, {
-    query: { queryKey: getListComplaintsQueryKey({ customerId: "1" } as any) }
+  const { data, isLoading } = useListComplaints({ customerId: String(customerId ?? "") } as any, {
+    query: {
+      queryKey: getListComplaintsQueryKey({ customerId: String(customerId ?? "") } as any),
+      enabled: customerId != null,
+    }
   });
 
   const createMutation = useCreateComplaint({
@@ -43,6 +48,14 @@ export default function CustomerComplaints() {
 
   return (
     <CustomerLayout>
+      {scopeLoading ? (
+        <div className="p-6"><Skeleton className="h-8 w-48" /></div>
+      ) : missingCustomerLink || customerId == null ? (
+        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+          <p className="font-semibold">Account not linked</p>
+          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+        </div>
+      ) : (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
@@ -79,7 +92,7 @@ export default function CustomerComplaints() {
                   <Label>Description</Label>
                   <Textarea data-testid="input-complaint-description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="mt-1" rows={4} placeholder="Describe the issue in detail..." />
                 </div>
-                <Button onClick={() => createMutation.mutate({ data: { customerId: 1, ...form, type: form.type as any } })}
+                <Button onClick={() => createMutation.mutate({ data: { customerId, ...form, type: form.type as any } })}
                   disabled={createMutation.isPending || !form.title || !form.description}
                   className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-complaint">
                   {createMutation.isPending ? "Filing..." : "Submit Complaint"}
@@ -116,6 +129,7 @@ export default function CustomerComplaints() {
           )}
         </div>
       </div>
+      )}
     </CustomerLayout>
   );
 }

@@ -200,7 +200,7 @@ router.post("/staff/:id/create-account", async (req, res) => {
       return res.status(400).json({ error: "Staff must be verified before creating an account" });
     }
 
-    const passwordHash = hashPassword(password);
+    const passwordHash = await hashPassword(password);
     const [user] = await db.insert(usersTable).values({
       name: staffMember.name,
       phone: staffMember.phone,

@@ -1,0 +1,43 @@
+# CWP Detailers — Varanasi MVP (Phase 1)
+# Single web service: API + static frontend on Render Postgres
+
+databases:
+  - name: cwp-postgres
+    plan: free
+    databaseName: cwp_detailers
+    user: cwp
+
+services:
+  - type: web
+    name: cwp-detailers
+    runtime: node
+    plan: free
+    buildCommand: >-
+      pnpm install --frozen-lockfile &&
+      BASE_PATH=/ pnpm --filter @workspace/cwp-platform run build &&
+      pnpm --filter @workspace/api-server run build
+    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BASE_PATH
+        value: /
+      - key: STATIC_ROOT
+        value: artifacts/cwp-platform/dist/public
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cwp-postgres
+          property: connectionString
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        value: cwp/varanasi
+      - key: MSG91_AUTH_KEY
+        sync: false
+      - key: MSG91_SENDER_ID
+        sync: false

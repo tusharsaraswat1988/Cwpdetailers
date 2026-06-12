@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { bookingsTable, customersTable, staffTable, servicesTable, bookingEventsTable } from "@workspace/db";
+import { bookingsTable, customersTable, staffTable, servicesTable, bookingEventsTable, vehiclesTable, solarSitesTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { decrementOnCompletion, recomputeNextDueDate, getTodayIST } from "../subscriptions/service";
+import { computeSolarCleaningPrice } from "../lib/solarPricing";
 
 const router = Router();
 
@@ -172,11 +173,44 @@ router.post("/bookings", async (req, res) => {
       if (!staff) return res.status(404).json({ error: "Staff not found" });
     }
 
+    if (vehicleId) {
+      const [vehicle] = await db.select().from(vehiclesTable).where(eq(vehiclesTable.id, vehicleId)).limit(1);
+      if (!vehicle || vehicle.customerId !== customerId) {
+        return res.status(400).json({ error: "Vehicle not found for this customer" });
+      }
+    }
+
+    if (solarSiteId) {
+      const [site] = await db.select().from(solarSitesTable).where(eq(solarSitesTable.id, solarSiteId)).limit(1);
+      if (!site || site.customerId !== customerId) {
+        return res.status(400).json({ error: "Solar site not found for this customer" });
+      }
+    }
+
+    let resolvedAmount = amount?.toString();
+    const resolvedBranchId = branchId ?? customer.branchId ?? undefined;
+
+    if (serviceId && !resolvedAmount) {
+      const [svc] = await db.select({ basePrice: servicesTable.basePrice }).from(servicesTable)
+        .where(eq(servicesTable.id, serviceId)).limit(1);
+      if (svc) resolvedAmount = svc.basePrice;
+    }
+
+    if (solarSiteId && serviceType === "solar_cleaning") {
+      const [site] = await db.select({ panelCount: solarSitesTable.panelCount }).from(solarSitesTable)
+        .where(eq(solarSitesTable.id, solarSiteId)).limit(1);
+      if (site) resolvedAmount = String(computeSolarCleaningPrice(site.panelCount));
+    }
+
+    const initialStatus = req.user?.role === "customer" ? "pending" as const : "scheduled" as const;
+
     const values = tenantStamp(req, {
-      customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId, branchId,
+      customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId,
+      branchId: resolvedBranchId,
       scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng, notes,
-      amount: amount?.toString(), recurrenceRule,
-      status: "scheduled" as const,
+      amount: resolvedAmount,
+      recurrenceRule,
+      status: initialStatus,
     });
     const [booking] = await db.insert(bookingsTable).values(values as any).returning();
     return res.status(201).json(booking);
@@ -223,6 +257,22 @@ router.patch("/bookings/:id", async (req, res) => {
     if (status === "completed" && !completedAt) updateData.completedAt = new Date();
 
     const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
+
+    if (beforePhotoUrl !== undefined) {
+      await logEvent(id, "proof_upload", {
+        body: "Before photo uploaded",
+        actorId: req.user?.id ?? req.scope?.staffId,
+        actorName: req.user?.name ?? "system",
+      });
+    }
+    if (afterPhotoUrl !== undefined) {
+      await logEvent(id, "proof_upload", {
+        body: "After photo uploaded",
+        actorId: req.user?.id ?? req.scope?.staffId,
+        actorName: req.user?.name ?? "system",
+      });
+    }
+
     return res.json(booking);
   } catch (err) {
     req.log.error({ err }, "Update booking error");
@@ -241,6 +291,13 @@ router.post("/bookings/:id/transition", async (req, res) => {
     const allowed = allowedTransitions[existing.status] || [];
     if (!allowed.includes(toStatus)) {
       return res.status(400).json({ error: `Invalid transition from ${existing.status} to ${toStatus}` });
+    }
+
+    if (toStatus === "in_progress" && !existing.beforePhotoUrl) {
+      return res.status(400).json({ error: "Upload a before photo before starting the job" });
+    }
+    if (toStatus === "completed" && !existing.afterPhotoUrl) {
+      return res.status(400).json({ error: "Upload an after photo before completing the job" });
     }
 
     const updateData: Record<string, unknown> = { status: toStatus, updatedAt: new Date() };

@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import path from "node:path";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { optionalAuth } from "./middlewares/auth";
@@ -31,5 +32,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", optionalAuth, router);
+
+const staticRoot = process.env.STATIC_ROOT;
+if (staticRoot && process.env.NODE_ENV === "production") {
+  const resolvedRoot = path.resolve(staticRoot);
+  app.use(express.static(resolvedRoot));
+  app.get("{*path}", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(resolvedRoot, "index.html"), (err) => {
+      if (err) next(err);
+    });
+  });
+}
 
 export default app;

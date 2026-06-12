@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, usersTable, customersTable, sessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { generateToken, hashToken, optionalAuth, requireAuth, getRolePermissions } from "../middlewares/auth";
-import { hashPassword } from "../lib/passwords";
+import { hashPassword, verifyPasswordWithUpgrade } from "../lib/passwords";
 
 const router = Router();
 
@@ -22,6 +22,11 @@ async function issueSession(userId: number, req: { headers: Record<string, unkno
   return token;
 }
 
+function toSafeUser(u: typeof usersTable.$inferSelect) {
+  const { passwordHash: _, ...safeUser } = u;
+  return safeUser;
+}
+
 router.post("/auth/login", async (req, res) => {
   try {
     const { phone, email, password } = req.body;
@@ -37,12 +42,18 @@ router.post("/auth/login", async (req, res) => {
     }
 
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
-    if (user.passwordHash !== hashPassword(password)) return res.status(401).json({ error: "Invalid credentials" });
+
+    const { valid, upgradedHash } = await verifyPasswordWithUpgrade(password, user.passwordHash);
+    if (!valid) return res.status(401).json({ error: "Invalid credentials" });
     if (!user.isActive) return res.status(401).json({ error: "Account suspended" });
 
+    if (upgradedHash) {
+      await db.update(usersTable).set({ passwordHash: upgradedHash, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+      user = { ...user, passwordHash: upgradedHash };
+    }
+
     const token = await issueSession(user.id, req);
-    const { passwordHash: _, ...safeUser } = user;
-    return res.json({ token, user: safeUser });
+    return res.json({ token, user: toSafeUser(user) });
   } catch (err) {
     req.log.error({ err }, "Login error");
     return res.status(500).json({ error: "Internal server error" });
@@ -57,9 +68,11 @@ router.post("/auth/register", async (req, res) => {
     const existing = await db.select().from(usersTable).where(eq(usersTable.phone, phone)).limit(1);
     if (existing.length > 0) return res.status(400).json({ error: "Phone already registered" });
 
+    const passwordHash = await hashPassword(password);
+
     const [user] = await db.insert(usersTable).values({
       name, phone, email: email || null,
-      passwordHash: hashPassword(password),
+      passwordHash,
       role: "customer",
       branchId: branchId || null,
       isActive: true,
@@ -71,18 +84,19 @@ router.post("/auth/register", async (req, res) => {
       userId: user.id,
       name, phone, email: email || null,
       address: address || null,
-      city: city || null,
+      city: city || "Varanasi",
       branchId: branchId || null,
       status: "active",
     }).returning();
 
+    let linkedUser = user;
     if (customer) {
-      await db.update(usersTable).set({ customerId: customer.id }).where(eq(usersTable.id, user.id));
+      const [updated] = await db.update(usersTable).set({ customerId: customer.id }).where(eq(usersTable.id, user.id)).returning();
+      if (updated) linkedUser = updated;
     }
 
-    const { passwordHash: _, ...safeUser } = user;
-    const token = await issueSession(user.id, req);
-    return res.status(201).json({ token, user: { ...safeUser, customerId: customer?.id ?? null } });
+    const token = await issueSession(linkedUser.id, req);
+    return res.status(201).json({ token, user: toSafeUser(linkedUser) });
   } catch (err) {
     req.log.error({ err }, "Register error");
     return res.status(500).json({ error: "Internal server error" });
@@ -90,8 +104,15 @@ router.post("/auth/register", async (req, res) => {
 });
 
 router.get("/auth/me", optionalAuth, requireAuth, async (req, res) => {
-  const u = req.user!;
-  return res.json(u);
+  try {
+    const rows = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id)).limit(1);
+    const u = rows[0];
+    if (!u || !u.isActive) return res.status(401).json({ error: "Authentication required" });
+    return res.json(toSafeUser(u));
+  } catch (err) {
+    req.log.error({ err }, "Get me error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.get("/auth/permissions", optionalAuth, async (req, res) => {

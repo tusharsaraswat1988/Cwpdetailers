@@ -7,10 +7,21 @@ interface UploadMetadata {
   contentType: string;
 }
 
+type CloudinarySig = {
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+  publicId: string;
+};
+
 interface UploadResponse {
   uploadURL: string;
   objectPath: string;
   metadata: UploadMetadata;
+  cloudinary?: CloudinarySig;
+  /** Absolute https URL returned after Cloudinary upload */
+  secureUrl?: string;
 }
 
 interface UseUploadOptions {
@@ -20,38 +31,33 @@ interface UseUploadOptions {
   onError?: (error: Error) => void;
 }
 
+async function uploadToCloudinary(file: File, presign: UploadResponse): Promise<string> {
+  const sig = presign.cloudinary;
+  if (!sig) throw new Error("Missing Cloudinary signature from upload endpoint");
+
+  const form = new FormData();
+  form.append("file", file);
+  form.append("api_key", sig.apiKey);
+  form.append("timestamp", String(sig.timestamp));
+  form.append("signature", sig.signature);
+  form.append("folder", sig.folder);
+  form.append("public_id", sig.publicId);
+
+  const res = await fetch(presign.uploadURL, { method: "POST", body: form });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Cloudinary upload failed: ${res.status} ${body}`);
+  }
+
+  const data = (await res.json()) as { secure_url?: string; error?: { message?: string } };
+  if (!data.secure_url) {
+    throw new Error(data.error?.message ?? "Cloudinary did not return secure_url");
+  }
+  return data.secure_url;
+}
+
 /**
- * React hook for handling file uploads with presigned URLs.
- *
- * This hook implements the two-step presigned URL upload flow:
- * 1. Request a presigned URL from your backend (sends JSON metadata, NOT the file)
- * 2. Upload the file directly to the presigned URL
- *
- * @example
- * ```tsx
- * function FileUploader() {
- *   const { uploadFile, isUploading, error } = useUpload({
- *     onSuccess: (response) => {
- *       console.log("Uploaded to:", response.objectPath);
- *     },
- *   });
- *
- *   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
- *     const file = e.target.files?.[0];
- *     if (file) {
- *       await uploadFile(file);
- *     }
- *   };
- *
- *   return (
- *     <div>
- *       <input type="file" onChange={handleFileChange} disabled={isUploading} />
- *       {isUploading && <p>Uploading...</p>}
- *       {error && <p>Error: {error.message}</p>}
- *     </div>
- *   );
- * }
- * ```
+ * React hook for Cloudinary uploads via signed parameters from the API.
  */
 export function useUpload(options: UseUploadOptions = {}) {
   const basePath = options.basePath ?? "/api/storage";
@@ -63,9 +69,7 @@ export function useUpload(options: UseUploadOptions = {}) {
     async (file: File): Promise<UploadResponse> => {
       const response = await fetch(`${basePath}/uploads/request-url`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: file.name,
           size: file.size,
@@ -80,24 +84,7 @@ export function useUpload(options: UseUploadOptions = {}) {
 
       return response.json();
     },
-    []
-  );
-
-  const uploadToPresignedUrl = useCallback(
-    async (file: File, uploadURL: string): Promise<void> => {
-      const response = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to upload file to storage");
-      }
-    },
-    []
+    [basePath],
   );
 
   const uploadFile = useCallback(
@@ -111,11 +98,12 @@ export function useUpload(options: UseUploadOptions = {}) {
         const uploadResponse = await requestUploadUrl(file);
 
         setProgress(30);
-        await uploadToPresignedUrl(file, uploadResponse.uploadURL);
+        const secureUrl = await uploadToCloudinary(file, uploadResponse);
 
         setProgress(100);
-        options.onSuccess?.(uploadResponse);
-        return uploadResponse;
+        const result = { ...uploadResponse, secureUrl, objectPath: secureUrl };
+        options.onSuccess?.(result);
+        return result;
       } catch (err) {
         const error = err instanceof Error ? err : new Error("Upload failed");
         setError(error);
@@ -125,41 +113,30 @@ export function useUpload(options: UseUploadOptions = {}) {
         setIsUploading(false);
       }
     },
-    [requestUploadUrl, uploadToPresignedUrl, options]
+    [requestUploadUrl, options],
   );
 
   const getUploadParameters = useCallback(
     async (
-      file: UppyFile<Record<string, unknown>, Record<string, unknown>>
-    ): Promise<{
-      method: "PUT";
-      url: string;
-      headers?: Record<string, string>;
-    }> => {
-      const response = await fetch(`${basePath}/uploads/request-url`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: file.name,
-          size: file.size,
-          contentType: file.type || "application/octet-stream",
-        }),
-      });
+      file: UppyFile<Record<string, unknown>, Record<string, unknown>>,
+    ): Promise<{ method: "POST"; url: string; formData?: Record<string, string> }> => {
+      const presign = await requestUploadUrl(file.data as File);
+      const sig = presign.cloudinary;
+      if (!sig) throw new Error("Missing Cloudinary signature");
 
-      if (!response.ok) {
-        throw new Error("Failed to get upload URL");
-      }
-
-      const data = await response.json();
       return {
-        method: "PUT",
-        url: data.uploadURL,
-        headers: { "Content-Type": file.type || "application/octet-stream" },
+        method: "POST",
+        url: presign.uploadURL,
+        formData: {
+          api_key: sig.apiKey,
+          timestamp: String(sig.timestamp),
+          signature: sig.signature,
+          folder: sig.folder,
+          public_id: sig.publicId,
+        },
       };
     },
-    []
+    [requestUploadUrl],
   );
 
   return {

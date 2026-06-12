@@ -1,4 +1,5 @@
 import { useAuth } from "@/lib/auth";
+import { useAccountScope } from "@/lib/account-scope";
 import { useGetCustomerSummary, getGetCustomerSummaryQueryKey, useListSubscriptions, getListSubscriptionsQueryKey } from "@workspace/api-client-react";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,15 +12,40 @@ import { motion } from "framer-motion";
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
-  const customerId = 1; // In real app, derive from user record
+  const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
 
-  const { data: summary, isLoading } = useGetCustomerSummary(customerId, {
-    query: { queryKey: getGetCustomerSummaryQueryKey(customerId) }
+  const { data: summary, isLoading } = useGetCustomerSummary(customerId ?? 0, {
+    query: {
+      queryKey: getGetCustomerSummaryQueryKey(customerId ?? 0),
+      enabled: customerId != null,
+    }
   });
 
-  const { data: subs } = useListSubscriptions({ customerId: String(customerId) } as any, {
-    query: { queryKey: getListSubscriptionsQueryKey({ customerId: String(customerId) } as any) }
+  const { data: subs } = useListSubscriptions({ customerId: String(customerId ?? "") } as any, {
+    query: {
+      queryKey: getListSubscriptionsQueryKey({ customerId: String(customerId ?? "") } as any),
+      enabled: customerId != null,
+    }
   });
+
+  if (scopeLoading) {
+    return (
+      <CustomerLayout>
+        <div className="p-6"><Skeleton className="h-8 w-48" /></div>
+      </CustomerLayout>
+    );
+  }
+
+  if (missingCustomerLink || customerId == null) {
+    return (
+      <CustomerLayout>
+        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+          <p className="font-semibold">Account not linked</p>
+          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+        </div>
+      </CustomerLayout>
+    );
+  }
 
   const stats = [
     { label: "Active Plans", value: summary?.activeSubscriptions ?? 0, icon: CreditCard, color: "text-primary" },

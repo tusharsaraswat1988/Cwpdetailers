@@ -1,25 +1,81 @@
-import { useState } from "react";
-import { useListServices, getListServicesQueryKey, useCreateBooking, getListBookingsQueryKey, useListVehicles, getListVehiclesQueryKey } from "@workspace/api-client-react";
+import { useMemo, useState } from "react";
+import { Link } from "wouter";
+import {
+  useListServices, getListServicesQueryKey,
+  useCreateBooking, getListBookingsQueryKey,
+  useListVehicles, getListVehiclesQueryKey,
+  useListSolarSites, getListSolarSitesQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAccountScope } from "@/lib/account-scope";
+import { computeSolarCleaningPrice } from "@/lib/solar-pricing";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle, Car, Sun } from "lucide-react";
+import { Loader2, CheckCircle, Car, Sun, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+
+const SERVICE_TYPE_CATEGORIES: Record<string, string> = {
+  car_wash: "car_wash",
+  detailing: "detailing",
+  solar_cleaning: "solar_cleaning",
+  pickup_drop: "car_wash",
+};
 
 export default function BookService() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
   const [success, setSuccess] = useState(false);
-  const [form, setForm] = useState<{ serviceId: string; serviceType: string; scheduledDate: string; scheduledTime: string; notes: string; vehicleId?: string }>({
-    serviceId: "", serviceType: "car_wash", scheduledDate: "", scheduledTime: "09:00", notes: ""
+  const [form, setForm] = useState<{
+    serviceId: string;
+    serviceType: string;
+    scheduledDate: string;
+    scheduledTime: string;
+    notes: string;
+    vehicleId: string;
+    solarSiteId: string;
+  }>({
+    serviceId: "",
+    serviceType: "car_wash",
+    scheduledDate: "",
+    scheduledTime: "09:00",
+    notes: "",
+    vehicleId: "",
+    solarSiteId: "",
   });
 
   const { data: services } = useListServices({ isActive: true }, { query: { queryKey: getListServicesQueryKey({ isActive: true }) } });
-  const { data: vehicles } = useListVehicles({ customerId: 1 }, { query: { queryKey: getListVehiclesQueryKey({ customerId: 1 }) } });
+  const { data: vehicles } = useListVehicles({ customerId: customerId ?? 0 }, {
+    query: { queryKey: getListVehiclesQueryKey({ customerId: customerId ?? 0 }), enabled: customerId != null },
+  });
+  const { data: solarSites } = useListSolarSites({ customerId: customerId ?? 0 }, {
+    query: { queryKey: getListSolarSitesQueryKey({ customerId: customerId ?? 0 }), enabled: customerId != null },
+  });
+
+  const filteredServices = useMemo(() => {
+    const cat = SERVICE_TYPE_CATEGORIES[form.serviceType] ?? form.serviceType;
+    return (services ?? []).filter(s => s.category === cat);
+  }, [services, form.serviceType]);
+
+  const selectedService = filteredServices.find(s => String(s.id) === form.serviceId);
+  const selectedSolar = (solarSites ?? []).find(s => String(s.id) === form.solarSiteId);
+
+  const estimatedPrice = useMemo(() => {
+    if (form.serviceType === "solar_cleaning" && selectedSolar) {
+      return computeSolarCleaningPrice(selectedSolar.panelCount);
+    }
+    if (selectedService) return Number(selectedService.basePrice);
+    return null;
+  }, [form.serviceType, selectedService, selectedSolar]);
+
+  const needsVehicle = ["car_wash", "detailing", "pickup_drop"].includes(form.serviceType);
+  const needsSolar = form.serviceType === "solar_cleaning";
+  const hasVehicle = (vehicles ?? []).length > 0;
+  const hasSolar = (solarSites ?? []).length > 0;
 
   const createMutation = useCreateBooking({
     mutation: {
@@ -28,11 +84,36 @@ export default function BookService() {
         setSuccess(true);
         toast({ title: "Booking confirmed!" });
       },
-      onError: () => toast({ title: "Booking failed", variant: "destructive" }),
+      onError: (e: any) => toast({ title: e?.response?.data?.error || "Booking failed", variant: "destructive" }),
     },
   });
 
   const today = new Date().toISOString().split("T")[0];
+
+  const canSubmit =
+    form.scheduledDate &&
+    (!needsVehicle || form.vehicleId) &&
+    (!needsSolar || form.solarSiteId) &&
+    (form.serviceType === "solar_cleaning" || form.serviceId);
+
+  if (scopeLoading) {
+    return (
+      <CustomerLayout>
+        <div className="p-6"><Loader2 className="animate-spin" /></div>
+      </CustomerLayout>
+    );
+  }
+
+  if (missingCustomerLink || customerId == null) {
+    return (
+      <CustomerLayout>
+        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+          <p className="font-semibold">Account not linked</p>
+          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+        </div>
+      </CustomerLayout>
+    );
+  }
 
   if (success) {
     return (
@@ -44,7 +125,7 @@ export default function BookService() {
             </div>
             <h2 className="font-display font-bold text-2xl text-center mb-2">Booking Confirmed!</h2>
             <p className="text-muted-foreground text-center mb-8">Our technician will reach you at the scheduled time.</p>
-            <Button onClick={() => setSuccess(false)} className="bg-primary text-secondary hover:bg-primary/90">Book Another Service</Button>
+            <Button onClick={() => { setSuccess(false); setForm(f => ({ ...f, serviceId: "", vehicleId: "", solarSiteId: "", scheduledDate: "", notes: "" })); }} className="bg-primary text-secondary hover:bg-primary/90">Book Another Service</Button>
           </motion.div>
         </div>
       </CustomerLayout>
@@ -62,7 +143,7 @@ export default function BookService() {
         <div className="grid grid-cols-2 gap-3">
           {["car_wash", "detailing", "solar_cleaning", "pickup_drop"].map(type => (
             <button key={type}
-              onClick={() => setForm(f => ({ ...f, serviceType: type }))}
+              onClick={() => setForm(f => ({ ...f, serviceType: type, serviceId: "", vehicleId: "", solarSiteId: "" }))}
               data-testid={`type-${type}`}
               className={`p-4 rounded-xl border text-left transition-all ${form.serviceType === type ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"}`}>
               <div className="flex items-center gap-2 mb-1">
@@ -73,30 +154,56 @@ export default function BookService() {
           ))}
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-          <div>
-            <Label>Select Service</Label>
-            <Select value={form.serviceId} onValueChange={v => setForm(f => ({ ...f, serviceId: v }))}>
-              <SelectTrigger className="mt-1" data-testid="select-service">
-                <SelectValue placeholder="Choose a service..." />
-              </SelectTrigger>
-              <SelectContent>
-                {(services ?? []).filter(s => s.category.includes(form.serviceType.split("_")[0])).map(s => (
-                  <SelectItem key={s.id} value={String(s.id)}>
-                    {s.name} — ₹{Number(s.basePrice).toLocaleString("en-IN")}
-                  </SelectItem>
-                ))}
-                {(services ?? []).map(s => (
-                  <SelectItem key={`all-${s.id}`} value={String(s.id)}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {needsVehicle && !hasVehicle && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm">
+            <p className="font-medium text-amber-800">Add a vehicle first</p>
+            <p className="text-amber-700 text-xs mt-1 mb-3">Register your car before booking a wash or detailing service.</p>
+            <Link href="/customer/assets">
+              <Button size="sm" variant="outline" className="gap-1" data-testid="link-add-vehicle">
+                Go to My Assets <ArrowRight size={12} />
+              </Button>
+            </Link>
           </div>
+        )}
 
-          {(vehicles ?? []).length > 0 && (
+        {needsSolar && !hasSolar && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm">
+            <p className="font-medium text-amber-800">Add a solar site first</p>
+            <p className="text-amber-700 text-xs mt-1 mb-3">Register your solar installation with panel count for pricing.</p>
+            <Link href="/customer/assets">
+              <Button size="sm" variant="outline" className="gap-1" data-testid="link-add-solar">
+                Go to My Assets <ArrowRight size={12} />
+              </Button>
+            </Link>
+          </div>
+        )}
+
+        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+          {form.serviceType !== "solar_cleaning" && (
             <div>
-              <Label>Vehicle (optional)</Label>
-              <Select onValueChange={v => setForm(f => ({ ...f, vehicleId: v }))}>
+              <Label>Select Service</Label>
+              <Select value={form.serviceId} onValueChange={v => setForm(f => ({ ...f, serviceId: v }))}>
+                <SelectTrigger className="mt-1" data-testid="select-service">
+                  <SelectValue placeholder="Choose a service..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredServices.map(s => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.name} — ₹{Number(s.basePrice).toLocaleString("en-IN")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {filteredServices.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">No services available for this type.</p>
+              )}
+            </div>
+          )}
+
+          {needsVehicle && hasVehicle && (
+            <div>
+              <Label>Vehicle</Label>
+              <Select value={form.vehicleId} onValueChange={v => setForm(f => ({ ...f, vehicleId: v }))}>
                 <SelectTrigger className="mt-1" data-testid="select-vehicle">
                   <SelectValue placeholder="Select vehicle..." />
                 </SelectTrigger>
@@ -106,6 +213,33 @@ export default function BookService() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {needsSolar && hasSolar && (
+            <div>
+              <Label>Solar site</Label>
+              <Select value={form.solarSiteId} onValueChange={v => setForm(f => ({ ...f, solarSiteId: v }))}>
+                <SelectTrigger className="mt-1" data-testid="select-solar">
+                  <SelectValue placeholder="Select solar site..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {(solarSites ?? []).map(s => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.address} ({s.panelCount} panels)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {estimatedPrice != null && (
+            <div className="bg-muted/50 rounded-lg px-4 py-3 flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Estimated price</span>
+              <span className="font-semibold text-primary" data-testid="estimated-price">
+                ₹{estimatedPrice.toLocaleString("en-IN")}
+              </span>
             </div>
           )}
 
@@ -127,16 +261,18 @@ export default function BookService() {
 
           <Button
             data-testid="btn-confirm-booking"
-            disabled={!form.scheduledDate || createMutation.isPending}
+            disabled={!canSubmit || createMutation.isPending}
             onClick={() => createMutation.mutate({
               data: {
-                customerId: 1,
+                customerId,
                 serviceId: form.serviceId ? parseInt(form.serviceId) : undefined,
+                vehicleId: form.vehicleId ? parseInt(form.vehicleId) : undefined,
+                solarSiteId: form.solarSiteId ? parseInt(form.solarSiteId) : undefined,
                 serviceType: form.serviceType as "car_wash" | "detailing" | "solar_cleaning" | "pickup_drop" | "emergency",
                 scheduledDate: form.scheduledDate,
                 scheduledTime: form.scheduledTime,
                 notes: form.notes || undefined,
-              }
+              },
             })}
             className="w-full bg-primary text-secondary hover:bg-primary/90 font-semibold"
           >

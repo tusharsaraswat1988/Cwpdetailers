@@ -2,11 +2,12 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Calendar, History, FileText, AlertCircle, User, LogOut, Sun } from "lucide-react";
+import { LayoutDashboard, Calendar, History, FileText, AlertCircle, LogOut, Sun, Car } from "lucide-react";
 
 const navItems = [
   { href: "/customer/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/customer/bookings", label: "Book", icon: Calendar },
+  { href: "/customer/assets", label: "Assets", icon: Car },
   { href: "/customer/history", label: "History", icon: History },
   { href: "/customer/invoices", label: "Invoices", icon: FileText },
   { href: "/customer/complaints", label: "Support", icon: AlertCircle },
@@ -65,7 +66,7 @@ export default function CustomerLayout({ children }: { children: ReactNode }) {
         className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-border bg-card/95 backdrop-blur safe-area-bottom"
         aria-label="Customer navigation"
       >
-        <div className="grid grid-cols-5 gap-0.5 px-1 py-1.5 max-w-lg mx-auto">
+        <div className="grid grid-cols-3 grid-rows-2 gap-0.5 px-1 py-1.5 max-w-lg mx-auto">
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = location === href || location.startsWith(href + "/");
             return (

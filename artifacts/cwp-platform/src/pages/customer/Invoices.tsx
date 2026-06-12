@@ -1,4 +1,5 @@
 import { useListInvoices, getListInvoicesQueryKey } from "@workspace/api-client-react";
+import { useAccountScope } from "@/lib/account-scope";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,14 +13,26 @@ const statusColors: Record<string, string> = {
 };
 
 export default function CustomerInvoices() {
-  const { data, isLoading } = useListInvoices({ customerId: "1" } as any, {
-    query: { queryKey: getListInvoicesQueryKey({ customerId: "1" } as any) }
+  const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
+  const { data, isLoading } = useListInvoices({ customerId: String(customerId ?? "") } as any, {
+    query: {
+      queryKey: getListInvoicesQueryKey({ customerId: String(customerId ?? "") } as any),
+      enabled: customerId != null,
+    }
   });
 
   const totalDue = (data?.data ?? []).reduce((s, inv) => s + Number(inv.dueAmount), 0);
 
   return (
     <CustomerLayout>
+      {scopeLoading ? (
+        <div className="p-6"><Skeleton className="h-8 w-48" /></div>
+      ) : missingCustomerLink || customerId == null ? (
+        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+          <p className="font-semibold">Account not linked</p>
+          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+        </div>
+      ) : (
       <div className="space-y-5">
         <div>
           <h1 className="font-display font-bold text-2xl">Invoices</h1>
@@ -60,6 +73,7 @@ export default function CustomerInvoices() {
           )}
         </div>
       </div>
+      )}
     </CustomerLayout>
   );
 }

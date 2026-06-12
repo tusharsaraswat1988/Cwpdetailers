@@ -45,6 +45,11 @@ function isSuperAdmin(role?: UserRole | null) {
   return role === "admin" || role === "superadmin";
 }
 
+function persistSession(u: AuthUser, t: string) {
+  localStorage.setItem(TOKEN_KEY, t);
+  localStorage.setItem(USER_KEY, JSON.stringify(u));
+}
+
 // Patches window.fetch once so every SAME-ORIGIN /api/* request carries the
 // bearer token. We deliberately do NOT attach the token to cross-origin
 // requests — that would leak credentials to third-party hosts (e.g. Google
@@ -80,24 +85,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [permissions, setPermissions] = useState<PermissionTuple[]>([]);
   const [scope, setScope] = useState<TenantScope | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const hydrated = useRef(false);
 
-  // Bootstrap once
+  // Bootstrap: restore session and refresh user from /auth/me for current linkages
   useEffect(() => {
     installFetchInterceptor();
     const storedToken = localStorage.getItem(TOKEN_KEY);
     const storedUser = localStorage.getItem(USER_KEY);
-    if (storedToken && storedUser) {
-      try {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      } catch {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-      }
+
+    if (!storedToken || !storedUser) {
+      setIsLoading(false);
+      return;
     }
-    setIsLoading(false);
-    hydrated.current = true;
+
+    let parsed: AuthUser;
+    try {
+      parsed = JSON.parse(storedUser);
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      setIsLoading(false);
+      return;
+    }
+
+    setToken(storedToken);
+    setUser(parsed);
+
+    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${storedToken}` } })
+      .then(async r => {
+        if (r.status === 401) {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(USER_KEY);
+          setUser(null);
+          setToken(null);
+          return null;
+        }
+        return r.ok ? r.json() : parsed;
+      })
+      .then(fresh => {
+        if (fresh) {
+          setUser(fresh);
+          persistSession(fresh, storedToken);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
   }, []);
 
   // Re-fetch permissions whenever user/token changes
@@ -137,8 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (u: AuthUser, t: string) => {
     setUser(u);
     setToken(t);
-    localStorage.setItem(TOKEN_KEY, t);
-    localStorage.setItem(USER_KEY, JSON.stringify(u));
+    persistSession(u, t);
   };
 
   const logout = () => {

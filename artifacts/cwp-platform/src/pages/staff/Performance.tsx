@@ -1,21 +1,44 @@
 import { useGetStaffPerformance, getGetStaffPerformanceQueryKey, useGetStaffLeaderboard, getGetStaffLeaderboardQueryKey } from "@workspace/api-client-react";
+import { useAccountScope } from "@/lib/account-scope";
 import StaffLayout from "@/components/layout/StaffLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Trophy, Star, TrendingUp, Calendar } from "lucide-react";
 
 export default function StaffPerformance() {
-  const staffId = 1;
+  const { staffId, isLoading: scopeLoading, missingStaffLink } = useAccountScope();
   const month = new Date().toISOString().slice(0, 7);
 
-  const { data: perf, isLoading } = useGetStaffPerformance(staffId, { month }, {
-    query: { queryKey: getGetStaffPerformanceQueryKey(staffId, { month }) }
+  const { data: perf, isLoading } = useGetStaffPerformance(staffId ?? 0, { month }, {
+    query: {
+      queryKey: getGetStaffPerformanceQueryKey(staffId ?? 0, { month }),
+      enabled: staffId != null,
+    }
   });
   const { data: leaderboard } = useGetStaffLeaderboard({ month }, {
     query: { queryKey: getGetStaffLeaderboardQueryKey({ month }) }
   });
 
-  const myRank = (leaderboard ?? []).findIndex(s => s.staffId === staffId) + 1;
+  const myRank = staffId != null ? (leaderboard ?? []).findIndex(s => s.staffId === staffId) + 1 : 0;
+
+  if (scopeLoading) {
+    return (
+      <StaffLayout>
+        <div className="p-6"><Skeleton className="h-8 w-48" /></div>
+      </StaffLayout>
+    );
+  }
+
+  if (missingStaffLink || staffId == null) {
+    return (
+      <StaffLayout>
+        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+          <p className="font-semibold">Account not linked</p>
+          <p className="text-sm text-muted-foreground">Your login is not linked to a staff profile. Ask your admin to create your staff account.</p>
+        </div>
+      </StaffLayout>
+    );
+  }
 
   return (
     <StaffLayout>

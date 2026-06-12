@@ -4,6 +4,13 @@ packages:
   - lib/integrations/*
   - scripts
 
+allowBuilds:
+  '@swc/core': true
+  argon2: true
+  esbuild: true
+  msw: true
+  unrs-resolver: true
+
 autoInstallPeers: false
 
 catalog:
@@ -38,6 +45,7 @@ minimumReleaseAgeExclude:
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - argon2
   - esbuild
   - msw
   - unrs-resolver

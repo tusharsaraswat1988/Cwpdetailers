@@ -169,7 +169,7 @@ router.post("/franchisees/:id/create-account", async (req, res) => {
     if (!password) return res.status(400).json({ error: "password is required" });
     if (franchisee.userId) return res.status(400).json({ error: "Account already exists" });
 
-    const passwordHash = hashPassword(password);
+    const passwordHash = await hashPassword(password);
     const [user] = await db.insert(usersTable).values({
       name: franchisee.name,
       phone: franchisee.phone,

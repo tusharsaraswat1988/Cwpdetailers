@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
+    "argon2": "^0.43.0",
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {

@@ -1,4 +1,6 @@
 import { useListBookings, getListBookingsQueryKey } from "@workspace/api-client-react";
+import { useAccountScope } from "@/lib/account-scope";
+import { resolveMediaUrl } from "@/lib/media-url";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,8 +18,12 @@ const statusColors: Record<string, string> = {
 };
 
 export default function CustomerHistory() {
-  const { data, isLoading } = useListBookings({ customerId: "1" } as any, {
-    query: { queryKey: getListBookingsQueryKey({ customerId: "1" } as any) }
+  const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
+  const { data, isLoading } = useListBookings({ customerId: String(customerId ?? "") } as any, {
+    query: {
+      queryKey: getListBookingsQueryKey({ customerId: String(customerId ?? "") } as any),
+      enabled: customerId != null,
+    }
   });
 
   const photos = (b: any) => {
@@ -29,6 +35,14 @@ export default function CustomerHistory() {
 
   return (
     <CustomerLayout>
+      {scopeLoading ? (
+        <div className="p-6"><Skeleton className="h-8 w-48" /></div>
+      ) : missingCustomerLink || customerId == null ? (
+        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+          <p className="font-semibold">Account not linked</p>
+          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+        </div>
+      ) : (
       <div className="space-y-5">
         <div>
           <h1 className="font-display font-bold text-2xl">Service History</h1>
@@ -66,13 +80,22 @@ export default function CustomerHistory() {
                 {photos(b).length > 0 && (
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
                     <Image size={12} className="text-muted-foreground" />
-                    <div className="flex items-center gap-1.5">
-                      {photos(b).slice(0, 3).map((url: string, i: number) => (
-                        <img key={i} src={url} alt="" className="w-10 h-10 rounded-lg object-cover border border-border" />
-                      ))}
-                      {photos(b).length > 3 && (
-                        <span className="text-xs text-muted-foreground">+{photos(b).length - 3} more</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {b.beforePhotoUrl && (
+                        <div className="text-center">
+                          <img src={resolveMediaUrl(b.beforePhotoUrl)} alt="Before" className="w-10 h-10 rounded-lg object-cover border border-border" />
+                          <p className="text-[9px] text-muted-foreground">Before</p>
+                        </div>
                       )}
+                      {b.afterPhotoUrl && (
+                        <div className="text-center">
+                          <img src={resolveMediaUrl(b.afterPhotoUrl)} alt="After" className="w-10 h-10 rounded-lg object-cover border border-border" />
+                          <p className="text-[9px] text-muted-foreground">After</p>
+                        </div>
+                      )}
+                      {((b.proofPhotoUrls as string[] | null) ?? []).slice(0, 2).map((url: string, i: number) => (
+                        <img key={i} src={resolveMediaUrl(url)} alt="" className="w-10 h-10 rounded-lg object-cover border border-border" />
+                      ))}
                     </div>
                   </div>
                 )}
@@ -83,6 +106,7 @@ export default function CustomerHistory() {
           )}
         </div>
       </div>
+      )}
     </CustomerLayout>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useGetStaffAttendance, getGetStaffAttendanceQueryKey, useMarkAttendance } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAccountScope } from "@/lib/account-scope";
 import StaffLayout from "@/components/layout/StaffLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,17 +19,20 @@ const statusColors: Record<string, string> = {
 export default function StaffAttendance() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { staffId, isLoading: scopeLoading, missingStaffLink } = useAccountScope();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const staffId = 1;
 
-  const { data: attendance, isLoading } = useGetStaffAttendance(staffId, { month }, {
-    query: { queryKey: getGetStaffAttendanceQueryKey(staffId, { month }) }
+  const { data: attendance, isLoading } = useGetStaffAttendance(staffId ?? 0, { month }, {
+    query: {
+      queryKey: getGetStaffAttendanceQueryKey(staffId ?? 0, { month }),
+      enabled: staffId != null,
+    }
   });
 
   const markMutation = useMarkAttendance({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getGetStaffAttendanceQueryKey(staffId) });
+        if (staffId != null) qc.invalidateQueries({ queryKey: getGetStaffAttendanceQueryKey(staffId) });
         toast({ title: "Attendance marked" });
       },
     },
@@ -39,6 +43,14 @@ export default function StaffAttendance() {
 
   return (
     <StaffLayout>
+      {scopeLoading ? (
+        <div className="p-6"><Skeleton className="h-8 w-48" /></div>
+      ) : missingStaffLink || staffId == null ? (
+        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+          <p className="font-semibold">Account not linked</p>
+          <p className="text-sm text-muted-foreground">Your login is not linked to a staff profile. Ask your admin to create your staff account.</p>
+        </div>
+      ) : (
       <div className="p-6 space-y-5">
         <div className="flex items-center justify-between">
           <div>
@@ -51,7 +63,7 @@ export default function StaffAttendance() {
             {!todayMarked && (
               <Button size="sm" className="bg-primary text-secondary hover:bg-primary/90"
                 data-testid="btn-mark-present"
-                onClick={() => markMutation.mutate({ id: staffId, data: { date: new Date().toISOString().split("T")[0], status: "present", checkInTime: new Date().toTimeString().slice(0, 5) } })}>
+                onClick={() => staffId != null && markMutation.mutate({ id: staffId, data: { date: new Date().toISOString().split("T")[0], status: "present", checkInTime: new Date().toTimeString().slice(0, 5) } })}>
                 <CheckCircle size={13} className="mr-1.5" />Mark Present
               </Button>
             )}
@@ -72,6 +84,7 @@ export default function StaffAttendance() {
           <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-border">No attendance records for this month</div>
         )}
       </div>
+      )}
     </StaffLayout>
   );
 }

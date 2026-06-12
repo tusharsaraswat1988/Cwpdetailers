@@ -32,6 +32,7 @@ import AdminDues from "@/pages/admin/Dues";
 
 import CustomerDashboard from "@/pages/customer/Dashboard";
 import BookService from "@/pages/customer/BookService";
+import MyAssets from "@/pages/customer/MyAssets";
 import CustomerHistory from "@/pages/customer/History";
 import CustomerInvoices from "@/pages/customer/Invoices";
 import CustomerComplaints from "@/pages/customer/Complaints";
@@ -128,6 +129,7 @@ function Router() {
       {/* Customer */}
       <Route path="/customer/dashboard" component={() => <ProtectedRoute component={CustomerDashboard} roles={["customer"]} />} />
       <Route path="/customer/bookings" component={() => <ProtectedRoute component={BookService} roles={["customer"]} />} />
+      <Route path="/customer/assets" component={() => <ProtectedRoute component={MyAssets} roles={["customer"]} />} />
       <Route path="/customer/history" component={() => <ProtectedRoute component={CustomerHistory} roles={["customer"]} />} />
       <Route path="/customer/invoices" component={() => <ProtectedRoute component={CustomerInvoices} roles={["customer"]} />} />
       <Route path="/customer/complaints" component={() => <ProtectedRoute component={CustomerComplaints} roles={["customer"]} />} />

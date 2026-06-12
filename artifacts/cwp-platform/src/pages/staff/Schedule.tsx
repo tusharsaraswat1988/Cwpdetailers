@@ -1,12 +1,17 @@
 import { useListBookings, getListBookingsQueryKey } from "@workspace/api-client-react";
+import { useAccountScope } from "@/lib/account-scope";
 import StaffLayout from "@/components/layout/StaffLayout";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Clock, MapPin, User } from "lucide-react";
 
 export default function StaffSchedule() {
-  const { data, isLoading } = useListBookings({ staffId: "1", limit: "30" } as any, {
-    query: { queryKey: getListBookingsQueryKey({ staffId: "1" } as any) }
+  const { staffId, isLoading: scopeLoading, missingStaffLink } = useAccountScope();
+  const { data, isLoading } = useListBookings({ staffId: String(staffId ?? ""), limit: "30" } as any, {
+    query: {
+      queryKey: getListBookingsQueryKey({ staffId: String(staffId ?? ""), limit: "30" } as any),
+      enabled: staffId != null,
+    }
   });
 
   const statusColors: Record<string, string> = {
@@ -19,6 +24,14 @@ export default function StaffSchedule() {
 
   return (
     <StaffLayout>
+      {scopeLoading ? (
+        <div className="p-6"><Skeleton className="h-8 w-48" /></div>
+      ) : missingStaffLink || staffId == null ? (
+        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+          <p className="font-semibold">Account not linked</p>
+          <p className="text-sm text-muted-foreground">Your login is not linked to a staff profile. Ask your admin to create your staff account.</p>
+        </div>
+      ) : (
       <div className="p-6 space-y-5">
         <div>
           <h1 className="font-display font-bold text-2xl">My Schedule</h1>
@@ -64,6 +77,7 @@ export default function StaffSchedule() {
           )}
         </div>
       </div>
+      )}
     </StaffLayout>
   );
 }
