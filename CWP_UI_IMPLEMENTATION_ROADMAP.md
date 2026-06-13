@@ -29,6 +29,7 @@ Sprint 7  (5–6 days)  Admin: Side Panel + Bookings Board
 Sprint 8  (5–6 days)  Admin: Command Palette + Domain Tabs
 Sprint 9  (4–5 days)  Customer: Account Hub + IA Restructure
 Sprint 10 (3–4 days)  PWA Polish + Motion + Before/After Slider
+Sprint M  (5–7 days)  Legacy Migration Tools — after Sprint 4, before full customer rollout
 ```
 
 Total estimated duration: **~38–46 working days** (solo developer)  
@@ -810,6 +811,59 @@ Single scrolling page. Desktop-first but fully responsive. No sidebar needed (li
 - City performance table shows rank, revenue bar, customer count, contract count
 - "No alerts" state shows green banner: "All systems healthy"
 - Permission: visible to `superadmin` role only
+
+---
+
+---
+
+## Sprint M — Legacy Migration Tools
+
+**Schedule:** After Sprint 4 (Daily Ops stabilization) and **before** full customer rollout (Sprint 9+).  
+**Not required before Sprint 2.**  
+**Duration:** 5–7 days  
+**Risk:** Medium — admin-only tooling; touches contracts, wallet, and audit data  
+**Purpose:** Migrate existing CWP customers from manual operations (spreadsheets, WhatsApp, paper) into the platform without losing contract history or prepaid balances.
+
+### Requirements
+
+#### M.1 Legacy Contract Creation
+Admin UI to create subscriptions for migrated customers, supporting:
+- **Daily Cleaning** (`daily_wash`)
+- **Wash Packages** (`monthly_wash`, visit-based packages)
+- **Solar AMC** (`solar_amc`)
+
+Uses existing subscription APIs — no new contract types.
+
+#### M.2 Opening Wallet Balance
+Set initial wallet credit at migration time (existing wallet credit API / admin wallet route).
+
+#### M.3 Remaining Credits
+Import prepaid rupee balance or package credit value into wallet or subscription `paidAmount` as appropriate.
+
+#### M.4 Remaining Visits
+Set `totalServices` + `servicesUsed` (or `servicesRemaining`) for visit-based packages and Solar AMC.
+
+#### M.5 Assigned Staff
+Link default staff to daily cleaning contracts (`assignedStaffId` on subscription or vehicle).
+
+#### M.6 Imported From Legacy Flag
+Boolean `importedFromLegacy` (or metadata field) on customer / subscription record for filtering and support.
+
+#### M.7 Migration Notes
+Free-text admin notes per migration batch or per customer (`migrationNotes`).
+
+#### M.8 Migration Audit Trail
+Log who migrated, when, source system, and before/after snapshot (admin audit table or existing activity log).
+
+### Deliverables (Future)
+- Admin route: `/admin/migration` (or `/admin/legacy-import`)
+- Step wizard: Select customer → Contract type → Balances & visits → Staff → Review → Confirm
+- Migration log list with search and export
+
+### Constraints
+- Use existing schema fields where possible; extend only with additive nullable columns if required
+- No changes to customer-facing Sprint 2 screens
+- Rollback-safe: each migration is a discrete admin action with audit entry
 
 ---
 
