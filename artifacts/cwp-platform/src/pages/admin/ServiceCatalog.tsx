@@ -11,12 +11,11 @@ import {
 } from "@/features/service-catalog/api";
 import { CategoriesTab } from "@/features/service-catalog/components/CategoriesTab";
 import { ServicesTab } from "@/features/service-catalog/components/ServicesTab";
-import { AddonsTab } from "@/features/service-catalog/components/AddonsTab";
 import { PricingTab } from "@/features/service-catalog/components/PricingTab";
 import { SolarSlabsTab } from "@/features/service-catalog/components/SolarSlabsTab";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Layers, Wrench, MapPin, Sun, Plus, Package, Home, Settings, Sparkles,
+  Layers, Wrench, MapPin, Sun, Package, Home, Settings, Sparkles,
 } from "lucide-react";
 
 export default function ServiceCatalog() {
@@ -47,7 +46,6 @@ export default function ServiceCatalog() {
               { v: "services", l: "Services", i: Wrench },
               { v: "pricing", l: "City Pricing", i: MapPin },
               { v: "solar", l: "Solar Slabs", i: Sun },
-              { v: "addons", l: "Addons", i: Plus },
               { v: "packages", l: "Packages", i: Package },
               { v: "homepage", l: "Homepage", i: Home },
               { v: "settings", l: "GST", i: Settings },
@@ -64,7 +62,6 @@ export default function ServiceCatalog() {
 
           <TabsContent value="pricing"><PricingTab /></TabsContent>
           <TabsContent value="solar"><SolarSlabsTab /></TabsContent>
-          <TabsContent value="addons"><AddonsTab /></TabsContent>
 
           <TabsContent value="packages">
             <div className="grid gap-4 md:grid-cols-2">

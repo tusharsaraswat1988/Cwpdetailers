@@ -14,7 +14,8 @@ import {
   useAdminServices, useServiceMutations, type AdminService,
 } from "@/features/service-catalog/api";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Wrench, IndianRupee, Clock } from "lucide-react";
+import { ServiceAddonsSection } from "@/features/service-catalog/components/ServiceAddonsSection";
+import { Plus, Pencil, Trash2, Wrench, IndianRupee, Clock, Puzzle } from "lucide-react";
 
 const PRICING_MODELS = [
   { value: "fixed", label: "Fixed Price" },
@@ -112,16 +113,15 @@ export function ServicesTab() {
     if (editing) {
       update.mutate({ id: editing.id, ...payload }, {
         onSuccess: () => {
-          setDialogOpen(false);
           toast({ title: "Service updated" });
         },
         onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
       });
     } else {
       create.mutate(payload, {
-        onSuccess: () => {
-          setDialogOpen(false);
-          toast({ title: "Service created" });
+        onSuccess: (created) => {
+          setEditing(created as AdminService);
+          toast({ title: "Service created — add addons below if needed" });
         },
         onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
       });
@@ -144,7 +144,7 @@ export function ServicesTab() {
         <div>
           <CardTitle>Services</CardTitle>
           <CardDescription>
-            Manage bookable services — category, pricing model, GST, and availability
+            Manage bookable services — category, pricing, GST, and per-service addons
           </CardDescription>
         </div>
         <Button size="sm" onClick={openCreate}>
@@ -198,6 +198,11 @@ export function ServicesTab() {
                     {pricingModelLabel(svc.pricingModel)}
                   </Badge>
                   {!svc.isActive && <Badge variant="destructive" className="text-xs">Inactive</Badge>}
+                  {(svc.addonCount ?? 0) > 0 && (
+                    <Badge variant="outline" className="text-xs gap-0.5">
+                      <Puzzle size={10} />{svc.addonCount} addon{svc.addonCount !== 1 ? "s" : ""}
+                    </Badge>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
@@ -216,7 +221,10 @@ export function ServicesTab() {
         )}
       </CardContent>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={open => {
+        setDialogOpen(open);
+        if (!open) { setEditing(null); setForm(emptyForm()); }
+      }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Service" : "New Service"}</DialogTitle>
@@ -312,9 +320,18 @@ export function ServicesTab() {
               <Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
 
-            <Button onClick={handleSave} disabled={isSaving} className="w-full">
-              {isSaving ? "Saving..." : editing ? "Update Service" : "Create Service"}
-            </Button>
+            {editing && (
+              <ServiceAddonsSection serviceId={editing.id} serviceName={editing.name} />
+            )}
+
+            <div className="flex gap-2">
+              <Button onClick={handleSave} disabled={isSaving} className="flex-1">
+                {isSaving ? "Saving..." : editing ? "Update Service" : "Create Service"}
+              </Button>
+              {editing && (
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Done</Button>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

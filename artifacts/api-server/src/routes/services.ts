@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { servicesTable, serviceCategoriesTable } from "@workspace/db";
-import { eq, and, asc } from "drizzle-orm";
+import { servicesTable, serviceCategoriesTable, serviceAddonLinksTable } from "@workspace/db";
+import { eq, and, asc, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -83,7 +83,19 @@ router.get("/services", async (req, res) => {
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(asc(serviceCategoriesTable.sortOrder), asc(servicesTable.name));
 
-    return res.json(data);
+    const linkCounts = await db
+      .select({
+        serviceId: serviceAddonLinksTable.serviceId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(serviceAddonLinksTable)
+      .where(eq(serviceAddonLinksTable.isActive, true))
+      .groupBy(serviceAddonLinksTable.serviceId);
+    const countMap = Object.fromEntries(
+      linkCounts.filter(r => r.serviceId != null).map(r => [r.serviceId!, r.count]),
+    );
+
+    return res.json(data.map(s => ({ ...s, addonCount: countMap[s.id] ?? 0 })));
   } catch (err) {
     req.log.error({ err }, "List services error");
     return res.status(500).json({ error: "Internal server error" });

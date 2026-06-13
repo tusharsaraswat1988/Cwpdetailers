@@ -34,6 +34,7 @@ export type AdminService = {
   imageUrl?: string;
   features?: string[];
   assignmentStrategy?: "manual" | "auto" | "round_robin";
+  addonCount?: number;
 };
 
 export type CatalogPackage = {
@@ -43,7 +44,8 @@ export type CatalogPackage = {
 };
 
 export type ServiceAddon = {
-  id: number; name: string; slug: string; basePrice: string; description?: string; isActive: boolean;
+  id: number; name: string; slug: string; basePrice: string; description?: string;
+  isActive: boolean; linkId?: number; durationMinutes?: number;
 };
 
 export type SolarSlab = {
@@ -98,7 +100,42 @@ export function useCatalogAddons(serviceId?: number) {
   return useQuery({
     queryKey: ["catalog", "addons", serviceId],
     queryFn: () => catalogFetch<ServiceAddon[]>(`/catalog/addons${serviceId ? `?serviceId=${serviceId}` : ""}`),
+    enabled: serviceId != null,
   });
+}
+
+export function useServiceAddonMutations(serviceId: number) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["catalog", "addons", serviceId] });
+    qc.invalidateQueries({ queryKey: ["admin", "services"] });
+  };
+  return {
+    create: useMutation({
+      mutationFn: (data: { name: string; basePrice: string; description?: string; durationMinutes?: number }) =>
+        catalogFetch<ServiceAddon>("/catalog/addons", {
+          method: "POST",
+          body: JSON.stringify({
+            ...data,
+            serviceId,
+            pricingType: "inclusive",
+            gstRate: "18",
+            isActive: true,
+          }),
+        }),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: ({ id, ...data }: { id: number } & Record<string, unknown>) =>
+        catalogFetch<ServiceAddon>(`/catalog/addons/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+    unlink: useMutation({
+      mutationFn: (linkId: number) =>
+        catalogFetch(`/catalog/addon-links/${linkId}`, { method: "DELETE" }),
+      onSuccess: invalidate,
+    }),
+  };
 }
 
 export function useSolarSlabs(serviceId?: number) {

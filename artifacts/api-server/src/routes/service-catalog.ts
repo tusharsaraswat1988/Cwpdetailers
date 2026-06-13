@@ -142,9 +142,23 @@ router.get("/catalog/addons", async (req, res) => {
 });
 
 router.post("/catalog/addons", async (req, res) => {
-  const body = { ...req.body, slug: req.body.slug ?? slugify(req.body.name) };
-  const [row] = await db.insert(serviceAddonsTable).values(body).returning();
-  return res.status(201).json(row);
+  try {
+    const { serviceId, serviceCategoryId, ...addonData } = req.body;
+    const body = { ...addonData, slug: addonData.slug ?? slugify(addonData.name) };
+    const [row] = await db.insert(serviceAddonsTable).values(body).returning();
+    if (serviceId || serviceCategoryId) {
+      await db.insert(serviceAddonLinksTable).values({
+        addonId: row.id,
+        serviceId: serviceId ?? null,
+        serviceCategoryId: serviceCategoryId ?? null,
+        isActive: true,
+      });
+    }
+    return res.status(201).json(row);
+  } catch (err) {
+    req.log.error({ err }, "Create addon error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.patch("/catalog/addons/:id", (req, res) => genericUpdate(serviceAddonsTable, req, res));
