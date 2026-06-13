@@ -17,10 +17,11 @@ import {
 } from "../api";
 import {
   MessageSquare, Send, Users, Zap, BarChart3, Shield, Server,
-  Plus, Play, Clock, CheckCircle2, XCircle, Eye, Radio, Target, Ban, IndianRupee,
+  Plus, Play, Clock, CheckCircle2, XCircle, Eye, Radio, Target, Ban, IndianRupee, Inbox,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
 import CampaignDetailDialog from "../components/CampaignDetailDialog";
+import ConversationInbox from "../components/ConversationInbox";
 
 const CHANNELS = [
   { id: "sms", label: "SMS" },
@@ -107,6 +108,7 @@ export default function CommunicationCenter() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex flex-wrap h-auto gap-1">
             <TabsTrigger value="overview" className="gap-1.5"><BarChart3 size={14} />Overview</TabsTrigger>
+            <TabsTrigger value="inbox" className="gap-1.5"><Inbox size={14} />Inbox</TabsTrigger>
             <TabsTrigger value="campaigns" className="gap-1.5"><Send size={14} />Campaigns</TabsTrigger>
             <TabsTrigger value="audiences" className="gap-1.5"><Users size={14} />Audiences</TabsTrigger>
             <TabsTrigger value="templates" className="gap-1.5"><MessageSquare size={14} />Templates</TabsTrigger>
@@ -245,6 +247,10 @@ export default function CommunicationCenter() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="inbox" className="mt-4">
+            <ConversationInbox />
           </TabsContent>
 
           {/* ── Campaigns ── */}

@@ -4,12 +4,13 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type { SidebarRenderProps } from "./PanelShell";
 import {
-  LayoutDashboard, Calendar, UserCog, LogOut, Sun,
+  LayoutDashboard, Calendar, UserCog, LogOut,
   UserX, Bell, Funnel,
 } from "lucide-react";
 import PanelShell from "./PanelShell";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
-import { usePortalManifest } from "@/lib/pwa/usePortalManifest";
+import { BrandLogo } from "@/components/shared/BrandLogo";
+import { useBranding, useBrandingPortal } from "@/lib/branding";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 
 type NavItem = {
@@ -31,6 +32,7 @@ const ALL_NAV: NavItem[] = [
 function FranchiseeSidebar({ onNavigate, embedded = false, className }: SidebarRenderProps & { className?: string }) {
   const [location] = useLocation();
   const { user, logout, hasPermission } = useAuth();
+  const branding = useBranding();
 
   const navItems = ALL_NAV.filter(item =>
     !item.permission || hasPermission(item.permission.resource, item.permission.action),
@@ -46,12 +48,10 @@ function FranchiseeSidebar({ onNavigate, embedded = false, className }: SidebarR
       data-testid="franchisee-sidebar"
     >
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
-        <div className="shrink-0 w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center">
-          <Sun size={16} className="text-white" />
-        </div>
+        <BrandLogo variant="navbar" imgClassName="h-8 w-8" fallbackClassName="w-8 h-8" lazy={false} />
         <div className="min-w-0">
           <p className="text-white font-display font-bold text-sm leading-tight">Franchisee Portal</p>
-          <p className="text-white/40 text-xs truncate">{user?.name ?? "City Partner"}</p>
+          <p className="text-white/40 text-xs truncate">{user?.name ?? branding.brandName}</p>
         </div>
       </div>
 
@@ -99,7 +99,7 @@ function FranchiseeSidebar({ onNavigate, embedded = false, className }: SidebarR
 
 export default function FranchiseeLayout({ children }: { children: ReactNode }) {
   const isMobile = useMediaQuery("(max-width: 1023px)");
-  usePortalManifest("/manifest-franchisee.json", "#21252e");
+  const branding = useBrandingPortal("franchisee");
 
   return (
     <PanelShell
@@ -110,7 +110,7 @@ export default function FranchiseeLayout({ children }: { children: ReactNode }) 
       {isMobile && (
         <PwaInstallBanner
           portalKey="franchisee"
-          title="Install Franchisee Portal"
+          title={`Install ${branding.brandName} Franchise`}
           description="Add the partner portal to your home screen for quick mobile access."
         />
       )}

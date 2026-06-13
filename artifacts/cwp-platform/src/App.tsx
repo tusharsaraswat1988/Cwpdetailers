@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { OfflineScreen } from "@/components/pwa/OfflineScreen";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { BrandingProvider } from "@/lib/branding";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
@@ -33,6 +34,7 @@ import AdminQuotationBuilder from "@/pages/admin/QuotationBuilder";
 import AdminExpenses from "@/pages/admin/Expenses";
 import AdminDues from "@/pages/admin/Dues";
 import AdminDailyOps from "@/pages/admin/DailyOps";
+import BrandIdentity from "@/pages/admin/BrandIdentity";
 
 import CustomerDashboard from "@/pages/customer/Dashboard";
 import BookService from "@/pages/customer/BookService";
@@ -138,6 +140,7 @@ function Router() {
       <Route path="/admin/dues" component={() => <ProtectedRoute component={AdminDues} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/operations-wall" component={() => <ProtectedRoute component={OperationsWall} roles={["admin", "superadmin", "manager"]} loginPath="/admin/login" />} />
       <Route path="/admin/founder" component={() => <ProtectedRoute component={FounderDashboard} roles={["superadmin"]} loginPath="/admin/login" />} />
+      <Route path="/admin/settings/brand" component={() => <ProtectedRoute component={BrandIdentity} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin" component={AdminRoot} />
 
       {/* Customer */}
@@ -182,13 +185,15 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <OfflineScreen />
-          <Toaster />
-        </TooltipProvider>
+        <BrandingProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+            <OfflineScreen />
+            <Toaster />
+          </TooltipProvider>
+        </BrandingProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

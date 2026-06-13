@@ -23,12 +23,16 @@ import billingRouter from "./billing";
 import walletRouter from "./wallet";
 import communicationsRouter from "./communications";
 import communicationsPhase2Router from "./communications-phase2";
+import communicationsPhase3Router from "./communications-phase3";
+import communicationsWebhooksRouter from "./communications-webhooks";
+import brandingRouter from "./branding";
 import { guardResource } from "../middlewares/permissions";
 
 const router: IRouter = Router();
 
 // Public / always-on
 router.use(healthRouter);
+router.use(communicationsWebhooksRouter);
 router.use(authRouter);
 
 // Resource-guarded routers. Each guard maps HTTP method → permission action
@@ -121,12 +125,20 @@ router.use(
     { match: /\/whatsapp\/test-send$/, method: "POST", action: "create" },
     { match: /\/consents\/\d+$/, method: "PUT", action: "edit" },
     { match: /\/smart-segments\/preview$/, method: "POST", action: "view" },
-    { match: /\/campaigns\/\d+\/attribution/, method: "GET", action: "view" },
+    { match: /\/conversations\/\d+\/reply$/, method: "POST", action: "edit" },
+    { match: /\/conversations\/\d+\/assign$/, method: "POST", action: "edit" },
+    { match: /\/conversations\/\d+\/close$/, method: "POST", action: "edit" },
+    { match: /\/conversations\/\d+\/notes$/, method: "POST", action: "edit" },
+    { match: /\/inbox/, method: "GET", action: "view" },
+    { match: /\/journey/, method: "GET", action: "view" },
+    { match: /\/crm\/analytics/, method: "GET", action: "view" },
   ]),
   communicationsRouter,
   communicationsPhase2Router,
+  communicationsPhase3Router,
 );
 
 router.use(storageRouter);
+router.use(brandingRouter);
 
 export default router;

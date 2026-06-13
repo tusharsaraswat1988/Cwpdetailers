@@ -64,6 +64,12 @@
 
   --background: 220 20% 97%;
   --foreground: 220 40% 10%;
+
+  /* Brand identity tokens (overridden at runtime by BrandingProvider) */
+  --brand-primary: #00cccc;
+  --brand-secondary: #212529;
+  --brand-accent: #e0ffff;
+  --brand-background: #ffffff;
   --card: 0 0% 100%;
   --card-foreground: 220 40% 10%;
   --card-border: 220 20% 90%;

@@ -60,6 +60,21 @@ export type CommEmailTemplate = {
 export type CommWhatsappTemplate = {
   id: number; brandId: number; metaTemplateName: string; category: string; bodyPreview: string;
 };
+export type CommConversation = {
+  id: number; status: string; primaryChannel: string;
+  subject?: string; lastMessagePreview?: string; slaStatus?: string;
+  customerId?: number; assignedToUserId?: number; assignedTeamId?: number;
+  lastMessageAt?: string; createdAt: string;
+};
+export type CommConversationDetail = CommConversation & {
+  messages: Array<{ id: number; direction: string; message: string; status: string; channel: string; createdAt: string }>;
+  notes: Array<{ id: number; body: string; authorUserId: number; createdAt: string }>;
+  tags: Array<{ id: number; tag: string; source: string }>;
+};
+export type CommAiAssistance = {
+  summary?: string; sentiment?: string; intent?: string; priority?: string;
+  replySuggestions?: string[];
+};
 export type CommConsent = {
   customerId: number;
   smsConsent: boolean;
@@ -165,5 +180,38 @@ export const commApi = {
   getConsentHistory: (customerId: number) =>
     commFetch<Array<{ id: number; smsConsent?: boolean; whatsappConsent?: boolean; emailConsent?: boolean; pushConsent?: boolean; createdAt: string }>>(
       `/communications/consents/${customerId}/history`,
+    ),
+  getInboxCounts: () => commFetch<{
+    open: number; assigned: number; unassigned: number; escalated: number;
+    closed: number; unknown: number; myQueue: number; pendingReplies: number; slaBreaches: number;
+  }>("/communications/inbox/counts"),
+  getInbox: (filter = "all", cursor?: number) =>
+    commFetch<{ items: CommConversation[]; nextCursor: number | null; hasMore: boolean }>(
+      `/communications/inbox?filter=${filter}${cursor ? `&cursor=${cursor}` : ""}`,
+    ),
+  getConversation: (id: number) => commFetch<CommConversationDetail>(`/communications/conversations/${id}`),
+  replyToConversation: (id: number, message: string, channel?: string) =>
+    commFetch<{ message: unknown; sendResult: { success: boolean } }>(
+      `/communications/conversations/${id}/reply`, { method: "POST", body: JSON.stringify({ message, channel }) },
+    ),
+  closeConversation: (id: number) =>
+    commFetch<{ conversation: CommConversation; csatSurvey: unknown }>(
+      `/communications/conversations/${id}/close`, { method: "POST" },
+    ),
+  getConversationAi: (id: number) => commFetch<CommAiAssistance | null>(`/communications/conversations/${id}/ai`),
+  getCustomerJourney: (customerId: number, opts?: { sync?: boolean; cursor?: number }) =>
+    commFetch<{ items: Array<{ id: string; source: string; title: string; occurredAt: string }>; nextCursor: number | null }>(
+      `/communications/journey/customer/${customerId}${opts?.sync ? "?sync=true" : ""}${opts?.cursor ? `${opts?.sync ? "&" : "?"}cursor=${opts.cursor}` : ""}`,
+    ),
+  getCrmAnalytics: () => commFetch<{ inbox: unknown; sla: unknown; csat: unknown }>("/communications/crm/analytics"),
+  getSlaDashboard: () => commFetch<{ openConversations: number; pendingReplies: number; slaBreaches: number }>("/communications/sla/dashboard"),
+  getCsatDashboard: () => commFetch<{ totalResponses: number; avgRating: number; satisfactionPct: number }>("/communications/csat/dashboard"),
+  getKnowledgeBase: (category?: string) =>
+    commFetch<Array<{ id: number; title: string; category: string; content: string }>>(
+      `/communications/knowledge-base${category ? `?category=${category}` : ""}`,
+    ),
+  getProfitability: (opts?: { brandId?: number; campaignId?: number }) =>
+    commFetch<Array<{ channel: string; cost: number; revenue: number; profit: number; roi: number }>>(
+      `/communications/profitability${opts?.brandId ? `?brandId=${opts.brandId}` : ""}${opts?.campaignId ? `${opts?.brandId ? "&" : "?"}campaignId=${opts.campaignId}` : ""}`,
     ),
 };

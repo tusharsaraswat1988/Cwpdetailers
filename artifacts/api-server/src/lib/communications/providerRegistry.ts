@@ -64,13 +64,15 @@ class StubEmailProvider implements CommChannelProvider {
     if (!apiKey) return { success: false, error: "Email provider not configured" };
 
     try {
+      const { getBrandName } = await import("../brandIdentityService");
+      const brandName = await getBrandName();
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: this.config.from ?? "CWP Detailers <noreply@cwpdetailers.com>",
+          from: this.config.from ?? `${brandName} <noreply@cwpdetailers.com>`,
           to: [opts.email],
-          subject: opts.subject ?? "CWP Detailers",
+          subject: opts.subject ?? brandName,
           html: opts.message,
         }),
       });

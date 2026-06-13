@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { useListServices } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
+import { BrandLogo } from "@/components/shared/BrandLogo";
+import { useBranding } from "@/lib/branding";
 import { Sun, Car, Shield, Sparkles, ChevronRight, MapPin, Phone, Star, Zap, Droplets, Check } from "lucide-react";
 
 const serviceIcons: Record<string, React.ElementType> = {
@@ -105,6 +107,7 @@ const cities = ["Varanasi", "Lucknow", "Kanpur", "Prayagraj", "Agra", "Gorakhpur
 
 export default function Landing() {
   const { data: services } = useListServices({ isActive: true });
+  const branding = useBranding();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -112,12 +115,10 @@ export default function Landing() {
       <header className="sticky top-0 z-40 bg-secondary/95 backdrop-blur border-b border-white/5 safe-area-top">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-              <Sun size={18} className="text-secondary" />
-            </div>
+            <BrandLogo variant="navbar" imgClassName="h-9 max-w-[160px]" fallbackClassName="w-9 h-9" lazy={false} />
             <div>
-              <p className="font-display font-bold text-white text-base leading-tight">CWP Detailers</p>
-              <p className="text-white/40 text-xs">+ Kleansolar</p>
+              <p className="font-display font-bold text-white text-base leading-tight">{branding.brandName}</p>
+              <p className="text-white/40 text-xs">{branding.tagline ?? branding.companyName}</p>
             </div>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-white/60">
@@ -511,22 +512,26 @@ export default function Landing() {
       <footer className="bg-secondary border-t border-white/5 py-10 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sun size={16} className="text-secondary" />
-            </div>
+            <BrandLogo variant="full" imgClassName="h-8 max-w-[180px]" fallbackClassName="w-8 h-8" lazy />
             <div>
-              <p className="font-display font-bold text-white text-sm">CWP Detailers + Kleansolar</p>
-              <p className="text-white/30 text-xs">Cleaning Solars & Cars of Varanasi</p>
+              <p className="font-display font-bold text-white text-sm">{branding.companyName}</p>
+              <p className="text-white/30 text-xs">{branding.tagline ?? branding.address ?? ""}</p>
             </div>
           </div>
           <div className="flex items-center gap-5 text-white/40 text-xs">
-            <a href="tel:8707488250" className="hover:text-white transition-colors">8707488250</a>
-            <span>·</span>
-            <a href="tel:7054007733" className="hover:text-white transition-colors">7054007733</a>
-            <span>·</span>
-            <span>kleansolar.co</span>
+            {branding.supportPhone && (
+              <a href={`tel:${branding.supportPhone}`} className="hover:text-white transition-colors">{branding.supportPhone}</a>
+            )}
+            {branding.website && (
+              <>
+                {branding.supportPhone && <span>·</span>}
+                <a href={branding.website} className="hover:text-white transition-colors" target="_blank" rel="noreferrer">
+                  {branding.website.replace(/^https?:\/\//, "")}
+                </a>
+              </>
+            )}
           </div>
-          <p className="text-white/30 text-xs">© 2026 CWP Detailers. All rights reserved.</p>
+          <p className="text-white/30 text-xs">© {new Date().getFullYear()} {branding.brandName}. All rights reserved.</p>
         </div>
       </footer>
     </div>

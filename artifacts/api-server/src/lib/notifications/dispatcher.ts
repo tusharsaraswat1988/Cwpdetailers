@@ -5,28 +5,32 @@ import { logger } from "../logger";
 import { createDefaultSmsAdapter } from "./channels/sms";
 import { getConfiguredSmsAdapter, normalizePhone, type ChannelAdapters, type DispatchChannel } from "./types";
 
+import { getBrandName } from "../brandIdentityService";
+
 export type NotificationTemplate =
   | "booking_confirmed"
   | "booking_completed"
   | "low_balance";
 
-const TEMPLATES: Record<NotificationTemplate, (vars: Record<string, string>) => { title: string; message: string; sms: string }> = {
-  booking_confirmed: (v) => ({
-    title: "Booking Confirmed",
-    message: `Hi ${v.customerName}, your ${v.serviceName} booking on ${v.scheduledDate} is confirmed. — CWP Detailers`,
-    sms: `Hi ${v.customerName}, your ${v.serviceName} on ${v.scheduledDate} is confirmed. — CWP Detailers`,
-  }),
-  booking_completed: (v) => ({
-    title: "Service Completed",
-    message: `Hi ${v.customerName}, your ${v.serviceName} on ${v.scheduledDate} is complete. Thank you! — CWP Detailers`,
-    sms: `Hi ${v.customerName}, your ${v.serviceName} on ${v.scheduledDate} is complete. Thank you! — CWP Detailers`,
-  }),
-  low_balance: (v) => ({
-    title: "Low Wallet Balance",
-    message: `Hi ${v.customerName}, your wallet balance (₹${v.balance}) is low. Please recharge to continue daily cleaning. — CWP Detailers`,
-    sms: `Hi ${v.customerName}, wallet balance ₹${v.balance} is low. Recharge to continue daily cleaning. — CWP Detailers`,
-  }),
-};
+function buildTemplates(brandName: string): Record<NotificationTemplate, (vars: Record<string, string>) => { title: string; message: string; sms: string }> {
+  return {
+    booking_confirmed: (v) => ({
+      title: "Booking Confirmed",
+      message: `Hi ${v.customerName}, your ${v.serviceName} booking on ${v.scheduledDate} is confirmed. — ${brandName}`,
+      sms: `Hi ${v.customerName}, your ${v.serviceName} on ${v.scheduledDate} is confirmed. — ${brandName}`,
+    }),
+    booking_completed: (v) => ({
+      title: "Service Completed",
+      message: `Hi ${v.customerName}, your ${v.serviceName} on ${v.scheduledDate} is complete. Thank you! — ${brandName}`,
+      sms: `Hi ${v.customerName}, your ${v.serviceName} on ${v.scheduledDate} is complete. Thank you! — ${brandName}`,
+    }),
+    low_balance: (v) => ({
+      title: "Low Wallet Balance",
+      message: `Hi ${v.customerName}, your wallet balance (₹${v.balance}) is low. Please recharge to continue daily cleaning. — ${brandName}`,
+      sms: `Hi ${v.customerName}, wallet balance ₹${v.balance} is low. Recharge to continue daily cleaning. — ${brandName}`,
+    }),
+  };
+}
 
 const TYPE_MAP = {
   booking_confirmed: "booking_confirmation",
@@ -78,7 +82,8 @@ async function resolveUserId(input: DispatchNotificationInput): Promise<number |
  */
 export async function dispatchNotification(input: DispatchNotificationInput) {
   const channels = input.channels ?? ["in_app", "sms"];
-  const tpl = TEMPLATES[input.template](input.vars);
+  const brandName = await getBrandName();
+  const tpl = buildTemplates(brandName)[input.template](input.vars);
   const userId = await resolveUserId(input);
   const phone = await resolvePhone(input);
 

@@ -6,9 +6,11 @@ import type { SidebarRenderProps } from "./PanelShell";
 import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, Wrench, BarChart3, Bell, LogOut, ChevronRight,
-  Sun, Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee, Sparkles,
-  Monitor, Crown, Radio,
+  Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee, Sparkles,
+  Monitor, Crown, Radio, Palette,
 } from "lucide-react";
+import { BrandLogo } from "@/components/shared/BrandLogo";
+import { useBranding } from "@/lib/branding";
 
 type NavItem = {
   href: string;
@@ -56,6 +58,12 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
+    label: "Settings",
+    items: [
+      { href: "/admin/settings/brand", label: "Brand Identity", icon: Palette, perm: { resource: "settings", action: "view" } },
+    ],
+  },
+  {
     label: "Views",
     items: [
       { href: "/admin/operations-wall", label: "Operations Wall", icon: Monitor, perm: null },
@@ -67,6 +75,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
 export default function AdminSidebar({ onNavigate, embedded = false, className }: SidebarRenderProps & { className?: string }) {
   const [location, setLocation] = useLocation();
   const { user, logout, hasPermission } = useAuth();
+  const branding = useBranding();
   const collapsed = useAppStore(s => s.sidebarCollapsed);
   const toggleSidebar = useAppStore(s => s.toggleSidebar);
   const showCollapsed = collapsed && !embedded;
@@ -89,13 +98,11 @@ export default function AdminSidebar({ onNavigate, embedded = false, className }
       )}
     >
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-          <Sun size={16} className="text-secondary" />
-        </div>
+        <BrandLogo variant="navbar" imgClassName="h-8 w-8" fallbackClassName="w-8 h-8" lazy={false} />
         {!showCollapsed && (
           <div className="min-w-0">
-            <p className="text-white font-display font-bold text-sm leading-tight">CWP Admin</p>
-            <p className="text-white/40 text-xs truncate">Operations Hub</p>
+            <p className="text-white font-display font-bold text-sm leading-tight">{branding.brandName} Admin</p>
+            <p className="text-white/40 text-xs truncate">{branding.tagline ?? "Operations Hub"}</p>
           </div>
         )}
         {!embedded && (

@@ -96,7 +96,9 @@ router.post("/notifications/test-sms", async (req, res) => {
     const normalized = normalizePhone(phone);
     if (!normalized) return res.status(400).json({ error: "Invalid phone number" });
 
-    const result = await adapter.sendSms(normalized, message ?? "CWP Detailers test SMS");
+    const { getBrandName } = await import("../lib/brandIdentityService");
+    const brandName = await getBrandName();
+    const result = await adapter.sendSms(normalized, message ?? `${brandName} test SMS`);
     return res.json({ adapter: adapter.name, phone: normalized, ...result });
   } catch (err) {
     req.log.error({ err }, "Test SMS error");

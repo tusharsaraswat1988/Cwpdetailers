@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Sun, WifiOff } from "lucide-react";
+import { BrandLogo } from "@/components/shared/BrandLogo";
+import { WifiOff } from "lucide-react";
 
 export function OfflineScreen() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -32,8 +33,8 @@ export function OfflineScreen() {
       data-testid="offline-screen"
     >
       <div className="max-w-sm w-full text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-5">
-          <Sun size={28} className="text-white" />
+        <div className="inline-flex items-center justify-center mb-5">
+          <BrandLogo variant="full" imgClassName="h-16 max-w-[200px]" fallbackClassName="w-16 h-16" lazy={false} />
         </div>
         <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted mb-4 -mt-2">
           <WifiOff size={18} className="text-muted-foreground" />

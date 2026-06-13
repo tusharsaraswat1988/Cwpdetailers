@@ -240,6 +240,17 @@ router.post("/payments", async (req, res) => {
 });
 
 import PDFDocument from "pdfkit";
+import { getInvoiceBranding } from "../lib/brandIdentityService";
+
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
 
 router.get("/invoices/:id/pdf", async (req, res) => {
   try {
@@ -261,24 +272,36 @@ router.get("/invoices/:id/pdf", async (req, res) => {
       .where(eq(invoicesTable.id, id));
     if (!inv || !rowInScope(req, inv)) return res.status(404).json({ error: "Invoice not found" });
 
+    const brand = await getInvoiceBranding();
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     const filename = `${inv.invoiceNumber?.replace(/\//g, '-') ?? 'invoice'}.pdf`;
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
     doc.pipe(res);
 
+    let headerY = 40;
+    if (brand.pdfLogoUrl) {
+      const logoBuf = await fetchImageBuffer(brand.pdfLogoUrl);
+      if (logoBuf) {
+        doc.image(logoBuf, 40, 40, { height: 48 });
+        headerY = 96;
+      }
+    }
+
     // Header
-    doc.fontSize(18).font("Helvetica-Bold").text("CWP DETAILERS", 40, 40);
-    doc.fontSize(10).font("Helvetica").text("All prices are GST-inclusive (18% GST included in totals)", 40, 62);
-    doc.fontSize(12).font("Helvetica-Bold").text(`TAX INVOICE`, 40, 82);
-    doc.fontSize(10).font("Helvetica").text(`Invoice #: ${inv.invoiceNumber ?? ''}`, 40, 98);
-    doc.fontSize(10).font("Helvetica").text(`Date: ${inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString('en-IN') : '-'}`, 40, 112);
-    if (inv.gstin) doc.fontSize(10).font("Helvetica").text(`Customer GSTIN: ${inv.gstin}`, 40, 126);
-    if (inv.customerName) doc.fontSize(10).font("Helvetica").text(`Customer: ${inv.customerName}`, 40, inv.gstin ? 140 : 126);
+    doc.fontSize(18).font("Helvetica-Bold").text(brand.companyName.toUpperCase(), 40, headerY);
+    doc.fontSize(10).font("Helvetica").text("All prices are GST-inclusive (18% GST included in totals)", 40, headerY + 22);
+    if (brand.gstNumber) doc.fontSize(9).font("Helvetica").text(`GSTIN: ${brand.gstNumber}`, 40, headerY + 36);
+    if (brand.address) doc.fontSize(9).font("Helvetica").text(brand.address, 40, headerY + (brand.gstNumber ? 50 : 36), { width: 300 });
+    doc.fontSize(12).font("Helvetica-Bold").text(`TAX INVOICE`, 40, headerY + 68);
+    doc.fontSize(10).font("Helvetica").text(`Invoice #: ${inv.invoiceNumber ?? ''}`, 40, headerY + 84);
+    doc.fontSize(10).font("Helvetica").text(`Date: ${inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString('en-IN') : '-'}`, 40, headerY + 98);
+    if (inv.gstin) doc.fontSize(10).font("Helvetica").text(`Customer GSTIN: ${inv.gstin}`, 40, headerY + 112);
+    if (inv.customerName) doc.fontSize(10).font("Helvetica").text(`Customer: ${inv.customerName}`, 40, inv.gstin ? headerY + 126 : headerY + 112);
 
     // Line items
     const items = Array.isArray(inv.items) ? inv.items as { description: string; quantity: number; unitPrice: number; total: number }[] : [];
-    let y = 180;
+    let y = headerY + 166;
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text("Item", 40, y, { width: 180 });
     doc.text("Qty", 230, y, { width: 50, align: "right" });

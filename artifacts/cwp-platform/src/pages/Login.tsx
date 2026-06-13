@@ -9,12 +9,15 @@ import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { useToast } from "@/hooks/use-toast";
 import { submitMobile } from "@/lib/contactForm";
-import { Sun, Loader2 } from "lucide-react";
+import { BrandLogo } from "@/components/shared/BrandLogo";
+import { useBranding } from "@/lib/branding";
+import { Loader2 } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { login } = useAuth();
+  const branding = useBranding();
   const { toast } = useToast();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -61,11 +64,11 @@ export default function Login() {
     <div className="min-h-[100dvh] bg-secondary flex items-center justify-center p-4 sm:p-6" data-testid="login-page">
       <div className="w-full max-w-md">
         <div className="text-center mb-8 sm:mb-10">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
-            <Sun size={28} className="text-secondary" />
+          <div className="inline-flex items-center justify-center mb-4">
+            <BrandLogo variant="login" imgClassName="h-14 max-w-[240px]" fallbackClassName="w-14 h-14" lazy={false} />
           </div>
           <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">Welcome back</h1>
-          <p className="text-white/50 mt-1 text-sm sm:text-base">Sign in to the CWP Platform</p>
+          <p className="text-white/50 mt-1 text-sm sm:text-base">Sign in to {branding.companyName}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

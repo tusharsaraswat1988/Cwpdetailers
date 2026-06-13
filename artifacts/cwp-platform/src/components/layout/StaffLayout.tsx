@@ -4,8 +4,9 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type { SidebarRenderProps } from "./PanelShell";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
-import { usePortalManifest } from "@/lib/pwa/usePortalManifest";
-import { LayoutDashboard, Calendar, CheckSquare, Clock, Award, LogOut, Sun } from "lucide-react";
+import { BrandLogo } from "@/components/shared/BrandLogo";
+import { useBranding, useBrandingPortal } from "@/lib/branding";
+import { LayoutDashboard, Calendar, Clock, Award, LogOut } from "lucide-react";
 import PanelShell from "./PanelShell";
 
 const navItems = [
@@ -18,6 +19,7 @@ const navItems = [
 function StaffSidebar({ onNavigate, embedded = false, className }: SidebarRenderProps & { className?: string }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const branding = useBranding();
 
   return (
     <aside
@@ -29,11 +31,9 @@ function StaffSidebar({ onNavigate, embedded = false, className }: SidebarRender
       data-testid="staff-sidebar"
     >
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-          <Sun size={16} className="text-secondary" />
-        </div>
+        <BrandLogo variant="navbar" imgClassName="h-8 w-8" fallbackClassName="w-8 h-8" lazy={false} />
         <div className="min-w-0">
-          <p className="text-white font-display font-bold text-sm">CWP Staff</p>
+          <p className="text-white font-display font-bold text-sm">{branding.brandName} Staff</p>
           <p className="text-white/40 text-xs truncate">Field Portal</p>
         </div>
       </div>
@@ -79,17 +79,17 @@ function StaffSidebar({ onNavigate, embedded = false, className }: SidebarRender
 }
 
 export default function StaffLayout({ children }: { children: ReactNode }) {
-  usePortalManifest("/manifest-staff.json", "#21252e");
+  const branding = useBrandingPortal("staff");
 
   return (
     <PanelShell
       testId="staff-layout"
-      mobileTitle="CWP Staff"
+      mobileTitle={`${branding.brandName} Staff`}
       sidebar={(props) => <StaffSidebar {...props} />}
     >
       <PwaInstallBanner
         portalKey="staff"
-        title="Install CWP Staff"
+        title={`Install ${branding.brandName} Staff`}
         description="Install the staff app for faster schedule access and field operations on your device."
       />
       {children}
