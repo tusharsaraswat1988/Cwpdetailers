@@ -8,9 +8,9 @@ allowBuilds:
   '@swc/core': true
   argon2: true
   esbuild: true
-  msgpackr-extract: set this to true or false
+  msgpackr-extract: true
   msw: true
-  sharp: set this to true or false
+  sharp: true
   unrs-resolver: true
 
 autoInstallPeers: false
@@ -49,7 +49,9 @@ onlyBuiltDependencies:
   - '@swc/core'
   - argon2
   - esbuild
+  - msgpackr-extract
   - msw
+  - sharp
   - unrs-resolver
 
 overrides:

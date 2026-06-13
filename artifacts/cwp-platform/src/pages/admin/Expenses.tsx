@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusCircle } from "lucide-react";
 import { useFormDraft } from "@/hooks/useFormDraft";
 import { queuedFetch } from "@/services/queuedApi";
-import { moduleError, queuedSuccessMessage } from "@/lib/moduleErrors";
+import { moduleError, queuedSuccessMessage, SERVER_CONFIRMATION_REQUIRED } from "@/lib/moduleErrors";
 import { fetchWithRetry } from "@/services/apiRetry";
 import ErrorState from "@/components/shared/ErrorState";
 
@@ -79,7 +79,15 @@ export default function AdminExpenses() {
       return;
     }
 
-    if (!result.ok || !result.response.ok) {
+    if (!result.ok) {
+      toast({
+        title: result.requiresServerConfirmation ? SERVER_CONFIRMATION_REQUIRED : moduleError("expenses", "save"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!result.response.ok) {
       toast({ title: moduleError("expenses", "save"), variant: "destructive" });
       return;
     }

@@ -43,19 +43,26 @@ router.get("/solar-sites", async (req, res) => {
 const SOLAR_SITE_FIELDS = [
   "address", "city", "panelCount", "panelCapacityKw",
   "installationDate", "lastCleanedDate", "nextServiceDate",
+  "serviceLat", "serviceLng", "placeId", "locationLabel",
 ] as const;
 
 router.post("/solar-sites", async (req, res) => {
   try {
-    const { customerId, address, panelCount } = req.body;
+    const { customerId, address, panelCount, serviceLat, serviceLng } = req.body;
     if (!customerId || !address || panelCount == null) {
       return res.status(400).json({ error: "customerId, address, panelCount are required" });
+    }
+    if (serviceLat == null || serviceLng == null) {
+      return res.status(400).json({ error: "serviceLat and serviceLng are required for solar site location" });
     }
     const allowed = await callerCustomerIds(req);
     if (allowed !== null && !allowed.includes(customerId)) {
       return res.status(404).json({ error: "Customer not found" });
     }
-    const base: Record<string, unknown> = { customerId };
+    const base: Record<string, unknown> = {
+      customerId,
+      locationComplete: true,
+    };
     for (const k of SOLAR_SITE_FIELDS) {
       if (req.body[k] !== undefined) base[k] = req.body[k];
     }
@@ -78,6 +85,12 @@ router.patch("/solar-sites/:id", async (req, res) => {
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of SOLAR_SITE_FIELDS) {
       if (req.body[key] !== undefined) updateData[key] = req.body[key];
+    }
+    if (req.body.serviceLat !== undefined || req.body.serviceLng !== undefined || req.body.address !== undefined) {
+      const lat = req.body.serviceLat ?? existing.serviceLat;
+      const lng = req.body.serviceLng ?? existing.serviceLng;
+      const addr = req.body.address ?? existing.address;
+      updateData.locationComplete = !!(addr && lat != null && lng != null);
     }
     const [site] = await db.update(solarSitesTable).set(updateData).where(eq(solarSitesTable.id, id)).returning();
     return res.json(site);

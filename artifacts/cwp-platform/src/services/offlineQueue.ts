@@ -1,14 +1,13 @@
 import { idbDelete, idbGetAll, idbPut, isIndexedDBAvailable } from "./idb";
 import { fetchWithRetry } from "./apiRetry";
 import { connectivityService } from "./connectivityService";
+import {
+  canQueueOfflineOperation,
+  type QueueOperationType,
+  SERVER_CONFIRMATION_REQUIRED_MESSAGE,
+} from "./offlineQueuePolicy";
 
-export type QueueOperationType =
-  | "booking"
-  | "customer"
-  | "expense"
-  | "invoice"
-  | "inventory"
-  | "note";
+export type { QueueOperationType } from "./offlineQueuePolicy";
 
 export type QueueItemStatus = "pending" | "syncing" | "failed";
 
@@ -51,21 +50,22 @@ class OfflineQueueService {
   }
 
   async getPendingItems(): Promise<QueueItem[]> {
-    if (isIndexedDBAvailable()) {
-      const all = await idbGetAll<QueueItem>("queue");
-      return all.filter((item) => item.status === "pending" || item.status === "failed");
-    }
-    return this.readFallback().filter((item) => item.status === "pending" || item.status === "failed");
+    const all = await this.getAllItems();
+    return all.filter((item) => item.status === "pending" || item.status === "failed");
   }
 
   async getAllItems(): Promise<QueueItem[]> {
-    if (isIndexedDBAvailable()) {
-      return idbGetAll<QueueItem>("queue");
-    }
-    return this.readFallback();
+    const raw = isIndexedDBAvailable()
+      ? await idbGetAll<QueueItem>("queue")
+      : this.readFallback();
+    return raw.filter((item) => canQueueOfflineOperation(item.type, item.url));
   }
 
   async enqueue(item: Omit<QueueItem, "id" | "createdAt" | "retries" | "status">): Promise<QueueItem> {
+    if (!canQueueOfflineOperation(item.type, item.url)) {
+      throw new Error(SERVER_CONFIRMATION_REQUIRED_MESSAGE);
+    }
+
     const entry: QueueItem = {
       ...item,
       id: crypto.randomUUID(),
@@ -98,6 +98,10 @@ class OfflineQueueService {
 
     for (const item of pending.sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
       if (!connectivityService.canExecuteWrites()) break;
+      if (!canQueueOfflineOperation(item.type, item.url)) {
+        await this.removeItem(item.id);
+        continue;
+      }
 
       item.status = "syncing";
       await this.persist(item);
@@ -114,8 +118,7 @@ class OfflineQueueService {
           throw new Error(`HTTP ${res.status}`);
         }
 
-        await idbDelete("queue", item.id);
-        this.removeFromFallback(item.id);
+        await this.removeItem(item.id);
         connectivityService.markSyncSuccess();
       } catch (err) {
         item.retries += 1;
@@ -127,6 +130,13 @@ class OfflineQueueService {
 
     this.syncing = false;
     this.emit();
+  }
+
+  private async removeItem(id: string): Promise<void> {
+    if (isIndexedDBAvailable()) {
+      await idbDelete("queue", id);
+    }
+    this.removeFromFallback(id);
   }
 
   private async persist(item: QueueItem): Promise<void> {

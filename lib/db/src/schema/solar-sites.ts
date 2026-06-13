@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, numeric, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, numeric, date, timestamp, doublePrecision, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,6 +12,11 @@ export const solarSitesTable = pgTable("solar_sites", {
   installationDate: date("installation_date"),
   lastCleanedDate: date("last_cleaned_date"),
   nextServiceDate: date("next_service_date"),
+  serviceLat: doublePrecision("service_lat"),
+  serviceLng: doublePrecision("service_lng"),
+  placeId: text("place_id"),
+  locationLabel: text("location_label"),
+  locationComplete: boolean("location_complete").notNull().default(false),
   companyId: integer("company_id"),
   franchiseeId: integer("franchisee_id"),
   branchId: integer("branch_id"),

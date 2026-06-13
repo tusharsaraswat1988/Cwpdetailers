@@ -8,6 +8,7 @@ import servicesRouter from "./services";
 import subscriptionsRouter from "./subscriptions";
 import bookingsRouter from "./bookings";
 import staffRouter from "./staff";
+import staffEcosystemRouter from "./staff-ecosystem";
 import complaintsRouter from "./complaints";
 import paymentsRouter from "./payments";
 import branchesRouter from "./branches";
@@ -26,7 +27,9 @@ import communicationsPhase2Router from "./communications-phase2";
 import communicationsPhase3Router from "./communications-phase3";
 import communicationsWebhooksRouter from "./communications-webhooks";
 import brandingRouter from "./branding";
-import { guardResource } from "../middlewares/permissions";
+import legalRouter from "./legal";
+import masterDataRouter from "./master-data";
+import { guardResource, guardMasterDataRoutes } from "../middlewares/permissions";
 
 const router: IRouter = Router();
 
@@ -77,8 +80,25 @@ router.use(
     { match: /\/reject$/, method: "POST", action: "approve" },
     { match: /\/create-account$/, method: "POST", action: "approve" },
     { match: /\/attendance$/, method: "POST", action: "edit" },
+    { match: /\/verification-status$/, method: "POST", action: "approve" },
+    { match: /\/ecosystem$/, method: "PATCH", action: "edit" },
+    { match: /\/roles$/, method: "PUT", action: "edit" },
+    { match: /\/documents$/, method: "POST", action: "edit" },
+    { match: /\/documents\/\d+\/replace$/, method: "POST", action: "edit" },
+    { match: /\/notes$/, method: "POST", action: "edit" },
   ]),
   staffRouter,
+);
+router.use(
+  guardResource("staff", [
+    { match: /\/verification-status$/, method: "POST", action: "approve" },
+    { match: /\/ecosystem$/, method: "PATCH", action: "edit" },
+    { match: /\/roles$/, method: "PUT", action: "edit" },
+    { match: /\/documents$/, method: "POST", action: "edit" },
+    { match: /\/documents\/\d+\/replace$/, method: "POST", action: "edit" },
+    { match: /\/notes$/, method: "POST", action: "edit" },
+  ]),
+  staffEcosystemRouter,
 );
 router.use(guardResource("complaints"), complaintsRouter);
 router.use(guardResource("invoices"), paymentsRouter);
@@ -140,5 +160,7 @@ router.use(
 
 router.use(storageRouter);
 router.use(brandingRouter);
+router.use(legalRouter);
+router.use(guardMasterDataRoutes(), masterDataRouter);
 
 export default router;

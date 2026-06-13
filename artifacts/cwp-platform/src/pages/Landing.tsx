@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useListServices } from "@workspace/api-client-react";
+import { useCatalogPlans } from "@/features/master-data/api";
 import { Button } from "@/components/ui/button";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { BrandLogo } from "@/components/shared/BrandLogo";
@@ -107,7 +108,22 @@ const cities = ["Varanasi", "Lucknow", "Kanpur", "Prayagraj", "Agra", "Gorakhpur
 
 export default function Landing() {
   const { data: services } = useListServices({ isActive: true });
+  const { data: dbPlans } = useCatalogPlans();
   const branding = useBranding();
+
+  const displayPlans = (dbPlans ?? []).length > 0
+    ? (dbPlans ?? []).map(p => ({
+        name: p.name,
+        price: Number(p.price).toLocaleString("en-IN"),
+        priceNote: p.durationMonths ? `/${p.durationMonths === 1 ? "month" : `${p.durationMonths} months`}` : "",
+        price2: undefined as string | undefined,
+        price2Note: undefined as string | undefined,
+        desc: p.description ?? "",
+        features: (p.features as string[]) ?? [],
+        tag: p.tag,
+        highlight: p.isHighlighted,
+      }))
+    : carWashPlans;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -246,7 +262,7 @@ export default function Landing() {
           </motion.div>
 
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {carWashPlans.map((plan, i) => (
+            {displayPlans.map((plan, i) => (
               <motion.div
                 key={plan.name}
                 initial={{ opacity: 0, y: 20 }}
@@ -510,28 +526,45 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="bg-secondary border-t border-white/5 py-10 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <BrandLogo variant="full" imgClassName="h-8 max-w-[180px]" fallbackClassName="w-8 h-8" lazy />
-            <div>
-              <p className="font-display font-bold text-white text-sm">{branding.companyName}</p>
-              <p className="text-white/30 text-xs">{branding.tagline ?? branding.address ?? ""}</p>
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <BrandLogo variant="full" imgClassName="h-8 max-w-[180px]" fallbackClassName="w-8 h-8" lazy />
+              <div>
+                <p className="font-display font-bold text-white text-sm">{branding.companyName}</p>
+                <p className="text-white/30 text-xs">{branding.tagline ?? branding.address ?? ""}</p>
+              </div>
             </div>
+            <div className="flex items-center gap-5 text-white/40 text-xs">
+              {branding.supportPhone && (
+                <a href={`tel:${branding.supportPhone}`} className="hover:text-white transition-colors">{branding.supportPhone}</a>
+              )}
+              {branding.website && (
+                <>
+                  {branding.supportPhone && <span>·</span>}
+                  <a href={branding.website} className="hover:text-white transition-colors" target="_blank" rel="noreferrer">
+                    {branding.website.replace(/^https?:\/\//, "")}
+                  </a>
+                </>
+              )}
+            </div>
+            <p className="text-white/30 text-xs">© {new Date().getFullYear()} {branding.brandName}. All rights reserved.</p>
           </div>
-          <div className="flex items-center gap-5 text-white/40 text-xs">
-            {branding.supportPhone && (
-              <a href={`tel:${branding.supportPhone}`} className="hover:text-white transition-colors">{branding.supportPhone}</a>
-            )}
-            {branding.website && (
-              <>
-                {branding.supportPhone && <span>·</span>}
-                <a href={branding.website} className="hover:text-white transition-colors" target="_blank" rel="noreferrer">
-                  {branding.website.replace(/^https?:\/\//, "")}
-                </a>
-              </>
-            )}
+          {/* Legal links */}
+          <div className="border-t border-white/5 pt-5 flex flex-wrap justify-center gap-x-6 gap-y-2">
+            {[
+              { href: "/about-us", label: "About Us" },
+              { href: "/contact-us", label: "Contact Us" },
+              { href: "/privacy-policy", label: "Privacy Policy" },
+              { href: "/terms-and-conditions", label: "Terms & Conditions" },
+              { href: "/refund-policy", label: "Refund Policy" },
+              { href: "/data-deletion", label: "Data Deletion" },
+            ].map(link => (
+              <Link key={link.href} href={link.href} className="text-white/30 hover:text-white/60 text-xs transition-colors">
+                {link.label}
+              </Link>
+            ))}
           </div>
-          <p className="text-white/30 text-xs">© {new Date().getFullYear()} {branding.brandName}. All rights reserved.</p>
         </div>
       </footer>
     </div>

@@ -38,3 +38,6 @@ export function moduleError(module: ModuleKey, action: "load" | "save"): string 
 export function queuedSuccessMessage(label: string): string {
   return `${label} saved offline. It will sync automatically when connection returns.`;
 }
+
+export const SERVER_CONFIRMATION_REQUIRED =
+  "This action requires confirmed server connection. Complete it when you're back online.";

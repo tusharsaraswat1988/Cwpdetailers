@@ -17,12 +17,14 @@ import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminCustomers from "@/pages/admin/Customers";
 import AdminCustomerDetail from "@/pages/admin/CustomerDetail";
 import AdminStaff from "@/pages/admin/Staff";
+import AdminStaffDetail from "@/pages/admin/StaffDetail";
 import AdminBookings from "@/pages/admin/Bookings";
 import AdminSubscriptions from "@/pages/admin/Subscriptions";
 import AdminInvoices from "@/pages/admin/Invoices";
 import AdminComplaints from "@/pages/admin/Complaints";
 import AdminBranches from "@/pages/admin/Branches";
 import AdminServices from "@/pages/admin/Services";
+import AdminMasterData from "@/pages/admin/MasterData";
 import AdminAnalytics from "@/pages/admin/Analytics";
 import AdminNotifications from "@/pages/admin/Notifications";
 import { CommunicationCenter } from "@/features/communications";
@@ -37,6 +39,17 @@ import AdminDues from "@/pages/admin/Dues";
 import AdminDailyOps from "@/pages/admin/DailyOps";
 import BrandIdentity from "@/pages/admin/BrandIdentity";
 import SystemStatus from "@/pages/admin/SystemStatus";
+import LegalCMS from "@/pages/admin/LegalCMS";
+import BusinessInfoPage from "@/pages/admin/BusinessInfo";
+import ComplianceSettings from "@/pages/admin/ComplianceSettings";
+import SeoSettingsPage from "@/pages/admin/SeoSettings";
+
+import PrivacyPolicy from "@/pages/legal/PrivacyPolicy";
+import TermsAndConditions from "@/pages/legal/TermsAndConditions";
+import RefundPolicy from "@/pages/legal/RefundPolicy";
+import DataDeletion from "@/pages/legal/DataDeletion";
+import AboutUs from "@/pages/legal/AboutUs";
+import ContactUs from "@/pages/legal/ContactUs";
 
 import CustomerDashboard from "@/pages/customer/Dashboard";
 import BookService from "@/pages/customer/BookService";
@@ -49,9 +62,9 @@ import CustomerServices from "@/pages/customer/Services";
 import CustomerAccount from "@/pages/customer/Account";
 
 import StaffDashboard from "@/pages/staff/Dashboard";
-import StaffSchedule from "@/pages/staff/Schedule";
-import StaffAttendance from "@/pages/staff/Attendance";
-import StaffPerformance from "@/pages/staff/Performance";
+import StaffJobs from "@/pages/staff/Jobs";
+import StaffEarnings from "@/pages/staff/Earnings";
+import StaffProfile from "@/pages/staff/Profile";
 
 import FranchiseeDashboard from "@/pages/franchisee/Dashboard";
 import FranchiseeBookings from "@/pages/franchisee/Bookings";
@@ -117,11 +130,20 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/register" component={Register} />
 
+      {/* Public Legal Pages */}
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-and-conditions" component={TermsAndConditions} />
+      <Route path="/refund-policy" component={RefundPolicy} />
+      <Route path="/data-deletion" component={DataDeletion} />
+      <Route path="/about-us" component={AboutUs} />
+      <Route path="/contact-us" component={ContactUs} />
+
       {/* Admin — admin/superadmin/manager can reach; per-page permission gates fine-tune */}
       <Route path="/admin/dashboard" component={() => <ProtectedRoute component={AdminDashboard} roles={["admin", "superadmin", "manager"]} loginPath="/admin/login" />} />
       <Route path="/admin/customers/:id" component={() => <ProtectedRoute component={AdminCustomerDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/customers" component={() => <ProtectedRoute component={AdminCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/staff" component={() => <ProtectedRoute component={AdminStaff} roles={["admin", "superadmin", "manager"]} permission={{ resource: "staff", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/staff/:id" component={() => <ProtectedRoute component={AdminStaffDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "staff", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/staff-approval" component={() => <ProtectedRoute component={AdminStaffApproval} roles={["admin", "superadmin"]} permission={{ resource: "staff", action: "approve" }} loginPath="/admin/login" />} />
       <Route path="/admin/bookings" component={() => <ProtectedRoute component={AdminBookings} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/daily-ops" component={() => <ProtectedRoute component={AdminDailyOps} roles={["admin", "superadmin", "manager"]} permission={{ resource: "subscriptions", action: "view" }} loginPath="/admin/login" />} />
@@ -129,6 +151,7 @@ function Router() {
       <Route path="/admin/invoices" component={() => <ProtectedRoute component={AdminInvoices} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={["admin", "superadmin", "manager"]} permission={{ resource: "complaints", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/branches" component={() => <ProtectedRoute component={AdminBranches} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/masters" component={() => <ProtectedRoute component={AdminMasterData} roles={["admin", "superadmin", "manager"]} permission={{ resource: "masters", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/services" component={() => <ProtectedRoute component={AdminServices} roles={["admin", "superadmin", "manager"]} permission={{ resource: "services", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/analytics" component={() => <ProtectedRoute component={AdminAnalytics} roles={["admin", "superadmin", "manager"]} permission={{ resource: "analytics", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/notifications" component={() => <ProtectedRoute component={AdminNotifications} roles={["admin", "superadmin", "manager"]} permission={{ resource: "notifications", action: "view" }} loginPath="/admin/login" />} />
@@ -144,6 +167,10 @@ function Router() {
       <Route path="/admin/founder" component={() => <ProtectedRoute component={FounderDashboard} roles={["superadmin"]} loginPath="/admin/login" />} />
       <Route path="/admin/settings/brand" component={() => <ProtectedRoute component={BrandIdentity} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/settings/system" component={() => <ProtectedRoute component={SystemStatus} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/settings/business" component={() => <ProtectedRoute component={BusinessInfoPage} roles={["admin", "superadmin"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/settings/seo" component={() => <ProtectedRoute component={SeoSettingsPage} roles={["admin", "superadmin"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/compliance" component={() => <ProtectedRoute component={ComplianceSettings} roles={["admin", "superadmin"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/legal" component={() => <ProtectedRoute component={LegalCMS} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin" component={AdminRoot} />
 
       {/* Customer */}
@@ -157,11 +184,14 @@ function Router() {
       <Route path="/customer/invoices" component={() => <ProtectedRoute component={CustomerInvoices} roles={["customer"]} />} />
       <Route path="/customer/complaints" component={() => <ProtectedRoute component={CustomerComplaints} roles={["customer"]} />} />
 
-      {/* Staff */}
+      {/* Staff — mobile-first field app (Sprint 3) */}
       <Route path="/staff/dashboard" component={() => <ProtectedRoute component={StaffDashboard} roles={["staff"]} />} />
-      <Route path="/staff/schedule" component={() => <ProtectedRoute component={StaffSchedule} roles={["staff"]} />} />
-      <Route path="/staff/attendance" component={() => <ProtectedRoute component={StaffAttendance} roles={["staff"]} />} />
-      <Route path="/staff/performance" component={() => <ProtectedRoute component={StaffPerformance} roles={["staff"]} />} />
+      <Route path="/staff/jobs" component={() => <ProtectedRoute component={StaffJobs} roles={["staff"]} />} />
+      <Route path="/staff/earnings" component={() => <ProtectedRoute component={StaffEarnings} roles={["staff"]} />} />
+      <Route path="/staff/profile" component={() => <ProtectedRoute component={StaffProfile} roles={["staff"]} />} />
+      <Route path="/staff/schedule" component={() => <Redirect to="/staff/jobs" />} />
+      <Route path="/staff/attendance" component={() => <Redirect to="/staff/profile" />} />
+      <Route path="/staff/performance" component={() => <Redirect to="/staff/profile" />} />
 
       {/* Franchisee */}
       <Route path="/franchisee/dashboard" component={() => <ProtectedRoute component={FranchiseeDashboard} roles={["franchisee"]} />} />

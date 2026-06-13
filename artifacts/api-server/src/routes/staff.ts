@@ -4,6 +4,8 @@ import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable }
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
 import { hashPassword } from "../lib/passwords";
+import { generateEmployeeCode } from "../lib/staffEcosystem/profileCompletion";
+import { recalculateStaffProfile } from "../lib/staffEcosystem/recalculate";
 import {
   parseRequiredMobile,
   parseOptionalEmail,
@@ -24,28 +26,32 @@ const SCOPE_COLS = {
 
 router.get("/staff", async (req, res) => {
   try {
-    const { branchId, role, isActive, verificationStatus, franchiseeId } = req.query as Record<string, string>;
+    const { branchId, role, isActive, verificationStatus, franchiseeId, forAssignment } = req.query as Record<string, string>;
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
     if (branchId) conditions.push(eq(staffTable.branchId, parseInt(branchId)));
     if (role) conditions.push(eq(staffTable.role, role as (typeof staffTable.role)["_"]["data"]));
     if (isActive !== undefined) conditions.push(eq(staffTable.isActive, isActive === "true"));
+    else if (forAssignment === "true") conditions.push(eq(staffTable.isActive, true));
     if (verificationStatus) conditions.push(eq(staffTable.verificationStatus, verificationStatus as (typeof staffTable.verificationStatus)["_"]["data"]));
     if (franchiseeId) conditions.push(eq(staffTable.franchiseeId, parseInt(franchiseeId)));
+    if (forAssignment === "true") {
+      conditions.push(sql`${staffTable.verificationStatus} != 'suspended'`);
+    }
 
     const where = conditions.length ? and(...conditions) : undefined;
     const data = await db.select({
       id: staffTable.id, userId: staffTable.userId, franchiseeId: staffTable.franchiseeId,
-      name: staffTable.name, phone: staffTable.phone, email: staffTable.email, role: staffTable.role,
+      employeeCode: staffTable.employeeCode, name: staffTable.name,
+      profilePhotoUrl: staffTable.profilePhotoUrl,
+      phone: staffTable.phone, email: staffTable.email, role: staffTable.role,
       branchId: staffTable.branchId, branchName: branchesTable.name,
       monthlySalary: staffTable.monthlySalary, joiningDate: staffTable.joiningDate,
-      localAddress: staffTable.localAddress, permanentAddress: staffTable.permanentAddress,
-      guardianName: staffTable.guardianName, guardianPhone: staffTable.guardianPhone,
-      aadhaar: staffTable.aadhaar, pan: staffTable.pan,
-      bankAccountName: staffTable.bankAccountName, bankAccountNumber: staffTable.bankAccountNumber,
-      bankIfsc: staffTable.bankIfsc, bankPassbookUrl: staffTable.bankPassbookUrl,
-      agreementUrl: staffTable.agreementUrl,
-      verificationStatus: staffTable.verificationStatus, verificationNotes: staffTable.verificationNotes,
-      verifiedAt: staffTable.verifiedAt, isActive: staffTable.isActive,
+      verificationStatus: staffTable.verificationStatus, isActive: staffTable.isActive,
+      profileCompletionPercent: staffTable.profileCompletionPercent,
+      identityComplete: staffTable.identityComplete,
+      documentsComplete: staffTable.documentsComplete,
+      bankComplete: staffTable.bankComplete,
+      addressComplete: staffTable.addressComplete,
       jobsCompletedThisMonth: sql<number>`(
         SELECT COUNT(*) FROM bookings b
         WHERE b.staff_id = ${staffTable.id}
@@ -102,7 +108,11 @@ router.post("/staff", async (req, res) => {
       verificationStatus: "pending" as const,
     });
     const [staff] = await db.insert(staffTable).values(values as typeof staffTable.$inferInsert).returning();
-    return res.status(201).json(staff);
+    const employeeCode = generateEmployeeCode(staff.id);
+    const [updated] = await db.update(staffTable).set({ employeeCode, updatedAt: new Date() })
+      .where(eq(staffTable.id, staff.id)).returning();
+    await recalculateStaffProfile(staff.id);
+    return res.status(201).json(updated ?? staff);
   } catch (err) {
     req.log.error({ err }, "Create staff error");
     return res.status(500).json({ error: "Internal server error" });

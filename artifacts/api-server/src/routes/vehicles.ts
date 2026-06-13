@@ -42,17 +42,66 @@ router.get("/vehicles", async (req, res) => {
 
 router.post("/vehicles", async (req, res) => {
   try {
-    const { customerId, make, model, year, color, registrationNumber, vehicleType } = req.body;
-    if (!customerId || !make || !model || !registrationNumber) {
-      return res.status(400).json({ error: "customerId, make, model, and registrationNumber are required" });
+    const {
+      customerId, vehicleModelId, make, model, year, color, registrationNumber, vehicleType,
+      serviceAddress, serviceLat, serviceLng, placeId, locationLabel,
+    } = req.body;
+    if (!customerId || !registrationNumber) {
+      return res.status(400).json({ error: "customerId and registrationNumber are required" });
     }
-    // Verify the customer is visible to the caller before attaching.
+    if (!vehicleModelId && (!make || !model)) {
+      return res.status(400).json({ error: "vehicleModelId or make+model are required" });
+    }
+
+    let resolvedMake = make;
+    let resolvedModel = model;
+    let resolvedType = vehicleType;
+    let resolvedModelId = vehicleModelId;
+
+    if (vehicleModelId) {
+      const { vehicleModelsTable, vehicleBrandsTable, vehicleCategoriesTable } = await import("@workspace/db");
+      const [vm] = await db
+        .select({
+          modelName: vehicleModelsTable.name,
+          brandName: vehicleBrandsTable.name,
+          categorySlug: vehicleCategoriesTable.slug,
+        })
+        .from(vehicleModelsTable)
+        .innerJoin(vehicleBrandsTable, eq(vehicleModelsTable.brandId, vehicleBrandsTable.id))
+        .innerJoin(vehicleCategoriesTable, eq(vehicleModelsTable.vehicleCategoryId, vehicleCategoriesTable.id))
+        .where(eq(vehicleModelsTable.id, vehicleModelId))
+        .limit(1);
+      if (!vm) return res.status(400).json({ error: "Invalid vehicleModelId" });
+      resolvedMake = vm.brandName;
+      resolvedModel = vm.modelName;
+      const typeMap: Record<string, string> = {
+        hatchback: "hatchback", sedan: "sedan", suv: "suv", muv: "van", mpv: "van",
+        luxury: "luxury", van: "van", pickup: "truck",
+      };
+      resolvedType = typeMap[vm.categorySlug] ?? "sedan";
+    }
+
+    const locationComplete = !!(serviceAddress && serviceLat != null && serviceLng != null);
+
     const allowed = await callerCustomerIds(req);
     if (allowed !== null && !allowed.includes(customerId)) {
       return res.status(404).json({ error: "Customer not found" });
     }
     const values = tenantStamp(req, {
-      customerId, make, model, year, color, registrationNumber, vehicleType,
+      customerId,
+      vehicleModelId: resolvedModelId,
+      make: resolvedMake,
+      model: resolvedModel,
+      year,
+      color,
+      registrationNumber,
+      vehicleType: resolvedType,
+      serviceAddress,
+      serviceLat,
+      serviceLng,
+      placeId,
+      locationLabel,
+      locationComplete,
     });
     const [vehicle] = await db.insert(vehiclesTable).values(values as typeof vehiclesTable.$inferInsert).returning();
     return res.status(201).json(vehicle);
@@ -69,7 +118,8 @@ router.patch("/vehicles/:id", async (req, res) => {
     if (!existing || !rowInScope(req, existing)) {
       return res.status(404).json({ error: "Vehicle not found" });
     }
-    const { make, model, year, color, registrationNumber, vehicleType, customerId, assignedStaffId } = req.body;
+    const { make, model, year, color, registrationNumber, vehicleType, customerId, assignedStaffId,
+      vehicleModelId, serviceAddress, serviceLat, serviceLng, placeId, locationLabel } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (make !== undefined) updateData.make = make;
     if (model !== undefined) updateData.model = model;
@@ -78,6 +128,18 @@ router.patch("/vehicles/:id", async (req, res) => {
     if (registrationNumber !== undefined) updateData.registrationNumber = registrationNumber;
     if (vehicleType !== undefined) updateData.vehicleType = vehicleType;
     if (customerId !== undefined) updateData.customerId = customerId;
+    if (vehicleModelId !== undefined) updateData.vehicleModelId = vehicleModelId;
+    if (serviceAddress !== undefined) updateData.serviceAddress = serviceAddress;
+    if (serviceLat !== undefined) updateData.serviceLat = serviceLat;
+    if (serviceLng !== undefined) updateData.serviceLng = serviceLng;
+    if (placeId !== undefined) updateData.placeId = placeId;
+    if (locationLabel !== undefined) updateData.locationLabel = locationLabel;
+    if (serviceAddress !== undefined || serviceLat !== undefined || serviceLng !== undefined) {
+      const addr = serviceAddress ?? existing.serviceAddress;
+      const lat = serviceLat ?? existing.serviceLat;
+      const lng = serviceLng ?? existing.serviceLng;
+      updateData.locationComplete = !!(addr && lat != null && lng != null);
+    }
 
     if (assignedStaffId !== undefined) {
       if (assignedStaffId === null) {

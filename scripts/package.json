@@ -7,6 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "seed": "tsx ./src/seed.ts",
     "seed:permissions": "tsx ./src/seed-permissions.ts",
+    "seed:master-data": "tsx ./src/seed-master-data.ts",
     "backfill:tenant": "tsx ./src/backfill-tenant-fields.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

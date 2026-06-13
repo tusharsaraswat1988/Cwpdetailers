@@ -12,6 +12,7 @@ export const servicesTable = pgTable("services", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
+  serviceCategoryId: integer("service_category_id"),
   category: serviceCategoryEnum("category").notNull(),
   basePrice: numeric("base_price", { precision: 10, scale: 2 }).notNull(),
   durationMinutes: integer("duration_minutes"),

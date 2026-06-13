@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Star, UserCog } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
 import { PageHeader, EmptyState } from "@/components/shared";
@@ -155,12 +156,16 @@ export default function AdminStaff() {
               <div key={s.id} className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors" data-testid={`staff-card-${s.id}`}>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <UserCog size={16} className="text-primary" />
-                    </div>
+                    {s.profilePhotoUrl ? (
+                      <img src={s.profilePhotoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <UserCog size={16} className="text-primary" />
+                      </div>
+                    )}
                     <div>
                       <p className="font-semibold text-sm text-foreground">{s.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{s.role?.replace(/_/g, " ")}</p>
+                      <p className="text-xs text-muted-foreground">{(s as { employeeCode?: string }).employeeCode ?? s.role?.replace(/_/g, " ")}</p>
                     </div>
                   </div>
                   <Badge variant="outline" className={s.isActive ? "text-green-600 dark:text-green-400 border-green-500/20 bg-green-500/10 text-xs" : "text-xs text-muted-foreground"}>
@@ -170,6 +175,13 @@ export default function AdminStaff() {
                 <div className="space-y-1.5 text-xs text-muted-foreground mb-3">
                   <p>{s.phone}</p>
                   <p>{s.branchName}</p>
+                  <div className="pt-1">
+                    <div className="flex justify-between mb-1">
+                      <span>Profile</span>
+                      <span>{(s as { profileCompletionPercent?: number }).profileCompletionPercent ?? 0}%</span>
+                    </div>
+                    <Progress value={(s as { profileCompletionPercent?: number }).profileCompletionPercent ?? 0} className="h-1.5" />
+                  </div>
                   <div className="flex items-center justify-between pt-1">
                     <span className="flex items-center gap-1">
                       <Star size={11} className="text-primary" fill="currentColor" />

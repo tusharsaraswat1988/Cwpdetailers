@@ -136,10 +136,30 @@ export default function Register() {
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-white/40 text-sm">
+        <p className="mt-4 text-center text-white/30 text-xs px-2">
+          By creating an account, you agree to our{" "}
+          <Link href="/terms-and-conditions" className="text-white/50 hover:text-primary transition-colors">Terms & Conditions</Link>
+          {" "}and{" "}
+          <Link href="/privacy-policy" className="text-white/50 hover:text-primary transition-colors">Privacy Policy</Link>.
+        </p>
+
+        <p className="mt-4 text-center text-white/40 text-sm">
           Already have an account?{" "}
           <Link href="/login" className="text-primary hover:underline">Sign in</Link>
         </p>
+
+        <div className="mt-8 pt-6 border-t border-white/5 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
+          {[
+            { href: "/privacy-policy", label: "Privacy Policy" },
+            { href: "/terms-and-conditions", label: "Terms" },
+            { href: "/refund-policy", label: "Refund Policy" },
+            { href: "/contact-us", label: "Contact" },
+          ].map(link => (
+            <Link key={link.href} href={link.href} className="text-white/20 hover:text-white/40 text-xs transition-colors">
+              {link.label}
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

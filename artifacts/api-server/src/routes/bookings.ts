@@ -4,19 +4,16 @@ import { bookingsTable, customersTable, staffTable, servicesTable, bookingEvents
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { decrementOnCompletion, recomputeNextDueDate, getTodayIST, type Transaction } from "../subscriptions/service";
-import { computeSolarCleaningPrice } from "../lib/solarPricing";
+import { resolveBookingAmount } from "../lib/dynamicPricing";
+import { staffAssignableError } from "../lib/staffEcosystem/profileCompletion";
 import {
   debitWallet,
   resolveDailyRate,
   WalletError,
-} from "../lib/wallet/service";
-import { notifyBookingConfirmed, notifyBookingCompleted, notifyLowBalance } from "../lib/notifications/dispatcher";
-import {
   getLedgerBalance,
-  resolveDailyRate,
   isLowBalance,
 } from "../lib/wallet/service";
-import { getTodayIST } from "../subscriptions/service";
+import { notifyBookingConfirmed, notifyBookingCompleted, notifyLowBalance } from "../lib/notifications/dispatcher";
 
 const router = Router();
 
@@ -51,6 +48,8 @@ const bookingSelect = {
   area: bookingsTable.area,
   locationLat: bookingsTable.locationLat,
   locationLng: bookingsTable.locationLng,
+  placeId: bookingsTable.placeId,
+  savedLocationId: bookingsTable.savedLocationId,
   notes: bookingsTable.notes,
   startedAt: bookingsTable.startedAt,
   completedAt: bookingsTable.completedAt,
@@ -197,9 +196,16 @@ router.get("/bookings", async (req, res) => {
 
 router.post("/bookings", async (req, res) => {
   try {
-    const { customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId, branchId, scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng, notes, amount, recurrenceRule } = req.body;
+    const {
+      customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId, branchId,
+      scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng,
+      placeId, savedLocationId, notes, amount, recurrenceRule,
+    } = req.body;
     if (!customerId || !scheduledDate || !serviceType) {
       return res.status(400).json({ error: "customerId, scheduledDate, and serviceType are required" });
+    }
+    if (!address || locationLat == null || locationLng == null) {
+      return res.status(400).json({ error: "address, locationLat, and locationLng are required for doorstep service" });
     }
 
     const customer = await loadIfInScope(req,
@@ -214,12 +220,17 @@ router.post("/bookings", async (req, res) => {
         r => ({ ...r, staffId: r.id }),
       );
       if (!staff) return res.status(404).json({ error: "Staff not found" });
+      const assignErr = staffAssignableError(staff);
+      if (assignErr) return res.status(409).json({ error: assignErr });
     }
 
     if (vehicleId) {
       const [vehicle] = await db.select().from(vehiclesTable).where(eq(vehiclesTable.id, vehicleId)).limit(1);
       if (!vehicle || vehicle.customerId !== customerId) {
         return res.status(400).json({ error: "Vehicle not found for this customer" });
+      }
+      if (!vehicle.locationComplete) {
+        return res.status(400).json({ error: "Vehicle must have a service location before booking" });
       }
     }
 
@@ -228,21 +239,23 @@ router.post("/bookings", async (req, res) => {
       if (!site || site.customerId !== customerId) {
         return res.status(400).json({ error: "Solar site not found for this customer" });
       }
+      if (!site.locationComplete) {
+        return res.status(400).json({ error: "Solar site must have a service location before booking" });
+      }
     }
 
     let resolvedAmount = amount?.toString();
     const resolvedBranchId = branchId ?? customer.branchId ?? undefined;
 
-    if (serviceId && !resolvedAmount) {
-      const [svc] = await db.select({ basePrice: servicesTable.basePrice }).from(servicesTable)
-        .where(eq(servicesTable.id, serviceId)).limit(1);
-      if (svc) resolvedAmount = svc.basePrice;
-    }
-
-    if (solarSiteId && serviceType === "solar_cleaning") {
-      const [site] = await db.select({ panelCount: solarSitesTable.panelCount }).from(solarSitesTable)
-        .where(eq(solarSitesTable.id, solarSiteId)).limit(1);
-      if (site) resolvedAmount = String(computeSolarCleaningPrice(site.panelCount));
+    if (!resolvedAmount) {
+      const panelCount = solarSiteId
+        ? (await db.select({ panelCount: solarSitesTable.panelCount }).from(solarSitesTable)
+            .where(eq(solarSitesTable.id, solarSiteId)).limit(1))[0]?.panelCount
+        : undefined;
+      const computed = await resolveBookingAmount({
+        serviceId, vehicleId, solarSiteId, serviceType, panelCount,
+      });
+      if (computed != null) resolvedAmount = String(computed);
     }
 
     const initialStatus = req.user?.role === "customer" ? "pending" as const : "scheduled" as const;
@@ -250,7 +263,8 @@ router.post("/bookings", async (req, res) => {
     const values = tenantStamp(req, {
       customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId,
       branchId: resolvedBranchId,
-      scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng, notes,
+      scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng,
+      placeId, savedLocationId, notes,
       amount: resolvedAmount,
       recurrenceRule,
       status: initialStatus,
@@ -285,7 +299,17 @@ router.patch("/bookings/:id", async (req, res) => {
     const { status, staffId, scheduledDate, scheduledTime, notes, technicianNotes, beforePhotoUrl, afterPhotoUrl, proofPhotoUrls, customerSignatureUrl, cancellationReason, rating, completedAt } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (status !== undefined) updateData.status = status;
-    if (staffId !== undefined) updateData.staffId = staffId;
+    if (staffId !== undefined) {
+      if (staffId === null) {
+        updateData.staffId = null;
+      } else {
+        const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
+        if (!staff) return res.status(404).json({ error: "Staff not found" });
+        const assignErr = staffAssignableError(staff);
+        if (assignErr) return res.status(409).json({ error: assignErr });
+        updateData.staffId = staffId;
+      }
+    }
     if (scheduledDate !== undefined) updateData.scheduledDate = scheduledDate;
     if (scheduledTime !== undefined) updateData.scheduledTime = scheduledTime;
     if (notes !== undefined) updateData.notes = notes;
@@ -505,6 +529,8 @@ router.post("/bookings/:id/assign", async (req, res) => {
       r => ({ ...r, staffId: r.id }),
     );
     if (!staff) return res.status(404).json({ error: "Staff not found" });
+    const assignErr = staffAssignableError(staff);
+    if (assignErr) return res.status(409).json({ error: assignErr });
     if (staff.verificationStatus !== "verified") {
       return res.status(400).json({ error: "Staff must be verified before assignment" });
     }

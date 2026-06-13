@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, Wrench, BarChart3, Bell, LogOut, ChevronRight,
   Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee, Sparkles,
-  Monitor, Crown, Radio, Palette, Activity,
+  Monitor, Crown, Radio, Palette, Activity, Scale, Search, Info, Database,
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
@@ -52,6 +52,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Config",
     items: [
       { href: "/admin/branches", label: "Branches", icon: GitBranch, perm: { resource: "branches", action: "view" } },
+      { href: "/admin/masters", label: "Master Data", icon: Database, perm: { resource: "masters", action: "view" } },
       { href: "/admin/services", label: "Services", icon: Wrench, perm: { resource: "services", action: "view" } },
       { href: "/admin/analytics", label: "Analytics", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
       { href: "/admin/communications", label: "Communication Center", icon: Radio, perm: { resource: "communications", action: "view" } },
@@ -62,7 +63,16 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Settings",
     items: [
       { href: "/admin/settings/brand", label: "Brand Identity", icon: Palette, perm: { resource: "settings", action: "view" } },
+      { href: "/admin/settings/business", label: "Business Info", icon: Info, perm: { resource: "settings", action: "view" } },
+      { href: "/admin/settings/seo", label: "SEO Management", icon: Search, perm: { resource: "settings", action: "view" } },
       { href: "/admin/settings/system", label: "System Status", icon: Activity, perm: { resource: "settings", action: "view" } },
+    ],
+  },
+  {
+    label: "Legal & Compliance",
+    items: [
+      { href: "/admin/legal", label: "Legal Pages CMS", icon: Scale, perm: { resource: "settings", action: "view" } },
+      { href: "/admin/compliance", label: "Compliance Settings", icon: ShieldCheck, perm: { resource: "settings", action: "view" } },
     ],
   },
   {

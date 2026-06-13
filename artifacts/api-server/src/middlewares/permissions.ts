@@ -43,3 +43,37 @@ export function mountGuarded(parent: Router, prefix: string, child: Router, reso
   overrides?: { match: RegExp; method?: string; action: string }[]) {
   parent.use(prefix, guardResource(resource, overrides), child);
 }
+
+/**
+ * Permission guard for master-data router paths (/masters/*, /catalog/*, /pricing/*, /saved-locations/*).
+ */
+export function guardMasterDataRoutes() {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const path = req.path;
+    const method = req.method.toUpperCase();
+    const action = METHOD_TO_ACTION[method] ?? "view";
+
+    // Public catalog + pricing quote for landing page (anonymous GET only)
+    if (method === "GET" && (path.startsWith("/catalog/") || path.startsWith("/pricing/"))) {
+      if (!req.user) {
+        req.scope = {
+          isSuperAdmin: false, companyId: null, branchIds: null,
+          franchiseeId: null, customerId: null, staffId: null,
+        };
+        return next();
+      }
+      return requirePermission("masters", "view")(req, res, next);
+    }
+
+    if (path.startsWith("/saved-locations")) {
+      const savedAction = method === "DELETE" ? "edit" : action;
+      return requirePermission("customers", savedAction)(req, res, next);
+    }
+
+    if (path.startsWith("/masters/")) {
+      return requirePermission("masters", action)(req, res, next);
+    }
+
+    return next();
+  };
+}

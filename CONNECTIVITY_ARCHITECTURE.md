@@ -105,7 +105,8 @@ sequenceDiagram
 | `src/services/connectivityService.ts` | Connectivity state machine |
 | `src/services/ConnectivityContext.tsx` | React context provider |
 | `src/services/apiRetry.ts` | Exponential backoff retry (2s, 5s, 10s) |
-| `src/services/offlineQueue.ts` | Offline write queue + auto-sync |
+| `src/services/offlineQueuePolicy.ts` | Allowlist and financial URL guards |
+| `src/services/offlineQueue.ts` | Offline write queue + auto-sync (allowlisted ops only) |
 | `src/services/draftService.ts` | Form draft persistence |
 | `src/services/queuedApi.ts` | Queue-aware fetch wrapper |
 | `src/hooks/useFormDraft.ts` | Auto-save/restore form hook |
@@ -137,7 +138,7 @@ sequenceDiagram
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | string (key) | UUID |
-| `type` | `booking \| customer \| expense \| invoice \| inventory \| note` | Operation category |
+| `type` | `booking \| customer \| note \| expense \| follow_up` | Queue-eligible operation only |
 | `label` | string | Human-readable label |
 | `url` | string | Absolute API URL |
 | `method` | string | HTTP method |
@@ -160,6 +161,26 @@ sequenceDiagram
 
 **Fallback:** `localStorage` keys `cwp_offline_queue_fallback`, `cwp_draft_{key}` when IndexedDB unavailable.
 
+### Offline queue policy
+
+**Allowed (may queue when offline):**
+
+- Bookings
+- Customer records
+- Notes
+- Expenses
+- Follow-ups
+
+**Never queued (require live server confirmation):**
+
+- Payments
+- Invoices
+- Wallet operations
+- Accounting / billing entries
+- Inventory / stock deductions
+
+Use `queuedFetch()` only for allowed types. Use `serverConfirmedFetch()` for all financial and inventory writes.
+
 ---
 
 ## Connectivity States
@@ -181,7 +202,7 @@ Health check timeout: **30s** (Render cold-start tolerant). Poll interval: **45s
 2. **Existing PWA installs** — service worker auto-updates via `registerType: "autoUpdate"`. Users may need one refresh after deploy.
 3. **`offline.html`** — kept for Workbox precache; no longer used as navigation fallback. App shell always loads; banner handles degraded states.
 4. **IndexedDB** — created lazily on first queue/draft write. Clearing site data removes queued ops and drafts.
-5. **Integrating more modules** — use `queuedFetch()` for writes and `useFormDraft()` for forms. Import messages from `@/lib/moduleErrors`.
+5. **Integrating more modules** — use `queuedFetch()` for allowlisted writes (bookings, customers, notes, expenses, follow-ups). Use `serverConfirmedFetch()` for payments, invoices, wallet, billing, and inventory.
 6. **Admin diagnostics** — Settings → System Status (`/admin/settings/system`).
 
 ### Example: queued write

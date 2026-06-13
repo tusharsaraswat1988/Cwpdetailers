@@ -111,6 +111,18 @@ export default function Login() {
             <Link href="/register" className="text-primary hover:underline">Create account</Link>
           </p>
         </div>
+
+        <div className="mt-8 pt-6 border-t border-white/5 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
+          {[
+            { href: "/privacy-policy", label: "Privacy Policy" },
+            { href: "/terms-and-conditions", label: "Terms" },
+            { href: "/contact-us", label: "Contact" },
+          ].map(link => (
+            <Link key={link.href} href={link.href} className="text-white/20 hover:text-white/40 text-xs transition-colors">
+              {link.label}
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

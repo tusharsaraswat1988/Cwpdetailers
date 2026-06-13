@@ -8,6 +8,7 @@ import {
 import argon2 from "argon2";
 import { and, eq, sql } from "drizzle-orm";
 import { seedPermissions } from "./seed-permissions";
+import { seedMasterData } from "./seed-master-data";
 
 async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password, {
@@ -528,6 +529,7 @@ async function seed() {
   }
 
   await seedPermissions();
+  await seedMasterData();
   await seedWalletLedger();
 
   console.log("\n✅ Varanasi pilot seed complete.\n");

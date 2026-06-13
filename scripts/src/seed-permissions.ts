@@ -6,7 +6,7 @@ type Action = "view" | "create" | "edit" | "delete" | "approve";
 
 const RESOURCES = [
   "customers", "leads", "staff", "bookings", "subscriptions", "invoices",
-  "complaints", "branches", "services", "analytics", "notifications",
+  "complaints", "branches", "services", "masters", "analytics", "notifications",
   "franchisees", "churned", "inventory", "billing", "settings", "permissions",
   "communications",
 ] as const;
@@ -29,6 +29,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     complaints: ALL_ACTIONS,
     branches: ["view"],
     services: ["view"],
+    masters: ["view", "create", "edit"],
     analytics: ["view"],
     notifications: ["view", "create"],
     communications: ["view", "create", "edit"],
@@ -50,6 +51,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     complaints: ["view", "edit"],
     branches: ["view"],
     services: ["view"],
+    masters: ["view"],
     analytics: ["view"],
     notifications: ["view"],
     communications: ["view", "create"],
@@ -66,6 +68,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     complaints: ["view", "create"],
     notifications: ["view"],
     services: ["view"],
+    masters: ["view"],
   },
 
   customer: {
@@ -76,6 +79,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     complaints: ["view", "create"],
     notifications: ["view"],
     services: ["view"],
+    masters: ["view"],
   },
 };
 

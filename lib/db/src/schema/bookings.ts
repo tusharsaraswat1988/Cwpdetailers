@@ -28,6 +28,8 @@ export const bookingsTable = pgTable("bookings", {
   area: text("area"),
   locationLat: doublePrecision("location_lat"),
   locationLng: doublePrecision("location_lng"),
+  placeId: text("place_id"),
+  savedLocationId: integer("saved_location_id"),
   notes: text("notes"),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),

@@ -7,6 +7,7 @@ import { TrendingUp, Users, CreditCard, Calendar, AlertCircle, Star, IndianRupee
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
+import { staffEcosystemApi } from "@/lib/staff-ecosystem/api";
 
 const COLORS = ["hsl(180,100%,40%)", "hsl(220,40%,60%)", "hsl(40,100%,50%)", "hsl(0,84%,60%)", "hsl(270,60%,60%)"];
 
@@ -50,6 +51,7 @@ export default function AdminDashboard() {
   const { data: health } = useGetSubscriptionHealth();
   const { data: leadStats } = useQuery({ queryKey: ["leadStats"], queryFn: fetchLeadStats });
   const { data: followUps } = useQuery({ queryKey: ["leadFollowUps"], queryFn: fetchFollowUps });
+  const { data: staffStats } = useQuery({ queryKey: ["staffDashboardStats"], queryFn: staffEcosystemApi.dashboardStats });
 
   const fmt = (n: number) => n >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : `₹${n.toLocaleString("en-IN")}`;
   const sourceLabel: Record<string, string> = {
@@ -77,6 +79,7 @@ export default function AdminDashboard() {
           <StatCard title="Month Revenue" value={fmt(stats?.monthRevenue ?? 0)} icon={TrendingUp} loading={isLoading} />
           <StatCard title="Active Subscriptions" value={stats?.activeSubscriptions ?? "--"} icon={CreditCard} loading={isLoading} />
           <StatCard title="Total Customers" value={stats?.totalCustomers ?? "--"} icon={Users} loading={isLoading} />
+          <StatCard title="Staff Profiles" value={`${staffStats?.averageCompletion ?? 0}% avg`} subtitle={`${staffStats?.incompleteProfiles ?? 0} incomplete · ${staffStats?.pendingVerification ?? 0} pending verify`} icon={Users} loading={!staffStats} />
           <StatCard title="Pending Dues" value={fmt(stats?.pendingDuesTotal ?? 0)} icon={AlertCircle} color="text-destructive" loading={isLoading} subtitle="Needs collection" />
           <StatCard title="Active Jobs" value={stats?.activeJobs ?? "--"} icon={Activity} loading={isLoading} />
           <StatCard title="Open Complaints" value={stats?.openComplaints ?? "--"} icon={AlertCircle} color="text-amber-500" loading={isLoading} />
