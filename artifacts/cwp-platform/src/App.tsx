@@ -2,9 +2,10 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { OfflineScreen } from "@/components/pwa/OfflineScreen";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { BrandingProvider } from "@/lib/branding";
+import { ConnectivityProvider } from "@/services/ConnectivityContext";
+import { ConnectivityBanner } from "@/components/connectivity/ConnectivityBanner";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
@@ -35,6 +36,7 @@ import AdminExpenses from "@/pages/admin/Expenses";
 import AdminDues from "@/pages/admin/Dues";
 import AdminDailyOps from "@/pages/admin/DailyOps";
 import BrandIdentity from "@/pages/admin/BrandIdentity";
+import SystemStatus from "@/pages/admin/SystemStatus";
 
 import CustomerDashboard from "@/pages/customer/Dashboard";
 import BookService from "@/pages/customer/BookService";
@@ -141,6 +143,7 @@ function Router() {
       <Route path="/admin/operations-wall" component={() => <ProtectedRoute component={OperationsWall} roles={["admin", "superadmin", "manager"]} loginPath="/admin/login" />} />
       <Route path="/admin/founder" component={() => <ProtectedRoute component={FounderDashboard} roles={["superadmin"]} loginPath="/admin/login" />} />
       <Route path="/admin/settings/brand" component={() => <ProtectedRoute component={BrandIdentity} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/settings/system" component={() => <ProtectedRoute component={SystemStatus} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin" component={AdminRoot} />
 
       {/* Customer */}
@@ -184,17 +187,19 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrandingProvider>
-          <TooltipProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-            <OfflineScreen />
-            <Toaster />
-          </TooltipProvider>
-        </BrandingProvider>
-      </AuthProvider>
+      <ConnectivityProvider>
+        <AuthProvider>
+          <BrandingProvider>
+            <TooltipProvider>
+              <ConnectivityBanner className="sticky top-0 z-40" />
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <Router />
+              </WouterRouter>
+              <Toaster />
+            </TooltipProvider>
+          </BrandingProvider>
+        </AuthProvider>
+      </ConnectivityProvider>
     </QueryClientProvider>
   );
 }

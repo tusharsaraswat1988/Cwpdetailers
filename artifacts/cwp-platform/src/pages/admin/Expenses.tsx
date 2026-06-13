@@ -10,46 +10,85 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlusCircle } from "lucide-react";
+import { useFormDraft } from "@/hooks/useFormDraft";
+import { queuedFetch } from "@/services/queuedApi";
+import { moduleError, queuedSuccessMessage } from "@/lib/moduleErrors";
+import { fetchWithRetry } from "@/services/apiRetry";
+import ErrorState from "@/components/shared/ErrorState";
 
 const categories = ["salary", "rent", "utilities", "materials", "marketing", "travel", "maintenance", "other"];
+
+const defaultExpenseForm = {
+  category: "materials",
+  amount: "",
+  description: "",
+  vendor: "",
+  paidBy: "",
+  expenseDate: "",
+};
 
 async function fetchExpenses(params?: Record<string, string>): Promise<any> {
   const url = new URL("/api/expenses", window.location.origin);
   Object.entries(params ?? {}).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed");
+  const res = await fetchWithRetry(url.toString());
+  if (!res.ok) throw new Error(moduleError("expenses", "load"));
   return res.json();
 }
 
 export default function AdminExpenses() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ category: "materials", amount: "", description: "", vendor: "", paidBy: "", expenseDate: "" });
-  const { data: expenses, isLoading, refetch } = useQuery({ queryKey: ["expenses"], queryFn: () => fetchExpenses({ limit: "50" }) });
+  const { value: form, setValue: setForm, clearDraft, restoredFromDraft } = useFormDraft(
+    "admin-expense-form",
+    defaultExpenseForm,
+  );
+  const { data: expenses, isLoading, isError, refetch } = useQuery({
+    queryKey: ["expenses"],
+    queryFn: () => fetchExpenses({ limit: "50" }),
+  });
 
   const save = async () => {
-    if (!form.amount || !form.expenseDate) { toast({ title: "Amount and date required", variant: "destructive" }); return; }
-    try {
-      const res = await fetch("/api/expenses", {
+    if (!form.amount || !form.expenseDate) {
+      toast({ title: "Amount and date required", variant: "destructive" });
+      return;
+    }
+    const payload = {
+      category: form.category,
+      amount: parseFloat(form.amount),
+      description: form.description || undefined,
+      vendor: form.vendor || undefined,
+      paidBy: form.paidBy || undefined,
+      expenseDate: form.expenseDate,
+    };
+
+    const result = await queuedFetch(
+      "/api/expenses",
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: form.category,
-          amount: parseFloat(form.amount),
-          description: form.description || undefined,
-          vendor: form.vendor || undefined,
-          paidBy: form.paidBy || undefined,
-          expenseDate: form.expenseDate,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      toast({ title: "Expense recorded" });
-      setForm({ category: "materials", amount: "", description: "", vendor: "", paidBy: "", expenseDate: "" });
+        body: JSON.stringify(payload),
+      },
+      { operationType: "expense", label: "Record expense" },
+    );
+
+    if (result.queued) {
+      toast({ title: queuedSuccessMessage("Expense") });
+      await clearDraft();
+      setForm(defaultExpenseForm);
       setOpen(false);
-      refetch();
-    } catch {
-      toast({ title: "Failed to record expense", variant: "destructive" });
+      return;
     }
+
+    if (!result.ok || !result.response.ok) {
+      toast({ title: moduleError("expenses", "save"), variant: "destructive" });
+      return;
+    }
+
+    toast({ title: "Expense recorded" });
+    await clearDraft();
+    setForm(defaultExpenseForm);
+    setOpen(false);
+    refetch();
   };
 
   return (
@@ -68,6 +107,11 @@ export default function AdminExpenses() {
         {open && (
           <Card>
             <CardContent className="p-4 space-y-4">
+              {restoredFromDraft && (
+                <p className="text-xs text-muted-foreground bg-muted/40 rounded-md px-3 py-2">
+                  Restored unsaved expense draft from your device.
+                </p>
+              )}
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <Label>Category</Label>
@@ -105,6 +149,13 @@ export default function AdminExpenses() {
         )}
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">
+          {isError ? (
+            <ErrorState
+              title={moduleError("expenses", "load")}
+              onRetry={() => refetch()}
+            />
+          ) : (
+          <>
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/30">
               <tr>{["Category", "Description", "Vendor", "Amount", "Date", "Paid By"].map(h => (
@@ -126,6 +177,8 @@ export default function AdminExpenses() {
             </tbody>
           </table>
           {!isLoading && (expenses?.data ?? []).length === 0 && <div className="text-center py-12 text-muted-foreground">No expenses recorded</div>}
+          </>
+          )}
         </div>
       </div>
     </AdminLayout>

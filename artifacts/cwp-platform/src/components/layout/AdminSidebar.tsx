@@ -7,9 +7,10 @@ import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, Wrench, BarChart3, Bell, LogOut, ChevronRight,
   Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee, Sparkles,
-  Monitor, Crown, Radio, Palette,
+  Monitor, Crown, Radio, Palette, Activity,
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
+import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
 import { useBranding } from "@/lib/branding";
 
 type NavItem = {
@@ -61,6 +62,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Settings",
     items: [
       { href: "/admin/settings/brand", label: "Brand Identity", icon: Palette, perm: { resource: "settings", action: "view" } },
+      { href: "/admin/settings/system", label: "System Status", icon: Activity, perm: { resource: "settings", action: "view" } },
     ],
   },
   {
@@ -103,6 +105,7 @@ export default function AdminSidebar({ onNavigate, embedded = false, className }
           <div className="min-w-0">
             <p className="text-white font-display font-bold text-sm leading-tight">{branding.brandName} Admin</p>
             <p className="text-white/40 text-xs truncate">{branding.tagline ?? "Operations Hub"}</p>
+            <SyncStatusIndicator className="mt-1.5 text-white/50" />
           </div>
         )}
         {!embedded && (

@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useFormDraft } from "@/hooks/useFormDraft";
+import { moduleError } from "@/lib/moduleErrors";
 import { Loader2, CheckCircle, Car, Sun, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -25,28 +27,25 @@ const SERVICE_TYPE_CATEGORIES: Record<string, string> = {
   pickup_drop: "car_wash",
 };
 
+const defaultBookingForm = {
+  serviceId: "",
+  serviceType: "car_wash",
+  scheduledDate: "",
+  scheduledTime: "09:00",
+  notes: "",
+  vehicleId: "",
+  solarSiteId: "",
+};
+
 export default function BookService() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
   const [success, setSuccess] = useState(false);
-  const [form, setForm] = useState<{
-    serviceId: string;
-    serviceType: string;
-    scheduledDate: string;
-    scheduledTime: string;
-    notes: string;
-    vehicleId: string;
-    solarSiteId: string;
-  }>({
-    serviceId: "",
-    serviceType: "car_wash",
-    scheduledDate: "",
-    scheduledTime: "09:00",
-    notes: "",
-    vehicleId: "",
-    solarSiteId: "",
-  });
+  const { value: form, setValue: setForm, clearDraft, restoredFromDraft } = useFormDraft(
+    "customer-booking-form",
+    defaultBookingForm,
+  );
 
   const { data: services } = useListServices({ isActive: true }, { query: { queryKey: getListServicesQueryKey({ isActive: true }) } });
   const { data: vehicles } = useListVehicles({ customerId: customerId ?? 0 }, {
@@ -79,12 +78,13 @@ export default function BookService() {
 
   const createMutation = useCreateBooking({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async () => {
         qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
+        await clearDraft();
         setSuccess(true);
         toast({ title: "Booking confirmed!" });
       },
-      onError: (e: any) => toast({ title: e?.response?.data?.error || "Booking failed", variant: "destructive" }),
+      onError: () => toast({ title: moduleError("bookings", "save"), variant: "destructive" }),
     },
   });
 
@@ -133,7 +133,10 @@ export default function BookService() {
             {/* QW-06: View History link */}
             <div className="flex flex-col gap-3">
               <Button
-                onClick={() => { setSuccess(false); setForm(f => ({ ...f, serviceId: "", vehicleId: "", solarSiteId: "", scheduledDate: "", notes: "" })); }}
+                onClick={() => {
+                  setSuccess(false);
+                  setForm(defaultBookingForm);
+                }}
                 className="w-full h-11 bg-primary text-secondary hover:bg-primary/90"
               >
                 Book Another Service
@@ -154,6 +157,11 @@ export default function BookService() {
         <div>
           <h1 className="font-display font-bold text-2xl">Book a Service</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Schedule your next car wash, detailing, or solar cleaning.</p>
+          {restoredFromDraft && (
+            <p className="text-xs text-muted-foreground mt-2 bg-muted/40 rounded-md px-3 py-2 inline-block">
+              Restored your previous booking draft.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

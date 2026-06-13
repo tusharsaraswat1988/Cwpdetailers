@@ -3,6 +3,7 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
 
 export type SidebarRenderProps = {
   onNavigate?: () => void;
@@ -39,7 +40,8 @@ export default function PanelShell({ testId, mobileTitle, sidebar, children }: P
         >
           <Menu size={20} />
         </Button>
-        <p className="font-display font-bold text-sm truncate min-w-0">{mobileTitle}</p>
+        <p className="font-display font-bold text-sm truncate min-w-0 flex-1">{mobileTitle}</p>
+        <SyncStatusIndicator compact />
       </header>
 
       <div className="hidden lg:flex shrink-0 h-full">

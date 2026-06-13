@@ -5,6 +5,7 @@ import { AppShell, type BottomNavItem } from "@/components/app-shell";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/shared/BrandLogo";
+import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
 import { useBrandingPortal } from "@/lib/branding";
 import {
   LogOut, Bell, LayoutDashboard, Calendar, CreditCard, IndianRupee, User,
@@ -54,6 +55,7 @@ export default function CustomerLayout({ children }: { children: ReactNode }) {
         subtitle: user?.name,
         trailing: (
           <>
+            <SyncStatusIndicator compact className="hidden sm:inline-flex" />
             <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Notifications">
               <Bell size={18} />
             </Button>

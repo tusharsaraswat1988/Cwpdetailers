@@ -83,8 +83,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,json}"],
-        // Serve the SPA shell on failed navigations — not offline.html. The React
-        // OfflineScreen handles true offline state after the app loads.
+        // Serve the SPA shell on failed navigations. ConnectivityBanner handles degraded states after load.
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api/],
         cleanupOutdatedCaches: true,
