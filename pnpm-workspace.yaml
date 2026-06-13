@@ -8,7 +8,9 @@ allowBuilds:
   '@swc/core': true
   argon2: true
   esbuild: true
+  msgpackr-extract: set this to true or false
   msw: true
+  sharp: set this to true or false
   unrs-resolver: true
 
 autoInstallPeers: false

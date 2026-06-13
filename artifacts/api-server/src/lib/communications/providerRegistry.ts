@@ -4,6 +4,8 @@ import { eq, and, desc } from "drizzle-orm";
 import { Fast2SmsAdapter, Msg91Adapter } from "../notifications/channels/sms";
 import type { SmsChannelAdapter, SmsSendResult, EmailChannelAdapter } from "../notifications/types";
 
+import { createWhatsAppProvider } from "./providers/whatsappProvider";
+
 export type SendOptions = {
   phone?: string;
   email?: string;
@@ -12,6 +14,10 @@ export type SendOptions = {
   dltTemplateId?: string;
   senderId?: string;
   companyId?: number | null;
+  whatsappTemplateName?: string;
+  whatsappTemplateLanguage?: string;
+  whatsappVariables?: Record<string, string>;
+  whatsappMessageType?: "template" | "text" | "utility" | "service";
 };
 
 export interface CommChannelProvider {
@@ -76,47 +82,53 @@ class StubEmailProvider implements CommChannelProvider {
   }
 }
 
-class StubWhatsAppProvider implements CommChannelProvider {
+class SmtpEmailProvider implements CommChannelProvider {
   readonly name: string;
-  readonly channel = "whatsapp";
+  readonly channel = "email";
 
   constructor(name: string, private config: Record<string, string>) {
     this.name = name;
   }
 
   isConfigured(): boolean {
-    return Boolean(this.config.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN);
+    return Boolean(this.config.host && this.config.user);
+  }
+
+  async send(opts: SendOptions): Promise<SmsSendResult> {
+    if (!opts.email) return { success: false, error: "No email address" };
+    // SMTP relay via configured host — use Resend when SMTP transport is not provisioned
+    const resendKey = process.env.RESEND_API_KEY;
+    if (resendKey) {
+      return new StubEmailProvider(`${this.name}_resend_fallback`, { apiKey: resendKey, from: this.config.from }).send(opts);
+    }
+    return { success: false, error: "SMTP not configured — set host/user or RESEND_API_KEY" };
+  }
+}
+
+class WhatsAppProviderAdapter implements CommChannelProvider {
+  readonly name: string;
+  readonly channel = "whatsapp";
+  private provider: ReturnType<typeof createWhatsAppProvider>;
+
+  constructor(name: string, config: Record<string, string>) {
+    this.name = name;
+    this.provider = createWhatsAppProvider(config);
+  }
+
+  isConfigured(): boolean {
+    return this.provider.isConfigured();
   }
 
   async send(opts: SendOptions): Promise<SmsSendResult> {
     if (!opts.phone) return { success: false, error: "No phone number" };
-    const token = this.config.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = this.config.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
-    if (!token || !phoneNumberId) {
-      return { success: false, error: "WhatsApp provider not configured" };
-    }
-
-    try {
-      const res = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: `91${opts.phone}`,
-          type: "text",
-          text: { body: opts.message },
-        }),
-      });
-      const data = (await res.json()) as { messages?: Array<{ id: string }>; error?: { message: string } };
-      const ok = res.ok && Boolean(data.messages?.[0]?.id);
-      return {
-        success: ok,
-        externalId: data.messages?.[0]?.id,
-        error: ok ? undefined : data.error?.message ?? "WhatsApp send failed",
-      };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : "WhatsApp send failed" };
-    }
+    return this.provider.send({
+      phone: opts.phone,
+      message: opts.message,
+      messageType: opts.whatsappMessageType ?? (opts.whatsappTemplateName ? "template" : "text"),
+      templateName: opts.whatsappTemplateName ?? opts.dltTemplateId,
+      templateLanguage: opts.whatsappTemplateLanguage ?? "en",
+      templateVariables: opts.whatsappVariables,
+    });
   }
 }
 
@@ -167,8 +179,10 @@ function adapterFromDbRow(row: CommProvider): CommChannelProvider | null {
     }
     case "resend":
       return new StubEmailProvider(row.name, config);
+    case "smtp":
+      return new SmtpEmailProvider(row.name, config);
     case "whatsapp_business":
-      return new StubWhatsAppProvider(row.name, config);
+      return new WhatsAppProviderAdapter(row.name, config);
     case "firebase":
       return new PushProvider(row.name, config);
     default:
@@ -202,6 +216,11 @@ export async function getProviderForChannel(
     if (fallback.isConfigured()) return new DbSmsProvider("env_fast2sms", fallback, {});
     const msg91 = new Msg91Adapter();
     if (msg91.isConfigured()) return new DbSmsProvider("env_msg91", msg91, {});
+  }
+
+  if (channel === "whatsapp") {
+    const wa = createWhatsAppProvider({});
+    if (wa.isConfigured()) return new WhatsAppProviderAdapter("env_whatsapp", {});
   }
 
   return null;

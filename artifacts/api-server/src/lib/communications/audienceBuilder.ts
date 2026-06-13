@@ -1,11 +1,14 @@
 import { db } from "@workspace/db";
 import {
   customersTable, leadsTable, subscriptionsTable, vehiclesTable,
-  bookingsTable, invoicesTable, type AudienceFilterNode,
+  bookingsTable, complaintsTable, servicesTable, invoicesTable,
+  commCustomerConsentsTable,
+  type AudienceFilterNode,
 } from "@workspace/db";
-import { eq, and, or, sql, gt, inArray, ne, desc } from "drizzle-orm";
+import { eq, and, or, sql, gt, gte, inArray, ne, desc, isNotNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { RecipientContext } from "./templateEngine";
+import { resolveSmartSegmentFilter } from "./smartSegments";
 
 export type AudienceScope = {
   companyId?: number | null;
@@ -31,6 +34,73 @@ function filterToSql(filter: string, params: Record<string, unknown> = {}, scope
 
     case "payment_due":
       return and(...base, gt(customersTable.totalDues, "0"));
+
+    case "payment_due_gt": {
+      const minAmount = Number(params.minAmount ?? 1000);
+      return and(...base, gte(customersTable.totalDues, String(minAmount)));
+    }
+
+    case "ceramic_coating_customers":
+      return and(
+        ...base,
+        sql`EXISTS (
+          SELECT 1 FROM ${bookingsTable} b
+          JOIN ${servicesTable} s ON s.id = b.service_id
+          WHERE b.customer_id = ${customersTable.id}
+          AND b.status = 'completed'
+          AND s.category = 'ceramic_coating'
+        )`,
+      );
+
+    case "ppf_customers":
+      return and(
+        ...base,
+        sql`EXISTS (
+          SELECT 1 FROM ${bookingsTable} b
+          JOIN ${servicesTable} s ON s.id = b.service_id
+          WHERE b.customer_id = ${customersTable.id}
+          AND b.status = 'completed'
+          AND s.category = 'ppf'
+        )`,
+      );
+
+    case "birthday_this_month":
+      return and(
+        ...base,
+        sql`EXISTS (
+          SELECT 1 FROM ${commCustomerConsentsTable} c
+          WHERE c.customer_id = ${customersTable.id}
+          AND c.birth_date IS NOT NULL
+          AND EXTRACT(MONTH FROM c.birth_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+        )`,
+      );
+
+    case "anniversary_this_month":
+      return and(
+        ...base,
+        sql`(
+          EXISTS (
+            SELECT 1 FROM ${commCustomerConsentsTable} c
+            WHERE c.customer_id = ${customersTable.id}
+            AND c.anniversary_date IS NOT NULL
+            AND EXTRACT(MONTH FROM c.anniversary_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+          )
+          OR EXTRACT(MONTH FROM ${customersTable.createdAt}) = EXTRACT(MONTH FROM CURRENT_DATE)
+        )`,
+      );
+
+    case "franchise_customers":
+      return and(...base, isNotNull(customersTable.franchiseeId));
+
+    case "open_complaints":
+      return and(
+        ...base,
+        sql`EXISTS (
+          SELECT 1 FROM ${complaintsTable} c
+          WHERE c.customer_id = ${customersTable.id}
+          AND c.status IN ('open', 'in_progress')
+        )`,
+      );
 
     case "high_value_customers":
       return and(
@@ -81,6 +151,45 @@ function filterToSql(filter: string, params: Record<string, unknown> = {}, scope
           AND s.status IN ('active', 'expiring')
         )`,
       );
+
+    case "bidwar_customers":
+      return and(
+        ...base,
+        sql`EXISTS (
+          SELECT 1 FROM ${subscriptionsTable} s
+          WHERE s.customer_id = ${customersTable.id}
+          AND s.type IN ('bidwar', 'auction')
+          AND s.status = 'active'
+        )`,
+      );
+
+    case "revenue_above": {
+      const minRevenue = Number(params.minRevenue ?? 10000);
+      return and(
+        ...base,
+        sql`(
+          SELECT COALESCE(SUM(CAST(${invoicesTable}.total AS numeric)), 0)
+          FROM ${invoicesTable}
+          WHERE ${invoicesTable}.customer_id = ${customersTable.id}
+          AND ${invoicesTable}.status = 'paid'
+        ) >= ${minRevenue}`,
+      );
+    }
+
+    case "last_visit_between": {
+      const fromDate = String(params.fromDate ?? "");
+      const toDate = String(params.toDate ?? "");
+      if (!fromDate || !toDate) return and(...base, sql`false`);
+      return and(
+        ...base,
+        sql`EXISTS (
+          SELECT 1 FROM ${bookingsTable} b
+          WHERE b.customer_id = ${customersTable.id}
+          AND b.status = 'completed'
+          AND b.completed_at::date BETWEEN ${fromDate}::date AND ${toDate}::date
+        )`,
+      );
+    }
 
     case "wash_due":
       return and(
@@ -156,12 +265,15 @@ function leadFilterToSql(filter: string, scope: AudienceScope): SQL | undefined 
       return and(...base, eq(leadsTable.status, "contacted"));
     case "cold_leads":
       return and(...base, eq(leadsTable.status, "new"));
+    case "converted_leads":
+      return and(...base, inArray(leadsTable.status, ["booked", "subscription", "completed"]));
     default:
       return undefined;
   }
 }
 
 function nodeToCustomerSql(node: AudienceFilterNode, scope: AudienceScope): SQL | undefined {
+  if (node.type === "smart_segment") return undefined;
   if (node.type === "filter") {
     return filterToSql(node.filter, node.params, scope);
   }
@@ -171,6 +283,7 @@ function nodeToCustomerSql(node: AudienceFilterNode, scope: AudienceScope): SQL 
 }
 
 function nodeToLeadSql(node: AudienceFilterNode, scope: AudienceScope): SQL | undefined {
+  if (node.type === "smart_segment") return undefined;
   if (node.type === "filter") {
     return leadFilterToSql(node.filter, scope);
   }
@@ -180,10 +293,27 @@ function nodeToLeadSql(node: AudienceFilterNode, scope: AudienceScope): SQL | un
 }
 
 const LEAD_FILTERS = new Set([
-  "lost_leads", "open_leads", "hot_leads", "warm_leads", "cold_leads",
+  "lost_leads", "open_leads", "hot_leads", "warm_leads", "cold_leads", "converted_leads",
 ]);
 
+async function expandFilterNode(node: AudienceFilterNode, scope: AudienceScope): Promise<AudienceFilterNode> {
+  if (node.type === "smart_segment") {
+    const def = await resolveSmartSegmentFilter(node.segmentKey, scope.companyId);
+    if (!def) return { type: "filter", filter: "all_customers" };
+    return expandFilterNode(def, scope);
+  }
+  if (node.type === "group") {
+    return {
+      type: "group",
+      operator: node.operator,
+      children: await Promise.all(node.children.map(c => expandFilterNode(c, scope))),
+    };
+  }
+  return node;
+}
+
 function isLeadOnlyTree(node: AudienceFilterNode): boolean {
+  if (node.type === "smart_segment") return false;
   if (node.type === "filter") return LEAD_FILTERS.has(node.filter);
   return node.children.every(isLeadOnlyTree);
 }
@@ -191,16 +321,19 @@ function isLeadOnlyTree(node: AudienceFilterNode): boolean {
 export async function resolveAudience(
   filterDef: AudienceFilterNode,
   scope: AudienceScope,
+  limit = 10000,
 ): Promise<{ customers: RecipientContext[]; leads: RecipientContext[] }> {
-  if (isLeadOnlyTree(filterDef)) {
-    const where = nodeToLeadSql(filterDef, scope);
+  const expanded = await expandFilterNode(filterDef, scope);
+
+  if (isLeadOnlyTree(expanded)) {
+    const where = nodeToLeadSql(expanded, scope);
     if (!where) return { customers: [], leads: [] };
     const rows = await db.select({
       id: leadsTable.id,
       name: leadsTable.name,
       phone: leadsTable.phone,
       customerId: leadsTable.customerId,
-    }).from(leadsTable).where(where).limit(10000);
+    }).from(leadsTable).where(where).limit(limit);
     return {
       customers: [],
       leads: rows.map(r => ({
@@ -212,7 +345,7 @@ export async function resolveAudience(
     };
   }
 
-  const where = nodeToCustomerSql(filterDef, scope);
+  const where = nodeToCustomerSql(expanded, scope);
   if (!where) return { customers: [], leads: [] };
 
   const rows = await db.select({
@@ -222,7 +355,7 @@ export async function resolveAudience(
     email: customersTable.email,
     userId: customersTable.userId,
     totalDues: customersTable.totalDues,
-  }).from(customersTable).where(where).limit(10000);
+  }).from(customersTable).where(where).limit(limit);
 
   const customerIds = rows.map(r => r.id);
   const vehicleMap = new Map<number, string>();
@@ -272,6 +405,17 @@ export async function resolveAudience(
 }
 
 export async function countAudience(filterDef: AudienceFilterNode, scope: AudienceScope): Promise<number> {
-  const { customers, leads } = await resolveAudience(filterDef, scope);
-  return customers.length + leads.length;
+  const expanded = await expandFilterNode(filterDef, scope);
+
+  if (isLeadOnlyTree(expanded)) {
+    const where = nodeToLeadSql(expanded, scope);
+    if (!where) return 0;
+    const [r] = await db.select({ count: sql<number>`count(*)::int` }).from(leadsTable).where(where);
+    return r?.count ?? 0;
+  }
+
+  const where = nodeToCustomerSql(expanded, scope);
+  if (!where) return 0;
+  const [r] = await db.select({ count: sql<number>`count(*)::int` }).from(customersTable).where(where);
+  return r?.count ?? 0;
 }

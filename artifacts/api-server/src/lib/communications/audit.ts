@@ -7,6 +7,7 @@ export async function logCommAudit(params: {
   resourceId?: number | null;
   userId?: number | null;
   companyId?: number | null;
+  brandId?: number | null;
   payload?: Record<string, unknown>;
 }) {
   await db.insert(commAuditLogsTable).values({
@@ -15,6 +16,7 @@ export async function logCommAudit(params: {
     resourceId: params.resourceId ?? null,
     userId: params.userId ?? null,
     companyId: params.companyId ?? null,
+    brandId: params.brandId ?? null,
     payload: params.payload ?? {},
   });
 }

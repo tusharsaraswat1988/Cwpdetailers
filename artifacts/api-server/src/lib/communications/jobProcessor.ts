@@ -6,13 +6,17 @@ import {
 import { eq, and, lte, sql } from "drizzle-orm";
 import { launchCampaign } from "./campaignEngine";
 import { dispatchAutomationEvent } from "./automationEngine";
+import { processQueueJobs } from "./queueService";
+import { continueWorkflowRun } from "./workflowEngine";
 import { logger } from "../logger";
 
 export type CommJobPayload =
   | { type: "campaign_send"; campaignId: number }
   | { type: "campaign_batch"; campaignId: number }
   | { type: "automation_trigger"; automationId: number; context: Record<string, unknown> }
-  | { type: "process_scheduled" };
+  | { type: "process_scheduled" }
+  | { type: "process_queue" }
+  | { type: "workflow_continue"; runId: number; stepId: number };
 
 export async function enqueueCommJob(payload: CommJobPayload, runAt?: Date) {
   const [job] = await db.insert(systemJobsTable).values({
@@ -55,6 +59,12 @@ export async function processCommJobs(limit = 10) {
         case "process_scheduled":
           await processScheduledCampaigns();
           await processAutomationTriggers();
+          break;
+        case "process_queue":
+          await processQueueJobs(50);
+          break;
+        case "workflow_continue":
+          await continueWorkflowRun(payload.runId, payload.stepId);
           break;
       }
 

@@ -1,68 +1,126 @@
 import { db } from "@workspace/db";
 import {
   commCampaignsTable, commEventsTable, commTemplatesTable,
-  commAudiencesTable, notificationsTable, type CommCampaign,
+  commAudiencesTable, type CommCampaign,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { resolveAudience } from "./audienceBuilder";
 import { renderTemplate, contextToVars } from "./templateEngine";
-import { sendViaProvider } from "./providerRegistry";
 import { logCommAudit } from "./audit";
 import { logger } from "../logger";
 import type { RecipientContext } from "./templateEngine";
+import {
+  channelRequiresConsent, hasConsentForChannel, loadConsentsForCustomers,
+} from "./consentService";
+import { processCampaignAttribution, refreshCampaignStats } from "./attributionService";
+import { sendViaChannel } from "./channels/channelService";
+import { validateSmsTemplate } from "./dltValidator";
+import { enqueueMessage } from "./queueService";
+import { syncTimelineFromEvent } from "./timelineService";
+import { resolveBrandId } from "./brandService";
+import { processQueueJobs } from "./queueService";
 
-const MAX_RETRIES = 3;
+const BATCH_SIZE = 100;
 
-async function sendToRecipient(
+async function queueRecipientSend(
   campaign: CommCampaign,
-  template: { body: string; subject: string | null; dltTemplateId: string | null },
+  template: {
+    id?: number;
+    body: string; subject: string | null; dltTemplateId: string | null;
+    name?: string; category?: string; headerId?: number | null;
+  },
   recipient: RecipientContext,
   eventId: number,
+  brandId: number | null,
+  consent?: import("@workspace/db").CommCustomerConsent,
 ) {
   const vars = contextToVars(recipient);
   const renderedBody = renderTemplate(template.body, vars);
   const renderedSubject = template.subject ? renderTemplate(template.subject, vars) : null;
 
-  let result: { success: boolean; externalId?: string; error?: string };
+  if (campaign.channel === "sms" && brandId && template.id) {
+    const dltCheck = await validateSmsTemplate(template.id, brandId, {
+      brandId,
+      headerId: template.headerId,
+      channel: "sms",
+      customerId: recipient.customerId,
+      consent,
+      companyId: campaign.companyId,
+    });
+    if (!dltCheck.valid) {
+      await db.update(commEventsTable).set({
+        status: "failed",
+        errorMessage: dltCheck.error ?? "DLT validation failed",
+        renderedBody,
+        renderedSubject,
+      }).where(eq(commEventsTable.id, eventId));
+      await syncTimelineFromEvent(eventId);
+      return false;
+    }
+  }
+
+  await db.update(commEventsTable).set({
+    renderedBody,
+    renderedSubject,
+    brandId,
+    status: "queued",
+  }).where(eq(commEventsTable.id, eventId));
 
   if (campaign.channel === "in_app" && recipient.userId) {
-    await db.insert(notificationsTable).values({
-      userId: recipient.userId,
-      title: renderedSubject ?? campaign.name,
+    const result = await sendViaChannel("in_app", {
       message: renderedBody,
-      type: "broadcast",
-      channel: "in_app",
-      deliveryStatus: "sent",
+      subject: renderedSubject ?? campaign.name,
       companyId: campaign.companyId,
-      branchId: campaign.branchId,
+      brandId,
+      metadata: { userId: recipient.userId },
     });
-    result = { success: true, externalId: "in_app" };
-  } else {
-    result = await sendViaProvider(campaign.channel, {
+    const status = result.success ? "sent" : "failed";
+    await db.update(commEventsTable).set({
+      status,
+      externalId: result.externalId ?? null,
+      errorMessage: result.error ?? null,
+      sentAt: result.success ? new Date() : null,
+    }).where(eq(commEventsTable.id, eventId));
+    await syncTimelineFromEvent(eventId);
+    return result.success;
+  }
+
+  const waCategory = template.category === "utility" ? "utility"
+    : template.category === "service_implicit" ? "service"
+    : template.dltTemplateId ? "template" : "text";
+
+  await enqueueMessage({
+    eventId,
+    channel: campaign.channel as "sms" | "whatsapp" | "email" | "push",
+    companyId: campaign.companyId,
+    brandId,
+    sendPayload: {
       phone: recipient.phone ?? undefined,
       email: recipient.email ?? undefined,
       message: renderedBody,
       subject: renderedSubject ?? undefined,
       dltTemplateId: template.dltTemplateId ?? undefined,
       companyId: campaign.companyId,
-    }, campaign.companyId);
-  }
+      brandId,
+      whatsappTemplateName: template.dltTemplateId ?? template.name,
+      whatsappTemplateLanguage: "en",
+      whatsappVariables: vars,
+      whatsappMessageType: campaign.channel === "whatsapp" ? waCategory as "template" | "utility" | "service" | "text" : undefined,
+    },
+  });
 
-  const status = result.success ? "sent" : "failed";
-  await db.update(commEventsTable).set({
-    renderedBody,
-    renderedSubject,
-    status,
-    externalId: result.externalId ?? null,
-    errorMessage: result.error ?? null,
-    sentAt: result.success ? new Date() : null,
-    deliveredAt: result.success ? new Date() : null,
-  }).where(eq(commEventsTable.id, eventId));
-
-  return result.success;
+  return true;
 }
 
-export async function processCampaignBatch(campaignId: number, batchSize = 50) {
+async function markConsentBlocked(eventId: number, channel: string) {
+  await db.update(commEventsTable).set({
+    status: "consent_blocked",
+    errorMessage: "consent_blocked",
+    metadata: { reason: "consent_blocked", channel },
+  }).where(eq(commEventsTable.id, eventId));
+}
+
+export async function processCampaignBatch(campaignId: number, batchSize = BATCH_SIZE) {
   const [campaign] = await db.select().from(commCampaignsTable)
     .where(eq(commCampaignsTable.id, campaignId)).limit(1);
   if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
@@ -84,24 +142,31 @@ export async function processCampaignBatch(campaignId: number, batchSize = 50) {
       const resolved = await resolveAudience(audience.filterDefinition, {
         companyId: campaign.companyId,
         branchId: campaign.branchId,
-      });
+      }, batchSize);
       recipients = [...resolved.customers, ...resolved.leads];
     }
   }
 
-  const pendingEvents = await db.select().from(commEventsTable)
-    .where(eq(commEventsTable.campaignId, campaignId))
+  const brandId = await resolveBrandId(campaign.brandId, campaign.companyId);
+
+  let pendingEvents = await db.select().from(commEventsTable)
+    .where(and(
+      eq(commEventsTable.campaignId, campaignId),
+      inArray(commEventsTable.status, ["pending", "queued"]),
+    ))
     .limit(batchSize);
 
-  const toProcess = pendingEvents.length
-    ? pendingEvents
-    : await createEventsForRecipients(campaign, template.body, recipients);
+  if (!pendingEvents.length && recipients.length) {
+    pendingEvents = await createEventsForRecipients(campaign, recipients, brandId);
+  }
 
-  let sent = 0, failed = 0;
+  const needsConsent = channelRequiresConsent(campaign.channel);
+  const customerIds = pendingEvents.map(e => e.customerId).filter((id): id is number => id != null);
+  const consentMap = needsConsent ? await loadConsentsForCustomers(customerIds) : new Map();
 
-  for (const event of toProcess) {
-    if (event.status !== "pending" && event.status !== "queued") continue;
+  let queued = 0, failed = 0, consentBlocked = 0;
 
+  for (const event of pendingEvents) {
     const recipient: RecipientContext = {
       customerId: event.customerId,
       leadId: event.leadId,
@@ -113,60 +178,74 @@ export async function processCampaignBatch(campaignId: number, batchSize = 50) {
       amountDue: (event.metadata as Record<string, string>)?.amountDue,
     };
 
+    if (needsConsent && recipient.customerId) {
+      const consent = consentMap.get(recipient.customerId);
+      if (!hasConsentForChannel(consent, campaign.channel)) {
+        await markConsentBlocked(event.id, campaign.channel);
+        consentBlocked++;
+        continue;
+      }
+    }
+
     try {
-      const ok = await sendToRecipient(campaign, template, recipient, event.id);
-      if (ok) sent++; else failed++;
+      const ok = await queueRecipientSend(
+        campaign,
+        { ...template, id: template.id, headerId: template.headerId },
+        recipient,
+        event.id,
+        brandId,
+        consentMap.get(recipient.customerId!),
+      );
+      if (ok) queued++; else failed++;
     } catch (err) {
       failed++;
-      const retryCount = event.retryCount + 1;
       await db.update(commEventsTable).set({
-        status: retryCount >= MAX_RETRIES ? "failed" : "pending",
-        retryCount,
-        errorMessage: err instanceof Error ? err.message : "Send failed",
+        status: "failed",
+        errorMessage: err instanceof Error ? err.message : "Queue failed",
       }).where(eq(commEventsTable.id, event.id));
-      logger.error({ err, eventId: event.id }, "Campaign send error");
+      logger.error({ err, eventId: event.id }, "Campaign queue error");
     }
   }
 
-  const remaining = await db.select({ id: commEventsTable.id }).from(commEventsTable)
-    .where(eq(commEventsTable.campaignId, campaignId));
+  await processQueueJobs(BATCH_SIZE);
 
-  const allEvents = await db.select().from(commEventsTable)
-    .where(eq(commEventsTable.campaignId, campaignId));
+  const remainingRows = await db.select({ id: commEventsTable.id }).from(commEventsTable)
+    .where(and(
+      eq(commEventsTable.campaignId, campaignId),
+      inArray(commEventsTable.status, ["pending", "queued", "processing", "retrying"]),
+    ))
+    .limit(1);
 
-  const stats = {
-    sent: allEvents.filter(e => ["sent", "delivered", "read"].includes(e.status)).length,
-    failed: allEvents.filter(e => e.status === "failed").length,
-    delivered: allEvents.filter(e => e.deliveredAt).length,
-    read: allEvents.filter(e => e.readAt).length,
-    clicked: allEvents.filter(e => e.clickedAt).length,
-    converted: allEvents.filter(e => e.convertedAt).length,
-    revenue: allEvents.reduce((sum, e) => sum + Number(e.revenue ?? 0), 0),
-  };
+  const allDone = remainingRows.length === 0 && pendingEvents.length < batchSize;
 
-  const allDone = allEvents.every(e => !["pending", "queued"].includes(e.status));
+  await processCampaignAttribution(campaignId);
+  const stats = await refreshCampaignStats(campaignId);
+
   if (allDone) {
     await db.update(commCampaignsTable).set({
-      status: stats.failed === allEvents.length ? "failed" : "sent",
+      status: (stats?.failed ?? 0) === (stats?.sent ?? 0) + (stats?.failed ?? 0) && (stats?.sent ?? 0) === 0 ? "failed" : "sent",
       sentAt: new Date(),
-      stats,
+      stats: { ...stats, consentBlocked: (stats?.consentBlocked ?? 0) + consentBlocked },
     }).where(eq(commCampaignsTable.id, campaignId));
   } else {
-    await db.update(commCampaignsTable).set({ stats }).where(eq(commCampaignsTable.id, campaignId));
+    await db.update(commCampaignsTable).set({
+      stats: { ...stats, consentBlocked: (stats?.consentBlocked ?? 0) + consentBlocked },
+    }).where(eq(commCampaignsTable.id, campaignId));
   }
 
-  return { sent, failed, remaining: remaining.length, stats, done: allDone };
+  return { sent: queued, failed, consentBlocked, stats, done: allDone };
 }
 
 async function createEventsForRecipients(
   campaign: CommCampaign,
-  _body: string,
   recipients: RecipientContext[],
+  brandId: number | null,
 ) {
   if (!recipients.length) return [];
 
   const events = await db.insert(commEventsTable).values(
     recipients.map(r => ({
+      brandId,
       campaignId: campaign.id,
       customerId: r.customerId ?? null,
       leadId: r.leadId ?? null,
@@ -201,10 +280,23 @@ export async function launchCampaign(campaignId: number, userId?: number) {
     resourceId: campaignId,
     userId,
     companyId: campaign.companyId,
+    brandId: campaign.brandId,
     payload: { campaignId },
   });
 
-  return processCampaignBatch(campaignId, 100);
+  let done = false;
+  let aggregate = { sent: 0, failed: 0, consentBlocked: 0 };
+
+  while (!done) {
+    const result = await processCampaignBatch(campaignId, BATCH_SIZE);
+    aggregate.sent += result.sent;
+    aggregate.failed += result.failed;
+    aggregate.consentBlocked += result.consentBlocked;
+    done = result.done ?? true;
+    if (result.sent === 0 && result.failed === 0 && result.consentBlocked === 0) break;
+  }
+
+  return { ...aggregate, stats: (await refreshCampaignStats(campaignId)) };
 }
 
 export async function previewCampaign(
@@ -213,4 +305,32 @@ export async function previewCampaign(
 ): Promise<{ body: string; subject?: string }> {
   const vars = contextToVars(recipient);
   return { body: renderTemplate(templateBody, vars) };
+}
+
+export async function testWhatsAppSend(params: {
+  phone: string;
+  templateBody: string;
+  templateName?: string;
+  companyId?: number | null;
+  recipient?: RecipientContext;
+}) {
+  const vars = contextToVars(params.recipient ?? {
+    customerName: "Test User",
+    vehicleNumber: "MH12AB1234",
+    amountDue: "1500",
+    nextServiceDate: new Date().toISOString().slice(0, 10),
+  });
+  const message = renderTemplate(params.templateBody, vars);
+
+  const result = await sendViaChannel("whatsapp", {
+    phone: params.phone,
+    message,
+    whatsappTemplateName: params.templateName,
+    whatsappTemplateLanguage: "en",
+    whatsappVariables: vars,
+    whatsappMessageType: params.templateName ? "template" : "text",
+    companyId: params.companyId,
+  });
+
+  return { ...result, renderedMessage: message, variables: vars };
 }

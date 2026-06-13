@@ -17,9 +17,10 @@ import {
 } from "../api";
 import {
   MessageSquare, Send, Users, Zap, BarChart3, Shield, Server,
-  Plus, Play, Clock, CheckCircle2, XCircle, Eye, Radio,
+  Plus, Play, Clock, CheckCircle2, XCircle, Eye, Radio, Target, Ban, IndianRupee,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
+import CampaignDetailDialog from "../components/CampaignDetailDialog";
 
 const CHANNELS = [
   { id: "sms", label: "SMS" },
@@ -61,6 +62,7 @@ export default function CommunicationCenter() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
+  const [detailCampaignId, setDetailCampaignId] = useState<number | null>(null);
 
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
     queryKey: ["comm-analytics"],
@@ -76,6 +78,11 @@ export default function CommunicationCenter() {
   const { data: filterOptions } = useQuery({ queryKey: ["comm-filters"], queryFn: commApi.getAudienceFilters });
   const { data: triggers } = useQuery({ queryKey: ["comm-triggers"], queryFn: commApi.getAutomationTriggers });
   const { data: variables } = useQuery({ queryKey: ["comm-vars"], queryFn: commApi.getTemplateVariables });
+  const { data: brands } = useQuery({ queryKey: ["comm-brands"], queryFn: commApi.getBrands });
+  const { data: workflows } = useQuery({ queryKey: ["comm-workflows"], queryFn: () => commApi.getWorkflows() });
+  const { data: emailTemplates } = useQuery({ queryKey: ["comm-email-templates"], queryFn: () => commApi.getEmailTemplates() });
+  const { data: waTemplates } = useQuery({ queryKey: ["comm-wa-templates"], queryFn: () => commApi.getWhatsappTemplates() });
+  const { data: queueStats } = useQuery({ queryKey: ["comm-queue-stats"], queryFn: commApi.getQueueStats });
 
   return (
     <AdminLayout>
@@ -106,47 +113,112 @@ export default function CommunicationCenter() {
             <TabsTrigger value="dlt" className="gap-1.5"><Shield size={14} />DLT</TabsTrigger>
             <TabsTrigger value="providers" className="gap-1.5"><Server size={14} />Providers</TabsTrigger>
             <TabsTrigger value="automations" className="gap-1.5"><Zap size={14} />Automations</TabsTrigger>
+            <TabsTrigger value="brands" className="gap-1.5"><Shield size={14} />Brands</TabsTrigger>
+            <TabsTrigger value="workflows" className="gap-1.5"><Zap size={14} />Workflows</TabsTrigger>
+            <TabsTrigger value="email-wa" className="gap-1.5"><MessageSquare size={14} />Email & WA</TabsTrigger>
           </TabsList>
 
           {/* ── Overview / Analytics ── */}
           <TabsContent value="overview" className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-              {analyticsLoading ? Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {analyticsLoading ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />) : (
                 <>
-                  <StatCard label="Sent" value={analytics?.sent ?? 0} icon={Send} />
-                  <StatCard label="Delivered" value={analytics?.delivered ?? 0} icon={CheckCircle2} />
-                  <StatCard label="Read" value={analytics?.read ?? 0} icon={Eye} />
-                  <StatCard label="Failed" value={analytics?.failed ?? 0} icon={XCircle} />
-                  <StatCard label="Clicked" value={analytics?.clicked ?? 0} icon={Eye} />
-                  <StatCard label="Converted" value={analytics?.converted ?? 0} icon={CheckCircle2} />
-                  <StatCard label="Revenue" value={`₹${(analytics?.revenue ?? 0).toLocaleString("en-IN")}`} icon={BarChart3} />
+                  <StatCard label="Total Campaigns" value={analytics?.totalCampaigns ?? 0} icon={Target} />
+                  <StatCard label="Messages Sent" value={analytics?.sent ?? 0} icon={Send} />
+                  <StatCard label="Revenue Generated" value={`₹${(analytics?.revenue ?? 0).toLocaleString("en-IN")}`} icon={IndianRupee} />
+                  <StatCard label="ROI" value={analytics?.roi ? `${analytics.roi}x` : "—"} icon={BarChart3} />
+                  <StatCard label="Consent Rate" value={`${analytics?.consentRate ?? 0}%`} icon={CheckCircle2} />
+                  <StatCard label="Active Automations" value={analytics?.activeAutomations ?? 0} icon={Zap} />
                 </>
               )}
             </div>
 
-            <Card>
-              <CardHeader><CardTitle className="text-sm">Daily Send Trend (30 days)</CardTitle></CardHeader>
-              <CardContent>
-                {analyticsLoading ? <Skeleton className="h-48" /> : (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={analytics?.dailyTrend ?? []}>
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="sent" fill="hsl(180,100%,40%)" name="Sent" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="failed" fill="hsl(0,84%,60%)" name="Failed" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {!analyticsLoading && (
+                <>
+                  <StatCard label="Consent Blocked" value={analytics?.consentBlocked ?? 0} icon={Ban} />
+                  <StatCard label="Delivered" value={analytics?.delivered ?? 0} icon={CheckCircle2} />
+                  <StatCard label="Failed" value={analytics?.failed ?? 0} icon={XCircle} />
+                  <StatCard label="Queue Retrying" value={queueStats?.retrying ?? 0} icon={Clock} />
+                  <StatCard label="Dead Letter" value={queueStats?.deadLetter ?? 0} icon={Ban} />
+                  <StatCard label="Converted" value={analytics?.converted ?? 0} icon={Eye} />
+                </>
+              )}
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Daily Messages</CardTitle></CardHeader>
+                <CardContent>
+                  {analyticsLoading ? <Skeleton className="h-48" /> : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={analytics?.dailyTrend ?? []}>
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Bar dataKey="sent" fill="hsl(180,100%,40%)" name="Sent" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="failed" fill="hsl(0,84%,60%)" name="Failed" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Daily Revenue</CardTitle></CardHeader>
+                <CardContent>
+                  {analyticsLoading ? <Skeleton className="h-48" /> : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={analytics?.dailyTrend ?? []}>
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(v: number) => `₹${v.toLocaleString("en-IN")}`} />
+                        <Line type="monotone" dataKey="revenue" stroke="hsl(180,100%,40%)" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Channel Performance</CardTitle></CardHeader>
+                <CardContent>
+                  {analyticsLoading ? <Skeleton className="h-40" /> : (
+                    <ResponsiveContainer width="100%" height={180}>
+                      <BarChart data={analytics?.channelPerformance ?? []} layout="vertical">
+                        <XAxis type="number" tick={{ fontSize: 10 }} />
+                        <YAxis type="category" dataKey="channel" width={70} tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="sent" fill="hsl(180,100%,40%)" name="Sent" />
+                        <Bar dataKey="failed" fill="hsl(0,84%,60%)" name="Failed" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Campaign ROI</CardTitle></CardHeader>
+                <CardContent className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {(analytics?.campaignRoi ?? []).slice(0, 8).map(c => (
+                    <div key={c.campaignId} className="flex justify-between text-sm p-2 rounded border">
+                      <span className="truncate mr-2">{c.name}</span>
+                      <span className="font-medium shrink-0">{c.roi > 0 ? `${c.roi}x` : `₹${c.revenue.toLocaleString("en-IN")}`}</span>
+                    </div>
+                  ))}
+                  {!analytics?.campaignRoi?.length && <p className="text-sm text-muted-foreground text-center py-6">No ROI data yet</p>}
+                </CardContent>
+              </Card>
+            </div>
 
             <div className="grid md:grid-cols-2 gap-4">
               <Card>
                 <CardHeader><CardTitle className="text-sm">Recent Campaigns</CardTitle></CardHeader>
                 <CardContent className="space-y-2">
                   {(campaigns ?? []).slice(0, 5).map(c => (
-                    <div key={c.id} className="flex items-center justify-between p-2 rounded-lg border">
+                    <div key={c.id} className="flex items-center justify-between p-2 rounded-lg border cursor-pointer hover:bg-muted/50"
+                      onClick={() => setDetailCampaignId(c.id)}>
                       <div>
                         <p className="text-sm font-medium">{c.name}</p>
                         <p className="text-xs text-muted-foreground">{c.channel.toUpperCase()} · {c.stats?.sent ?? 0} sent</p>
@@ -182,6 +254,7 @@ export default function CommunicationCenter() {
               audiences={audiences ?? []}
               campaigns={campaigns ?? []}
               onRefresh={() => { refetchCampaigns(); qc.invalidateQueries({ queryKey: ["comm-analytics"] }); }}
+              onViewDetail={setDetailCampaignId}
               toast={toast}
             />
           </TabsContent>
@@ -216,7 +289,79 @@ export default function CommunicationCenter() {
               qc={qc}
             />
           </TabsContent>
+
+          <TabsContent value="brands" className="mt-4 space-y-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Multi-Brand Registry</CardTitle>
+                <CardDescription>CWP Detailers, Kleansolar, DCC, BidWar — isolated communication per brand</CardDescription>
+              </CardHeader>
+              <CardContent className="grid md:grid-cols-2 gap-3">
+                {(brands ?? []).map(b => (
+                  <div key={b.id} className="p-4 border rounded-lg flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ background: b.primaryColor ?? "#666" }} />
+                    <div>
+                      <p className="font-medium">{b.name}</p>
+                      <p className="text-xs text-muted-foreground">{b.code} · {b.status}</p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="workflows" className="mt-4 space-y-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Visual Workflows</CardTitle>
+                <CardDescription>Multi-step automations: SMS → Wait → WhatsApp → Email → Task</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {(workflows ?? []).map(w => (
+                  <div key={w.id} className="p-4 border rounded-lg flex justify-between">
+                    <div>
+                      <p className="font-medium">{w.name}</p>
+                      <p className="text-xs text-muted-foreground">{w.trigger.replace(/_/g, " ")} · Brand #{w.brandId}</p>
+                    </div>
+                    <Badge variant={w.isActive ? "default" : "secondary"}>{w.isActive ? "Active" : "Paused"}</Badge>
+                  </div>
+                ))}
+                {!workflows?.length && <p className="text-sm text-muted-foreground">No workflows yet. Create via API or builder.</p>}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="email-wa" className="mt-4 grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Email Templates</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {(emailTemplates ?? []).map(t => (
+                  <div key={t.id} className="p-3 border rounded-lg">
+                    <p className="font-medium text-sm">{t.name}</p>
+                    <p className="text-xs text-muted-foreground">{t.emailType} · {t.subject}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-sm">WhatsApp Templates (Meta)</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {(waTemplates ?? []).map(t => (
+                  <div key={t.id} className="p-3 border rounded-lg">
+                    <p className="font-medium text-sm">{t.metaTemplateName}</p>
+                    <p className="text-xs text-muted-foreground">{t.category} · {t.bodyPreview.slice(0, 80)}…</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+        <CampaignDetailDialog
+          campaignId={detailCampaignId}
+          open={detailCampaignId != null}
+          onOpenChange={(open) => { if (!open) setDetailCampaignId(null); }}
+        />
       </div>
     </AdminLayout>
   );
@@ -225,16 +370,17 @@ export default function CommunicationCenter() {
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
 function CampaignBuilder({
-  templates, audiences, campaigns, onRefresh, toast,
+  templates, audiences, campaigns, onRefresh, onViewDetail, toast,
 }: {
   templates: CommTemplate[];
   audiences: Array<{ id: number; name: string; estimatedCount?: number }>;
   campaigns: CommCampaign[];
   onRefresh: () => void;
+  onViewDetail: (id: number) => void;
   toast: ReturnType<typeof useToast>["toast"];
 }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", channel: "sms", audienceId: "", templateId: "", schedule: "" });
+  const [form, setForm] = useState({ name: "", channel: "sms", audienceId: "", templateId: "", schedule: "", testPhone: "" });
   const [preview, setPreview] = useState("");
 
   const createMut = useMutation({
@@ -261,6 +407,20 @@ function CampaignBuilder({
   });
 
   const selectedTemplate = templates.find(t => String(t.id) === form.templateId);
+
+  const testWaMut = useMutation({
+    mutationFn: () => commApi.testWhatsApp({
+      phone: form.testPhone,
+      templateBody: selectedTemplate!.body,
+      templateName: selectedTemplate!.dltTemplateId ?? selectedTemplate!.name,
+    }),
+    onSuccess: (r) => toast({
+      title: r.success ? "WhatsApp test sent" : "Test failed",
+      description: r.success ? r.renderedMessage : r.error,
+      variant: r.success ? "default" : "destructive",
+    }),
+    onError: (e: Error) => toast({ title: "Test failed", description: e.message, variant: "destructive" }),
+  });
 
   return (
     <div className="space-y-4">
@@ -311,6 +471,17 @@ function CampaignBuilder({
                   <div className="p-3 rounded-lg bg-muted text-sm">{preview || selectedTemplate.body}</div>
                 </div>
               )}
+              {form.channel === "whatsapp" && selectedTemplate && (
+                <div className="space-y-2 pt-2 border-t">
+                  <Label>Test WhatsApp Send</Label>
+                  <div className="flex gap-2">
+                    <Input placeholder="Phone (10 digits)" value={form.testPhone}
+                      onChange={e => setForm(f => ({ ...f, testPhone: e.target.value }))} />
+                    <Button variant="outline" onClick={() => testWaMut.mutate()}
+                      disabled={!form.testPhone || testWaMut.isPending}>Test</Button>
+                  </div>
+                </div>
+              )}
               <div>
                 <Label>Schedule (optional)</Label>
                 <Input type="datetime-local" value={form.schedule} onChange={e => setForm(f => ({ ...f, schedule: e.target.value }))} className="mt-1" />
@@ -336,6 +507,7 @@ function CampaignBuilder({
               </div>
               <div className="flex items-center gap-2">
                 <Badge className={STATUS_COLORS[c.status] ?? ""}>{c.status}</Badge>
+                <Button size="sm" variant="outline" onClick={() => onViewDetail(c.id)}><Eye size={14} /></Button>
                 {(c.status === "draft" || c.status === "scheduled") && (
                   <Button size="sm" onClick={() => sendMut.mutate(c.id)} disabled={sendMut.isPending}>
                     <Play size={14} className="mr-1" />Send Now
@@ -359,12 +531,32 @@ function AudienceBuilder({
   toast: ReturnType<typeof useToast>["toast"];
   qc: ReturnType<typeof useQueryClient>;
 }) {
+  const [audienceTab, setAudienceTab] = useState<"filters" | "segments">("filters");
   const [name, setName] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [selectedSegment, setSelectedSegment] = useState<string>("");
   const [operator, setOperator] = useState<"AND" | "OR">("AND");
   const [previewCount, setPreviewCount] = useState<number | null>(null);
 
+  const { data: smartSegments } = useQuery({
+    queryKey: ["comm-smart-segments"],
+    queryFn: commApi.getSmartSegments,
+  });
+
   const buildFilterDef = (): AudienceFilterNode => {
+    if (audienceTab === "segments" && selectedSegment) {
+      if (selectedFilters.length) {
+        return {
+          type: "group",
+          operator,
+          children: [
+            { type: "smart_segment", segmentKey: selectedSegment },
+            ...selectedFilters.map(f => ({ type: "filter" as const, filter: f })),
+          ],
+        };
+      }
+      return { type: "smart_segment", segmentKey: selectedSegment };
+    }
     if (selectedFilters.length === 1) return { type: "filter", filter: selectedFilters[0]! };
     return {
       type: "group",
@@ -374,7 +566,12 @@ function AudienceBuilder({
   };
 
   const previewMut = useMutation({
-    mutationFn: () => commApi.previewAudience(buildFilterDef()),
+    mutationFn: () => {
+      if (audienceTab === "segments" && selectedSegment && !selectedFilters.length) {
+        return commApi.previewSmartSegment(selectedSegment);
+      }
+      return commApi.previewAudience(buildFilterDef());
+    },
     onSuccess: (r) => setPreviewCount(r.count),
     onError: (e: Error) => toast({ title: "Preview failed", description: e.message, variant: "destructive" }),
   });
@@ -383,7 +580,7 @@ function AudienceBuilder({
     mutationFn: () => commApi.createAudience({ name, filterDefinition: buildFilterDef() }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["comm-audiences"] });
-      setName(""); setSelectedFilters([]); setPreviewCount(null);
+      setName(""); setSelectedFilters([]); setSelectedSegment(""); setPreviewCount(null);
       toast({ title: "Audience saved" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -399,18 +596,33 @@ function AudienceBuilder({
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Build Audience</CardTitle>
-          <CardDescription>Combine filters with AND/OR conditions</CardDescription>
+          <CardDescription>Use filters or smart segments with AND/OR</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div><Label>Name</Label><Input value={name} onChange={e => setName(e.target.value)} className="mt-1" placeholder="e.g. Payment Due — Mumbai" /></div>
-          <div>
-            <Label>Combine with</Label>
-            <Select value={operator} onValueChange={v => setOperator(v as "AND" | "OR")}>
-              <SelectTrigger className="mt-1 w-32"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="AND">AND</SelectItem><SelectItem value="OR">OR</SelectItem></SelectContent>
-            </Select>
-          </div>
-          {Object.entries(grouped).map(([group, filters]) => (
+          <Tabs value={audienceTab} onValueChange={v => setAudienceTab(v as "filters" | "segments")}>
+            <TabsList className="w-full">
+              <TabsTrigger value="filters" className="flex-1">Custom Filters</TabsTrigger>
+              <TabsTrigger value="segments" className="flex-1">Smart Segments</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div><Label>Name</Label><Input value={name} onChange={e => setName(e.target.value)} className="mt-1" placeholder="e.g. High value — no visit 30d" /></div>
+
+          {audienceTab === "segments" && (
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {(smartSegments ?? []).map(seg => (
+                <div key={seg.segmentKey}
+                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedSegment === seg.segmentKey ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+                  onClick={() => setSelectedSegment(seg.segmentKey)}>
+                  <p className="text-sm font-medium">{seg.name}</p>
+                  <p className="text-xs text-muted-foreground">{seg.description}</p>
+                  {seg.isSystem && <Badge variant="outline" className="text-[10px] mt-1">System</Badge>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {audienceTab === "filters" && Object.entries(grouped).map(([group, filters]) => (
             <div key={group}>
               <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">{group}</p>
               <div className="flex flex-wrap gap-2">
@@ -429,14 +641,34 @@ function AudienceBuilder({
               </div>
             </div>
           ))}
+
+          {audienceTab === "segments" && selectedSegment && (
+            <div>
+              <Label className="text-xs">Combine segment with filters (optional)</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {filterOptions.slice(0, 8).map(f => (
+                  <Badge key={f.id} variant={selectedFilters.includes(f.id) ? "default" : "outline"}
+                    className="cursor-pointer text-xs"
+                    onClick={() => setSelectedFilters(prev =>
+                      prev.includes(f.id) ? prev.filter(x => x !== f.id) : [...prev, f.id],
+                    )}>
+                    {f.label}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
           {previewCount !== null && (
             <p className="text-sm font-medium text-primary">{previewCount.toLocaleString("en-IN")} recipients match</p>
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => previewMut.mutate()} disabled={!selectedFilters.length || previewMut.isPending}>
+            <Button variant="outline" onClick={() => previewMut.mutate()}
+              disabled={(audienceTab === "filters" ? !selectedFilters.length : !selectedSegment) || previewMut.isPending}>
               <Eye size={14} className="mr-1" />Preview Count
             </Button>
-            <Button onClick={() => createMut.mutate()} disabled={!name || !selectedFilters.length || createMut.isPending}>
+            <Button onClick={() => createMut.mutate()} disabled={!name || createMut.isPending
+              || (audienceTab === "filters" ? !selectedFilters.length : !selectedSegment)}>
               Save Audience
             </Button>
           </div>

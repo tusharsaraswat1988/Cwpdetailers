@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useListServices } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { Sun, Car, Shield, Sparkles, ChevronRight, MapPin, Phone, Star, Zap, Droplets, Check } from "lucide-react";
 
 const serviceIcons: Record<string, React.ElementType> = {
@@ -108,7 +109,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Nav */}
-      <header className="sticky top-0 z-40 bg-secondary/95 backdrop-blur border-b border-white/5">
+      <header className="sticky top-0 z-40 bg-secondary/95 backdrop-blur border-b border-white/5 safe-area-top">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
@@ -135,6 +136,14 @@ export default function Landing() {
           </div>
         </div>
       </header>
+
+      <div className="max-w-7xl mx-auto px-2 pt-2">
+        <PwaInstallBanner
+          portalKey="main"
+          title="Install CWP"
+          description="Add CWP to your home screen for quick access to services and your account."
+        />
+      </div>
 
       {/* Hero */}
       <section className="relative bg-secondary overflow-hidden">

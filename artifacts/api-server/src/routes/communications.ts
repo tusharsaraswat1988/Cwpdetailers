@@ -8,11 +8,14 @@ import {
 import { eq, and, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp } from "../middlewares/tenantScope";
 import { countAudience, resolveAudience } from "../lib/communications/audienceBuilder";
-import { launchCampaign, previewCampaign } from "../lib/communications/campaignEngine";
-import { getCommAnalytics } from "../lib/communications/analytics";
+import { launchCampaign, previewCampaign, testWhatsAppSend } from "../lib/communications/campaignEngine";
+import { getCommAnalytics, getDashboardAnalytics } from "../lib/communications/analytics";
 import { enqueueCommJob, processCommJobs } from "../lib/communications/jobProcessor";
 import { logCommAudit } from "../lib/communications/audit";
 import { extractVariables, TEMPLATE_VARIABLES } from "../lib/communications/templateEngine";
+import { getCustomerConsent, upsertCustomerConsent } from "../lib/communications/consentService";
+import { listSmartSegments, createCustomSmartSegment } from "../lib/communications/smartSegments";
+import { getCampaignAttributionDetail, processCampaignAttribution } from "../lib/communications/attributionService";
 import type { AudienceFilterNode } from "@workspace/db";
 
 const router = Router();
@@ -240,6 +243,9 @@ router.get("/communications/audience-filters", (_req, res) => {
     { id: "cwp_customers", label: "CWP Customers", group: "segments" },
     { id: "dcc_customers", label: "DCC Customers", group: "segments" },
     { id: "solar_customers", label: "Solar Customers", group: "segments" },
+    { id: "bidwar_customers", label: "BidWar Customers", group: "segments" },
+    { id: "revenue_above", label: "Revenue Above X", group: "customers", params: [{ key: "minRevenue", type: "number", default: 10000 }] },
+    { id: "last_visit_between", label: "Last Visit Between Dates", group: "customers", params: [{ key: "fromDate", type: "date", default: "" }, { key: "toDate", type: "date", default: "" }] },
     { id: "lost_leads", label: "Lost Leads", group: "leads" },
     { id: "open_leads", label: "Open Leads", group: "leads" },
     { id: "hot_leads", label: "Hot Leads", group: "leads" },
@@ -422,7 +428,180 @@ router.get("/communications/audit-logs", async (req, res) => {
 router.post("/communications/jobs/process", async (req, res) => {
   try {
     const results = await processCommJobs(20);
+    await processCampaignAttribution();
     return res.json({ processed: results.length, results });
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Consent Management ─────────────────────────────────────────────────────
+
+router.get("/communications/consents/:customerId", async (req, res) => {
+  try {
+    const customerId = parseInt(req.params.customerId);
+    const consent = await getCustomerConsent(customerId);
+    return res.json(consent ?? {
+      customerId, smsConsent: false, whatsappConsent: false, emailConsent: false,
+      consentSource: "manual", consentDate: null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/communications/consents/:customerId", async (req, res) => {
+  try {
+    const customerId = parseInt(req.params.customerId);
+    const { smsConsent, whatsappConsent, emailConsent, consentSource, birthDate, anniversaryDate, notes } = req.body;
+    const consentIp = req.ip ?? req.headers["x-forwarded-for"]?.toString() ?? null;
+    const row = await upsertCustomerConsent(customerId, {
+      smsConsent, whatsappConsent, emailConsent,
+      consentSource: consentSource ?? "manual",
+      consentIp,
+      birthDate, anniversaryDate, notes,
+      companyId: req.scope?.companyId,
+    });
+    await logCommAudit({
+      action: "consent.update",
+      resource: "consent",
+      resourceId: row.id,
+      userId: req.user?.id,
+      companyId: row.companyId,
+      payload: { customerId, smsConsent, whatsappConsent, emailConsent },
+    });
+    return res.json(row);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Smart Segments ─────────────────────────────────────────────────────────
+
+router.get("/communications/smart-segments", async (req, res) => {
+  try {
+    const data = await listSmartSegments(req.scope?.companyId);
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/communications/smart-segments", async (req, res) => {
+  try {
+    const { name, description, segmentKey, configJson } = req.body;
+    if (!name || !segmentKey || !configJson) {
+      return res.status(400).json({ error: "name, segmentKey, configJson required" });
+    }
+    const row = await createCustomSmartSegment({
+      name, description, segmentKey, configJson,
+      companyId: req.scope?.companyId,
+    });
+    await logCommAudit({
+      action: "segment.create",
+      resource: "smart_segment",
+      resourceId: row.id,
+      userId: req.user?.id,
+      companyId: row.companyId,
+      payload: { segmentKey },
+    });
+    return res.status(201).json(row);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/communications/smart-segments/preview", async (req, res) => {
+  try {
+    const { segmentKey, combineWith } = req.body as {
+      segmentKey: string;
+      combineWith?: AudienceFilterNode;
+    };
+    if (!segmentKey) return res.status(400).json({ error: "segmentKey required" });
+    const scope = { companyId: req.scope?.companyId, branchId: req.scope?.branchIds?.[0] };
+    let filterDef: AudienceFilterNode = { type: "smart_segment", segmentKey };
+    if (combineWith) {
+      filterDef = { type: "group", operator: "AND", children: [filterDef, combineWith] };
+    }
+    const count = await countAudience(filterDef, scope);
+    const { customers, leads } = await resolveAudience(filterDef, scope, 5);
+    return res.json({ count, sample: [...customers.slice(0, 5), ...leads.slice(0, 5)] });
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Campaign Detail & Attribution ──────────────────────────────────────────
+
+router.get("/communications/campaigns/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [campaign] = await db.select().from(commCampaignsTable).where(eq(commCampaignsTable.id, id)).limit(1);
+    if (!campaign) return res.status(404).json({ error: "Not found" });
+    const attribution = await getCampaignAttributionDetail(id);
+    const cost = Number(campaign.costAmount ?? 0);
+    const revenue = attribution.summary.revenue;
+    return res.json({
+      ...campaign,
+      attribution,
+      roi: cost > 0 ? Math.round((revenue / cost) * 100) / 100 : null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/communications/campaigns/:id/attribution", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const data = await getCampaignAttributionDetail(id);
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/communications/campaigns/:id/attribution/process", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const result = await processCampaignAttribution(id);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── WhatsApp Test Send ─────────────────────────────────────────────────────
+
+router.post("/communications/whatsapp/test-send", async (req, res) => {
+  try {
+    const { phone, templateBody, templateName, recipient } = req.body;
+    if (!phone || !templateBody) return res.status(400).json({ error: "phone and templateBody required" });
+    const result = await testWhatsAppSend({
+      phone, templateBody, templateName,
+      companyId: req.scope?.companyId,
+      recipient,
+    });
+    await logCommAudit({
+      action: "whatsapp.test_send",
+      resource: "whatsapp",
+      userId: req.user?.id,
+      companyId: req.scope?.companyId,
+      payload: { phone, success: result.success },
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Dashboard Analytics ──────────────────────────────────────────────────────
+
+router.get("/communications/dashboard", async (req, res) => {
+  try {
+    const days = parseInt((req.query.days as string) ?? "30");
+    const data = await getDashboardAnalytics(req.scope?.companyId, days);
+    return res.json(data);
   } catch (err) {
     return res.status(500).json({ error: "Internal server error" });
   }

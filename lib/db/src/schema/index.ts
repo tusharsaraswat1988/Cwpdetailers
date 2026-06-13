@@ -24,3 +24,4 @@ export * from "./booking-events";
 export * from "./system-jobs";
 export * from "./wallet-transactions";
 export * from "./communications";
+export * from "./communications-phase2";

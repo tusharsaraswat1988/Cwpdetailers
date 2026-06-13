@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#00cccc" />
+    <title>Offline — CWP</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      :root {
+        color-scheme: light;
+        --primary: #00cccc;
+        --bg: #f5f6f8;
+        --text: #1a2332;
+        --muted: #64748b;
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+      }
+      .card {
+        max-width: 24rem;
+        width: 100%;
+        text-align: center;
+      }
+      .logo {
+        width: 4rem;
+        height: 4rem;
+        border-radius: 1rem;
+        background: var(--primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+      }
+      .logo svg { width: 2rem; height: 2rem; }
+      h1 {
+        font-family: Outfit, system-ui, sans-serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+      }
+      p {
+        color: var(--muted);
+        font-size: 0.9375rem;
+        line-height: 1.5;
+        margin-bottom: 1.5rem;
+      }
+      button {
+        appearance: none;
+        border: none;
+        background: var(--primary);
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.9375rem;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        min-width: 10rem;
+      }
+      button:active { opacity: 0.9; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="4"/>
+          <line x1="12" y1="2" x2="12" y2="5"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="5" y2="12"/>
+          <line x1="19" y1="12" x2="22" y2="12"/>
+        </svg>
+      </div>
+      <h1>Connection lost</h1>
+      <p>You're offline. Check your internet connection and try again. Live bookings, wallet, and billing require an active connection.</p>
+      <button type="button" onclick="window.location.reload()">Retry</button>
+    </div>
+  </body>
+</html>

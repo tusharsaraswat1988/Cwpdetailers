@@ -22,6 +22,7 @@ import expensesRouter from "./expenses";
 import billingRouter from "./billing";
 import walletRouter from "./wallet";
 import communicationsRouter from "./communications";
+import communicationsPhase2Router from "./communications-phase2";
 import { guardResource } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -117,8 +118,13 @@ router.use(
     { match: /\/campaigns\/preview$/, method: "POST", action: "view" },
     { match: /\/audiences\/preview$/, method: "POST", action: "view" },
     { match: /\/jobs\/process$/, method: "POST", action: "edit" },
+    { match: /\/whatsapp\/test-send$/, method: "POST", action: "create" },
+    { match: /\/consents\/\d+$/, method: "PUT", action: "edit" },
+    { match: /\/smart-segments\/preview$/, method: "POST", action: "view" },
+    { match: /\/campaigns\/\d+\/attribution/, method: "GET", action: "view" },
   ]),
   communicationsRouter,
+  communicationsPhase2Router,
 );
 
 router.use(storageRouter);

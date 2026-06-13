@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, IndianRupee, Wallet, Car } from "lucide-react";
 import { Link } from "wouter";
 import CommunicationTimeline from "@/features/communications/components/CommunicationTimeline";
+import CommunicationPreferences from "@/features/communications/components/CommunicationPreferences";
 
 type WalletTx = {
   id: number;
@@ -300,6 +301,15 @@ export default function AdminCustomerDetail() {
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Communication preferences</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CommunicationPreferences customerId={id} />
           </CardContent>
         </Card>
 

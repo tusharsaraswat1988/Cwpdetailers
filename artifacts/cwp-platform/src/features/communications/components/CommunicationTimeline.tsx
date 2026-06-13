@@ -28,15 +28,20 @@ export default function CommunicationTimeline({ customerId }: { customerId: numb
     <div className="space-y-2">
       {events.map(e => {
         const Icon = CHANNEL_ICONS[e.channel] ?? MessageSquare;
+        const timelineEvents = e.metadata?.timelineEvents ?? [];
+        const displayStatus = e.status === "consent_blocked" ? "consent blocked" : e.status;
         return (
           <div key={e.id} className="flex gap-3 p-3 rounded-lg border">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <Icon size={14} className="text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                 <Badge variant="outline" className="text-[10px]">{e.channel}</Badge>
-                <Badge variant={e.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">{e.status}</Badge>
+                <Badge variant={e.status === "failed" || e.status === "consent_blocked" ? "destructive" : "secondary"} className="text-[10px]">{displayStatus}</Badge>
+                {timelineEvents.map((te, i) => (
+                  <Badge key={i} variant="outline" className="text-[10px]">{te.type.replace(/_/g, " ")}</Badge>
+                ))}
                 <span className="text-[10px] text-muted-foreground ml-auto">
                   {new Date(e.sentAt ?? e.createdAt).toLocaleString("en-IN")}
                 </span>

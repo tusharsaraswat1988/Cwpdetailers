@@ -2,24 +2,42 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { AppShell, type BottomNavItem } from "@/components/app-shell";
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { Button } from "@/components/ui/button";
-import { Sun, LogOut, Bell, LayoutDashboard, Calendar, Car, History, AlertCircle } from "lucide-react";
+import { usePortalManifest } from "@/lib/pwa/usePortalManifest";
+import {
+  Sun, LogOut, Bell, LayoutDashboard, Calendar, CreditCard, IndianRupee, User,
+} from "lucide-react";
 
 const navItems: BottomNavItem[] = [
   { href: "/customer/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/customer/assets", label: "Services", icon: Car },
+  { href: "/customer/services", label: "Services", icon: CreditCard },
   { href: "/customer/bookings", label: "Book", icon: Calendar, fab: true },
-  { href: "/customer/history", label: "History", icon: History },
-  { href: "/customer/complaints", label: "Support", icon: AlertCircle },
+  { href: "/customer/wallet", label: "Wallet", icon: IndianRupee },
+  { href: "/customer/account", label: "Account", icon: User },
 ];
+
+const pageTitles: Record<string, string> = {
+  "/customer/dashboard": "Home",
+  "/customer/services": "Services",
+  "/customer/bookings": "Book",
+  "/customer/wallet": "Wallet",
+  "/customer/account": "Account",
+  "/customer/history": "History",
+  "/customer/invoices": "Invoices",
+  "/customer/assets": "My Assets",
+  "/customer/complaints": "Support",
+};
 
 export default function CustomerLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  usePortalManifest("/manifest-customer.json", "#00cccc");
 
-  const pageTitle = navItems.find(
-    (item) => location === item.href || location.startsWith(item.href + "/"),
-  )?.label;
+  const pageTitle =
+    pageTitles[location] ??
+    navItems.find(item => location === item.href || location.startsWith(item.href + "/"))?.label ??
+    "CWP";
 
   return (
     <AppShell
@@ -33,7 +51,7 @@ export default function CustomerLayout({ children }: { children: ReactNode }) {
             </div>
           </Link>
         ),
-        title: pageTitle ?? "CWP",
+        title: pageTitle,
         subtitle: user?.name,
         trailing: (
           <>
@@ -54,6 +72,11 @@ export default function CustomerLayout({ children }: { children: ReactNode }) {
       }}
       bottomNav={navItems}
     >
+      <PwaInstallBanner
+        portalKey="customer"
+        title="Install CWP app"
+        description="Add CWP to your home screen for quick access to bookings, wallet, and services."
+      />
       {children}
     </AppShell>
   );

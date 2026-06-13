@@ -3,6 +3,8 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type { SidebarRenderProps } from "./PanelShell";
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
+import { usePortalManifest } from "@/lib/pwa/usePortalManifest";
 import { LayoutDashboard, Calendar, CheckSquare, Clock, Award, LogOut, Sun } from "lucide-react";
 import PanelShell from "./PanelShell";
 
@@ -77,12 +79,19 @@ function StaffSidebar({ onNavigate, embedded = false, className }: SidebarRender
 }
 
 export default function StaffLayout({ children }: { children: ReactNode }) {
+  usePortalManifest("/manifest-staff.json", "#21252e");
+
   return (
     <PanelShell
       testId="staff-layout"
       mobileTitle="CWP Staff"
       sidebar={(props) => <StaffSidebar {...props} />}
     >
+      <PwaInstallBanner
+        portalKey="staff"
+        title="Install CWP Staff"
+        description="Install the staff app for faster schedule access and field operations on your device."
+      />
       {children}
     </PanelShell>
   );

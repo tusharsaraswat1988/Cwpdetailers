@@ -2,6 +2,7 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { OfflineScreen } from "@/components/pwa/OfflineScreen";
 import { AuthProvider, useAuth } from "@/lib/auth";
 
 import NotFound from "@/pages/not-found";
@@ -39,6 +40,9 @@ import MyAssets from "@/pages/customer/MyAssets";
 import CustomerHistory from "@/pages/customer/History";
 import CustomerInvoices from "@/pages/customer/Invoices";
 import CustomerComplaints from "@/pages/customer/Complaints";
+import CustomerWallet from "@/pages/customer/Wallet";
+import CustomerServices from "@/pages/customer/Services";
+import CustomerAccount from "@/pages/customer/Account";
 
 import StaffDashboard from "@/pages/staff/Dashboard";
 import StaffSchedule from "@/pages/staff/Schedule";
@@ -138,6 +142,9 @@ function Router() {
 
       {/* Customer */}
       <Route path="/customer/dashboard" component={() => <ProtectedRoute component={CustomerDashboard} roles={["customer"]} />} />
+      <Route path="/customer/wallet" component={() => <ProtectedRoute component={CustomerWallet} roles={["customer"]} />} />
+      <Route path="/customer/services" component={() => <ProtectedRoute component={CustomerServices} roles={["customer"]} />} />
+      <Route path="/customer/account" component={() => <ProtectedRoute component={CustomerAccount} roles={["customer"]} />} />
       <Route path="/customer/bookings" component={() => <ProtectedRoute component={BookService} roles={["customer"]} />} />
       <Route path="/customer/assets" component={() => <ProtectedRoute component={MyAssets} roles={["customer"]} />} />
       <Route path="/customer/history" component={() => <ProtectedRoute component={CustomerHistory} roles={["customer"]} />} />
@@ -179,6 +186,7 @@ function App() {
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />
           </WouterRouter>
+          <OfflineScreen />
           <Toaster />
         </TooltipProvider>
       </AuthProvider>
