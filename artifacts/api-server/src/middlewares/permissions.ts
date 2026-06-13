@@ -10,6 +10,45 @@ const METHOD_TO_ACTION: Record<string, string> = {
   DELETE: "delete",
 };
 
+/** Reserved first segment under /catalog/* — not city slugs for SEO pages. */
+const CATALOG_RESERVED_SEGMENTS = new Set([
+  "pricing", "packages", "addons", "homepage", "settings", "services",
+  "entitlements", "solar-slabs", "city-availability", "city-content",
+  "reminder-hooks", "self-booking", "addon-links", "package-entitlements",
+]);
+
+const CATALOG_PUBLIC_GET_PREFIXES = [
+  "/catalog/homepage",
+  "/catalog/packages",
+  "/catalog/addons",
+  "/catalog/pricing/quote",
+  "/catalog/settings",
+  "/catalog/self-booking/check",
+  "/catalog/city-content",
+  "/catalog/services/",
+];
+
+function emptyPublicScope(req: Request) {
+  req.scope = {
+    isSuperAdmin: false, companyId: null, branchIds: null,
+    franchiseeId: null, customerId: null, staffId: null,
+  };
+}
+
+function isPublicCatalogGet(path: string): boolean {
+  if (CATALOG_PUBLIC_GET_PREFIXES.some(p => path === p || path.startsWith(p))) return true;
+  const match = path.match(/^\/catalog\/([^/]+)\/([^/]+)$/);
+  if (match && !CATALOG_RESERVED_SEGMENTS.has(match[1]!)) return true;
+  return false;
+}
+
+function catalogResourceForPath(path: string): string {
+  if (path.startsWith("/catalog/pricing")) return "pricing";
+  if (path.startsWith("/catalog/packages")) return "packages";
+  if (path.startsWith("/catalog/addons") || path.startsWith("/catalog/addon-links")) return "addons";
+  return "catalog";
+}
+
 /**
  * Wraps a sub-router so every request first runs the matching permission check
  * for `resource`. Method → action mapping is conventional (GET=view, etc.).
@@ -45,7 +84,7 @@ export function mountGuarded(parent: Router, prefix: string, child: Router, reso
 }
 
 /**
- * Permission guard for master-data router paths (/masters/*, /catalog/*, /pricing/*, /saved-locations/*).
+ * Permission guard for master-data router paths (/masters/*, /pricing/*, legacy /catalog/*).
  */
 export function guardMasterDataRoutes() {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -53,25 +92,29 @@ export function guardMasterDataRoutes() {
     const method = req.method.toUpperCase();
     const action = METHOD_TO_ACTION[method] ?? "view";
 
-    // Public catalog + pricing quote for landing page (anonymous GET only)
-    if (method === "GET" && (path.startsWith("/catalog/") || path.startsWith("/pricing/"))) {
+    if (method === "GET" && path.startsWith("/pricing/")) {
       if (!req.user) {
-        req.scope = {
-          isSuperAdmin: false, companyId: null, branchIds: null,
-          franchiseeId: null, customerId: null, staffId: null,
-        };
+        emptyPublicScope(req);
         return next();
       }
-      return requirePermission("masters", "view")(req, res, next);
+      return requirePermission("pricing", "view")(req, res, next);
+    }
+
+    if (path.startsWith("/masters/")) {
+      return requirePermission("masters", action)(req, res, next);
+    }
+
+    if (path.startsWith("/catalog/services") || path.startsWith("/catalog/plans")) {
+      if (method === "GET" && !req.user) {
+        emptyPublicScope(req);
+        return next();
+      }
+      return requirePermission("catalog", action)(req, res, next);
     }
 
     if (path.startsWith("/saved-locations")) {
       const savedAction = method === "DELETE" ? "edit" : action;
       return requirePermission("customers", savedAction)(req, res, next);
-    }
-
-    if (path.startsWith("/masters/")) {
-      return requirePermission("masters", action)(req, res, next);
     }
 
     return next();
@@ -85,32 +128,14 @@ export function guardCatalogRoutes() {
     const method = req.method.toUpperCase();
     const action = METHOD_TO_ACTION[method] ?? "view";
 
-    const publicGetPaths = [
-      "/catalog/homepage",
-      "/catalog/packages",
-      "/catalog/addons",
-      "/catalog/pricing/quote",
-      "/catalog/settings",
-      "/catalog/self-booking/check",
-    ];
-    const isPublicCityRoute = method === "GET" && (
-      /^\/catalog\/[^/]+\/[^/]+$/.test(path) ||
-      /^\/catalog\/services\/[^/]+$/.test(path) ||
-      /^\/catalog\/city-content$/.test(path)
-    );
-
-    if (method === "GET" && (publicGetPaths.some(p => path === p || path.startsWith(p + "?")) || isPublicCityRoute)) {
-      if (!req.user) {
-        req.scope = {
-          isSuperAdmin: false, companyId: null, branchIds: null,
-          franchiseeId: null, customerId: null, staffId: null,
-        };
-        return next();
-      }
+    if (method === "GET" && isPublicCatalogGet(path)) {
+      if (!req.user) emptyPublicScope(req);
+      return next();
     }
 
     if (path.startsWith("/catalog/")) {
-      return requirePermission("services", action)(req, res, next);
+      const resource = catalogResourceForPath(path);
+      return requirePermission(resource, action)(req, res, next);
     }
 
     return next();

@@ -1,3 +1,4 @@
+import "./load-env.js";
 import { db, permissionsTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -6,7 +7,8 @@ type Action = "view" | "create" | "edit" | "delete" | "approve";
 
 const RESOURCES = [
   "customers", "leads", "staff", "bookings", "subscriptions", "invoices",
-  "complaints", "branches", "services", "masters", "analytics", "notifications",
+  "complaints", "branches", "services", "masters", "catalog", "pricing",
+  "packages", "addons", "analytics", "notifications",
   "franchisees", "churned", "inventory", "billing", "settings", "permissions",
   "communications",
 ] as const;
@@ -30,6 +32,10 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     branches: ["view"],
     services: ["view"],
     masters: ["view", "create", "edit"],
+    catalog: ["view", "create", "edit"],
+    pricing: ["view", "create", "edit"],
+    packages: ["view", "create", "edit"],
+    addons: ["view", "create", "edit"],
     analytics: ["view"],
     notifications: ["view", "create"],
     communications: ["view", "create", "edit"],

@@ -14,6 +14,28 @@ async function catalogFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type AdminService = {
+  id: number;
+  name: string;
+  slug?: string;
+  description?: string;
+  shortDescription?: string;
+  serviceCategoryId?: number;
+  category: string;
+  categoryName?: string;
+  categorySlug?: string;
+  basePrice: string;
+  gstRate?: string;
+  pricingType?: "inclusive" | "exclusive";
+  pricingModel?: "fixed" | "vehicle_matrix" | "solar_slab";
+  durationMinutes?: number;
+  isActive?: boolean;
+  status?: "active" | "disabled" | "archived";
+  imageUrl?: string;
+  features?: string[];
+  assignmentStrategy?: "manual" | "auto" | "round_robin";
+};
+
 export type CatalogPackage = {
   id: number; name: string; slug: string; price: string; validityDays: number;
   features?: string[]; tag?: string; isHighlighted: boolean; cityId?: number;
@@ -32,6 +54,38 @@ export type SolarSlab = {
 export type HomepageSection = {
   sectionKey: string; title?: string; subtitle?: string; content: Record<string, unknown>; isActive: boolean;
 };
+
+export function useAdminServices() {
+  return useQuery({
+    queryKey: ["admin", "services"],
+    queryFn: () => catalogFetch<AdminService[]>("/services?includeInactive=true"),
+  });
+}
+
+export function useServiceMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "services"] });
+    qc.invalidateQueries({ queryKey: ["catalog", "services"] });
+    qc.invalidateQueries({ queryKey: ["/services"] });
+  };
+  return {
+    create: useMutation({
+      mutationFn: (data: Record<string, unknown>) =>
+        catalogFetch<AdminService>("/services", { method: "POST", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: ({ id, ...data }: { id: number } & Record<string, unknown>) =>
+        catalogFetch<AdminService>(`/services/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: number) => catalogFetch(`/services/${id}`, { method: "DELETE" }),
+      onSuccess: invalidate,
+    }),
+  };
+}
 
 export function useCatalogPackages(citySlug?: string) {
   return useQuery({
@@ -74,6 +128,26 @@ export function useCityAvailability(serviceId?: number) {
     queryFn: () => catalogFetch<Array<{ id: number; serviceId: number; cityId: number; basePriceOverride?: string; isActive: boolean }>>(
       `/catalog/city-availability${serviceId ? `?serviceId=${serviceId}` : ""}`,
     ),
+  });
+}
+
+export function useCustomerEntitlements(customerId?: number) {
+  return useQuery({
+    queryKey: ["catalog", "entitlements", customerId],
+    queryFn: () => catalogFetch<Array<{
+      id: number; serviceId: number; remainingCredits: number; validUntil: string; status: string; entitlementType: string;
+    }>>(`/catalog/entitlements?customerId=${customerId}&status=active`),
+    enabled: customerId != null,
+  });
+}
+
+export function useSelfBookingCheck(customerId?: number, serviceId?: number, citySlug = "varanasi") {
+  return useQuery({
+    queryKey: ["catalog", "self-booking", customerId, serviceId, citySlug],
+    queryFn: () => catalogFetch<{ eligible: boolean; entitlementId?: number; remainingCredits?: number; reason?: string }>(
+      `/catalog/self-booking/check?customerId=${customerId}&serviceId=${serviceId}&citySlug=${citySlug}`,
+    ),
+    enabled: customerId != null && serviceId != null,
   });
 }
 

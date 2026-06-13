@@ -200,6 +200,7 @@ router.post("/bookings", async (req, res) => {
       customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId, branchId,
       scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng,
       placeId, savedLocationId, notes, amount, recurrenceRule,
+      entitlementId, addonIds, cityId, citySlug,
     } = req.body;
     if (!customerId || !scheduledDate || !serviceType) {
       return res.status(400).json({ error: "customerId, scheduledDate, and serviceType are required" });
@@ -246,6 +247,37 @@ router.post("/bookings", async (req, res) => {
 
     let resolvedAmount = amount?.toString();
     const resolvedBranchId = branchId ?? customer.branchId ?? undefined;
+    let resolvedEntitlementId: number | null = entitlementId ?? null;
+    let resolvedCityId: number | null = cityId ?? null;
+
+    if (serviceId && customerId && !resolvedEntitlementId) {
+      const { checkSelfBookingEligibility } = await import("../lib/catalog/entitlementEngine");
+      const { resolveCityId } = await import("../lib/catalog/pricingEngine");
+      const cid = resolvedCityId ?? (citySlug ? await resolveCityId(citySlug) : null);
+      const eligibility = await checkSelfBookingEligibility({
+        customerId, serviceId, cityId: cid,
+      });
+      if (eligibility.eligible && eligibility.entitlementId) {
+        resolvedEntitlementId = eligibility.entitlementId;
+      }
+    }
+
+    if (resolvedEntitlementId) {
+      const { customerEntitlementsTable } = await import("@workspace/db");
+      const { gt: gtOp } = await import("drizzle-orm");
+      const today = getTodayIST();
+      const [ent] = await db.select().from(customerEntitlementsTable)
+        .where(and(
+          eq(customerEntitlementsTable.id, resolvedEntitlementId),
+          eq(customerEntitlementsTable.customerId, customerId),
+          eq(customerEntitlementsTable.status, "active"),
+          gtOp(customerEntitlementsTable.remainingCredits, 0),
+        ))
+        .limit(1);
+      if (!ent || ent.validUntil < today) {
+        return res.status(400).json({ error: "Invalid or expired entitlement for this booking" });
+      }
+    }
 
     if (!resolvedAmount) {
       const panelCount = solarSiteId
@@ -254,8 +286,22 @@ router.post("/bookings", async (req, res) => {
         : undefined;
       const computed = await resolveBookingAmount({
         serviceId, vehicleId, solarSiteId, serviceType, panelCount,
+        cityId: resolvedCityId, citySlug,
       });
       if (computed != null) resolvedAmount = String(computed);
+    }
+
+    if (resolvedEntitlementId) {
+      resolvedAmount = "0";
+    }
+
+    if (Array.isArray(addonIds) && addonIds.length > 0) {
+      const { serviceAddonsTable } = await import("@workspace/db");
+      const { inArray } = await import("drizzle-orm");
+      const addons = await db.select().from(serviceAddonsTable)
+        .where(and(inArray(serviceAddonsTable.id, addonIds), eq(serviceAddonsTable.isActive, true)));
+      const addonTotal = addons.reduce((sum, a) => sum + parseFloat(a.basePrice), 0);
+      resolvedAmount = String(parseFloat(resolvedAmount ?? "0") + addonTotal);
     }
 
     const initialStatus = req.user?.role === "customer" ? "pending" as const : "scheduled" as const;
@@ -267,6 +313,9 @@ router.post("/bookings", async (req, res) => {
       placeId, savedLocationId, notes,
       amount: resolvedAmount,
       recurrenceRule,
+      entitlementId: resolvedEntitlementId,
+      addonIds: Array.isArray(addonIds) ? addonIds : [],
+      cityId: resolvedCityId,
       status: initialStatus,
     });
     const [booking] = await db.insert(bookingsTable).values(values as any).returning();

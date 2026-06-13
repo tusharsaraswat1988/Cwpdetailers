@@ -319,6 +319,22 @@ router.post("/catalog/reminder-hooks/refresh", async (_req, res) => {
   return res.json({ ok: true });
 });
 
+// ─── Pricing Quote (must be registered before /catalog/:citySlug/:serviceSlug) ─
+
+router.get("/catalog/pricing/quote", async (req, res) => {
+  const { serviceId, vehicleModelId, panelCount, cityId, citySlug } = req.query as Record<string, string>;
+  if (!serviceId) return res.status(400).json({ error: "serviceId is required" });
+  const pricing = await resolveCatalogPricing({
+    serviceId: parseInt(serviceId),
+    vehicleModelId: vehicleModelId ? parseInt(vehicleModelId) : undefined,
+    panelCount: panelCount ? parseInt(panelCount) : undefined,
+    cityId: cityId ? parseInt(cityId) : undefined,
+    citySlug,
+  });
+  if (!pricing) return res.status(404).json({ error: "Pricing not found" });
+  return res.json(pricing);
+});
+
 // ─── Enhanced Public Catalog ─────────────────────────────────────────────────
 
 router.get("/catalog/services/:citySlug", async (req, res) => {
@@ -382,20 +398,6 @@ router.get("/catalog/:citySlug/:serviceSlug", async (req, res) => {
     cityContent: cityContent ?? null,
     addons: addons.map(a => a.addon),
   });
-});
-
-router.get("/catalog/pricing/quote", async (req, res) => {
-  const { serviceId, vehicleModelId, panelCount, cityId, citySlug } = req.query as Record<string, string>;
-  if (!serviceId) return res.status(400).json({ error: "serviceId is required" });
-  const pricing = await resolveCatalogPricing({
-    serviceId: parseInt(serviceId),
-    vehicleModelId: vehicleModelId ? parseInt(vehicleModelId) : undefined,
-    panelCount: panelCount ? parseInt(panelCount) : undefined,
-    cityId: cityId ? parseInt(cityId) : undefined,
-    citySlug,
-  });
-  if (!pricing) return res.status(404).json({ error: "Pricing not found" });
-  return res.json(pricing);
 });
 
 export default router;

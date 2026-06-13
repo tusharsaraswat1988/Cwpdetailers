@@ -12,6 +12,9 @@ import {
   useCatalogServices, useSavedLocations, useCreateSavedLocation,
   usePricingQuote, type LocationValue,
 } from "@/features/master-data/api";
+import {
+  useCatalogAddons, useCatalogPricingQuote, useSelfBookingCheck,
+} from "@/features/service-catalog/api";
 import { LocationPicker } from "@/components/shared/LocationPicker";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Button } from "@/components/ui/button";
@@ -39,6 +42,7 @@ export default function BookService() {
   const { toast } = useToast();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
   const [success, setSuccess] = useState(false);
+  const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   const [bookingLocation, setBookingLocation] = useState<LocationValue | null>(null);
   const { value: form, setValue: setForm, clearDraft, restoredFromDraft } = useFormDraft(
     "customer-booking-form",
@@ -80,17 +84,37 @@ export default function BookService() {
   const needsVehicle = !isSolar && form.serviceCategorySlug !== "";
   const needsSolar = isSolar;
 
-  const { data: pricingQuote } = usePricingQuote(
+  const { data: pricingQuoteLegacy } = usePricingQuote(
     form.serviceId ? parseInt(form.serviceId) : undefined,
     (selectedVehicle as { vehicleModelId?: number })?.vehicleModelId,
   );
+  const { data: catalogQuote } = useCatalogPricingQuote({
+    serviceId: form.serviceId ? parseInt(form.serviceId) : undefined,
+    vehicleModelId: (selectedVehicle as { vehicleModelId?: number })?.vehicleModelId,
+    panelCount: selectedSolar?.panelCount,
+    citySlug: "varanasi",
+  });
+  const pricingQuote = catalogQuote ?? pricingQuoteLegacy;
+
+  const { data: serviceAddons } = useCatalogAddons(form.serviceId ? parseInt(form.serviceId) : undefined);
+  const { data: selfBooking } = useSelfBookingCheck(
+    customerId ?? undefined,
+    form.serviceId ? parseInt(form.serviceId) : undefined,
+  );
+
+  const addonTotal = (serviceAddons ?? [])
+    .filter(a => selectedAddonIds.includes(a.id))
+    .reduce((sum, a) => sum + Number(a.basePrice), 0);
 
   const estimatedPrice = useMemo(() => {
-    if (isSolar && selectedSolar) return computeSolarCleaningPrice(selectedSolar.panelCount);
-    if (pricingQuote) return pricingQuote.amount;
-    if (selectedService) return Number(selectedService.basePrice);
-    return null;
-  }, [isSolar, selectedSolar, pricingQuote, selectedService]);
+    if (selfBooking?.eligible) return addonTotal;
+    let base: number | null = null;
+    if (isSolar && selectedSolar) base = computeSolarCleaningPrice(selectedSolar.panelCount);
+    else if (pricingQuote) base = Number((pricingQuote as { amount?: number }).amount ?? 0);
+    else if (selectedService) base = Number(selectedService.basePrice);
+    if (base == null) return null;
+    return base + addonTotal;
+  }, [isSolar, selectedSolar, pricingQuote, selectedService, addonTotal, selfBooking?.eligible]);
 
   const hasVehicle = (vehicles ?? []).length > 0;
   const hasSolar = (solarSites ?? []).length > 0;
@@ -234,16 +258,47 @@ export default function BookService() {
             </div>
           )}
 
+          {selfBooking?.eligible && (
+            <div className="bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3 text-sm">
+              <p className="font-medium text-green-800">Package visit available</p>
+              <p className="text-muted-foreground">{selfBooking.remainingCredits} credits left · valid until {selfBooking.validUntil}</p>
+            </div>
+          )}
+
+          {(serviceAddons ?? []).length > 0 && (
+            <div>
+              <Label>Add-ons (optional)</Label>
+              <div className="mt-2 space-y-2">
+                {(serviceAddons ?? []).map(addon => (
+                  <label key={addon.id} className="flex items-center gap-2 text-sm border rounded-lg p-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedAddonIds.includes(addon.id)}
+                      onChange={e => setSelectedAddonIds(ids =>
+                        e.target.checked ? [...ids, addon.id] : ids.filter(x => x !== addon.id),
+                      )}
+                    />
+                    <span className="flex-1">{addon.name}</span>
+                    <span className="font-medium">₹{addon.basePrice}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           {estimatedPrice != null && (
             <div className="bg-muted/50 rounded-lg px-4 py-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Estimated price</span>
                 <span className="font-semibold text-primary" data-testid="estimated-price">₹{estimatedPrice.toLocaleString("en-IN")}</span>
               </div>
-              {pricingQuote?.vehicleCategory && (
+              {pricingQuote && (pricingQuote as { vehicleCategory?: string }).vehicleCategory && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Based on {pricingQuote.vehicleCategory} · {pricingQuote.seatCategory}
+                  Based on {(pricingQuote as { vehicleCategory?: string }).vehicleCategory} · {(pricingQuote as { seatCategory?: string }).seatCategory}
                 </p>
+              )}
+              {selfBooking?.eligible && (
+                <p className="text-xs text-green-700 mt-1">Service covered by your active package</p>
               )}
             </div>
           )}
@@ -291,6 +346,9 @@ export default function BookService() {
                   locationLat: bookingLocation.latitude,
                   locationLng: bookingLocation.longitude,
                   placeId: bookingLocation.placeId,
+                  citySlug: "varanasi",
+                  addonIds: selectedAddonIds.length ? selectedAddonIds : undefined,
+                  entitlementId: selfBooking?.eligible ? selfBooking.entitlementId : undefined,
                 } as Parameters<typeof createMutation.mutate>[0]["data"],
               });
             }}
