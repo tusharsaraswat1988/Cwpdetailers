@@ -6,6 +6,7 @@ export * from "./branches";
 export * from "./customers";
 export * from "./vehicles";
 export * from "./solar-sites";
+export * from "./service-catalog";
 export * from "./services";
 export * from "./subscriptions";
 export * from "./staff";

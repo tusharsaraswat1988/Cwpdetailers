@@ -117,6 +117,32 @@ export const commApi = {
   deleteAudience: (id: number) => commFetch<{ ok: boolean }>(`/communications/audiences/${id}`, { method: "DELETE" }),
   deleteCampaign: (id: number) => commFetch<{ ok: boolean }>(`/communications/campaigns/${id}`, { method: "DELETE" }),
   deleteProvider: (id: number) => commFetch<{ ok: boolean }>(`/communications/providers/${id}`, { method: "DELETE" }),
+  updateTemplate: (id: number, data: Partial<CommTemplate>) =>
+    commFetch<CommTemplate>(`/communications/templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  updateProvider: (id: number, data: Partial<CommProvider & { config?: Record<string, string> }>) =>
+    commFetch<CommProvider>(`/communications/providers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  updateAutomation: (id: number, data: Partial<CommAutomation>) =>
+    commFetch<CommAutomation>(`/communications/automations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  createBrand: (data: Partial<CommBrand>) =>
+    commFetch<CommBrand>("/communications/brands", { method: "POST", body: JSON.stringify(data) }),
+  createDltGovernanceTemplate: (data: {
+    brandId: number; entityId: number; headerId: number;
+    templateId: string; name: string; templateType: string; approvedContent: string;
+  }) => commFetch<{ id: number }>("/communications/dlt/templates", { method: "POST", body: JSON.stringify(data) }),
+  createEmailTemplate: (data: Partial<CommEmailTemplate>) =>
+    commFetch<CommEmailTemplate>("/communications/email/templates", { method: "POST", body: JSON.stringify(data) }),
+  createWhatsappTemplate: (data: Partial<CommWhatsappTemplate & { bodyPreview: string }>) =>
+    commFetch<CommWhatsappTemplate>("/communications/whatsapp/templates", { method: "POST", body: JSON.stringify(data) }),
+  runWorkflow: (id: number) => commFetch<{ ok: boolean }>(`/communications/workflows/${id}/run`, { method: "POST" }),
+  assignConversation: (id: number, data: { userId?: number; teamId?: number }) =>
+    commFetch<CommConversation>(`/communications/conversations/${id}/assign`, { method: "POST", body: JSON.stringify(data) }),
+  addConversationNote: (id: number, body: string) =>
+    commFetch<{ id: number }>(`/communications/conversations/${id}/notes`, { method: "POST", body: JSON.stringify({ body }) }),
+  addConversationTag: (id: number, tag: string) =>
+    commFetch<{ id: number }>(`/communications/conversations/${id}/tags`, { method: "POST", body: JSON.stringify({ tag }) }),
+  createKnowledgeBaseArticle: (data: { title: string; category: string; content: string }) =>
+    commFetch<{ id: number }>("/communications/knowledge-base", { method: "POST", body: JSON.stringify(data) }),
+  getTeams: () => commFetch<Array<{ id: number; name: string; memberCount?: number }>>("/communications/teams"),
   getDltEntities: () => commFetch<DltEntity[]>("/communications/dlt/entities"),
   createDltEntity: (data: Partial<DltEntity>) => commFetch<DltEntity>("/communications/dlt/entities", { method: "POST", body: JSON.stringify(data) }),
   getDltHeaders: () => commFetch<DltHeader[]>("/communications/dlt/headers"),

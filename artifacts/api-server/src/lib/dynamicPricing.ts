@@ -7,8 +7,7 @@ import {
   servicePricingTable,
   servicesTable,
 } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
-import { computeSolarCleaningPrice } from "./solarPricing";
+import { eq, and, or, isNull } from "drizzle-orm";
 
 export interface PricingResult {
   amount: number;
@@ -21,6 +20,15 @@ export interface PricingResult {
 export async function resolveVehiclePricing(
   serviceId: number,
   vehicleModelId: number,
+  cityId?: number | null,
+): Promise<PricingResult | null> {
+  return resolveVehiclePricingWithCity(serviceId, vehicleModelId, cityId);
+}
+
+export async function resolveVehiclePricingWithCity(
+  serviceId: number,
+  vehicleModelId: number,
+  cityId?: number | null,
 ): Promise<PricingResult | null> {
   const [model] = await db
     .select({
@@ -42,17 +50,28 @@ export async function resolveVehiclePricing(
     eq(servicePricingTable.isActive, true),
   ];
 
-  // Try exact match: category + seat
-  const [exact] = await db
+  if (cityId) {
+    pricingConditions.push(
+      or(eq(servicePricingTable.cityId, cityId), isNull(servicePricingTable.cityId))!,
+    );
+  }
+
+  const allPricing = await db
     .select()
     .from(servicePricingTable)
-    .where(and(
-      ...pricingConditions,
-      eq(servicePricingTable.vehicleCategoryId, model.vehicleCategoryId),
-      eq(servicePricingTable.seatCategoryId, model.seatCategoryId),
-    ))
-    .limit(1);
+    .where(and(...pricingConditions));
 
+  const preferCity = (rows: typeof allPricing) => {
+    const citySpecific = rows.filter(r => r.cityId === cityId);
+    return citySpecific.length ? citySpecific : rows.filter(r => r.cityId == null);
+  };
+
+  // Try exact match: category + seat
+  const exactPool = preferCity(allPricing.filter(r =>
+    r.vehicleCategoryId === model.vehicleCategoryId &&
+    r.seatCategoryId === model.seatCategoryId,
+  ));
+  const exact = exactPool[0];
   if (exact) {
     return {
       amount: parseFloat(exact.price),
@@ -64,15 +83,10 @@ export async function resolveVehiclePricing(
   }
 
   // Fallback: seat category only
-  const [seatOnly] = await db
-    .select()
-    .from(servicePricingTable)
-    .where(and(
-      ...pricingConditions,
-      eq(servicePricingTable.seatCategoryId, model.seatCategoryId),
-    ))
-    .limit(1);
-
+  const seatPool = preferCity(allPricing.filter(r =>
+    r.seatCategoryId === model.seatCategoryId && !r.vehicleCategoryId,
+  ));
+  const seatOnly = seatPool[0];
   if (seatOnly) {
     return {
       amount: parseFloat(seatOnly.price),
@@ -84,15 +98,10 @@ export async function resolveVehiclePricing(
   }
 
   // Fallback: category only
-  const [catOnly] = await db
-    .select()
-    .from(servicePricingTable)
-    .where(and(
-      ...pricingConditions,
-      eq(servicePricingTable.vehicleCategoryId, model.vehicleCategoryId),
-    ))
-    .limit(1);
-
+  const catPool = preferCity(allPricing.filter(r =>
+    r.vehicleCategoryId === model.vehicleCategoryId && !r.seatCategoryId,
+  ));
+  const catOnly = catPool[0];
   if (catOnly) {
     return {
       amount: parseFloat(catOnly.price),
@@ -127,32 +136,38 @@ export async function resolveBookingAmount(opts: {
   solarSiteId?: number | null;
   serviceType?: string;
   panelCount?: number;
+  cityId?: number | null;
+  citySlug?: string;
 }): Promise<number | null> {
-  if (opts.solarSiteId && opts.serviceType === "solar_cleaning" && opts.panelCount) {
-    return computeSolarCleaningPrice(opts.panelCount);
-  }
-
-  if (opts.serviceId && opts.vehicleId) {
-    const { vehiclesTable } = await import("@workspace/db");
-    const [vehicle] = await db
-      .select({ vehicleModelId: vehiclesTable.vehicleModelId })
-      .from(vehiclesTable)
-      .where(eq(vehiclesTable.id, opts.vehicleId))
-      .limit(1);
-
-    if (vehicle?.vehicleModelId) {
-      const pricing = await resolveVehiclePricing(opts.serviceId, vehicle.vehicleModelId);
-      if (pricing) return pricing.amount;
-    }
-  }
-
   if (opts.serviceId) {
-    const [svc] = await db
-      .select({ basePrice: servicesTable.basePrice })
-      .from(servicesTable)
-      .where(eq(servicesTable.id, opts.serviceId))
-      .limit(1);
-    if (svc) return parseFloat(svc.basePrice);
+    const { resolveCatalogPricing } = await import("./catalog/pricingEngine");
+    let panelCount = opts.panelCount;
+    if (!panelCount && opts.solarSiteId) {
+      const { solarSitesTable } = await import("@workspace/db");
+      const [site] = await db.select({ panelCount: solarSitesTable.panelCount })
+        .from(solarSitesTable).where(eq(solarSitesTable.id, opts.solarSiteId)).limit(1);
+      panelCount = site?.panelCount ?? undefined;
+    }
+
+    let vehicleModelId: number | undefined;
+    if (opts.vehicleId) {
+      const { vehiclesTable } = await import("@workspace/db");
+      const [vehicle] = await db
+        .select({ vehicleModelId: vehiclesTable.vehicleModelId })
+        .from(vehiclesTable)
+        .where(eq(vehiclesTable.id, opts.vehicleId))
+        .limit(1);
+      vehicleModelId = vehicle?.vehicleModelId ?? undefined;
+    }
+
+    const pricing = await resolveCatalogPricing({
+      serviceId: opts.serviceId,
+      vehicleModelId,
+      panelCount,
+      cityId: opts.cityId,
+      citySlug: opts.citySlug,
+    });
+    if (pricing) return pricing.amount;
   }
 
   return null;

@@ -9,6 +9,7 @@ import { ConnectivityBanner } from "@/components/connectivity/ConnectivityBanner
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
+import CityServicePage from "@/pages/CityServicePage";
 import Login from "@/pages/Login";
 import AdminLogin from "@/pages/AdminLogin";
 import Register from "@/pages/Register";
@@ -24,6 +25,7 @@ import AdminInvoices from "@/pages/admin/Invoices";
 import AdminComplaints from "@/pages/admin/Complaints";
 import AdminBranches from "@/pages/admin/Branches";
 import AdminServices from "@/pages/admin/Services";
+import ServiceCatalog from "@/pages/admin/ServiceCatalog";
 import AdminMasterData from "@/pages/admin/MasterData";
 import AdminAnalytics from "@/pages/admin/Analytics";
 import AdminNotifications from "@/pages/admin/Notifications";
@@ -153,6 +155,7 @@ function Router() {
       <Route path="/admin/branches" component={() => <ProtectedRoute component={AdminBranches} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/masters" component={() => <ProtectedRoute component={AdminMasterData} roles={["admin", "superadmin", "manager"]} permission={{ resource: "masters", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/services" component={() => <ProtectedRoute component={AdminServices} roles={["admin", "superadmin", "manager"]} permission={{ resource: "services", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/catalog" component={() => <ProtectedRoute component={ServiceCatalog} roles={["admin", "superadmin", "manager"]} permission={{ resource: "services", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/analytics" component={() => <ProtectedRoute component={AdminAnalytics} roles={["admin", "superadmin", "manager"]} permission={{ resource: "analytics", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/notifications" component={() => <ProtectedRoute component={AdminNotifications} roles={["admin", "superadmin", "manager"]} permission={{ resource: "notifications", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/communications" component={() => <ProtectedRoute component={CommunicationCenter} roles={["admin", "superadmin", "manager"]} permission={{ resource: "communications", action: "view" }} loginPath="/admin/login" />} />
@@ -208,6 +211,9 @@ function Router() {
           </div>
         </div>
       )} roles={["franchisee"]} />} />
+
+      {/* City SEO pages: /varanasi/daily-car-cleaning — must be after all fixed routes */}
+      <Route path="/:citySlug/:serviceSlug" component={CityServicePage} />
 
       <Route component={NotFound} />
     </Switch>

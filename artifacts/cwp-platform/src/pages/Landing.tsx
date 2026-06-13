@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useListServices } from "@workspace/api-client-react";
 import { useCatalogPlans } from "@/features/master-data/api";
+import { useCatalogPackages, useHomepageSections } from "@/features/service-catalog/api";
 import { Button } from "@/components/ui/button";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { BrandLogo } from "@/components/shared/BrandLogo";
@@ -100,22 +101,37 @@ const solarTiers = [
 
 const testimonials = [
   { name: "Arjun Sharma", city: "Varanasi", rating: 5, text: "My BMW has never looked better. The ceramic coating service is truly premium — I've tried services in Delhi and Pune, nothing compares." },
-  { name: "Pooja Chauhan", city: "Lucknow", rating: 5, text: "The daily wash subscription is a game-changer. They show up at 8 AM, car is spotless before I leave for office. Completely reliable." },
+  { name: "Pooja Chauhan", city: "Varanasi", rating: 5, text: "The daily wash subscription is a game-changer. They show up at 8 AM, car is spotless before I leave for office. Completely reliable." },
   { name: "Meena Gupta", city: "Varanasi", rating: 5, text: "Solar panel output went up 22% after their cleaning. The efficiency report they send is very detailed. Worth every rupee of the AMC." },
 ];
 
-const cities = ["Varanasi", "Lucknow", "Kanpur", "Prayagraj", "Agra", "Gorakhpur"];
+const cities = ["Varanasi"];
 
 export default function Landing() {
   const { data: services } = useListServices({ isActive: true });
   const { data: dbPlans } = useCatalogPlans();
+  const { data: catalogPackages } = useCatalogPackages("varanasi");
+  const { data: homepageSections } = useHomepageSections();
   const branding = useBranding();
 
-  const displayPlans = (dbPlans ?? []).length > 0
-    ? (dbPlans ?? []).map(p => ({
+  const heroSection = homepageSections?.find(s => s.sectionKey === "hero");
+  const citiesSection = homepageSections?.find(s => s.sectionKey === "cities");
+  const testimonialsSection = homepageSections?.find(s => s.sectionKey === "testimonials");
+  const statsSection = homepageSections?.find(s => s.sectionKey === "stats");
+
+  const cmsCities = (citiesSection?.content as { cities?: Array<{ name: string; slug: string; active?: boolean }> })?.cities;
+  const displayCities = cmsCities?.filter(c => c.active !== false).map(c => c.name) ?? cities;
+
+  const cmsTestimonials = (testimonialsSection?.content as { items?: typeof testimonials })?.items;
+  const displayTestimonials = cmsTestimonials ?? testimonials;
+
+  const catalogPlanItems = (catalogPackages ?? []).length > 0 ? catalogPackages : dbPlans;
+
+  const displayPlans = (catalogPlanItems ?? []).length > 0
+    ? (catalogPlanItems ?? []).map(p => ({
         name: p.name,
         price: Number(p.price).toLocaleString("en-IN"),
-        priceNote: p.durationMonths ? `/${p.durationMonths === 1 ? "month" : `${p.durationMonths} months`}` : "",
+        priceNote: "validityDays" in p && p.validityDays ? `/${Math.round(p.validityDays / 30) || 1} month${p.validityDays > 30 ? "s" : ""}` : (p.durationMonths ? `/${p.durationMonths === 1 ? "month" : `${p.durationMonths} months`}` : ""),
         price2: undefined as string | undefined,
         price2Note: undefined as string | undefined,
         desc: p.description ?? "",
@@ -169,7 +185,7 @@ export default function Landing() {
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }} className="max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-full px-4 py-1.5 text-primary text-sm font-medium mb-6">
               <MapPin size={12} />
-              <span>Serving Varanasi, Lucknow & Kanpur</span>
+              <span>Serving Varanasi</span>
             </div>
             <h1 className="font-display font-bold text-5xl md:text-7xl text-white leading-[1.05] mb-6">
               Your car deserves<br />
@@ -468,7 +484,7 @@ export default function Landing() {
             <h2 className="font-display font-bold text-3xl md:text-4xl text-white mb-3">What our customers say</h2>
           </motion.div>
           <div className="grid md:grid-cols-3 gap-5">
-            {testimonials.map((t, i) => (
+            {displayTestimonials.map((t, i) => (
               <motion.div key={t.name} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1, duration: 0.5 }} viewport={{ once: true }}
                 className="bg-white/5 border border-white/10 rounded-2xl p-6">
                 <div className="flex gap-0.5 mb-4">
@@ -515,7 +531,7 @@ export default function Landing() {
       <section className="py-8 px-6 max-w-7xl mx-auto border-t border-border">
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
           <span className="text-muted-foreground text-sm">Currently serving:</span>
-          {cities.map(city => (
+          {displayCities.map(city => (
             <div key={city} className="flex items-center gap-1.5 text-sm font-medium">
               <MapPin size={12} className="text-primary" />
               {city}

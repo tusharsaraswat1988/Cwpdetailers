@@ -77,3 +77,42 @@ export function guardMasterDataRoutes() {
     return next();
   };
 }
+
+/** Permission guard for service catalog engine routes (/catalog/*). */
+export function guardCatalogRoutes() {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const path = req.path;
+    const method = req.method.toUpperCase();
+    const action = METHOD_TO_ACTION[method] ?? "view";
+
+    const publicGetPaths = [
+      "/catalog/homepage",
+      "/catalog/packages",
+      "/catalog/addons",
+      "/catalog/pricing/quote",
+      "/catalog/settings",
+      "/catalog/self-booking/check",
+    ];
+    const isPublicCityRoute = method === "GET" && (
+      /^\/catalog\/[^/]+\/[^/]+$/.test(path) ||
+      /^\/catalog\/services\/[^/]+$/.test(path) ||
+      /^\/catalog\/city-content$/.test(path)
+    );
+
+    if (method === "GET" && (publicGetPaths.some(p => path === p || path.startsWith(p + "?")) || isPublicCityRoute)) {
+      if (!req.user) {
+        req.scope = {
+          isSuperAdmin: false, companyId: null, branchIds: null,
+          franchiseeId: null, customerId: null, staffId: null,
+        };
+        return next();
+      }
+    }
+
+    if (path.startsWith("/catalog/")) {
+      return requirePermission("services", action)(req, res, next);
+    }
+
+    return next();
+  };
+}

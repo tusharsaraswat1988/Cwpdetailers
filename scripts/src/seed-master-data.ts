@@ -1,3 +1,4 @@
+import "./load-env.js";
 import { db } from "@workspace/db";
 import {
   vehicleCategoriesTable, seatCategoriesTable, fuelTypesTable,

@@ -379,11 +379,18 @@ router.delete("/masters/service-pricing/:id", (req, res) => genericDelete(servic
 
 router.get("/pricing/quote", async (req, res) => {
   try {
-    const { serviceId, vehicleModelId } = req.query as Record<string, string>;
-    if (!serviceId || !vehicleModelId) {
-      return res.status(400).json({ error: "serviceId and vehicleModelId are required" });
+    const { serviceId, vehicleModelId, panelCount, cityId, citySlug } = req.query as Record<string, string>;
+    if (!serviceId) {
+      return res.status(400).json({ error: "serviceId is required" });
     }
-    const pricing = await resolveVehiclePricing(parseInt(serviceId), parseInt(vehicleModelId));
+    const { resolveCatalogPricing } = await import("../lib/catalog/pricingEngine");
+    const pricing = await resolveCatalogPricing({
+      serviceId: parseInt(serviceId),
+      vehicleModelId: vehicleModelId ? parseInt(vehicleModelId) : undefined,
+      panelCount: panelCount ? parseInt(panelCount) : undefined,
+      cityId: cityId ? parseInt(cityId) : undefined,
+      citySlug,
+    });
     if (!pricing) return res.status(404).json({ error: "Pricing not found" });
     return res.json(pricing);
   } catch (err) {

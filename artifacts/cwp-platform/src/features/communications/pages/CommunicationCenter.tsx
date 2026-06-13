@@ -18,10 +18,18 @@ import {
 import {
   MessageSquare, Send, Users, Zap, BarChart3, Shield, Server,
   Plus, Play, Clock, CheckCircle2, XCircle, Eye, Radio, Target, Ban,
+  Inbox, Trash2, IndianRupee, BookOpen, Route, GitBranch, Layers,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
 import CampaignDetailDialog from "../components/CampaignDetailDialog";
 import HistoryPanel from "../components/HistoryPanel";
+import ConversationInbox from "../components/ConversationInbox";
+import CrmDashboardPanel from "../components/CrmDashboardPanel";
+import BrandsPanel from "../components/BrandsPanel";
+import WorkflowsPanel from "../components/WorkflowsPanel";
+import ChannelTemplatesPanel from "../components/ChannelTemplatesPanel";
+import KnowledgeBasePanel from "../components/KnowledgeBasePanel";
+import CustomerJourneyPanel from "../components/CustomerJourneyPanel";
 
 const CHANNELS = [
   { id: "sms", label: "SMS" },
@@ -59,10 +67,20 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: number |
   );
 }
 
+function DeleteButton({ onDelete, label }: { onDelete: () => void; label?: string }) {
+  return (
+    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive h-8 w-8 p-0"
+      title={label ?? "Delete"} onClick={() => { if (window.confirm(`Delete this ${label ?? "item"}?`)) onDelete(); }}>
+      <Trash2 size={14} />
+    </Button>
+  );
+}
+
 export default function CommunicationCenter() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [crmSubTab, setCrmSubTab] = useState("insights");
   const [detailCampaignId, setDetailCampaignId] = useState<number | null>(null);
 
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
@@ -77,8 +95,10 @@ export default function CommunicationCenter() {
   const { data: headers } = useQuery({ queryKey: ["comm-dlt-headers"], queryFn: commApi.getDltHeaders });
   const { data: providers } = useQuery({ queryKey: ["comm-providers"], queryFn: commApi.getProviders });
   const { data: filterOptions } = useQuery({ queryKey: ["comm-filters"], queryFn: commApi.getAudienceFilters });
+  const { data: triggers } = useQuery({ queryKey: ["comm-triggers"], queryFn: commApi.getAutomationTriggers });
   const { data: variables } = useQuery({ queryKey: ["comm-vars"], queryFn: commApi.getTemplateVariables });
   const { data: queueStats } = useQuery({ queryKey: ["comm-queue-stats"], queryFn: commApi.getQueueStats });
+  const { data: inboxCounts } = useQuery({ queryKey: ["comm-inbox-counts"], queryFn: commApi.getInboxCounts });
 
   return (
     <AdminLayout>
@@ -101,14 +121,20 @@ export default function CommunicationCenter() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsList className="flex flex-wrap h-auto gap-1 max-w-full">
             <TabsTrigger value="dashboard" className="gap-1.5"><BarChart3 size={14} />Dashboard</TabsTrigger>
-            <TabsTrigger value="templates" className="gap-1.5"><MessageSquare size={14} />Templates</TabsTrigger>
+            <TabsTrigger value="inbox" className="gap-1.5"><Inbox size={14} />Inbox</TabsTrigger>
             <TabsTrigger value="campaigns" className="gap-1.5"><Send size={14} />Campaigns</TabsTrigger>
             <TabsTrigger value="audiences" className="gap-1.5"><Users size={14} />Audience</TabsTrigger>
+            <TabsTrigger value="templates" className="gap-1.5"><MessageSquare size={14} />Templates</TabsTrigger>
+            <TabsTrigger value="history" className="gap-1.5"><Clock size={14} />History</TabsTrigger>
             <TabsTrigger value="dlt" className="gap-1.5"><Shield size={14} />DLT</TabsTrigger>
             <TabsTrigger value="providers" className="gap-1.5"><Server size={14} />Providers</TabsTrigger>
-            <TabsTrigger value="history" className="gap-1.5"><Clock size={14} />History</TabsTrigger>
+            <TabsTrigger value="automations" className="gap-1.5"><Zap size={14} />Automations</TabsTrigger>
+            <TabsTrigger value="brands" className="gap-1.5"><Layers size={14} />Brands</TabsTrigger>
+            <TabsTrigger value="workflows" className="gap-1.5"><GitBranch size={14} />Workflows</TabsTrigger>
+            <TabsTrigger value="email-wa" className="gap-1.5"><MessageSquare size={14} />Email & WA</TabsTrigger>
+            <TabsTrigger value="crm" className="gap-1.5"><Route size={14} />CRM</TabsTrigger>
           </TabsList>
 
           {/* ── Dashboard ── */}
@@ -120,6 +146,17 @@ export default function CommunicationCenter() {
                   <StatCard label="Failed Today" value={analytics?.sprint1?.failedToday ?? 0} icon={XCircle} />
                   <StatCard label="Campaign Count" value={analytics?.sprint1?.campaignCount ?? analytics?.totalCampaigns ?? 0} icon={Target} />
                   <StatCard label="Template Count" value={analytics?.sprint1?.templateCount ?? 0} icon={MessageSquare} />
+                </>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {!analyticsLoading && (
+                <>
+                  <StatCard label="Open Inbox" value={inboxCounts?.open ?? 0} icon={Inbox} />
+                  <StatCard label="SLA Breaches" value={inboxCounts?.slaBreaches ?? 0} icon={XCircle} />
+                  <StatCard label="Revenue" value={`₹${(analytics?.revenue ?? 0).toLocaleString("en-IN")}`} icon={IndianRupee} />
+                  <StatCard label="ROI" value={analytics?.roi ? `${analytics.roi}x` : "—"} icon={BarChart3} />
                 </>
               )}
             </div>
@@ -238,6 +275,10 @@ export default function CommunicationCenter() {
             </div>
           </TabsContent>
 
+          <TabsContent value="inbox" className="mt-4">
+            <ConversationInbox />
+          </TabsContent>
+
           {/* ── Campaigns ── */}
           <TabsContent value="campaigns" className="mt-4">
             <CampaignBuilder
@@ -247,6 +288,7 @@ export default function CommunicationCenter() {
               onRefresh={() => { refetchCampaigns(); qc.invalidateQueries({ queryKey: ["comm-analytics"] }); }}
               onViewDetail={setDetailCampaignId}
               toast={toast}
+              qc={qc}
             />
           </TabsContent>
 
@@ -274,6 +316,35 @@ export default function CommunicationCenter() {
           <TabsContent value="history" className="mt-4">
             <HistoryPanel />
           </TabsContent>
+
+          <TabsContent value="automations" className="mt-4">
+            <AutomationManager automations={automations ?? []} templates={templates ?? []} triggers={triggers ?? []} toast={toast} qc={qc} />
+          </TabsContent>
+
+          <TabsContent value="brands" className="mt-4">
+            <BrandsPanel />
+          </TabsContent>
+
+          <TabsContent value="workflows" className="mt-4">
+            <WorkflowsPanel />
+          </TabsContent>
+
+          <TabsContent value="email-wa" className="mt-4">
+            <ChannelTemplatesPanel />
+          </TabsContent>
+
+          <TabsContent value="crm" className="mt-4 space-y-4">
+            <Tabs value={crmSubTab} onValueChange={setCrmSubTab}>
+              <TabsList>
+                <TabsTrigger value="insights">Insights</TabsTrigger>
+                <TabsTrigger value="journey">Journey</TabsTrigger>
+                <TabsTrigger value="kb"><BookOpen size={12} className="mr-1" />Knowledge Base</TabsTrigger>
+              </TabsList>
+              <TabsContent value="insights" className="mt-4"><CrmDashboardPanel /></TabsContent>
+              <TabsContent value="journey" className="mt-4"><CustomerJourneyPanel /></TabsContent>
+              <TabsContent value="kb" className="mt-4"><KnowledgeBasePanel /></TabsContent>
+            </Tabs>
+          </TabsContent>
         </Tabs>
 
         <CampaignDetailDialog
@@ -289,7 +360,7 @@ export default function CommunicationCenter() {
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
 function CampaignBuilder({
-  templates, audiences, campaigns, onRefresh, onViewDetail, toast,
+  templates, audiences, campaigns, onRefresh, onViewDetail, toast, qc,
 }: {
   templates: CommTemplate[];
   audiences: Array<{ id: number; name: string; estimatedCount?: number }>;
@@ -297,6 +368,7 @@ function CampaignBuilder({
   onRefresh: () => void;
   onViewDetail: (id: number) => void;
   toast: ReturnType<typeof useToast>["toast"];
+  qc: ReturnType<typeof useQueryClient>;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", channel: "sms", audienceId: "", templateId: "", schedule: "", testPhone: "" });
@@ -318,6 +390,12 @@ function CampaignBuilder({
     mutationFn: (id: number) => commApi.sendCampaign(id),
     onSuccess: (r) => { onRefresh(); toast({ title: `Sent ${r.sent}, failed ${r.failed}` }); },
     onError: (e: Error) => toast({ title: "Send failed", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => commApi.deleteCampaign(id),
+    onSuccess: () => { onRefresh(); qc.invalidateQueries({ queryKey: ["comm-campaigns"] }); toast({ title: "Campaign deleted" }); },
+    onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
   });
 
   const previewMut = useMutation({
@@ -432,6 +510,7 @@ function CampaignBuilder({
                     <Play size={14} className="mr-1" />Send Now
                   </Button>
                 )}
+                <DeleteButton label="campaign" onDelete={() => deleteMut.mutate(c.id)} />
               </div>
             </CardContent>
           </Card>
@@ -503,6 +582,12 @@ function AudienceBuilder({
       toast({ title: "Audience saved" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => commApi.deleteAudience(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["comm-audiences"] }); toast({ title: "Audience deleted" }); },
+    onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
   });
 
   const grouped = filterOptions.reduce((acc, f) => {
@@ -598,12 +683,12 @@ function AudienceBuilder({
         <CardHeader><CardTitle className="text-sm">Saved Audiences</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {audiences.map(a => (
-            <div key={a.id} className="p-3 rounded-lg border flex justify-between">
+            <div key={a.id} className="p-3 rounded-lg border flex justify-between items-center">
               <div>
                 <p className="font-medium text-sm">{a.name}</p>
                 <p className="text-xs text-muted-foreground">{a.estimatedCount?.toLocaleString("en-IN") ?? "—"} recipients</p>
               </div>
-              <Users size={16} className="text-muted-foreground" />
+              <DeleteButton label="audience" onDelete={() => deleteMut.mutate(a.id)} />
             </div>
           ))}
           {!audiences.length && <p className="text-sm text-muted-foreground text-center py-6">No saved audiences</p>}
@@ -632,6 +717,12 @@ function TemplateManager({
       toast({ title: "Template created" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => commApi.deleteTemplate(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["comm-templates"] }); toast({ title: "Template deleted" }); },
+    onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
   });
 
   return (
@@ -693,9 +784,10 @@ function TemplateManager({
             <CardContent className="p-4">
               <div className="flex justify-between items-start mb-2">
                 <p className="font-medium">{t.name}</p>
-                <div className="flex gap-1">
+                <div className="flex gap-1 items-center">
                   <Badge variant="outline">{t.channel}</Badge>
                   <Badge variant="secondary">{t.category.replace(/_/g, " ")}</Badge>
+                  <DeleteButton label="template" onDelete={() => deleteMut.mutate(t.id)} />
                 </div>
               </div>
               <p className="text-sm text-muted-foreground line-clamp-2">{t.body}</p>
@@ -718,6 +810,12 @@ function DltManager({
 }) {
   const [entityForm, setEntityForm] = useState({ name: "", entityId: "" });
   const [headerForm, setHeaderForm] = useState({ entityId: "", headerId: "", name: "" });
+  const [dltTplForm, setDltTplForm] = useState({
+    brandId: "", entityId: "", headerId: "", name: "", templateId: "", templateType: "transactional", approvedContent: "",
+  });
+
+  const { data: brands } = useQuery({ queryKey: ["comm-brands"], queryFn: commApi.getBrands });
+  const { data: dltTemplates } = useQuery({ queryKey: ["comm-dlt-gov-templates"], queryFn: () => commApi.getDltGovernanceTemplates() });
 
   const createEntity = useMutation({
     mutationFn: () => commApi.createDltEntity(entityForm),
@@ -727,8 +825,26 @@ function DltManager({
     mutationFn: () => commApi.createDltHeader({ ...headerForm, entityId: parseInt(headerForm.entityId) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["comm-dlt-headers"] }); setHeaderForm({ entityId: "", headerId: "", name: "" }); toast({ title: "Header added" }); },
   });
+  const createDltTpl = useMutation({
+    mutationFn: () => commApi.createDltGovernanceTemplate({
+      brandId: parseInt(dltTplForm.brandId),
+      entityId: parseInt(dltTplForm.entityId),
+      headerId: parseInt(dltTplForm.headerId),
+      name: dltTplForm.name,
+      templateId: dltTplForm.templateId,
+      templateType: dltTplForm.templateType,
+      approvedContent: dltTplForm.approvedContent,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["comm-dlt-gov-templates"] });
+      setDltTplForm({ brandId: "", entityId: "", headerId: "", name: "", templateId: "", templateType: "transactional", approvedContent: "" });
+      toast({ title: "DLT template registered" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   return (
+    <div className="space-y-6">
     <div className="grid md:grid-cols-2 gap-6">
       <Card>
         <CardHeader><CardTitle className="text-sm">DLT Entities</CardTitle><CardDescription>Registered Principal Entity IDs</CardDescription></CardHeader>
@@ -767,6 +883,41 @@ function DltManager({
         </CardContent>
       </Card>
     </div>
+    <Card>
+      <CardHeader><CardTitle className="text-sm">DLT Template Registry</CardTitle><CardDescription>Governance-approved templates per brand</CardDescription></CardHeader>
+      <CardContent className="space-y-3">
+        {(dltTemplates ?? []).map(t => (
+          <div key={t.id} className="p-3 border rounded-lg flex justify-between">
+            <div><p className="font-medium text-sm">{t.name}</p><p className="text-xs text-muted-foreground font-mono">{t.templateId} · {t.templateType}</p></div>
+            <Badge variant={t.status === "approved" ? "default" : "secondary"}>{t.status}</Badge>
+          </div>
+        ))}
+        <div className="pt-3 border-t grid md:grid-cols-2 gap-2">
+          <Select value={dltTplForm.brandId} onValueChange={v => setDltTplForm(f => ({ ...f, brandId: v }))}>
+            <SelectTrigger><SelectValue placeholder="Brand" /></SelectTrigger>
+            <SelectContent>{(brands ?? []).map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={dltTplForm.entityId} onValueChange={v => setDltTplForm(f => ({ ...f, entityId: v }))}>
+            <SelectTrigger><SelectValue placeholder="Entity" /></SelectTrigger>
+            <SelectContent>{entities.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={dltTplForm.headerId} onValueChange={v => setDltTplForm(f => ({ ...f, headerId: v }))}>
+            <SelectTrigger><SelectValue placeholder="Header" /></SelectTrigger>
+            <SelectContent>{headers.map(h => <SelectItem key={h.id} value={String(h.id)}>{h.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Input placeholder="Template name" value={dltTplForm.name} onChange={e => setDltTplForm(f => ({ ...f, name: e.target.value }))} />
+          <Input placeholder="DLT Template ID" value={dltTplForm.templateId} onChange={e => setDltTplForm(f => ({ ...f, templateId: e.target.value }))} />
+          <Input placeholder="Type (transactional/promotional)" value={dltTplForm.templateType} onChange={e => setDltTplForm(f => ({ ...f, templateType: e.target.value }))} />
+          <Textarea placeholder="Approved content" value={dltTplForm.approvedContent} onChange={e => setDltTplForm(f => ({ ...f, approvedContent: e.target.value }))} className="md:col-span-2" />
+          <Button size="sm" onClick={() => createDltTpl.mutate()}
+            disabled={!dltTplForm.brandId || !dltTplForm.entityId || !dltTplForm.headerId || !dltTplForm.name || !dltTplForm.templateId || !dltTplForm.approvedContent || createDltTpl.isPending}
+            className="md:col-span-2">
+            Register DLT Template
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+    </div>
   );
 }
 
@@ -788,6 +939,12 @@ function ProviderManager({
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["comm-providers"] }); toast({ title: "Provider added" }); },
   });
 
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => commApi.deleteProvider(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["comm-providers"] }); toast({ title: "Provider deleted" }); },
+    onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <div className="space-y-4">
       <Card>
@@ -802,9 +959,10 @@ function ProviderManager({
                 <p className="font-medium">{p.name}</p>
                 <p className="text-xs text-muted-foreground">{p.providerType} · {p.channel}</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
                 {p.isPrimary && <Badge>Primary</Badge>}
                 <Badge variant={p.isActive ? "default" : "secondary"}>{p.isActive ? "Active" : "Inactive"}</Badge>
+                <DeleteButton label="provider" onDelete={() => deleteMut.mutate(p.id)} />
               </div>
             </div>
           ))}
@@ -854,6 +1012,11 @@ function AutomationManager({
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["comm-automations"] }); toast({ title: "Automation created" }); },
   });
 
+  const toggleMut = useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => commApi.updateAutomation(id, { isActive: !isActive }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["comm-automations"] }),
+  });
+
   return (
     <div className="space-y-4">
       <Card>
@@ -888,7 +1051,10 @@ function AutomationManager({
               <p className="font-medium">{a.name}</p>
               <p className="text-xs text-muted-foreground">{a.trigger.replace(/_/g, " ")} → {a.channel.toUpperCase()}</p>
             </div>
-            <Badge variant={a.isActive ? "default" : "secondary"}>{a.isActive ? "Active" : "Paused"}</Badge>
+            <Badge variant={a.isActive ? "default" : "secondary"} className="cursor-pointer"
+              onClick={() => toggleMut.mutate({ id: a.id, isActive: a.isActive })}>
+              {a.isActive ? "Active" : "Paused"}
+            </Badge>
           </div>
         ))}
       </div>

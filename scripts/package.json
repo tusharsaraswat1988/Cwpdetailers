@@ -8,6 +8,9 @@
     "seed": "tsx ./src/seed.ts",
     "seed:permissions": "tsx ./src/seed-permissions.ts",
     "seed:master-data": "tsx ./src/seed-master-data.ts",
+    "migrate:catalog": "tsx ./src/run-migration.ts 008_service_catalog.sql",
+    "seed:catalog": "tsx ./src/seed-catalog-migration.ts",
+    "verify:catalog": "tsx ./src/verify-catalog.ts",
     "backfill:tenant": "tsx ./src/backfill-tenant-fields.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

@@ -409,6 +409,11 @@ router.post("/bookings/:id/transition", async (req, res) => {
             await recomputeServicesRemaining(subId, tx);
           }
 
+          if (existing.entitlementId) {
+            const { consumeEntitlementOnCompletion } = await import("../lib/catalog/entitlementEngine");
+            await consumeEntitlementOnCompletion(existing.entitlementId as number, id, 1, tx);
+          }
+
           return b;
         });
 

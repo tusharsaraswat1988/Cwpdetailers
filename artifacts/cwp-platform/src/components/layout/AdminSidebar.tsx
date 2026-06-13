@@ -53,6 +53,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/branches", label: "Branches", icon: GitBranch, perm: { resource: "branches", action: "view" } },
       { href: "/admin/masters", label: "Master Data", icon: Database, perm: { resource: "masters", action: "view" } },
+      { href: "/admin/catalog", label: "Service Catalog", icon: Sparkles, perm: { resource: "services", action: "view" } },
       { href: "/admin/services", label: "Services", icon: Wrench, perm: { resource: "services", action: "view" } },
       { href: "/admin/analytics", label: "Analytics", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
       { href: "/admin/communications", label: "Communication Center", icon: Radio, perm: { resource: "communications", action: "view" } },

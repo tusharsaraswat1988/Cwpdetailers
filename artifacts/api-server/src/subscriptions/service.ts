@@ -390,6 +390,9 @@ export async function runDailyTick(todayStr?: string, opts?: { force?: boolean }
       .set({ status: "success", completedAt: new Date(), lastRunAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, schedulerResult, dueWashCount: dueWashes.length } })
       .where(eq(systemJobsTable.id, job.id));
 
+    const { refreshEntitlementStatuses } = await import("../lib/catalog/entitlementEngine");
+    await refreshEntitlementStatuses();
+
     logger.info({ today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, scheduler: schedulerResult }, "Daily tick completed");
     return { missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, scheduler: schedulerResult, dueWashCount: dueWashes.length };
   } catch (err) {

@@ -29,7 +29,8 @@ import communicationsWebhooksRouter from "./communications-webhooks";
 import brandingRouter from "./branding";
 import legalRouter from "./legal";
 import masterDataRouter from "./master-data";
-import { guardResource, guardMasterDataRoutes } from "../middlewares/permissions";
+import serviceCatalogRouter from "./service-catalog";
+import { guardResource, guardMasterDataRoutes, guardCatalogRoutes } from "../middlewares/permissions";
 
 const router: IRouter = Router();
 
@@ -162,5 +163,6 @@ router.use(storageRouter);
 router.use(brandingRouter);
 router.use(legalRouter);
 router.use(guardMasterDataRoutes(), masterDataRouter);
+router.use(guardCatalogRoutes(), serviceCatalogRouter);
 
 export default router;
