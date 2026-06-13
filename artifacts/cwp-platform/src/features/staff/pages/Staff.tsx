@@ -156,8 +156,8 @@ export default function AdminStaff() {
               <div key={s.id} className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors" data-testid={`staff-card-${s.id}`}>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    {s.profilePhotoUrl ? (
-                      <img src={s.profilePhotoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" />
+                    {(s as { profilePhotoUrl?: string }).profilePhotoUrl ? (
+                      <img src={(s as { profilePhotoUrl?: string }).profilePhotoUrl!} alt="" className="w-10 h-10 rounded-xl object-cover" />
                     ) : (
                       <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                         <UserCog size={16} className="text-primary" />

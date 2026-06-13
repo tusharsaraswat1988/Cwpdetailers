@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { uploadFileToCloudinary } from "@/lib/media-url";
 import { resolveMediaUrl } from "@/lib/media-url";
 import {
-  staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, DOC_LABELS, OPTIONAL_DOCS, EXPIRY_DOCS,
+  staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, DOC_LABELS, OPTIONAL_DOCS,
   type StaffEcosystemProfile, type StaffDocument,
 } from "@/lib/staff-ecosystem/api";
 import {
@@ -354,8 +354,18 @@ export default function StaffDetail() {
             <Card>
               <CardHeader><CardTitle className="text-base">Current Address</CardTitle></CardHeader>
               <CardContent className="grid sm:grid-cols-2 gap-4">
-                {(["House Number", "currentHouseNumber"], ["Street", "currentStreet"], ["Area", "currentArea"], ["Landmark", "currentLandmark"], ["City", "currentCity"], ["State", "currentState"], ["Pincode", "currentPincode"] as const).map(([lbl, key]) => (
-                  <Field key={key} label={lbl}><Input value={(p as Record<string, string>)[key] ?? ""} onChange={e => set(key, e.target.value)} /></Field>
+                {([
+                  ["House Number", "currentHouseNumber"],
+                  ["Street", "currentStreet"],
+                  ["Area", "currentArea"],
+                  ["Landmark", "currentLandmark"],
+                  ["City", "currentCity"],
+                  ["State", "currentState"],
+                  ["Pincode", "currentPincode"],
+                ] as const).map(([lbl, key]) => (
+                  <Field key={key} label={lbl}>
+                    <Input value={String((p as Record<string, unknown>)[key] ?? "")} onChange={e => set(key, e.target.value)} />
+                  </Field>
                 ))}
               </CardContent>
             </Card>
@@ -370,8 +380,18 @@ export default function StaffDetail() {
               </CardHeader>
               {!p.permanentSameAsCurrent && (
                 <CardContent className="grid sm:grid-cols-2 gap-4">
-                  {(["House Number", "permanentHouseNumber"], ["Street", "permanentStreet"], ["Area", "permanentArea"], ["Landmark", "permanentLandmark"], ["City", "permanentCity"], ["State", "permanentState"], ["Pincode", "permanentPincode"] as const).map(([lbl, key]) => (
-                    <Field key={key} label={lbl}><Input value={(p as Record<string, string>)[key] ?? ""} onChange={e => set(key, e.target.value)} /></Field>
+                  {([
+                    ["House Number", "permanentHouseNumber"],
+                    ["Street", "permanentStreet"],
+                    ["Area", "permanentArea"],
+                    ["Landmark", "permanentLandmark"],
+                    ["City", "permanentCity"],
+                    ["State", "permanentState"],
+                    ["Pincode", "permanentPincode"],
+                  ] as const).map(([lbl, key]) => (
+                    <Field key={key} label={lbl}>
+                      <Input value={String((p as Record<string, unknown>)[key] ?? "")} onChange={e => set(key, e.target.value)} />
+                    </Field>
                   ))}
                 </CardContent>
               )}
