@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, Wrench, BarChart3, Bell, LogOut, ChevronRight,
   Sun, Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee, Sparkles,
-  Monitor, Crown,
+  Monitor, Crown, Radio,
 } from "lucide-react";
 
 type NavItem = {
@@ -51,6 +51,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/admin/branches", label: "Branches", icon: GitBranch, perm: { resource: "branches", action: "view" } },
       { href: "/admin/services", label: "Services", icon: Wrench, perm: { resource: "services", action: "view" } },
       { href: "/admin/analytics", label: "Analytics", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
+      { href: "/admin/communications", label: "Communication Center", icon: Radio, perm: { resource: "communications", action: "view" } },
       { href: "/admin/notifications", label: "Notifications", icon: Bell, perm: { resource: "notifications", action: "view" } },
     ],
   },

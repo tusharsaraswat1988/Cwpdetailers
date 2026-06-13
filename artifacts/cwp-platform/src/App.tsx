@@ -22,6 +22,7 @@ import AdminBranches from "@/pages/admin/Branches";
 import AdminServices from "@/pages/admin/Services";
 import AdminAnalytics from "@/pages/admin/Analytics";
 import AdminNotifications from "@/pages/admin/Notifications";
+import { CommunicationCenter } from "@/features/communications";
 import AdminFranchisees from "@/pages/admin/Franchisees";
 import AdminStaffApproval from "@/pages/admin/StaffApproval";
 import AdminCredentials from "@/pages/admin/Credentials";
@@ -123,6 +124,7 @@ function Router() {
       <Route path="/admin/services" component={() => <ProtectedRoute component={AdminServices} roles={["admin", "superadmin", "manager"]} permission={{ resource: "services", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/analytics" component={() => <ProtectedRoute component={AdminAnalytics} roles={["admin", "superadmin", "manager"]} permission={{ resource: "analytics", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/notifications" component={() => <ProtectedRoute component={AdminNotifications} roles={["admin", "superadmin", "manager"]} permission={{ resource: "notifications", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/communications" component={() => <ProtectedRoute component={CommunicationCenter} roles={["admin", "superadmin", "manager"]} permission={{ resource: "communications", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/franchisees" component={() => <ProtectedRoute component={AdminFranchisees} roles={["admin", "superadmin"]} permission={{ resource: "franchisees", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/credentials" component={() => <ProtectedRoute component={AdminCredentials} roles={["admin", "superadmin"]} permission={{ resource: "staff", action: "approve" }} loginPath="/admin/login" />} />
       <Route path="/admin/churned" component={() => <ProtectedRoute component={AdminChurnedCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "churned", action: "view" }} loginPath="/admin/login" />} />

@@ -8,6 +8,7 @@ const RESOURCES = [
   "customers", "leads", "staff", "bookings", "subscriptions", "invoices",
   "complaints", "branches", "services", "analytics", "notifications",
   "franchisees", "churned", "inventory", "billing", "settings", "permissions",
+  "communications",
 ] as const;
 
 const ALL_ACTIONS: Action[] = ["view", "create", "edit", "delete", "approve"];
@@ -30,6 +31,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     services: ["view"],
     analytics: ["view"],
     notifications: ["view", "create"],
+    communications: ["view", "create", "edit"],
     franchisees: ["view"],
     churned: ["view", "edit"],
     inventory: ["view", "edit"],
@@ -50,6 +52,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     services: ["view"],
     analytics: ["view"],
     notifications: ["view"],
+    communications: ["view", "create"],
     franchisees: ["view"],
     churned: ["view", "edit"],
     inventory: ["view"],

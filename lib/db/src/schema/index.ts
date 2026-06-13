@@ -23,3 +23,4 @@ export * from "./lead-ingestion-log";
 export * from "./booking-events";
 export * from "./system-jobs";
 export * from "./wallet-transactions";
+export * from "./communications";

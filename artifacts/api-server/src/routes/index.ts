@@ -21,6 +21,7 @@ import quotationsRouter from "./quotations";
 import expensesRouter from "./expenses";
 import billingRouter from "./billing";
 import walletRouter from "./wallet";
+import communicationsRouter from "./communications";
 import { guardResource } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -107,6 +108,17 @@ router.use(
     { match: /\/ingest$/, method: "POST", action: "create" },
   ]),
   leadsRouter,
+);
+
+router.use(
+  guardResource("communications", [
+    { match: /\/campaigns\/\d+\/send$/, method: "POST", action: "edit" },
+    { match: /\/campaigns\/\d+\/schedule$/, method: "POST", action: "edit" },
+    { match: /\/campaigns\/preview$/, method: "POST", action: "view" },
+    { match: /\/audiences\/preview$/, method: "POST", action: "view" },
+    { match: /\/jobs\/process$/, method: "POST", action: "edit" },
+  ]),
+  communicationsRouter,
 );
 
 router.use(storageRouter);
