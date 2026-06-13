@@ -30,6 +30,8 @@ import brandingRouter from "./branding";
 import legalRouter from "./legal";
 import masterDataRouter from "./master-data";
 import serviceCatalogRouter from "./service-catalog";
+import dcmsRouter from "./dcms";
+import pushRouter from "./push";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -162,6 +164,8 @@ router.use(
 router.use(storageRouter);
 router.use(brandingRouter);
 router.use(legalRouter);
+router.use(pushRouter);
+router.use(dcmsRouter);
 router.use(guardMasterDataRoutes(), masterDataRouter);
 router.use(guardCatalogRoutes(), serviceCatalogRouter);
 

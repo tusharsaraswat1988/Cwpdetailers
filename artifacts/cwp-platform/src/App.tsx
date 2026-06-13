@@ -41,6 +41,7 @@ import AdminDues from "@/pages/admin/Dues";
 import AdminDailyOps from "@/pages/admin/DailyOps";
 import BrandIdentity from "@/pages/admin/BrandIdentity";
 import SystemStatus from "@/pages/admin/SystemStatus";
+import AdminPushLogs from "@/pages/admin/PushLogs";
 import LegalCMS from "@/pages/admin/LegalCMS";
 import BusinessInfoPage from "@/pages/admin/BusinessInfo";
 import ComplianceSettings from "@/pages/admin/ComplianceSettings";
@@ -75,6 +76,12 @@ import FranchiseeChurned from "@/pages/franchisee/ChurnedCustomers";
 import FranchiseeLeads from "@/pages/franchisee/Leads";
 import OperationsWall from "@/pages/admin/OperationsWall";
 import FounderDashboard from "@/pages/admin/FounderDashboard";
+import {
+  DcmsDashboardPage, DcmsPlansPage, DcmsSubscriptionsPage, DcmsVisitsPage, DcmsAssignmentsPage,
+  DcmsStaffPerformancePage,
+  StaffDailyCleaningPage, CustomerDailyCleaningPage, CustomerDcmsHistoryPage, CustomerDcmsGalleryPage,
+  StaffDailyRoutePage, DcmsWashHistoryPage,
+} from "@/features/daily-cleaning";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -149,6 +156,13 @@ function Router() {
       <Route path="/admin/staff/:id" component={() => <ProtectedRoute component={AdminStaffDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "staff", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/bookings" component={() => <ProtectedRoute component={AdminBookings} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/daily-ops" component={() => <ProtectedRoute component={AdminDailyOps} roles={["admin", "superadmin", "manager"]} permission={{ resource: "subscriptions", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning/plans" component={() => <ProtectedRoute component={DcmsPlansPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "manage_plans" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning/subscriptions" component={() => <ProtectedRoute component={DcmsSubscriptionsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "manage_subscriptions" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning/visits" component={() => <ProtectedRoute component={DcmsVisitsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning/washes" component={() => <ProtectedRoute component={DcmsWashHistoryPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning/staff-performance" component={() => <ProtectedRoute component={DcmsStaffPerformancePage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view_reports" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning/assignments" component={() => <ProtectedRoute component={DcmsAssignmentsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "manage_assignments" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning" component={() => <ProtectedRoute component={DcmsDashboardPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view_reports" }} loginPath="/admin/login" />} />
       <Route path="/admin/subscriptions" component={() => <ProtectedRoute component={AdminSubscriptions} roles={["admin", "superadmin", "manager"]} permission={{ resource: "subscriptions", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/invoices" component={() => <ProtectedRoute component={AdminInvoices} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={["admin", "superadmin", "manager"]} permission={{ resource: "complaints", action: "view" }} loginPath="/admin/login" />} />
@@ -158,6 +172,7 @@ function Router() {
       <Route path="/admin/catalog" component={() => <ProtectedRoute component={ServiceCatalog} roles={["admin", "superadmin", "manager"]} permission={{ resource: "services", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/analytics" component={() => <ProtectedRoute component={AdminAnalytics} roles={["admin", "superadmin", "manager"]} permission={{ resource: "analytics", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/notifications" component={() => <ProtectedRoute component={AdminNotifications} roles={["admin", "superadmin", "manager"]} permission={{ resource: "notifications", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/push-logs" component={() => <ProtectedRoute component={AdminPushLogs} roles={["admin", "superadmin", "manager"]} permission={{ resource: "notifications", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/communications" component={() => <ProtectedRoute component={CommunicationCenter} roles={["admin", "superadmin", "manager"]} permission={{ resource: "communications", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/franchisees" component={() => <ProtectedRoute component={AdminFranchisees} roles={["admin", "superadmin"]} permission={{ resource: "franchisees", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/credentials" component={() => <ProtectedRoute component={AdminCredentials} roles={["admin", "superadmin"]} permission={{ resource: "staff", action: "approve" }} loginPath="/admin/login" />} />
@@ -186,12 +201,17 @@ function Router() {
       <Route path="/customer/history" component={() => <ProtectedRoute component={CustomerHistory} roles={["customer"]} />} />
       <Route path="/customer/invoices" component={() => <ProtectedRoute component={CustomerInvoices} roles={["customer"]} />} />
       <Route path="/customer/complaints" component={() => <ProtectedRoute component={CustomerComplaints} roles={["customer"]} />} />
+      <Route path="/customer/daily-cleaning/history" component={() => <ProtectedRoute component={CustomerDcmsHistoryPage} roles={["customer"]} />} />
+      <Route path="/customer/daily-cleaning/gallery" component={() => <ProtectedRoute component={CustomerDcmsGalleryPage} roles={["customer"]} />} />
+      <Route path="/customer/daily-cleaning" component={() => <ProtectedRoute component={CustomerDailyCleaningPage} roles={["customer"]} />} />
 
       {/* Staff — mobile-first field app (Sprint 3) */}
       <Route path="/staff/dashboard" component={() => <ProtectedRoute component={StaffDashboard} roles={["staff"]} />} />
       <Route path="/staff/jobs" component={() => <ProtectedRoute component={StaffJobs} roles={["staff"]} />} />
       <Route path="/staff/earnings" component={() => <ProtectedRoute component={StaffEarnings} roles={["staff"]} />} />
       <Route path="/staff/profile" component={() => <ProtectedRoute component={StaffProfile} roles={["staff"]} />} />
+      <Route path="/staff/daily-route" component={() => <ProtectedRoute component={StaffDailyRoutePage} roles={["staff"]} permission={{ resource: "daily_cleaning", action: "complete_visits" }} />} />
+      <Route path="/staff/daily-cleaning" component={() => <Redirect to="/staff/daily-route" />} />
       <Route path="/staff/schedule" component={() => <Redirect to="/staff/jobs" />} />
       <Route path="/staff/attendance" component={() => <Redirect to="/staff/profile" />} />
       <Route path="/staff/performance" component={() => <Redirect to="/staff/profile" />} />

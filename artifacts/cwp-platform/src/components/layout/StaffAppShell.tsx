@@ -6,10 +6,11 @@ import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
 import { useBrandingPortal } from "@/lib/branding";
-import { Zap, Calendar, IndianRupee, User } from "lucide-react";
+import { Zap, Calendar, IndianRupee, User, Sparkles } from "lucide-react";
 
 const staffNavItems: BottomNavItem[] = [
   { href: "/staff/dashboard", label: "Today", icon: Zap },
+  { href: "/staff/daily-route", label: "Route", icon: Sparkles },
   { href: "/staff/jobs", label: "Jobs", icon: Calendar },
   { href: "/staff/earnings", label: "Earnings", icon: IndianRupee },
   { href: "/staff/profile", label: "Profile", icon: User },
@@ -17,6 +18,8 @@ const staffNavItems: BottomNavItem[] = [
 
 const pageTitles: Record<string, string> = {
   "/staff/dashboard": "Today",
+  "/staff/daily-route": "Daily Route",
+  "/staff/daily-cleaning": "Daily Route",
   "/staff/jobs": "Jobs",
   "/staff/earnings": "Earnings",
   "/staff/profile": "Profile",

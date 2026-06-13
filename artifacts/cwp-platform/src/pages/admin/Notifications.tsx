@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Bell, BellOff } from "lucide-react";
+import { Link } from "wouter";
 
 export default function AdminNotifications() {
   const qc = useQueryClient();
@@ -42,7 +43,7 @@ export default function AdminNotifications() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-display font-bold text-2xl">Notifications</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">{unread} unread</p>
+            <p className="text-muted-foreground text-sm mt-0.5">{unread} unread · <Link href="/admin/push-logs" className="text-primary hover:underline">Push delivery log</Link></p>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>

@@ -34,3 +34,6 @@ export * from "./vehicle-masters";
 export * from "./city-masters";
 export * from "./saved-locations";
 export * from "./service-management";
+export * from "./legacy-migration";
+export * from "./dcms";
+export * from "./push-notifications";

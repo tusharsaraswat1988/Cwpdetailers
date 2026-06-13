@@ -1,4 +1,7 @@
 /** HTTP API smoke test for Phase 4 daily cleaning automation */
+import "./load-env.js";
+import { readAdminCredentials } from "./adminEnv.js";
+
 const BASE = "http://127.0.0.1:8080/api";
 
 async function login(phone: string, password: string) {
@@ -38,7 +41,8 @@ async function main() {
   console.log("=== Phase 4 HTTP API Verification ===\n");
   const results: string[] = [];
 
-  const admin = await login("9999999999", "admin123");
+  const adminCreds = readAdminCredentials();
+  const admin = await login(adminCreds.phone, adminCreds.password);
   results.push(`Admin login: ${admin.ok ? "PASS" : "FAIL"}`);
 
   const dailyOps = await get("/subscriptions/daily-ops", admin.token);

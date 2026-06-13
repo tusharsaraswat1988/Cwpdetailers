@@ -24,6 +24,8 @@ import { ArrowLeft, IndianRupee, Wallet, Car } from "lucide-react";
 import { Link } from "wouter";
 import CommunicationTimeline from "@/features/communications/components/CommunicationTimeline";
 import CommunicationPreferences from "@/features/communications/components/CommunicationPreferences";
+import { VehicleReferencePhotoEditor } from "@/components/shared/VehicleReferencePhotoEditor";
+import { vehiclePhotosFromRecord } from "@/components/shared/VehicleReferencePhotos";
 
 type WalletTx = {
   id: number;
@@ -228,30 +230,38 @@ export default function AdminCustomerDetail() {
             ) : (
               <div className="space-y-3">
                 {(vehicles ?? []).map((v: any) => (
-                  <div key={v.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-border" data-testid={`vehicle-staff-${v.id}`}>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{v.registrationNumber}</p>
-                      <p className="text-xs text-muted-foreground">{v.make} {v.model} · {v.vehicleType}</p>
+                  <div key={v.id} className="flex flex-col gap-3 p-3 rounded-lg border border-border" data-testid={`vehicle-staff-${v.id}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{v.registrationNumber}</p>
+                        <p className="text-xs text-muted-foreground">{v.make} {v.model} · {v.vehicleType}</p>
+                      </div>
+                      <Select
+                        value={v.assignedStaffId ? String(v.assignedStaffId) : "none"}
+                        onValueChange={(val) => {
+                          assignStaffMutation.mutate({
+                            id: v.id,
+                            data: { assignedStaffId: val === "none" ? null : parseInt(val, 10) } as any,
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="w-full sm:w-48" data-testid={`select-staff-${v.id}`}>
+                          <SelectValue placeholder="Assign staff" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Unassigned</SelectItem>
+                          {(staffList ?? []).map((s: any) => (
+                            <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Select
-                      value={v.assignedStaffId ? String(v.assignedStaffId) : "none"}
-                      onValueChange={(val) => {
-                        assignStaffMutation.mutate({
-                          id: v.id,
-                          data: { assignedStaffId: val === "none" ? null : parseInt(val, 10) } as any,
-                        });
-                      }}
-                    >
-                      <SelectTrigger className="w-full sm:w-48" data-testid={`select-staff-${v.id}`}>
-                        <SelectValue placeholder="Assign staff" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Unassigned</SelectItem>
-                        {(staffList ?? []).map((s: any) => (
-                          <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <VehicleReferencePhotoEditor
+                      vehicleId={v.id}
+                      initialPhotos={vehiclePhotosFromRecord(v)}
+                      compact
+                      onUpdated={() => qc.invalidateQueries({ queryKey: getListVehiclesQueryKey({ customerId: String(id) } as any) })}
+                    />
                   </div>
                 ))}
               </div>

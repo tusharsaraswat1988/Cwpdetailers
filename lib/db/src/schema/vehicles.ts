@@ -13,6 +13,7 @@ export const vehiclesTable = pgTable("vehicles", {
   year: integer("year"),
   color: text("color"),
   registrationNumber: text("registration_number").notNull(),
+  registrationNormalized: text("registration_normalized"),
   vehicleType: vehicleTypeEnum("vehicle_type").default("sedan"),
   serviceAddress: text("service_address"),
   serviceLat: doublePrecision("service_lat"),
@@ -24,6 +25,10 @@ export const vehiclesTable = pgTable("vehicles", {
   franchiseeId: integer("franchisee_id"),
   branchId: integer("branch_id"),
   assignedStaffId: integer("assigned_staff_id"),
+  refPhotoFrontUrl: text("ref_photo_front_url"),
+  refPhotoRearUrl: text("ref_photo_rear_url"),
+  refPhotoLeftUrl: text("ref_photo_left_url"),
+  refPhotoRightUrl: text("ref_photo_right_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

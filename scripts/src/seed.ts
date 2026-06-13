@@ -1,4 +1,5 @@
 import "./load-env.js";
+import { readAdminCredentials } from "./adminEnv.js";
 import { db } from "@workspace/db";
 import {
   usersTable, branchesTable, customersTable, vehiclesTable,
@@ -154,7 +155,7 @@ async function upsertUser(input: {
   phone: string;
   email: string | null;
   passwordHash: string;
-  role: "admin" | "customer" | "staff";
+  role: "admin" | "superadmin" | "customer" | "staff";
   branchId: number;
   customerId?: number | null;
   staffId?: number | null;
@@ -334,16 +335,17 @@ async function seed() {
     joiningDate: "2023-08-15",
   });
 
-  const adminHash = await hashPassword("admin123");
+  const adminCreds = readAdminCredentials();
+  const adminHash = await hashPassword(adminCreds.password);
   const customerHash = await hashPassword("customer123");
   const staffHash = await hashPassword("staff123");
 
   const adminUser = await upsertUser({
-    name: "Admin CWP",
-    phone: "9999999999",
-    email: "admin@cwpdetailers.com",
+    name: adminCreds.name,
+    phone: adminCreds.phone,
+    email: adminCreds.email,
     passwordHash: adminHash,
-    role: "admin",
+    role: "superadmin",
     branchId: varanasi.id,
   });
 
@@ -534,7 +536,7 @@ async function seed() {
   await seedWalletLedger();
 
   console.log("\n✅ Varanasi pilot seed complete.\n");
-  console.log("Admin:     phone 9999999999  password admin123");
+  console.log(`Admin:     phone ${adminCreds.phone}  password (from ADMIN_PASSWORD in .env)`);
   console.log("Customer:  phone 9001001001  password customer123  (Arjun Sharma)");
   console.log("Customer:  phone 9001001002  password customer123  (Sunita Patel)");
   console.log("Customer:  phone 9001001005  password customer123  (Rohit Agarwal)");

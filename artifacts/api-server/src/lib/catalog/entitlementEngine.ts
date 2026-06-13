@@ -50,6 +50,46 @@ export async function grantEntitlement(input: EntitlementGrantInput, tx?: Transa
   return ent;
 }
 
+/** Grant entitlement with optional used-credit balance and explicit valid-until (legacy migration). */
+export async function grantEntitlementWithBalance(
+  input: EntitlementGrantInput & { usedCredits?: number; validUntil?: string },
+  tx?: Transaction,
+) {
+  const ctx = tx ?? db;
+  const validFrom = input.validFrom ?? getTodayIST();
+  let validUntil = input.validUntil;
+  if (!validUntil) {
+    const validUntilDate = new Date(validFrom);
+    validUntilDate.setDate(validUntilDate.getDate() + input.validityDays);
+    validUntil = validUntilDate.toISOString().split("T")[0];
+  }
+
+  const used = Math.max(0, input.usedCredits ?? 0);
+  const total = input.creditCount;
+  if (used > total) throw new Error("usedCredits cannot exceed creditCount");
+  const remaining = total - used;
+  const status = remaining <= 0 ? "exhausted" as const : "active" as const;
+
+  const [ent] = await ctx.insert(customerEntitlementsTable).values({
+    customerId: input.customerId,
+    packageId: input.packageId ?? null,
+    subscriptionId: input.subscriptionId ?? null,
+    serviceId: input.serviceId,
+    cityId: input.cityId ?? null,
+    entitlementType: input.entitlementType,
+    totalCredits: total,
+    usedCredits: used,
+    remainingCredits: remaining,
+    validFrom,
+    validUntil,
+    status,
+    notes: input.notes ?? null,
+  }).returning();
+
+  logger.info({ entitlementId: ent.id, customerId: input.customerId, total, used, remaining }, "Entitlement granted with balance");
+  return ent;
+}
+
 export async function grantPackageEntitlements(
   customerId: number,
   packageId: number,
@@ -77,6 +117,50 @@ export async function grantPackageEntitlements(
       creditCount: item.creditCount,
       validityDays: pkg.validityDays,
       validFrom: opts?.validFrom,
+      notes: `From package: ${pkg.name}`,
+    }, ctx);
+    grants.push(ent);
+  }
+  return grants;
+}
+
+/** Grant all package entitlements with per-service used-credit overrides (legacy migration). */
+export async function grantPackageEntitlementsWithBalance(
+  customerId: number,
+  packageId: number,
+  opts?: {
+    subscriptionId?: number;
+    cityId?: number;
+    validFrom?: string;
+    validUntil?: string;
+    usedCreditsByServiceId?: Record<number, number>;
+  },
+  tx?: Transaction,
+) {
+  const ctx = tx ?? db;
+  const [pkg] = await ctx.select().from(catalogPackagesTable).where(eq(catalogPackagesTable.id, packageId)).limit(1);
+  if (!pkg) throw new Error("Package not found");
+
+  const items = await ctx.select()
+    .from(catalogPackageEntitlementsTable)
+    .where(eq(catalogPackageEntitlementsTable.packageId, packageId))
+    .orderBy(catalogPackageEntitlementsTable.sortOrder);
+
+  const grants = [];
+  for (const item of items) {
+    const usedCredits = opts?.usedCreditsByServiceId?.[item.serviceId];
+    const ent = await grantEntitlementWithBalance({
+      customerId,
+      packageId,
+      subscriptionId: opts?.subscriptionId,
+      serviceId: item.serviceId,
+      cityId: opts?.cityId ?? pkg.cityId ?? undefined,
+      entitlementType: item.entitlementType,
+      creditCount: item.creditCount,
+      validityDays: pkg.validityDays,
+      validFrom: opts?.validFrom,
+      validUntil: opts?.validUntil,
+      usedCredits,
       notes: `From package: ${pkg.name}`,
     }, ctx);
     grants.push(ent);

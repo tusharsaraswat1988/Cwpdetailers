@@ -20,6 +20,15 @@ export {
   type FieldResult as EmailFieldResult,
 } from "./email";
 
+export {
+  normalizeRegistration,
+  extractRegistrationFromText,
+  processPlateOcrOutput,
+  shouldAutoSelectFromOcrConfidence,
+  PLATE_OCR_AUTO_SELECT_THRESHOLD,
+  type PlateOcrResult,
+} from "./registration";
+
 export function firstFieldError(
   results: Record<string, { ok: boolean; error?: string }>,
 ): string | null {

@@ -7,6 +7,7 @@ import { useConnectivity } from "@/services/ConnectivityContext";
 import { offlineQueue } from "@/services/offlineQueue";
 import { usePwaInstall } from "@/lib/pwa/usePwaInstall";
 import type { QueueItem } from "@/services/offlineQueue";
+import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 
 function statusBadge(ok: boolean, okLabel: string, badLabel: string) {
   return (
@@ -155,6 +156,8 @@ export default function SystemStatus() {
             </CardContent>
           </Card>
         )}
+
+        <PushNotificationSettings />
       </div>
     </AdminLayout>
   );

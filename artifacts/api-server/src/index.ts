@@ -1,6 +1,14 @@
+import "./load-env.js";
 import app from "./app";
+import { bootstrapAdminFromEnv } from "./lib/bootstrapAdmin";
 import { logger } from "./lib/logger";
 import { runDailyTick } from "./subscriptions/service";
+import { runMissedVisitScheduler } from "./lib/dcms/missedVisitScheduler";
+import { autoResumeExpiredPauses } from "./lib/dcms/pauseService";
+import { runDcmsMaintenanceJobs } from "./lib/dcms/maintenanceService";
+import { notifyDailyRoutesAvailable } from "./lib/dcms/routeNotifyService";
+import { processPendingNotificationEvents } from "./lib/push/eventProcessor";
+import { todayStrInIST, getNext2359IST } from "./lib/dcms/dateUtils";
 
 const rawPort = process.env["PORT"];
 
@@ -23,12 +31,16 @@ app.listen(port, "0.0.0.0", (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  // Bootstrap daily-tick scheduler
+  bootstrapAdminFromEnv().catch(err => {
+    logger.error({ err }, "Super admin bootstrap failed");
+  });
   bootstrapDailyTick();
+  bootstrapDcmsScheduler();
+  bootstrapMorningRouteNotify();
+  bootstrapPushEventProcessor();
 });
 
 function getNextMidnightIST(now: Date): Date {
-  // Midnight IST = 18:30 UTC
   const next = new Date(now);
   next.setUTCHours(18, 30, 0, 0);
   if (next <= now) {
@@ -38,12 +50,9 @@ function getNextMidnightIST(now: Date): Date {
 }
 
 function bootstrapDailyTick() {
-  // Run once immediately at startup (idempotent via 6h window)
   runDailyTick().catch(err => {
     logger.error({ err }, "Startup daily tick failed");
   });
-
-  // Schedule next run at midnight IST, then recompute each cycle to avoid drift
   scheduleNextTick();
   logger.info("Daily tick scheduler bootstrapped");
 }
@@ -59,4 +68,71 @@ function scheduleNextTick() {
     });
     scheduleNextTick();
   }, delay);
+}
+
+function bootstrapDcmsScheduler() {
+  scheduleDcmsEndOfDay();
+  logger.info("DCMS missed-visit scheduler bootstrapped (23:59 IST)");
+}
+
+function scheduleDcmsEndOfDay() {
+  const now = new Date();
+  const next2359 = getNext2359IST(now);
+  const delay = next2359.getTime() - now.getTime();
+
+  setTimeout(async () => {
+    const date = todayStrInIST();
+    try {
+      const result = await runMissedVisitScheduler(date);
+      logger.info({ result }, "DCMS missed visit scheduler completed");
+      await autoResumeExpiredPauses(date);
+      await runDcmsMaintenanceJobs();
+    } catch (err) {
+      logger.error({ err }, "DCMS end-of-day scheduler failed");
+    }
+    scheduleDcmsEndOfDay();
+  }, delay);
+}
+
+/** 6:00 AM IST — notify staff that today's route is ready. */
+function getNext6AmIST(now: Date): Date {
+  const next = new Date(now);
+  next.setUTCHours(0, 30, 0, 0);
+  if (next <= now) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+  return next;
+}
+
+function bootstrapMorningRouteNotify() {
+  scheduleMorningRouteNotify();
+  logger.info("DCMS morning route push scheduler bootstrapped (06:00 IST)");
+}
+
+function scheduleMorningRouteNotify() {
+  const now = new Date();
+  const next = getNext6AmIST(now);
+  const delay = next.getTime() - now.getTime();
+
+  setTimeout(async () => {
+    try {
+      const result = await notifyDailyRoutesAvailable();
+      logger.info({ result }, "Daily route push notifications sent");
+    } catch (err) {
+      logger.error({ err }, "Morning route notify failed");
+    }
+    scheduleMorningRouteNotify();
+  }, delay);
+}
+
+function bootstrapPushEventProcessor() {
+  processPendingNotificationEvents().catch(err => {
+    logger.error({ err }, "Startup push event processing failed");
+  });
+  setInterval(() => {
+    processPendingNotificationEvents().catch(err => {
+      logger.error({ err }, "Periodic push event processing failed");
+    });
+  }, 60_000);
+  logger.info("Push notification event processor bootstrapped");
 }

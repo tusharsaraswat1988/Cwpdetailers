@@ -45,6 +45,10 @@ router.get("/customers", async (req, res) => {
         email: customersTable.email, address: customersTable.address, city: customersTable.city,
         status: customersTable.status, walletBalance: customersTable.walletBalance,
         totalDues: customersTable.totalDues, branchId: customersTable.branchId,
+        photoUrl: customersTable.photoUrl, lastPaymentDate: customersTable.lastPaymentDate,
+        customerSince: customersTable.customerSince, historicalWashCount: customersTable.historicalWashCount,
+        historicalSolarVisitCount: customersTable.historicalSolarVisitCount,
+        operationalNotes: customersTable.operationalNotes,
         branchName: branchesTable.name, createdAt: customersTable.createdAt,
       }).from(customersTable)
         .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
@@ -86,6 +90,34 @@ router.post("/customers", async (req, res) => {
   }
 });
 
+router.get("/customers/me", async (req, res) => {
+  try {
+    const customerId = req.scope?.customerId;
+    if (!customerId) return res.status(403).json({ error: "Customer profile only" });
+
+    const [customer] = await db.select({
+      id: customersTable.id, name: customersTable.name, phone: customersTable.phone,
+      email: customersTable.email, address: customersTable.address, city: customersTable.city,
+      status: customersTable.status, walletBalance: customersTable.walletBalance,
+      totalDues: customersTable.totalDues, branchId: customersTable.branchId,
+      photoUrl: customersTable.photoUrl, lastPaymentDate: customersTable.lastPaymentDate,
+      customerSince: customersTable.customerSince, historicalWashCount: customersTable.historicalWashCount,
+      historicalSolarVisitCount: customersTable.historicalSolarVisitCount,
+      operationalNotes: customersTable.operationalNotes,
+      branchName: branchesTable.name, createdAt: customersTable.createdAt,
+    }).from(customersTable)
+      .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
+      .where(eq(customersTable.id, customerId))
+      .limit(1);
+
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+    return res.json(customer);
+  } catch (err) {
+    req.log.error({ err }, "Get customer profile error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/customers/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -95,6 +127,10 @@ router.get("/customers/:id", async (req, res) => {
       status: customersTable.status, walletBalance: customersTable.walletBalance,
       totalDues: customersTable.totalDues, branchId: customersTable.branchId,
       companyId: customersTable.companyId, franchiseeId: customersTable.franchiseeId,
+      photoUrl: customersTable.photoUrl, lastPaymentDate: customersTable.lastPaymentDate,
+      customerSince: customersTable.customerSince, historicalWashCount: customersTable.historicalWashCount,
+      historicalSolarVisitCount: customersTable.historicalSolarVisitCount,
+      operationalNotes: customersTable.operationalNotes,
       branchName: branchesTable.name, createdAt: customersTable.createdAt,
     }).from(customersTable)
       .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
@@ -125,7 +161,7 @@ router.patch("/customers/:id", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    const { name, phone, email, address, city, status, branchId } = req.body;
+    const { name, phone, email, address, city, status, branchId, photoUrl, operationalNotes } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
 
@@ -138,6 +174,15 @@ router.patch("/customers/:id", async (req, res) => {
     if (city !== undefined) updateData.city = city;
     if (status !== undefined) updateData.status = status;
     if (branchId !== undefined) updateData.branchId = branchId;
+    if (photoUrl !== undefined) {
+      if (photoUrl !== null && typeof photoUrl === "string" && photoUrl.trim() && !/^https?:\/\//.test(photoUrl)) {
+        return res.status(400).json({ error: "photoUrl must be an https URL" });
+      }
+      updateData.photoUrl = photoUrl || null;
+    }
+    if (operationalNotes !== undefined && req.scope?.isSuperAdmin) {
+      updateData.operationalNotes = operationalNotes;
+    }
     // walletBalance is derived from ledger — never patch directly
 
     const [customer] = await db.update(customersTable).set(updateData).where(eq(customersTable.id, id)).returning();

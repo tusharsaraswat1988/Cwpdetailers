@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { CompletionRing } from "@/components/shared/CompletionRing";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { DcmsHomeCard } from "@/features/daily-cleaning/pages/CustomerDailyCleaningPage";
 
 async function fetchWalletTransactions(customerId: number) {
   const res = await fetch(`/api/customers/${customerId}/wallet/transactions?limit=5`, { credentials: "include" });
@@ -208,6 +209,9 @@ export default function CustomerDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Daily Cleaning (DCMS) */}
+        <DcmsHomeCard />
 
         {/* Active subscriptions */}
         <div>

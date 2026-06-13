@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, BarChart3, Bell, LogOut, ChevronRight,
   Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee, Sparkles,
-  Monitor, Crown, Radio, Palette, Activity, Scale, Search, Info, Database,
+  Monitor, Crown, Radio, Palette, Activity, Scale, Search, Info, Database, BellRing,
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
@@ -30,7 +30,8 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/admin/customers", label: "Customers", icon: Users, perm: { resource: "customers", action: "view" } },
       { href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
       { href: "/admin/bookings", label: "Bookings", icon: Calendar, perm: { resource: "bookings", action: "view" } },
-      { href: "/admin/daily-ops", label: "Daily Cleaning", icon: Sparkles, perm: { resource: "subscriptions", action: "view" } },
+      { href: "/admin/daily-cleaning", label: "Daily Cleaning", icon: Sparkles, perm: { resource: "daily_cleaning", action: "view" } },
+      { href: "/admin/daily-ops", label: "Daily Ops (Legacy)", icon: Sparkles, perm: { resource: "subscriptions", action: "view" } },
       { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard, perm: { resource: "subscriptions", action: "view" } },
       { href: "/admin/invoices", label: "Invoices & Payments", icon: FileText, perm: { resource: "invoices", action: "view" } },
       { href: "/admin/quotations", label: "Quotations", icon: FileText, perm: { resource: "invoices", action: "view" } },
@@ -57,6 +58,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/admin/analytics", label: "Analytics", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
       { href: "/admin/communications", label: "Communication Center", icon: Radio, perm: { resource: "communications", action: "view" } },
       { href: "/admin/notifications", label: "Notifications", icon: Bell, perm: { resource: "notifications", action: "view" } },
+      { href: "/admin/push-logs", label: "Push Delivery Log", icon: BellRing, perm: { resource: "notifications", action: "view" } },
     ],
   },
   {

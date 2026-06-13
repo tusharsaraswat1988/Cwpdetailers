@@ -1,8 +1,9 @@
 import { Router, type Request } from "express";
 import { db } from "@workspace/db";
 import { vehiclesTable, customersTable, staffTable } from "@workspace/db";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql, ne } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { normalizeRegistration } from "../lib/dcms/registration";
 
 const router = Router();
 
@@ -83,6 +84,13 @@ router.post("/vehicles", async (req, res) => {
 
     const locationComplete = !!(serviceAddress && serviceLat != null && serviceLng != null);
 
+    const regNorm = normalizeRegistration(registrationNumber);
+    const [dup] = await db.select({ id: vehiclesTable.id }).from(vehiclesTable)
+      .where(eq(vehiclesTable.registrationNormalized, regNorm)).limit(1);
+    if (dup) {
+      return res.status(409).json({ error: "Vehicle registration number already exists", registrationNumber: regNorm });
+    }
+
     const allowed = await callerCustomerIds(req);
     if (allowed !== null && !allowed.includes(customerId)) {
       return res.status(404).json({ error: "Customer not found" });
@@ -95,6 +103,7 @@ router.post("/vehicles", async (req, res) => {
       year,
       color,
       registrationNumber,
+      registrationNormalized: regNorm,
       vehicleType: resolvedType,
       serviceAddress,
       serviceLat,
@@ -125,7 +134,16 @@ router.patch("/vehicles/:id", async (req, res) => {
     if (model !== undefined) updateData.model = model;
     if (year !== undefined) updateData.year = year;
     if (color !== undefined) updateData.color = color;
-    if (registrationNumber !== undefined) updateData.registrationNumber = registrationNumber;
+    if (registrationNumber !== undefined) {
+      const regNorm = normalizeRegistration(registrationNumber);
+      const [dup] = await db.select({ id: vehiclesTable.id }).from(vehiclesTable)
+        .where(and(eq(vehiclesTable.registrationNormalized, regNorm), ne(vehiclesTable.id, id))).limit(1);
+      if (dup) {
+        return res.status(409).json({ error: "Vehicle registration number already exists", registrationNumber: regNorm });
+      }
+      updateData.registrationNumber = registrationNumber;
+      updateData.registrationNormalized = regNorm;
+    }
     if (vehicleType !== undefined) updateData.vehicleType = vehicleType;
     if (customerId !== undefined) updateData.customerId = customerId;
     if (vehicleModelId !== undefined) updateData.vehicleModelId = vehicleModelId;
@@ -179,6 +197,40 @@ router.delete("/vehicles/:id", async (req, res) => {
     return res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Delete vehicle error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/vehicles/:id/reference-photos", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(vehiclesTable).where(eq(vehiclesTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, existing)) {
+      return res.status(404).json({ error: "Vehicle not found" });
+    }
+    const { getVehicleReferencePhotos } = await import("../lib/vehicles/referencePhotos");
+    const data = await getVehicleReferencePhotos(id);
+    return res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "Get vehicle reference photos error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/vehicles/:id/reference-photos", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(vehiclesTable).where(eq(vehiclesTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, existing)) {
+      return res.status(404).json({ error: "Vehicle not found" });
+    }
+    const { front, rear, left, right } = req.body as Record<string, string | null | undefined>;
+    const { updateVehicleReferencePhotos } = await import("../lib/vehicles/referencePhotos");
+    const data = await updateVehicleReferencePhotos(id, { front, rear, left, right });
+    if (!data) return res.status(404).json({ error: "Vehicle not found" });
+    return res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "Update vehicle reference photos error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

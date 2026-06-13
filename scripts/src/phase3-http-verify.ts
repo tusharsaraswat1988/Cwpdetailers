@@ -1,4 +1,7 @@
 /** HTTP API smoke test for Phase 3 endpoints */
+import "./load-env.js";
+import { readAdminCredentials } from "./adminEnv.js";
+
 const BASE = "http://127.0.0.1:8080/api";
 
 async function login(phone: string, password: string) {
@@ -28,7 +31,8 @@ async function post(path: string, token: string, data: unknown) {
 async function main() {
   console.log("=== Phase 3 HTTP API Verification ===\n");
 
-  const admin = await login("9999999999", "admin123");
+  const adminCreds = readAdminCredentials();
+  const admin = await login(adminCreds.phone, adminCreds.password);
   console.log(`Admin login: ${admin.ok ? "PASS" : "FAIL"} (${admin.body?.user?.role})`);
 
   const customer = await login("9001001001", "customer123");

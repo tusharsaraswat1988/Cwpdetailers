@@ -11,6 +11,7 @@ allowBuilds:
   msgpackr-extract: true
   msw: true
   sharp: true
+  tesseract.js: true
   unrs-resolver: true
 
 autoInstallPeers: false

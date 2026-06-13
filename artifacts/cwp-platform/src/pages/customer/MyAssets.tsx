@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Car, Sun, Loader2, Plus, MapPin, CheckCircle2 } from "lucide-react";
+import { VehicleReferencePhotoEditor } from "@/components/shared/VehicleReferencePhotoEditor";
+import { vehiclePhotosFromRecord } from "@/components/shared/VehicleReferencePhotos";
 
 export default function MyAssets() {
   const qc = useQueryClient();
@@ -103,14 +105,27 @@ export default function MyAssets() {
                   <p className="text-sm text-muted-foreground text-center py-4">No vehicles yet. Add your first car below.</p>
                 ) : (
                   (vehicles ?? []).map(v => (
-                    <div key={v.id} className="bg-card border border-border rounded-xl p-4" data-testid={`asset-vehicle-${v.id}`}>
-                      <p className="font-medium text-sm">{v.make} {v.model} {v.year ? `(${v.year})` : ""}</p>
-                      <p className="text-xs text-muted-foreground">{v.registrationNumber} · {v.color}</p>
-                      {(v as { serviceAddress?: string; locationComplete?: boolean }).locationComplete ? (
-                        <p className="text-xs text-green-600 flex items-center gap-1 mt-1"><CheckCircle2 size={10} /> Location set</p>
-                      ) : (
-                        <p className="text-xs text-amber-600 flex items-center gap-1 mt-1"><MapPin size={10} /> Location required before booking</p>
-                      )}
+                    <div key={v.id} className="bg-card border border-border rounded-xl p-4 space-y-3" data-testid={`asset-vehicle-${v.id}`}>
+                      <div>
+                        <p className="font-medium text-sm">{v.make} {v.model} {v.year ? `(${v.year})` : ""}</p>
+                        <p className="text-xs text-muted-foreground">{v.registrationNumber} · {v.color}</p>
+                        {(v as { serviceAddress?: string; locationComplete?: boolean }).locationComplete ? (
+                          <p className="text-xs text-green-600 flex items-center gap-1 mt-1"><CheckCircle2 size={10} /> Location set</p>
+                        ) : (
+                          <p className="text-xs text-amber-600 flex items-center gap-1 mt-1"><MapPin size={10} /> Location required before booking</p>
+                        )}
+                      </div>
+                      <VehicleReferencePhotoEditor
+                        vehicleId={v.id}
+                        initialPhotos={vehiclePhotosFromRecord({
+                          refPhotoFrontUrl: (v as { refPhotoFrontUrl?: string | null }).refPhotoFrontUrl,
+                          refPhotoRearUrl: (v as { refPhotoRearUrl?: string | null }).refPhotoRearUrl,
+                          refPhotoLeftUrl: (v as { refPhotoLeftUrl?: string | null }).refPhotoLeftUrl,
+                          refPhotoRightUrl: (v as { refPhotoRightUrl?: string | null }).refPhotoRightUrl,
+                        })}
+                        compact
+                        onUpdated={() => qc.invalidateQueries({ queryKey: getListVehiclesQueryKey({ customerId }) })}
+                      />
                     </div>
                   ))
                 )}

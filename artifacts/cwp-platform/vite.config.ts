@@ -33,6 +33,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "autoUpdate",
       includeAssets: [
         "favicon.svg",
@@ -81,9 +84,11 @@ export default defineConfig({
           },
         ],
       },
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,json}"],
+      },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,json}"],
-        // Serve the SPA shell on failed navigations. ConnectivityBanner handles degraded states after load.
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api/],
         cleanupOutdatedCaches: true,

@@ -10,6 +10,10 @@
     "seed:master-data": "tsx ./src/seed-master-data.ts",
     "migrate:006": "tsx ./src/run-migration.ts 006_master_data.sql",
     "migrate:catalog": "tsx ./src/run-migration.ts 008_service_catalog.sql",
+    "migrate:legacy": "tsx ./src/run-migration.ts 009_legacy_migration.sql",
+    "migrate:pending": "tsx ./src/run-pending-migrations.ts",
+    "migration:sample": "tsx ./src/generate-migration-sample.ts",
+    "verify:migration-lm6": "tsx ./src/verify-migration-lm6.ts",
     "seed:catalog": "tsx ./src/seed-catalog-migration.ts",
     "verify:catalog": "tsx ./src/verify-catalog.ts",
     "backfill:tenant": "tsx ./src/backfill-tenant-fields.ts",
@@ -18,7 +22,8 @@
   "dependencies": {
     "@workspace/db": "workspace:*",
     "argon2": "^0.43.0",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "exceljs": "^4.4.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",

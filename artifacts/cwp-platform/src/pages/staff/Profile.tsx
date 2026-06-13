@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp } from "lucide-react";
 import { todayIso } from "@/lib/staff-jobs";
+import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 
 const statusColors: Record<string, string> = {
   present: "bg-green-500/10 text-green-600 border-green-500/20",
@@ -226,6 +227,8 @@ export default function StaffProfile() {
             </div>
           )}
         </section>
+
+        <PushNotificationSettings />
 
         <Button
           variant="outline"

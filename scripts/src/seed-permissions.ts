@@ -3,15 +3,20 @@ import { db, permissionsTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 type Role = "customer" | "staff" | "admin" | "superadmin" | "franchisee" | "manager";
-type Action = "view" | "create" | "edit" | "delete" | "approve";
+type Action = "view" | "create" | "edit" | "delete" | "approve"
+  | "manage_plans" | "manage_subscriptions" | "manage_assignments" | "view_reports" | "complete_visits";
 
 const RESOURCES = [
   "customers", "leads", "staff", "bookings", "subscriptions", "invoices",
   "complaints", "branches", "services", "masters", "catalog", "pricing",
   "packages", "addons", "analytics", "notifications",
   "franchisees", "churned", "inventory", "billing", "settings", "permissions",
-  "communications",
+  "communications", "daily_cleaning",
 ] as const;
+
+const DAILY_CLEANING_ACTIONS: Action[] = [
+  "view", "manage_plans", "manage_subscriptions", "manage_assignments", "view_reports", "complete_visits",
+];
 
 const ALL_ACTIONS: Action[] = ["view", "create", "edit", "delete", "approve"];
 
@@ -44,6 +49,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     inventory: ["view", "edit"],
     billing: ["view"],
     settings: ["view"],
+    daily_cleaning: DAILY_CLEANING_ACTIONS,
   },
 
   // franchise_admin (mapped to franchisee in DB)
@@ -75,6 +81,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     notifications: ["view"],
     services: ["view"],
     masters: ["view"],
+    daily_cleaning: ["view", "complete_visits"],
   },
 
   customer: {
@@ -86,8 +93,14 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     notifications: ["view"],
     services: ["view"],
     masters: ["view"],
+    daily_cleaning: ["view"],
   },
 };
+
+/** Admin/superadmin get all standard actions on all RESOURCES except daily_cleaning custom actions. */
+function dailyCleaningRows(role: Role): { role: Role; resource: string; action: Action }[] {
+  return DAILY_CLEANING_ACTIONS.map(action => ({ role, resource: "daily_cleaning", action }));
+}
 
 async function seedPermissions() {
   console.log("Seeding permissions…");
@@ -99,6 +112,9 @@ async function seedPermissions() {
       for (const action of actions ?? []) {
         rows.push({ role, resource, action });
       }
+    }
+    if (role === "admin" || role === "superadmin") {
+      rows.push(...dailyCleaningRows(role));
     }
   }
   if (rows.length === 0) {
