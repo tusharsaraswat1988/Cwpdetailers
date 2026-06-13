@@ -16,6 +16,8 @@ import { extractVariables, TEMPLATE_VARIABLES } from "../lib/communications/temp
 import { getCustomerConsent, upsertCustomerConsent } from "../lib/communications/consentService";
 import { listSmartSegments, createCustomSmartSegment } from "../lib/communications/smartSegments";
 import { getCampaignAttributionDetail, processCampaignAttribution } from "../lib/communications/attributionService";
+import { getSprint1Dashboard } from "../lib/communications/sprint1Dashboard";
+import { commDltTemplatesTable } from "@workspace/db";
 import type { AudienceFilterNode } from "@workspace/db";
 
 const router = Router();
@@ -23,6 +25,24 @@ const SCOPE_COMM = {
   companyCol: commCampaignsTable.companyId,
   branchCol: commCampaignsTable.branchId,
 };
+
+// ─── DLT (combined) ───────────────────────────────────────────────────────────
+
+router.get("/communications/dlt", async (req, res) => {
+  try {
+    const entityConditions = [...tenantFilters(req, { companyCol: commDltEntitiesTable.companyId })];
+    const headerConditions = [...tenantFilters(req, { companyCol: commDltHeadersTable.companyId })];
+    const templateConditions = [...tenantFilters(req, { companyCol: commDltTemplatesTable.companyId })];
+    const [entities, headers, templates] = await Promise.all([
+      db.select().from(commDltEntitiesTable).where(entityConditions.length ? and(...entityConditions) : undefined),
+      db.select().from(commDltHeadersTable).where(headerConditions.length ? and(...headerConditions) : undefined),
+      db.select().from(commDltTemplatesTable).where(templateConditions.length ? and(...templateConditions) : undefined),
+    ]);
+    return res.json({ entities, headers, templates });
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // ─── DLT Entities ───────────────────────────────────────────────────────────
 
@@ -133,6 +153,17 @@ router.patch("/communications/templates/:id", async (req, res) => {
   }
 });
 
+router.delete("/communications/templates/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [row] = await db.delete(commTemplatesTable).where(eq(commTemplatesTable.id, id)).returning();
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/communications/template-variables", (_req, res) => {
   return res.json(TEMPLATE_VARIABLES.map(v => ({ key: v, placeholder: `{{${v}}}` })));
 });
@@ -183,6 +214,17 @@ router.patch("/communications/providers/:id", async (req, res) => {
   }
 });
 
+router.delete("/communications/providers/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [row] = await db.delete(commProvidersTable).where(eq(commProvidersTable.id, id)).returning();
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Audiences ──────────────────────────────────────────────────────────────
 
 router.get("/communications/audiences", async (req, res) => {
@@ -209,6 +251,34 @@ router.post("/communications/audiences", async (req, res) => {
     return res.status(201).json(row);
   } catch (err) {
     req.log.error({ err }, "Create audience error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/communications/audiences/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const updates = { ...req.body, updatedAt: new Date() };
+    if (updates.filterDefinition) {
+      const scope = { companyId: req.scope?.companyId, branchId: req.scope?.branchIds?.[0] };
+      updates.estimatedCount = await countAudience(updates.filterDefinition, scope);
+    }
+    const [row] = await db.update(commAudiencesTable).set(updates)
+      .where(eq(commAudiencesTable.id, id)).returning();
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.json(row);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/communications/audiences/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [row] = await db.delete(commAudiencesTable).where(eq(commAudiencesTable.id, id)).returning();
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.json({ ok: true });
+  } catch (err) {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -280,6 +350,17 @@ router.post("/communications/campaigns", async (req, res) => {
     const [row] = await db.insert(commCampaignsTable).values(payload).returning();
     await logCommAudit({ action: "campaign.create", resource: "campaign", resourceId: row!.id, userId: req.user?.id, companyId: row!.companyId });
     return res.status(201).json(row);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/communications/campaigns/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [row] = await db.delete(commCampaignsTable).where(eq(commCampaignsTable.id, id)).returning();
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -379,6 +460,22 @@ router.get("/communications/automation-triggers", (_req, res) => {
     { id: "payment_received", label: "Payment Received" },
     { id: "amc_reminder", label: "AMC Reminder" },
   ]);
+});
+
+// ─── Message History (Sprint 1) ─────────────────────────────────────────────
+
+router.get("/communications/history", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt((req.query.limit as string) ?? "200"), 500);
+    const campaignId = req.query.campaignId ? parseInt(req.query.campaignId as string) : undefined;
+    const conditions = [...tenantFilters(req, { companyCol: commEventsTable.companyId, branchCol: commEventsTable.branchId })];
+    if (campaignId) conditions.push(eq(commEventsTable.campaignId, campaignId));
+    const where = conditions.length ? and(...conditions) : undefined;
+    const data = await db.select().from(commEventsTable).where(where).orderBy(desc(commEventsTable.createdAt)).limit(limit);
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // ─── Timeline ───────────────────────────────────────────────────────────────
@@ -601,7 +698,8 @@ router.get("/communications/dashboard", async (req, res) => {
   try {
     const days = parseInt((req.query.days as string) ?? "30");
     const data = await getDashboardAnalytics(req.scope?.companyId, days);
-    return res.json(data);
+    const sprint1 = await getSprint1Dashboard(req.scope?.companyId);
+    return res.json({ ...data, sprint1 });
   } catch (err) {
     return res.status(500).json({ error: "Internal server error" });
   }

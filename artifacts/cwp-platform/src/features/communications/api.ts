@@ -99,6 +99,7 @@ export type CommAnalytics = {
   dailyTrend: Array<{ date: string; sent: number; failed: number; revenue: number }>;
   channelPerformance: Array<{ channel: string; sent: number; failed: number; revenue: number }>;
   campaignRoi: Array<{ campaignId: number; name: string; revenue: number; cost: number; roi: number }>;
+  sprint1?: { sentToday: number; failedToday: number; campaignCount: number; templateCount: number };
 };
 export type CampaignDetail = CommCampaign & {
   roi: number | null;
@@ -110,6 +111,12 @@ export type CampaignDetail = CommCampaign & {
 
 export const commApi = {
   getAnalytics: (days = 30) => commFetch<CommAnalytics>(`/communications/dashboard?days=${days}`),
+  getHistory: (limit = 200) => commFetch<CommEvent[]>(`/communications/history?limit=${limit}`),
+  getDlt: () => commFetch<{ entities: DltEntity[]; headers: DltHeader[]; templates: unknown[] }>("/communications/dlt"),
+  deleteTemplate: (id: number) => commFetch<{ ok: boolean }>(`/communications/templates/${id}`, { method: "DELETE" }),
+  deleteAudience: (id: number) => commFetch<{ ok: boolean }>(`/communications/audiences/${id}`, { method: "DELETE" }),
+  deleteCampaign: (id: number) => commFetch<{ ok: boolean }>(`/communications/campaigns/${id}`, { method: "DELETE" }),
+  deleteProvider: (id: number) => commFetch<{ ok: boolean }>(`/communications/providers/${id}`, { method: "DELETE" }),
   getDltEntities: () => commFetch<DltEntity[]>("/communications/dlt/entities"),
   createDltEntity: (data: Partial<DltEntity>) => commFetch<DltEntity>("/communications/dlt/entities", { method: "POST", body: JSON.stringify(data) }),
   getDltHeaders: () => commFetch<DltHeader[]>("/communications/dlt/headers"),

@@ -17,11 +17,11 @@ import {
 } from "../api";
 import {
   MessageSquare, Send, Users, Zap, BarChart3, Shield, Server,
-  Plus, Play, Clock, CheckCircle2, XCircle, Eye, Radio, Target, Ban, IndianRupee, Inbox,
+  Plus, Play, Clock, CheckCircle2, XCircle, Eye, Radio, Target, Ban,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
 import CampaignDetailDialog from "../components/CampaignDetailDialog";
-import ConversationInbox from "../components/ConversationInbox";
+import HistoryPanel from "../components/HistoryPanel";
 
 const CHANNELS = [
   { id: "sms", label: "SMS" },
@@ -62,7 +62,7 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: number |
 export default function CommunicationCenter() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [detailCampaignId, setDetailCampaignId] = useState<number | null>(null);
 
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
@@ -77,12 +77,7 @@ export default function CommunicationCenter() {
   const { data: headers } = useQuery({ queryKey: ["comm-dlt-headers"], queryFn: commApi.getDltHeaders });
   const { data: providers } = useQuery({ queryKey: ["comm-providers"], queryFn: commApi.getProviders });
   const { data: filterOptions } = useQuery({ queryKey: ["comm-filters"], queryFn: commApi.getAudienceFilters });
-  const { data: triggers } = useQuery({ queryKey: ["comm-triggers"], queryFn: commApi.getAutomationTriggers });
   const { data: variables } = useQuery({ queryKey: ["comm-vars"], queryFn: commApi.getTemplateVariables });
-  const { data: brands } = useQuery({ queryKey: ["comm-brands"], queryFn: commApi.getBrands });
-  const { data: workflows } = useQuery({ queryKey: ["comm-workflows"], queryFn: () => commApi.getWorkflows() });
-  const { data: emailTemplates } = useQuery({ queryKey: ["comm-email-templates"], queryFn: () => commApi.getEmailTemplates() });
-  const { data: waTemplates } = useQuery({ queryKey: ["comm-wa-templates"], queryFn: () => commApi.getWhatsappTemplates() });
   const { data: queueStats } = useQuery({ queryKey: ["comm-queue-stats"], queryFn: commApi.getQueueStats });
 
   return (
@@ -107,30 +102,24 @@ export default function CommunicationCenter() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex flex-wrap h-auto gap-1">
-            <TabsTrigger value="overview" className="gap-1.5"><BarChart3 size={14} />Overview</TabsTrigger>
-            <TabsTrigger value="inbox" className="gap-1.5"><Inbox size={14} />Inbox</TabsTrigger>
-            <TabsTrigger value="campaigns" className="gap-1.5"><Send size={14} />Campaigns</TabsTrigger>
-            <TabsTrigger value="audiences" className="gap-1.5"><Users size={14} />Audiences</TabsTrigger>
+            <TabsTrigger value="dashboard" className="gap-1.5"><BarChart3 size={14} />Dashboard</TabsTrigger>
             <TabsTrigger value="templates" className="gap-1.5"><MessageSquare size={14} />Templates</TabsTrigger>
+            <TabsTrigger value="campaigns" className="gap-1.5"><Send size={14} />Campaigns</TabsTrigger>
+            <TabsTrigger value="audiences" className="gap-1.5"><Users size={14} />Audience</TabsTrigger>
             <TabsTrigger value="dlt" className="gap-1.5"><Shield size={14} />DLT</TabsTrigger>
             <TabsTrigger value="providers" className="gap-1.5"><Server size={14} />Providers</TabsTrigger>
-            <TabsTrigger value="automations" className="gap-1.5"><Zap size={14} />Automations</TabsTrigger>
-            <TabsTrigger value="brands" className="gap-1.5"><Shield size={14} />Brands</TabsTrigger>
-            <TabsTrigger value="workflows" className="gap-1.5"><Zap size={14} />Workflows</TabsTrigger>
-            <TabsTrigger value="email-wa" className="gap-1.5"><MessageSquare size={14} />Email & WA</TabsTrigger>
+            <TabsTrigger value="history" className="gap-1.5"><Clock size={14} />History</TabsTrigger>
           </TabsList>
 
-          {/* ── Overview / Analytics ── */}
-          <TabsContent value="overview" className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {analyticsLoading ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />) : (
+          {/* ── Dashboard ── */}
+          <TabsContent value="dashboard" className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {analyticsLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />) : (
                 <>
-                  <StatCard label="Total Campaigns" value={analytics?.totalCampaigns ?? 0} icon={Target} />
-                  <StatCard label="Messages Sent" value={analytics?.sent ?? 0} icon={Send} />
-                  <StatCard label="Revenue Generated" value={`₹${(analytics?.revenue ?? 0).toLocaleString("en-IN")}`} icon={IndianRupee} />
-                  <StatCard label="ROI" value={analytics?.roi ? `${analytics.roi}x` : "—"} icon={BarChart3} />
-                  <StatCard label="Consent Rate" value={`${analytics?.consentRate ?? 0}%`} icon={CheckCircle2} />
-                  <StatCard label="Active Automations" value={analytics?.activeAutomations ?? 0} icon={Zap} />
+                  <StatCard label="Sent Today" value={analytics?.sprint1?.sentToday ?? 0} icon={Send} />
+                  <StatCard label="Failed Today" value={analytics?.sprint1?.failedToday ?? 0} icon={XCircle} />
+                  <StatCard label="Campaign Count" value={analytics?.sprint1?.campaignCount ?? analytics?.totalCampaigns ?? 0} icon={Target} />
+                  <StatCard label="Template Count" value={analytics?.sprint1?.templateCount ?? 0} icon={MessageSquare} />
                 </>
               )}
             </div>
@@ -249,10 +238,6 @@ export default function CommunicationCenter() {
             </div>
           </TabsContent>
 
-          <TabsContent value="inbox" className="mt-4">
-            <ConversationInbox />
-          </TabsContent>
-
           {/* ── Campaigns ── */}
           <TabsContent value="campaigns" className="mt-4">
             <CampaignBuilder
@@ -285,81 +270,9 @@ export default function CommunicationCenter() {
             <ProviderManager providers={providers ?? []} toast={toast} qc={qc} />
           </TabsContent>
 
-          {/* ── Automations ── */}
-          <TabsContent value="automations" className="mt-4">
-            <AutomationManager
-              automations={automations ?? []}
-              templates={templates ?? []}
-              triggers={triggers ?? []}
-              toast={toast}
-              qc={qc}
-            />
-          </TabsContent>
-
-          <TabsContent value="brands" className="mt-4 space-y-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Multi-Brand Registry</CardTitle>
-                <CardDescription>CWP Detailers, Kleansolar, DCC, BidWar — isolated communication per brand</CardDescription>
-              </CardHeader>
-              <CardContent className="grid md:grid-cols-2 gap-3">
-                {(brands ?? []).map(b => (
-                  <div key={b.id} className="p-4 border rounded-lg flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full" style={{ background: b.primaryColor ?? "#666" }} />
-                    <div>
-                      <p className="font-medium">{b.name}</p>
-                      <p className="text-xs text-muted-foreground">{b.code} · {b.status}</p>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="workflows" className="mt-4 space-y-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Visual Workflows</CardTitle>
-                <CardDescription>Multi-step automations: SMS → Wait → WhatsApp → Email → Task</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {(workflows ?? []).map(w => (
-                  <div key={w.id} className="p-4 border rounded-lg flex justify-between">
-                    <div>
-                      <p className="font-medium">{w.name}</p>
-                      <p className="text-xs text-muted-foreground">{w.trigger.replace(/_/g, " ")} · Brand #{w.brandId}</p>
-                    </div>
-                    <Badge variant={w.isActive ? "default" : "secondary"}>{w.isActive ? "Active" : "Paused"}</Badge>
-                  </div>
-                ))}
-                {!workflows?.length && <p className="text-sm text-muted-foreground">No workflows yet. Create via API or builder.</p>}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="email-wa" className="mt-4 grid md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader><CardTitle className="text-sm">Email Templates</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                {(emailTemplates ?? []).map(t => (
-                  <div key={t.id} className="p-3 border rounded-lg">
-                    <p className="font-medium text-sm">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.emailType} · {t.subject}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="text-sm">WhatsApp Templates (Meta)</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                {(waTemplates ?? []).map(t => (
-                  <div key={t.id} className="p-3 border rounded-lg">
-                    <p className="font-medium text-sm">{t.metaTemplateName}</p>
-                    <p className="text-xs text-muted-foreground">{t.category} · {t.bodyPreview.slice(0, 80)}…</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+          {/* ── History ── */}
+          <TabsContent value="history" className="mt-4">
+            <HistoryPanel />
           </TabsContent>
         </Tabs>
 

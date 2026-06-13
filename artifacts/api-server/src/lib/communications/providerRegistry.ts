@@ -42,6 +42,8 @@ class DbSmsProvider implements CommChannelProvider {
 
   async send(opts: SendOptions): Promise<SmsSendResult> {
     if (!opts.phone) return { success: false, error: "No phone number" };
+    if (opts.dltTemplateId) process.env.FAST2SMS_TEMPLATE_ID = opts.dltTemplateId;
+    if (opts.senderId) process.env.FAST2SMS_SENDER_ID = opts.senderId;
     return this.adapter.sendSms(opts.phone, opts.message);
   }
 }
