@@ -6,6 +6,8 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { BrandingProvider } from "@/lib/branding";
 import { ConnectivityProvider } from "@/services/ConnectivityContext";
 import { ConnectivityBanner } from "@/components/connectivity/ConnectivityBanner";
+import { AppSplashGate } from "@/components/pwa/AppSplashGate";
+import { PwaRouteHeadSync } from "@/components/pwa/PwaRouteHeadSync";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
@@ -246,9 +248,11 @@ function App() {
       <ConnectivityProvider>
         <AuthProvider>
           <BrandingProvider>
+            <AppSplashGate />
             <TooltipProvider>
               <ConnectivityBanner className="sticky top-0 z-40" />
               <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <PwaRouteHeadSync />
                 <Router />
               </WouterRouter>
               <Toaster />

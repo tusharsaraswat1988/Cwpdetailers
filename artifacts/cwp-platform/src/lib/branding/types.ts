@@ -22,6 +22,10 @@ export type BrandGeneratedAssets = {
   maskable512?: string;
   webpFull?: string;
   webpNavbar?: string;
+  iosSplash750x1334?: string;
+  iosSplash1170x2532?: string;
+  iosSplash1284x2778?: string;
+  iosSplash2048x2732?: string;
 };
 
 export type PublicBranding = {

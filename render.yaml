@@ -18,9 +18,13 @@ services:
       pnpm --filter @workspace/api-server run build
     preDeployCommand: >-
       pnpm --filter @workspace/scripts run migrate:006 &&
+      pnpm --filter @workspace/scripts run migrate:catalog &&
+      pnpm --filter @workspace/scripts run migrate:legacy &&
+      pnpm --filter @workspace/scripts run migrate:pending &&
       pnpm --filter @workspace/db run push-force &&
       pnpm --filter @workspace/scripts run seed:permissions &&
-      pnpm --filter @workspace/scripts run seed:master-data
+      pnpm --filter @workspace/scripts run seed:master-data &&
+      pnpm --filter @workspace/scripts run seed:catalog
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     envVars:
@@ -50,3 +54,9 @@ services:
         sync: false
       - key: MSG91_SENDER_ID
         sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:admin@cwpdetailers.com

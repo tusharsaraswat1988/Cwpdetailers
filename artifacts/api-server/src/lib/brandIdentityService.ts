@@ -230,6 +230,20 @@ export async function updateBranding(
   patch: Partial<Omit<PlatformBranding, "id" | "createdAt">>,
 ): Promise<PlatformBranding> {
   const current = await getActiveBrandingRow();
+
+  if (
+    patch.backgroundColor &&
+    patch.backgroundColor !== current.backgroundColor &&
+    !patch.generatedAssets
+  ) {
+    const source = current.fullLogoUrl ?? current.pwaIconUrl;
+    if (source) {
+      patch.generatedAssets = await processLogoAssets(source, {
+        backgroundColor: patch.backgroundColor,
+      });
+    }
+  }
+
   const [updated] = await db
     .update(platformBrandingTable)
     .set({
@@ -271,13 +285,23 @@ function transformationUrl(publicId: string, transformation: string): string {
   return `https://res.cloudinary.com/${cfg.cloudName}/image/upload/${transformation}/${publicId}.png`;
 }
 
+function cloudinaryBgHex(hex: string): string {
+  const normalized = hex.replace("#", "").trim();
+  return normalized.length === 6 ? normalized.toUpperCase() : "FFFFFF";
+}
+
 /**
  * Generate optimized derivative URLs from a source logo using Cloudinary transformations.
  * Falls back to the source URL when Cloudinary is not configured.
  */
-export async function processLogoAssets(sourceUrl: string): Promise<BrandGeneratedAssets> {
-  const publicId = cloudinaryPublicId(sourceUrl);
-  if (!publicId || !getCloudinaryConfig()) {
+export async function processLogoAssets(
+  sourceUrl: string,
+  options?: { backgroundColor?: string },
+): Promise<BrandGeneratedAssets> {
+  const bg = cloudinaryBgHex(options?.backgroundColor ?? "#ffffff");
+  const fallbackSplash = sourceUrl;
+
+  if (!cloudinaryPublicId(sourceUrl) || !getCloudinaryConfig()) {
     return {
       favicon16: sourceUrl,
       favicon32: sourceUrl,
@@ -293,8 +317,14 @@ export async function processLogoAssets(sourceUrl: string): Promise<BrandGenerat
       maskable512: sourceUrl,
       webpFull: sourceUrl,
       webpNavbar: sourceUrl,
+      iosSplash750x1334: fallbackSplash,
+      iosSplash1170x2532: fallbackSplash,
+      iosSplash1284x2778: fallbackSplash,
+      iosSplash2048x2732: fallbackSplash,
     };
   }
+
+  const publicId = cloudinaryPublicId(sourceUrl)!;
 
   const eagerTransforms = [
     { key: "favicon16", t: "w_16,h_16,c_fit,f_png,q_auto" },
@@ -308,9 +338,13 @@ export async function processLogoAssets(sourceUrl: string): Promise<BrandGenerat
     { key: "twitterCard", t: "w_1200,h_600,c_pad,b_white,f_jpg,q_auto" },
     { key: "pwaIcon192", t: "w_192,h_192,c_fit,f_png,q_auto" },
     { key: "pwaIcon512", t: "w_512,h_512,c_fit,f_png,q_auto" },
-    { key: "maskable512", t: "w_512,h_512,c_pad,b_white,f_png,q_auto" },
+    { key: "maskable512", t: "w_512,h_512,c_pad,b_rgb:" + bg + ",f_png,q_auto" },
     { key: "webpFull", t: "w_800,c_limit,f_webp,q_auto" },
     { key: "webpNavbar", t: "w_200,c_limit,f_webp,q_auto" },
+    { key: "iosSplash750x1334", t: `w_750,h_1334,c_pad,b_rgb:${bg},f_png,q_auto` },
+    { key: "iosSplash1170x2532", t: `w_1170,h_2532,c_pad,b_rgb:${bg},f_png,q_auto` },
+    { key: "iosSplash1284x2778", t: `w_1284,h_2778,c_pad,b_rgb:${bg},f_png,q_auto` },
+    { key: "iosSplash2048x2732", t: `w_2048,h_2732,c_pad,b_rgb:${bg},f_png,q_auto` },
   ] as const;
 
   const assets: BrandGeneratedAssets = {};
@@ -360,10 +394,10 @@ export async function assignBrandingAsset(
   const patch: Partial<PlatformBranding> = { [field]: url };
 
   if (options?.regenerateDerivatives || slot === "full_logo" || slot === "pwa_icon") {
-    const generated = await processLogoAssets(url);
+    const current = await getActiveBrandingRow();
+    const generated = await processLogoAssets(url, { backgroundColor: current.backgroundColor });
     patch.generatedAssets = generated;
     if (slot === "full_logo" || slot === "pwa_icon") {
-      const current = await getActiveBrandingRow();
       patch.faviconUrl = generated.favicon32 ?? url;
       patch.pwaIconUrl = generated.pwaIcon512 ?? url;
       patch.appleTouchIconUrl = generated.appleTouchIcon ?? url;
@@ -377,15 +411,24 @@ export async function assignBrandingAsset(
 
 export function buildPwaManifest(
   branding: PublicBranding,
-  portal: "admin" | "customer" | "staff" | "franchisee",
+  portal: "main" | "admin" | "customer" | "staff" | "franchisee",
 ) {
   const startUrls: Record<string, string> = {
+    main: "/",
     admin: "/admin/dashboard",
     customer: "/customer/dashboard",
     staff: "/staff/dashboard",
     franchisee: "/franchisee/dashboard",
   };
+  const scopes: Record<string, string> = {
+    main: "/",
+    admin: "/admin/",
+    customer: "/customer/",
+    staff: "/staff/",
+    franchisee: "/franchisee/",
+  };
   const names: Record<string, { name: string; short: string }> = {
+    main: { name: branding.companyName, short: branding.brandName },
     admin: { name: `${branding.brandName} Admin`, short: "Admin" },
     customer: { name: branding.companyName, short: branding.brandName },
     staff: { name: `${branding.brandName} Staff`, short: "Staff" },
@@ -394,20 +437,25 @@ export function buildPwaManifest(
   const icon192 = branding.generatedAssets.pwaIcon192 ?? branding.pwaIcon ?? branding.fullLogo;
   const icon512 = branding.generatedAssets.pwaIcon512 ?? branding.pwaIcon ?? branding.fullLogo;
   const maskable = branding.generatedAssets.maskable512 ?? icon512;
+  const apple180 = branding.appleTouchIcon ?? branding.generatedAssets.appleTouchIcon;
 
   return {
     name: names[portal].name,
     short_name: names[portal].short,
     description: branding.metaDescription,
     start_url: startUrls[portal],
-    scope: `/${portal}/`,
+    scope: scopes[portal],
+    id: scopes[portal],
     display: "standalone",
-    orientation: "portrait-primary",
+    display_override: ["standalone", "browser"],
+    orientation: portal === "main" ? "any" : "portrait-primary",
     theme_color: branding.primaryColor,
     background_color: branding.backgroundColor,
+    categories: ["business", "lifestyle"],
     icons: [
       ...(icon192 ? [{ src: icon192, sizes: "192x192", type: "image/png", purpose: "any" }] : []),
       ...(icon512 ? [{ src: icon512, sizes: "512x512", type: "image/png", purpose: "any" }] : []),
+      ...(apple180 ? [{ src: apple180, sizes: "180x180", type: "image/png", purpose: "any" }] : []),
       ...(maskable ? [{ src: maskable, sizes: "512x512", type: "image/png", purpose: "maskable" }] : []),
     ],
   };

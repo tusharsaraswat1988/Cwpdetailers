@@ -42,6 +42,8 @@ export function processBrandingAssets(): Promise<Record<string, unknown>> {
   return brandingFetch("/branding/process", { method: "POST", body: "{}" });
 }
 
-export function brandingManifestUrl(portal: "admin" | "customer" | "staff" | "franchisee"): string {
+export type BrandingManifestPortal = "main" | "admin" | "customer" | "staff" | "franchisee";
+
+export function brandingManifestUrl(portal: BrandingManifestPortal): string {
   return `/api/branding/public/manifest/${portal}`;
 }

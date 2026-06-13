@@ -2,9 +2,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchPublicBranding } from "./api";
 import { BRANDING_QUERY_KEY, DEFAULT_BRANDING, type PublicBranding } from "./types";
 
-export function useBranding(): PublicBranding & { isLoading: boolean; refetch: () => void } {
+export function useBranding(): PublicBranding & {
+  isLoading: boolean;
+  isFetched: boolean;
+  refetch: () => void;
+} {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetched } = useQuery({
     queryKey: BRANDING_QUERY_KEY,
     queryFn: fetchPublicBranding,
     staleTime: 60_000,
@@ -17,6 +21,7 @@ export function useBranding(): PublicBranding & { isLoading: boolean; refetch: (
   return {
     ...branding,
     isLoading,
+    isFetched,
     refetch: () => {
       void qc.invalidateQueries({ queryKey: BRANDING_QUERY_KEY });
     },

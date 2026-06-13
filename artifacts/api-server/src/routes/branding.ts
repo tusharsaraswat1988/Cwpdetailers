@@ -31,8 +31,8 @@ router.get("/branding/public", async (req: Request, res: Response) => {
 
 /** GET /branding/public/manifest/:portal — dynamic PWA manifest */
 router.get("/branding/public/manifest/:portal", async (req: Request, res: Response) => {
-  const portal = req.params.portal as "admin" | "customer" | "staff" | "franchisee";
-  if (!["admin", "customer", "staff", "franchisee"].includes(portal)) {
+  const portal = req.params.portal as "main" | "admin" | "customer" | "staff" | "franchisee";
+  if (!["main", "admin", "customer", "staff", "franchisee"].includes(portal)) {
     res.status(400).json({ error: "Invalid portal" });
     return;
   }
@@ -140,7 +140,7 @@ router.post("/branding/process", requireAuth, requirePermission("settings", "edi
       res.status(400).json({ error: "No source logo to process" });
       return;
     }
-    const generated = await processLogoAssets(source);
+    const generated = await processLogoAssets(source, { backgroundColor: row.backgroundColor ?? "#ffffff" });
     const updated = await updateBranding({ generatedAssets: generated });
     res.json(updated);
   } catch (err) {

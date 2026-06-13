@@ -1,6 +1,7 @@
 import { ReactNode, useEffect } from "react";
 import { useBranding } from "./useBranding";
-import { brandingManifestUrl } from "./api";
+import { applyBrandingToSplash, detectPwaPortal } from "@/lib/pwa/splash";
+import { syncPwaHeadTags } from "@/lib/pwa/pwaHead";
 
 function upsertMeta(attr: "name" | "property", key: string, content: string) {
   let el = document.querySelector<HTMLMetaElement>(`meta[${attr}='${key}']`);
@@ -61,14 +62,10 @@ export function BrandingProvider({ children, portal }: BrandingProviderProps) {
     if (favicon) {
       upsertLink("icon", favicon, { type: "image/png" });
     }
-    const apple = branding.appleTouchIcon ?? branding.generatedAssets.appleTouchIcon;
-    if (apple) {
-      upsertLink("apple-touch-icon", apple);
-    }
 
-    if (portal) {
-      upsertLink("manifest", brandingManifestUrl(portal));
-    }
+    const resolvedPortal = portal ?? detectPwaPortal(window.location.pathname);
+    syncPwaHeadTags(branding, resolvedPortal);
+    applyBrandingToSplash(branding);
 
     const existing = document.getElementById("brand-schema-org");
     if (existing) existing.remove();
