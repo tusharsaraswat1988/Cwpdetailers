@@ -93,8 +93,30 @@ async function upsertPincode(serviceAreaId: number, pincode: string) {
   }
 }
 
+async function ensureTablesExist() {
+  const tables = [
+    "vehicle_categories", "seat_categories", "fuel_types",
+    "vehicle_brands", "vehicle_models",
+    "states", "cities", "service_areas", "pincodes",
+    "service_categories", "service_plans", "service_pricing",
+  ];
+  for (const table of tables) {
+    const result = await db.execute(
+      sql`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ${table}) AS exists`
+    );
+    const exists = (result.rows?.[0] as any)?.exists ?? false;
+    if (!exists) {
+      throw new Error(
+        `Table "${table}" does not exist. Run "pnpm --filter @workspace/db run push-force" first to apply schema migrations.`
+      );
+    }
+  }
+  console.log("  ✓ All required tables exist");
+}
+
 export async function seedMasterData() {
   console.log("Seeding complete India master data...");
+  await ensureTablesExist();
 
   // ─── 1. Vehicle Categories ────────────────────────────────────────────────
   const cats = await upsertBySlug(vehicleCategoriesTable, [
