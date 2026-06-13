@@ -3,26 +3,50 @@ import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { WifiOff } from "lucide-react";
 
+async function verifyConnectivity(): Promise<boolean> {
+  if (!navigator.onLine) return false;
+  try {
+    const res = await fetch("/api/healthz", { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function OfflineScreen() {
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const sync = async () => {
+      const online = await verifyConnectivity();
+      if (!cancelled) setIsOffline(!online);
+    };
+
+    void sync();
+
     const goOffline = () => setIsOffline(true);
-    const goOnline = () => setIsOffline(false);
+    const goOnline = () => {
+      void verifyConnectivity().then((online) => {
+        if (!cancelled) setIsOffline(!online);
+      });
+    };
+
     window.addEventListener("offline", goOffline);
     window.addEventListener("online", goOnline);
     return () => {
+      cancelled = true;
       window.removeEventListener("offline", goOffline);
       window.removeEventListener("online", goOnline);
     };
   }, []);
 
   const retry = useCallback(() => {
-    if (navigator.onLine) {
-      window.location.reload();
-    } else {
-      setIsOffline(true);
-    }
+    void verifyConnectivity().then((online) => {
+      if (online) window.location.reload();
+      else setIsOffline(true);
+    });
   }, []);
 
   if (!isOffline) return null;
