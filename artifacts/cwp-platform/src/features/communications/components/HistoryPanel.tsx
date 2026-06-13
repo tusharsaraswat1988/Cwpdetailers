@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { commApi } from "../api";
+import { commApi, type CommEvent } from "../api";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -13,9 +13,9 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
 };
 
 export default function HistoryPanel() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<CommEvent[]>({
     queryKey: ["comm-history"],
-    queryFn: commApi.getHistory,
+    queryFn: () => commApi.getHistory(),
   });
 
   if (isLoading) return <Skeleton className="h-64 w-full rounded-xl" />;
