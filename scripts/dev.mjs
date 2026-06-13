@@ -29,6 +29,34 @@ function loadEnv(file) {
 const baseEnv = loadEnv(path.join(root, ".env"));
 baseEnv.NODE_ENV = "development";
 
+/** Stop stale listeners so `pnpm dev` can restart after Ctrl+C left orphans (common on Windows). */
+function freePort(port) {
+  try {
+    if (process.platform === "win32") {
+      const out = execSync(`netstat -ano | findstr ":${port}.*LISTENING"`, {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const pids = new Set();
+      for (const line of out.split(/\r?\n/)) {
+        const m = line.trim().match(/\s(\d+)\s*$/);
+        if (m && m[1] !== "0") pids.add(m[1]);
+      }
+      for (const pid of pids) {
+        console.log(`Stopping previous process on port ${port} (PID ${pid})…`);
+        execSync(`taskkill /PID ${pid} /F`, { stdio: "ignore" });
+      }
+      return;
+    }
+    execSync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`, {
+      shell: true,
+      stdio: "ignore",
+    });
+  } catch {
+    // Port already free
+  }
+}
+
 function prefixStream(name, color, stream) {
   stream.on("data", (chunk) => {
     for (const line of chunk.toString().split(/\r?\n/)) {
@@ -76,6 +104,9 @@ execSync("pnpm --filter @workspace/api-server run build", {
 });
 
 console.log("Starting API (http://127.0.0.1:8080) + frontend (http://127.0.0.1:21456) ...");
+
+freePort(8080);
+freePort(21456);
 
 children.push(
   run("api", "pnpm", ["--filter", "@workspace/api-server", "run", "start"], {

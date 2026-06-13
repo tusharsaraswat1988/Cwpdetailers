@@ -1,0 +1,19 @@
+{
+  "name": "CWP — My Services",
+  "short_name": "CWP",
+  "description": "Premium car wash, detailing, and solar cleaning services",
+  "start_url": "/customer/dashboard",
+  "scope": "/customer",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6f8",
+  "theme_color": "#00cccc",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

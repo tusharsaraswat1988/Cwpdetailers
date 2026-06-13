@@ -183,13 +183,51 @@ router.get("/subscriptions/health", async (req, res) => {
   }
 });
 
-router.post("/subscriptions/daily-tick", async (req, res) => {
-  if (!req.user || (req.user.role !== "admin" && req.user.role !== "superadmin")) {
+router.get("/subscriptions/daily-ops", async (req, res) => {
+  try {
+    const { getDailyOpsSummary } = await import("../subscriptions/dailyScheduler");
+    const summary = await getDailyOpsSummary();
+    return res.json(summary);
+  } catch (err) {
+    req.log.error({ err }, "Daily ops summary error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/subscriptions/due-washes", async (req, res) => {
+  try {
+    const { detectDueWashes } = await import("../subscriptions/dailyScheduler");
+    const due = await detectDueWashes();
+    return res.json({ data: due, total: due.length });
+  } catch (err) {
+    req.log.error({ err }, "Due washes error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/subscriptions/daily-schedule", async (req, res) => {
+  if (!req.user || !["admin", "superadmin", "manager"].includes(req.user.role)) {
     return res.status(403).json({ error: "Forbidden" });
   }
   try {
+    const { date } = req.body ?? {};
+    const { generateDailyCleaningBookings } = await import("../subscriptions/dailyScheduler");
+    const result = await generateDailyCleaningBookings(date);
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Daily schedule error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/subscriptions/daily-tick", async (req, res) => {
+  if (!req.user || !["admin", "superadmin", "manager"].includes(req.user.role ?? "")) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const { force } = req.body ?? {};
     const { runDailyTick } = await import("../subscriptions/service");
-    const result = await runDailyTick();
+    const result = await runDailyTick(undefined, { force: force === true });
     return res.json(result);
   } catch (err) {
     req.log.error({ err }, "Daily tick error");

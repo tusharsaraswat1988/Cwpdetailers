@@ -6,7 +6,8 @@ import type { SidebarRenderProps } from "./PanelShell";
 import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, Wrench, BarChart3, Bell, LogOut, ChevronRight,
-  Sun, Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee,
+  Sun, Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee, Sparkles,
+  Monitor, Crown,
 } from "lucide-react";
 
 type NavItem = {
@@ -26,6 +27,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/admin/customers", label: "Customers", icon: Users, perm: { resource: "customers", action: "view" } },
       { href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
       { href: "/admin/bookings", label: "Bookings", icon: Calendar, perm: { resource: "bookings", action: "view" } },
+      { href: "/admin/daily-ops", label: "Daily Cleaning", icon: Sparkles, perm: { resource: "subscriptions", action: "view" } },
       { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard, perm: { resource: "subscriptions", action: "view" } },
       { href: "/admin/invoices", label: "Invoices & Payments", icon: FileText, perm: { resource: "invoices", action: "view" } },
       { href: "/admin/quotations", label: "Quotations", icon: FileText, perm: { resource: "invoices", action: "view" } },
@@ -52,6 +54,13 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/admin/notifications", label: "Notifications", icon: Bell, perm: { resource: "notifications", action: "view" } },
     ],
   },
+  {
+    label: "Views",
+    items: [
+      { href: "/admin/operations-wall", label: "Operations Wall", icon: Monitor, perm: null },
+      { href: "/admin/founder", label: "Founder Dashboard", icon: Crown, perm: null },
+    ],
+  },
 ];
 
 export default function AdminSidebar({ onNavigate, embedded = false, className }: SidebarRenderProps & { className?: string }) {
@@ -73,7 +82,7 @@ export default function AdminSidebar({ onNavigate, embedded = false, className }
     <aside
       data-testid="admin-sidebar"
       className={cn(
-        "flex flex-col h-full bg-secondary transition-all duration-300 border-r border-white/5",
+        "flex flex-col h-full bg-secondary transition-all duration-300 border-r border-white/5 overflow-y-auto",
         embedded ? "w-full border-r-0" : showCollapsed ? "w-16" : "w-60",
         className,
       )}
@@ -103,8 +112,12 @@ export default function AdminSidebar({ onNavigate, embedded = false, className }
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
         {visibleGroups.map(group => (
           <div key={group.label}>
+            {/* QW-10: Group labels with left accent line for visual hierarchy */}
             {!showCollapsed && (
-              <p className="text-white/25 text-[10px] font-semibold uppercase tracking-widest px-3 mb-1">{group.label}</p>
+              <div className="flex items-center gap-2 px-3 mb-1.5">
+                <div className="w-0.5 h-3 rounded-full bg-primary/40 shrink-0" />
+                <p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest">{group.label}</p>
+              </div>
             )}
             <div className="space-y-0.5">
               {group.items.map(({ href, label, icon: Icon }) => {

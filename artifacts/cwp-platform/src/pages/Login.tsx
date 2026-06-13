@@ -6,7 +6,9 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { useToast } from "@/hooks/use-toast";
+import { submitMobile } from "@/lib/contactForm";
 import { Sun, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -16,6 +18,7 @@ export default function Login() {
   const { toast } = useToast();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const loginMutation = useLogin({
     mutation: {
@@ -33,15 +36,25 @@ export default function Login() {
         if (userRole === "staff") setLocation("/staff/dashboard");
         else setLocation("/customer/dashboard");
       },
-      onError: () => {
-        toast({ title: "Login failed", description: "Invalid phone number or password.", variant: "destructive" });
+      onError: (err: any) => {
+        toast({
+          title: "Login failed",
+          description: err?.response?.data?.error ?? "Invalid phone number or password.",
+          variant: "destructive",
+        });
       },
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    loginMutation.mutate({ data: { phone, password } });
+    const phoneResult = submitMobile(phone);
+    setPhoneError(phoneResult.ok ? null : phoneResult.error);
+    if (!phoneResult.ok) {
+      toast({ title: phoneResult.error, variant: "destructive" });
+      return;
+    }
+    loginMutation.mutate({ data: { phone: phoneResult.value, password } });
   };
 
   return (
@@ -56,17 +69,16 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="phone" className="text-white/70 text-sm">Phone Number</Label>
-            <Input
-              id="phone"
-              data-testid="input-phone"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="9999999999"
-              className="mt-1.5 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
-            />
-          </div>
+          <PhoneInput
+            id="phone"
+            data-testid="input-phone"
+            label="Phone Number"
+            value={phone}
+            onChange={setPhone}
+            error={phoneError}
+            onErrorChange={setPhoneError}
+            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary [&+p]:text-white/40"
+          />
           <div>
             <Label htmlFor="password" className="text-white/70 text-sm">Password</Label>
             <Input

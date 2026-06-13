@@ -23,14 +23,14 @@ import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shar
 import { format, isToday, parseISO } from "date-fns";
 
 const statusColors: Record<string, string> = {
-  pending: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  confirmed: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  scheduled: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  en_route: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  confirmed: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+  scheduled: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
+  en_route: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
   in_progress: "bg-primary/10 text-primary border-primary/20",
-  completed: "bg-green-500/10 text-green-400 border-green-500/20",
-  cancelled: "bg-red-500/10 text-red-400 border-red-500/20",
-  rescheduled: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+  completed: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+  cancelled: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+  rescheduled: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
 };
 
 type B = {
@@ -116,10 +116,10 @@ export default function AdminBookings() {
       key: "customer", header: "Customer",
       cell: b => (
         <div className="flex items-center gap-2">
-          <User size={13} className="text-white/40" />
+          <User size={13} className="text-muted-foreground" />
           <div>
-            <p className="font-medium text-white">{b.customerName}</p>
-            <p className="text-xs text-white/50">{b.customerPhone}</p>
+            <p className="font-medium text-foreground">{b.customerName}</p>
+            <p className="text-xs text-muted-foreground">{b.customerPhone}</p>
           </div>
         </div>
       ),
@@ -128,18 +128,18 @@ export default function AdminBookings() {
       key: "service", header: "Service",
       cell: b => (
         <div>
-          <p className="text-white/80">{b.serviceName ?? b.serviceType?.replace(/_/g, " ")}</p>
-          <p className="text-xs text-white/50 capitalize">{b.serviceType?.replace(/_/g, " ")}</p>
+          <p className="text-foreground">{b.serviceName ?? b.serviceType?.replace(/_/g, " ")}</p>
+          <p className="text-xs text-muted-foreground capitalize">{b.serviceType?.replace(/_/g, " ")}</p>
         </div>
       ),
     },
-    { key: "staff", header: "Staff", cell: b => <span className="text-white/60">{b.staffName ?? "Unassigned"}</span> },
+    { key: "staff", header: "Staff", cell: b => <span className="text-muted-foreground">{b.staffName ?? "Unassigned"}</span> },
     {
       key: "datetime", header: "Date & Time",
       cell: b => (
         <div>
-          <div className="flex items-center gap-1.5 text-xs text-white/80"><Calendar size={11} className="text-white/40" /><span>{b.scheduledDate}</span></div>
-          {b.scheduledTime && <div className="flex items-center gap-1.5 text-xs text-white/50 mt-0.5"><Clock size={11} /><span>{b.scheduledTime}</span></div>}
+          <div className="flex items-center gap-1.5 text-xs text-foreground"><Calendar size={11} className="text-muted-foreground" /><span>{b.scheduledDate}</span></div>
+          {b.scheduledTime && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5"><Clock size={11} /><span>{b.scheduledTime}</span></div>}
         </div>
       ),
     },
@@ -147,7 +147,7 @@ export default function AdminBookings() {
       key: "status", header: "Status",
       cell: b => <Badge variant="outline" className={`text-xs capitalize ${statusColors[b.status ?? "scheduled"]}`}>{b.status?.replace(/_/g, " ")}</Badge>,
     },
-    { key: "amount", header: "Amount", align: "right", cell: b => b.amount ? <span className="font-medium text-white">₹{Number(b.amount).toLocaleString("en-IN")}</span> : <span className="text-white/30">—</span> },
+    { key: "amount", header: "Amount", align: "right", cell: b => b.amount ? <span className="font-medium text-foreground">₹{Number(b.amount).toLocaleString("en-IN")}</span> : <span className="text-muted-foreground">—</span> },
     {
       key: "action", header: "", align: "right",
       cell: b => (
@@ -169,7 +169,7 @@ export default function AdminBookings() {
 
         <FilterBar>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40 bg-white/5 border-white/10 text-white" data-testid="select-booking-status">
+            <SelectTrigger className="w-40" data-testid="select-booking-status">
               <SelectValue placeholder="Filter status" />
             </SelectTrigger>
             <SelectContent>
@@ -189,7 +189,7 @@ export default function AdminBookings() {
 
         {(data?.total ?? 0) > limit && (
           <div className="flex items-center justify-between text-sm">
-            <span className="text-white/50">Showing {offset + 1}–{Math.min(offset + limit, data?.total ?? 0)} of {data?.total}</span>
+            <span className="text-muted-foreground">Showing {offset + 1}–{Math.min(offset + limit, data?.total ?? 0)} of {data?.total}</span>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={offset === 0} data-testid="btn-prev-page"><ChevronLeft size={14} /></Button>
               <Button variant="outline" size="sm" onClick={() => setOffset(o => o + limit)} disabled={offset + limit >= (data?.total ?? 0)} data-testid="btn-next-page"><ChevronRight size={14} /></Button>

@@ -12,6 +12,7 @@ import Register from "@/pages/Register";
 
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminCustomers from "@/pages/admin/Customers";
+import AdminCustomerDetail from "@/pages/admin/CustomerDetail";
 import AdminStaff from "@/pages/admin/Staff";
 import AdminBookings from "@/pages/admin/Bookings";
 import AdminSubscriptions from "@/pages/admin/Subscriptions";
@@ -29,6 +30,7 @@ import AdminLeads from "@/pages/admin/Leads";
 import AdminQuotationBuilder from "@/pages/admin/QuotationBuilder";
 import AdminExpenses from "@/pages/admin/Expenses";
 import AdminDues from "@/pages/admin/Dues";
+import AdminDailyOps from "@/pages/admin/DailyOps";
 
 import CustomerDashboard from "@/pages/customer/Dashboard";
 import BookService from "@/pages/customer/BookService";
@@ -47,6 +49,8 @@ import FranchiseeBookings from "@/pages/franchisee/Bookings";
 import FranchiseeStaff from "@/pages/franchisee/Staff";
 import FranchiseeChurned from "@/pages/franchisee/ChurnedCustomers";
 import FranchiseeLeads from "@/pages/franchisee/Leads";
+import OperationsWall from "@/pages/admin/OperationsWall";
+import FounderDashboard from "@/pages/admin/FounderDashboard";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -106,10 +110,12 @@ function Router() {
 
       {/* Admin — admin/superadmin/manager can reach; per-page permission gates fine-tune */}
       <Route path="/admin/dashboard" component={() => <ProtectedRoute component={AdminDashboard} roles={["admin", "superadmin", "manager"]} loginPath="/admin/login" />} />
+      <Route path="/admin/customers/:id" component={() => <ProtectedRoute component={AdminCustomerDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/customers" component={() => <ProtectedRoute component={AdminCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/staff" component={() => <ProtectedRoute component={AdminStaff} roles={["admin", "superadmin", "manager"]} permission={{ resource: "staff", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/staff-approval" component={() => <ProtectedRoute component={AdminStaffApproval} roles={["admin", "superadmin"]} permission={{ resource: "staff", action: "approve" }} loginPath="/admin/login" />} />
       <Route path="/admin/bookings" component={() => <ProtectedRoute component={AdminBookings} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-ops" component={() => <ProtectedRoute component={AdminDailyOps} roles={["admin", "superadmin", "manager"]} permission={{ resource: "subscriptions", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/subscriptions" component={() => <ProtectedRoute component={AdminSubscriptions} roles={["admin", "superadmin", "manager"]} permission={{ resource: "subscriptions", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/invoices" component={() => <ProtectedRoute component={AdminInvoices} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={["admin", "superadmin", "manager"]} permission={{ resource: "complaints", action: "view" }} loginPath="/admin/login" />} />
@@ -124,6 +130,8 @@ function Router() {
       <Route path="/admin/quotations" component={() => <ProtectedRoute component={AdminQuotationBuilder} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/expenses" component={() => <ProtectedRoute component={AdminExpenses} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/dues" component={() => <ProtectedRoute component={AdminDues} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/operations-wall" component={() => <ProtectedRoute component={OperationsWall} roles={["admin", "superadmin", "manager"]} loginPath="/admin/login" />} />
+      <Route path="/admin/founder" component={() => <ProtectedRoute component={FounderDashboard} roles={["superadmin"]} loginPath="/admin/login" />} />
       <Route path="/admin" component={AdminRoot} />
 
       {/* Customer */}
@@ -146,6 +154,15 @@ function Router() {
       <Route path="/franchisee/staff" component={() => <ProtectedRoute component={FranchiseeStaff} roles={["franchisee"]} />} />
       <Route path="/franchisee/churned" component={() => <ProtectedRoute component={FranchiseeChurned} roles={["franchisee"]} />} />
       <Route path="/franchisee/leads" component={() => <ProtectedRoute component={FranchiseeLeads} roles={["franchisee"]} permission={{ resource: "leads", action: "view" }} />} />
+      {/* QW-11: Fix broken franchisee notifications route */}
+      <Route path="/franchisee/notifications" component={() => <ProtectedRoute component={() => (
+        <div className="min-h-screen flex items-center justify-center bg-background p-6">
+          <div className="text-center max-w-sm">
+            <p className="font-display font-bold text-lg mb-2">Notifications</p>
+            <p className="text-muted-foreground text-sm">Push notifications for franchisees are coming soon.</p>
+          </div>
+        </div>
+      )} roles={["franchisee"]} />} />
 
       <Route component={NotFound} />
     </Switch>

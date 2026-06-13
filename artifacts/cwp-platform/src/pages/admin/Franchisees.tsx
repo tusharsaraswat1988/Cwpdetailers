@@ -4,6 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, Plus, Phone, Mail, MapPin, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { EmailInput } from "@/components/ui/email-input";
+import { submitEmail, submitMobile, submitOptionalMobile } from "@/lib/contactForm";
 
 async function fetchFranchisees() {
   const res = await fetch("/api/franchisees");
@@ -44,6 +47,7 @@ export default function AdminFranchisees() {
   const { data: franchisees = [], isLoading } = useQuery({ queryKey: ["franchisees"], queryFn: fetchFranchisees });
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null; secondaryPhone?: string | null }>({});
   const [expanded, setExpanded] = useState<number | null>(null);
   const [accountModal, setAccountModal] = useState<{ id: number; name: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
@@ -51,7 +55,7 @@ export default function AdminFranchisees() {
   const createMut = useMutation({
     mutationFn: createFranchisee,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisees"] }); setShowForm(false); setForm(emptyForm); toast({ title: "Franchisee added" }); },
-    onError: () => toast({ title: "Failed to add franchisee", variant: "destructive" }),
+    onError: (err: any) => toast({ title: "Failed to add franchisee", description: err?.error ?? err?.message, variant: "destructive" }),
   });
   const statusMut = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => updateFranchisee(id, { status }),
@@ -68,6 +72,27 @@ export default function AdminFranchisees() {
   });
 
   const f = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
+
+  const handleCreate = () => {
+    const phoneResult = submitMobile(form.phone);
+    const emailResult = submitEmail(form.email);
+    const secondaryResult = submitOptionalMobile(form.secondaryPhone);
+    setErrors({
+      phone: phoneResult.ok ? null : phoneResult.error,
+      email: emailResult.ok ? null : emailResult.error,
+      secondaryPhone: secondaryResult.ok ? null : secondaryResult.error,
+    });
+    if (!phoneResult.ok || !emailResult.ok || !secondaryResult.ok) {
+      toast({ title: "Please fix phone or email format", variant: "destructive" });
+      return;
+    }
+    createMut.mutate({
+      ...form,
+      phone: phoneResult.value,
+      email: emailResult.value,
+      secondaryPhone: secondaryResult.value,
+    });
+  };
 
   return (
     <AdminLayout>
@@ -87,9 +112,15 @@ export default function AdminFranchisees() {
           <div className="bg-card border border-border rounded-xl p-6 mb-6">
             <h2 className="font-semibold mb-4">New Franchisee Record</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Full Name *</label>
+                <input value={form.name} onChange={e => f("name", e.target.value)} className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="Full Name" />
+              </div>
+              <PhoneInput label="Mobile Number *" value={form.phone} onChange={v => f("phone", v)} error={errors.phone} onErrorChange={err => setErrors(e => ({ ...e, phone: err }))} />
+              <EmailInput label="Email" optional value={form.email} onChange={v => f("email", v)} error={errors.email} onErrorChange={err => setErrors(e => ({ ...e, email: err }))} />
+              <PhoneInput label="Secondary Phone" optional value={form.secondaryPhone} onChange={v => f("secondaryPhone", v)} error={errors.secondaryPhone} onErrorChange={err => setErrors(e => ({ ...e, secondaryPhone: err }))} />
               {[
-                ["name", "Full Name *"], ["phone", "Mobile Number *"], ["email", "Email"],
-                ["secondaryPhone", "Secondary Phone"], ["branchId", "Branch ID (City)"],
+                ["branchId", "Branch ID (City)"],
                 ["currentAddress", "Current Address"], ["permanentAddress", "Permanent Address"],
                 ["aadhaar", "Aadhaar Number"], ["pan", "PAN Number"],
                 ["tenureStartDate", "Tenure Start Date"], ["tenureEndDate", "Tenure End Date"],
@@ -115,7 +146,7 @@ export default function AdminFranchisees() {
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/40" />
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => createMut.mutate(form)} disabled={createMut.isPending || !form.name || !form.phone} className="bg-primary text-secondary">
+              <Button onClick={handleCreate} disabled={createMut.isPending || !form.name || !form.phone} className="bg-primary text-secondary">
                 {createMut.isPending ? "Saving…" : "Save Franchisee"}
               </Button>
               <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>

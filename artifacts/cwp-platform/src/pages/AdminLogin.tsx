@@ -6,7 +6,9 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { useToast } from "@/hooks/use-toast";
+import { submitMobile } from "@/lib/contactForm";
 import { Shield, Loader2 } from "lucide-react";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin", "manager"]);
@@ -17,6 +19,7 @@ export default function AdminLogin() {
   const { toast } = useToast();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const loginMutation = useLogin({
     mutation: {
@@ -33,10 +36,10 @@ export default function AdminLogin() {
         login(data.user, data.token);
         setLocation("/admin/dashboard");
       },
-      onError: () => {
+      onError: (err: any) => {
         toast({
           title: "Login failed",
-          description: "Invalid credentials. Check your phone number and password.",
+          description: err?.response?.data?.error ?? "Invalid credentials. Check your phone number and password.",
           variant: "destructive",
         });
       },
@@ -45,7 +48,13 @@ export default function AdminLogin() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    loginMutation.mutate({ data: { phone, password } });
+    const phoneResult = submitMobile(phone);
+    setPhoneError(phoneResult.ok ? null : phoneResult.error);
+    if (!phoneResult.ok) {
+      toast({ title: phoneResult.error, variant: "destructive" });
+      return;
+    }
+    loginMutation.mutate({ data: { phone: phoneResult.value, password } });
   };
 
   return (
@@ -60,17 +69,16 @@ export default function AdminLogin() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="admin-phone" className="text-white/70 text-sm">Phone Number</Label>
-            <Input
-              id="admin-phone"
-              data-testid="input-admin-phone"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="9999999999"
-              className="mt-1.5 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
-            />
-          </div>
+          <PhoneInput
+            id="admin-phone"
+            data-testid="input-admin-phone"
+            label="Phone Number"
+            value={phone}
+            onChange={setPhone}
+            error={phoneError}
+            onErrorChange={setPhoneError}
+            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
+          />
           <div>
             <Label htmlFor="admin-password" className="text-white/70 text-sm">Password</Label>
             <Input

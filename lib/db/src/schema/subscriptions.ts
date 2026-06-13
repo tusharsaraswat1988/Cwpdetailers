@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, date, timestamp, pgEnum, text, check } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, date, timestamp, pgEnum, text, check, json } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -27,6 +27,8 @@ export const subscriptionsTable = pgTable("subscriptions", {
   servicesRemaining: integer("services_remaining"),
   graceMinutes: integer("grace_minutes").notNull().default(60),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  dailyRate: numeric("daily_rate", { precision: 10, scale: 2 }),
+  offDays: json("off_days").$type<number[]>().default([3]),
   paidAmount: numeric("paid_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   dueAmount: numeric("due_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   companyId: integer("company_id"),

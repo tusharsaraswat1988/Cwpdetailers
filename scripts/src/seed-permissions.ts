@@ -58,6 +58,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
 
   staff: {
     customers: ["view"],
+    staff: ["view"],
     bookings: ["view", "edit"],
     complaints: ["view", "create"],
     notifications: ["view"],
@@ -65,6 +66,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
   },
 
   customer: {
+    customers: ["view", "create"],
     bookings: ["view", "create"],
     subscriptions: ["view", "create"],
     invoices: ["view"],
@@ -74,7 +76,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
   },
 };
 
-async function main() {
+async function seedPermissions() {
   console.log("Seeding permissions…");
   await db.execute(sql`TRUNCATE TABLE permissions RESTART IDENTITY`);
 
@@ -92,6 +94,12 @@ async function main() {
   }
   await db.insert(permissionsTable).values(rows.map(r => ({ ...r, allow: true })));
   console.log(`Inserted ${rows.length} permission rows.`);
+}
+
+export { seedPermissions };
+
+async function main() {
+  await seedPermissions();
 }
 
 main()

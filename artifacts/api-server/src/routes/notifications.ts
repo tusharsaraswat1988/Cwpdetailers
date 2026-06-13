@@ -66,7 +66,6 @@ router.post("/notifications", async (req, res) => {
     const { userId, title, message, type, channel } = req.body;
     if (!title || !message || !type) return res.status(400).json({ error: "title, message, type are required" });
 
-    // Only super-admins may broadcast to other users.
     const targetUserId = req.scope?.isSuperAdmin
       ? (userId ?? req.user?.id)
       : req.user?.id;
@@ -74,10 +73,33 @@ router.post("/notifications", async (req, res) => {
 
     const [notification] = await db.insert(notificationsTable).values({
       userId: targetUserId, title, message, type, channel: channel || "in_app",
+      deliveryStatus: "sent",
     }).returning();
     return res.status(201).json(notification);
   } catch (err) {
     req.log.error({ err }, "Create notification error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/notifications/test-sms", async (req, res) => {
+  try {
+    const isAdmin = req.scope?.isSuperAdmin || ["admin", "superadmin", "manager"].includes(req.user?.role ?? "");
+    if (!isAdmin) return res.status(403).json({ error: "Admin only" });
+
+    const { phone, message } = req.body as { phone?: string; message?: string };
+    if (!phone) return res.status(400).json({ error: "phone is required" });
+
+    const { createDefaultSmsAdapter } = await import("../lib/notifications/channels/sms");
+    const { normalizePhone } = await import("../lib/notifications/types");
+    const adapter = createDefaultSmsAdapter();
+    const normalized = normalizePhone(phone);
+    if (!normalized) return res.status(400).json({ error: "Invalid phone number" });
+
+    const result = await adapter.sendSms(normalized, message ?? "CWP Detailers test SMS");
+    return res.json({ adapter: adapter.name, phone: normalized, ...result });
+  } catch (err) {
+    req.log.error({ err }, "Test SMS error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -2,7 +2,14 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { customersTable, vehiclesTable, solarSitesTable, subscriptionsTable, bookingsTable, paymentsTable, branchesTable } from "@workspace/db";
 import { eq, ilike, or, and, sql, desc } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { getLedgerBalance } from "../lib/wallet/service";
+import {
+  parseRequiredMobile,
+  parseOptionalEmail,
+  applyMobileField,
+  applyOptionalEmailField,
+} from "../lib/contactFields";
 
 const router = Router();
 
@@ -57,10 +64,16 @@ router.get("/customers", async (req, res) => {
 router.post("/customers", async (req, res) => {
   try {
     const { name, phone, email, address, city, branchId } = req.body;
-    if (!name || !phone) return res.status(400).json({ error: "Name and phone are required" });
+    if (!name) return res.status(400).json({ error: "Name is required" });
+
+    const phoneResult = parseRequiredMobile(phone);
+    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    const emailResult = parseOptionalEmail(email);
+    if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
 
     const values = tenantStamp(req, {
-      name, phone, email, address, city,
+      name, phone: phoneResult.value, email: emailResult.value, address, city,
       branchId: branchId || null,
       status: "active" as const,
     });
@@ -112,16 +125,20 @@ router.patch("/customers/:id", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    const { name, phone, email, address, city, status, walletBalance, branchId } = req.body;
+    const { name, phone, email, address, city, status, branchId } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
-    if (phone !== undefined) updateData.phone = phone;
-    if (email !== undefined) updateData.email = email;
+
+    const phoneField = applyMobileField(req.body, "phone", updateData);
+    if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
+    const emailField = applyOptionalEmailField(req.body, "email", updateData);
+    if (!emailField.ok) return res.status(400).json({ error: emailField.error });
+
     if (address !== undefined) updateData.address = address;
     if (city !== undefined) updateData.city = city;
     if (status !== undefined) updateData.status = status;
-    if (walletBalance !== undefined) updateData.walletBalance = walletBalance;
     if (branchId !== undefined) updateData.branchId = branchId;
+    // walletBalance is derived from ledger — never patch directly
 
     const [customer] = await db.update(customersTable).set(updateData).where(eq(customersTable.id, id)).returning();
     return res.json({ ...customer, branchName: null });
@@ -163,7 +180,7 @@ router.get("/customers/:id/summary", async (req, res) => {
     return res.json({
       activeSubscriptions: Number(activeSubscriptions[0]?.count ?? 0),
       upcomingServices: Number(upcomingBookings[0]?.count ?? 0),
-      walletBalance: parseFloat(customer.walletBalance),
+      walletBalance: await getLedgerBalance(id),
       pendingDues: parseFloat(customer.totalDues),
       totalServicesThisMonth: Number(thisMonthBookings[0]?.count ?? 0),
       totalSpend: Number(totalSpendResult[0]?.total ?? 0),

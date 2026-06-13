@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle, FileDown, FileText, ArrowRightLeft } from "lucide-react";
 
@@ -31,6 +32,20 @@ const qStatusColors: Record<string, string> = {
 };
 
 // Manual fetch helpers for new endpoints not yet in generated spec
+async function createInvoice(body: Record<string, unknown>) {
+  const res = await fetch("/api/invoices", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? "Failed to create invoice");
+  }
+  return res.json();
+}
+
 async function fetchQuotations(params?: Record<string, string>) {
   const url = new URL("/api/quotations", window.location.origin);
   Object.entries(params ?? {}).forEach(([k, v]) => url.searchParams.set(k, v));
@@ -50,7 +65,15 @@ export default function AdminInvoices() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [payOpen, setPayOpen] = useState(false);
+  const [invOpen, setInvOpen] = useState(false);
   const [payForm, setPayForm] = useState({ customerId: "", invoiceId: "", amount: "", method: "upi" });
+  const [invForm, setInvForm] = useState({
+    customerId: "",
+    description: "",
+    amount: "",
+    subscriptionId: "",
+    invoiceType: "package",
+  });
 
   const { data: invoices, isLoading } = useListInvoices({}, { query: { queryKey: getListInvoicesQueryKey({}) } });
   const { data: payments } = useListPayments({}, { query: { queryKey: getListPaymentsQueryKey({}) } });
@@ -69,6 +92,30 @@ export default function AdminInvoices() {
     },
   });
 
+  const createInvMutation = useMutation({
+    mutationFn: () => {
+      const total = parseFloat(invForm.amount);
+      return createInvoice({
+        customerId: parseInt(invForm.customerId),
+        subscriptionId: invForm.subscriptionId ? parseInt(invForm.subscriptionId) : undefined,
+        gstInclusive: true,
+        items: [{
+          description: invForm.description || `${invForm.invoiceType} purchase`,
+          quantity: 1,
+          unitPrice: total,
+          total,
+        }],
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+      setInvOpen(false);
+      setInvForm({ customerId: "", description: "", amount: "", subscriptionId: "", invoiceType: "package" });
+      toast({ title: "Invoice created" });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
   return (
     <AdminLayout>
       <div className="p-6 space-y-5">
@@ -77,7 +124,50 @@ export default function AdminInvoices() {
             <h1 className="font-display font-bold text-2xl">Billing & Finance</h1>
             <p className="text-muted-foreground text-sm mt-0.5">Invoices, quotations, payments, and expenses</p>
           </div>
-          <Dialog open={payOpen} onOpenChange={setPayOpen}>
+          <div className="flex gap-2">
+            <Dialog open={invOpen} onOpenChange={setInvOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="btn-create-invoice">
+                  <FileText size={15} className="mr-1.5" />Create Invoice
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Create Invoice</DialogTitle></DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <div>
+                    <Label>Customer ID</Label>
+                    <Input value={invForm.customerId} onChange={e => setInvForm(f => ({ ...f, customerId: e.target.value }))} className="mt-1" data-testid="input-invoice-customer-id" />
+                  </div>
+                  <div>
+                    <Label>Type</Label>
+                    <Select value={invForm.invoiceType} onValueChange={v => setInvForm(f => ({ ...f, invoiceType: v }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="package">Wash package</SelectItem>
+                        <SelectItem value="solar_amc">Solar AMC</SelectItem>
+                        <SelectItem value="manual">Manual invoice</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Description</Label>
+                    <Textarea value={invForm.description} onChange={e => setInvForm(f => ({ ...f, description: e.target.value }))} className="mt-1" placeholder="e.g. 6-month wash package" />
+                  </div>
+                  <div>
+                    <Label>Amount (₹, GST inclusive)</Label>
+                    <Input type="number" value={invForm.amount} onChange={e => setInvForm(f => ({ ...f, amount: e.target.value }))} className="mt-1" data-testid="input-invoice-amount" />
+                  </div>
+                  <div>
+                    <Label>Subscription ID (optional)</Label>
+                    <Input value={invForm.subscriptionId} onChange={e => setInvForm(f => ({ ...f, subscriptionId: e.target.value }))} className="mt-1" />
+                  </div>
+                  <Button onClick={() => createInvMutation.mutate()} disabled={createInvMutation.isPending || !invForm.customerId || !invForm.amount} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-invoice">
+                    {createInvMutation.isPending ? "Creating..." : "Create invoice"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={payOpen} onOpenChange={setPayOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="btn-record-payment">
                 <PlusCircle size={15} className="mr-1.5" />Record Payment
@@ -110,6 +200,7 @@ export default function AdminInvoices() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         <Tabs defaultValue="invoices">

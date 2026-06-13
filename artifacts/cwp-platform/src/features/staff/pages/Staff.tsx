@@ -14,6 +14,9 @@ import { Plus, Star, UserCog } from "lucide-react";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
 import { PageHeader, EmptyState } from "@/components/shared";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { EmailInput } from "@/components/ui/email-input";
+import { submitEmail, submitMobile } from "@/lib/contactForm";
 
 type StaffForm = { name: string; phone: string; email: string; role: string; branchId: string; monthlySalary: string };
 
@@ -22,6 +25,7 @@ export default function AdminStaff() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<StaffForm>({ name: "", phone: "", email: "", role: "technician", branchId: "", monthlySalary: "" });
+  const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
 
   const { data: staff, isLoading } = useListStaff({}, { query: { queryKey: getListStaffQueryKey({}) } });
   const { data: branches } = useListBranches({ query: { queryKey: getListBranchesQueryKey() } });
@@ -33,9 +37,31 @@ export default function AdminStaff() {
         setOpen(false);
         toast({ title: "Staff member created" });
       },
-      onError: () => toast({ title: "Failed to create staff", variant: "destructive" }),
+      onError: (err: any) => toast({ title: "Failed to create staff", description: err?.response?.data?.error, variant: "destructive" }),
     },
   });
+
+  const handleCreate = () => {
+    const phoneResult = submitMobile(form.phone);
+    const emailResult = submitEmail(form.email);
+    setErrors({
+      phone: phoneResult.ok ? null : phoneResult.error,
+      email: emailResult.ok ? null : emailResult.error,
+    });
+    if (!phoneResult.ok || !emailResult.ok) {
+      toast({ title: "Please fix phone or email format", variant: "destructive" });
+      return;
+    }
+    const payload: CreateStaffBody = {
+      name: form.name,
+      phone: phoneResult.value,
+      email: emailResult.value,
+      role: form.role as CreateStaffBody["role"],
+      branchId: parseInt(form.branchId),
+      monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : undefined,
+    };
+    createMutation.mutate({ data: payload });
+  };
 
   const list = staff ?? [];
 
@@ -56,12 +82,33 @@ export default function AdminStaff() {
                 <DialogContent>
                   <DialogHeader><DialogTitle>New Staff Member</DialogTitle></DialogHeader>
                   <div className="space-y-4 mt-2">
-                    {[["name", "Full Name", "text"], ["phone", "Phone", "tel"], ["email", "Email", "email"], ["monthlySalary", "Monthly Salary (₹)", "number"]].map(([k, l, t]) => (
-                      <div key={k}>
-                        <Label htmlFor={k}>{l}</Label>
-                        <Input id={k} data-testid={`input-staff-${k}`} type={t} value={form[k as keyof StaffForm]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} className="mt-1" />
-                      </div>
-                    ))}
+                    <div>
+                      <Label htmlFor="name">Full Name</Label>
+                      <Input id="name" data-testid="input-staff-name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" />
+                    </div>
+                    <PhoneInput
+                      id="phone"
+                      data-testid="input-staff-phone"
+                      label="Phone"
+                      value={form.phone}
+                      onChange={v => setForm(f => ({ ...f, phone: v }))}
+                      error={errors.phone}
+                      onErrorChange={err => setErrors(e => ({ ...e, phone: err }))}
+                    />
+                    <EmailInput
+                      id="email"
+                      data-testid="input-staff-email"
+                      label="Email"
+                      optional
+                      value={form.email}
+                      onChange={v => setForm(f => ({ ...f, email: v }))}
+                      error={errors.email}
+                      onErrorChange={err => setErrors(e => ({ ...e, email: err }))}
+                    />
+                    <div>
+                      <Label htmlFor="monthlySalary">Monthly Salary (₹)</Label>
+                      <Input id="monthlySalary" data-testid="input-staff-monthlySalary" type="number" value={form.monthlySalary} onChange={e => setForm(f => ({ ...f, monthlySalary: e.target.value }))} className="mt-1" />
+                    </div>
                     <div>
                       <Label>Role</Label>
                       <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
@@ -83,17 +130,7 @@ export default function AdminStaff() {
                       </Select>
                     </div>
                     <Button
-                      onClick={() => {
-                        const payload: CreateStaffBody = {
-                          name: form.name,
-                          phone: form.phone,
-                          email: form.email || undefined,
-                          role: form.role as CreateStaffBody["role"],
-                          branchId: parseInt(form.branchId),
-                          monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : undefined,
-                        };
-                        createMutation.mutate({ data: payload });
-                      }}
+                      onClick={handleCreate}
                       disabled={createMutation.isPending || !form.branchId}
                       className="w-full bg-primary text-secondary hover:bg-primary/90"
                       data-testid="btn-submit-staff">
@@ -115,22 +152,22 @@ export default function AdminStaff() {
         ) : (
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
             {list.map(s => (
-              <div key={s.id} className="bg-white/[0.02] border border-white/10 rounded-xl p-4 hover:border-primary/30 transition-colors" data-testid={`staff-card-${s.id}`}>
+              <div key={s.id} className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors" data-testid={`staff-card-${s.id}`}>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                       <UserCog size={16} className="text-primary" />
                     </div>
                     <div>
-                      <p className="font-semibold text-sm text-white">{s.name}</p>
-                      <p className="text-xs text-white/50 capitalize">{s.role?.replace(/_/g, " ")}</p>
+                      <p className="font-semibold text-sm text-foreground">{s.name}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{s.role?.replace(/_/g, " ")}</p>
                     </div>
                   </div>
-                  <Badge variant="outline" className={s.isActive ? "text-green-400 border-green-500/20 bg-green-500/10 text-xs" : "text-xs"}>
+                  <Badge variant="outline" className={s.isActive ? "text-green-600 dark:text-green-400 border-green-500/20 bg-green-500/10 text-xs" : "text-xs text-muted-foreground"}>
                     {s.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </div>
-                <div className="space-y-1.5 text-xs text-white/50 mb-3">
+                <div className="space-y-1.5 text-xs text-muted-foreground mb-3">
                   <p>{s.phone}</p>
                   <p>{s.branchName}</p>
                   <div className="flex items-center justify-between pt-1">

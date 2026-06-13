@@ -118,14 +118,30 @@ export default function BookService() {
   if (success) {
     return (
       <CustomerLayout>
-        <div className="flex flex-col items-center justify-center py-20">
-          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 200 }}>
-            <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mb-6">
+        <div className="flex flex-col items-center justify-center py-20 px-4">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 200 }}
+            className="w-full max-w-sm text-center"
+          >
+            <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mb-6 mx-auto">
               <CheckCircle size={40} className="text-green-500" />
             </div>
-            <h2 className="font-display font-bold text-2xl text-center mb-2">Booking Confirmed!</h2>
-            <p className="text-muted-foreground text-center mb-8">Our technician will reach you at the scheduled time.</p>
-            <Button onClick={() => { setSuccess(false); setForm(f => ({ ...f, serviceId: "", vehicleId: "", solarSiteId: "", scheduledDate: "", notes: "" })); }} className="bg-primary text-secondary hover:bg-primary/90">Book Another Service</Button>
+            <h2 className="font-display font-bold text-2xl mb-2">Booking Confirmed!</h2>
+            <p className="text-muted-foreground mb-8">Our technician will reach you at the scheduled time.</p>
+            {/* QW-06: View History link */}
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={() => { setSuccess(false); setForm(f => ({ ...f, serviceId: "", vehicleId: "", solarSiteId: "", scheduledDate: "", notes: "" })); }}
+                className="w-full h-11 bg-primary text-secondary hover:bg-primary/90"
+              >
+                Book Another Service
+              </Button>
+              <Link href="/customer/history">
+                <Button variant="outline" className="w-full h-11">View My Bookings</Button>
+              </Link>
+            </div>
           </motion.div>
         </div>
       </CustomerLayout>

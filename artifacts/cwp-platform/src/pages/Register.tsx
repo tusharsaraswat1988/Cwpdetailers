@@ -5,7 +5,10 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { EmailInput } from "@/components/ui/email-input";
 import { useToast } from "@/hooks/use-toast";
+import { submitEmail, submitMobile } from "@/lib/contactForm";
 import { Sun, Loader2 } from "lucide-react";
 
 export default function Register() {
@@ -13,6 +16,7 @@ export default function Register() {
   const { login } = useAuth();
   const { toast } = useToast();
   const [form, setForm] = useState({ name: "", phone: "", email: "", password: "", city: "" });
+  const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
 
   const registerMutation = useRegister({
     mutation: {
@@ -20,15 +24,38 @@ export default function Register() {
         login(data.user, data.token);
         setLocation("/customer/dashboard");
       },
-      onError: () => {
-        toast({ title: "Registration failed", description: "Phone may already be registered.", variant: "destructive" });
+      onError: (err: any) => {
+        toast({
+          title: "Registration failed",
+          description: err?.response?.data?.error ?? "Phone may already be registered.",
+          variant: "destructive",
+        });
       },
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    registerMutation.mutate({ data: form });
+
+    const phoneResult = submitMobile(form.phone);
+    const emailResult = submitEmail(form.email);
+    setErrors({
+      phone: phoneResult.ok ? null : phoneResult.error,
+      email: emailResult.ok ? null : emailResult.error,
+    });
+
+    if (!phoneResult.ok || !emailResult.ok) {
+      toast({ title: "Please fix the highlighted fields", variant: "destructive" });
+      return;
+    }
+
+    registerMutation.mutate({
+      data: {
+        ...form,
+        phone: phoneResult.value,
+        email: emailResult.value,
+      },
+    });
   };
 
   return (
@@ -43,10 +70,42 @@ export default function Register() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="name" className="text-white/70 text-sm">Full Name</Label>
+            <Input
+              id="name"
+              data-testid="input-name"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="Arjun Sharma"
+              className="mt-1.5 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
+            />
+          </div>
+
+          <PhoneInput
+            id="phone"
+            data-testid="input-phone"
+            label="Phone Number"
+            value={form.phone}
+            onChange={v => setForm(f => ({ ...f, phone: v }))}
+            error={errors.phone}
+            onErrorChange={err => setErrors(e => ({ ...e, phone: err }))}
+            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
+          />
+
+          <EmailInput
+            id="email"
+            data-testid="input-email"
+            label="Email (optional)"
+            optional
+            value={form.email}
+            onChange={v => setForm(f => ({ ...f, email: v }))}
+            error={errors.email}
+            onErrorChange={err => setErrors(e => ({ ...e, email: err }))}
+            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
+          />
+
           {[
-            { id: "name", label: "Full Name", placeholder: "Arjun Sharma", type: "text" },
-            { id: "phone", label: "Phone Number", placeholder: "9001001001", type: "tel" },
-            { id: "email", label: "Email (optional)", placeholder: "you@email.com", type: "email" },
             { id: "city", label: "City", placeholder: "Varanasi", type: "text" },
             { id: "password", label: "Password", placeholder: "••••••••", type: "password" },
           ].map(({ id, label, placeholder, type }) => (
@@ -63,6 +122,7 @@ export default function Register() {
               />
             </div>
           ))}
+
           <Button
             type="submit"
             data-testid="btn-submit-register"

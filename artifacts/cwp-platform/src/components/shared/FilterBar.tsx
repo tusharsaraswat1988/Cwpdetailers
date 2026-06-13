@@ -14,12 +14,12 @@ export function FilterBar({ search, onSearchChange, searchPlaceholder = "Searchâ
     <div className="flex flex-wrap items-center gap-3 mb-4" data-testid="filter-bar">
       {onSearchChange && (
         <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search ?? ""}
             onChange={e => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
-            className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-white/30"
+            className="pl-9"
             data-testid="filter-search"
           />
         </div>

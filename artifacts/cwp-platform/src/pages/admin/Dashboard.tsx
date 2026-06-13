@@ -83,7 +83,7 @@ export default function AdminDashboard() {
           <StatCard title="Repeat Customer %" value={`${stats?.repeatCustomerPercent ?? 0}%`} icon={Star} loading={isLoading} />
         </div>
 
-        {/* Subscription Health strip */}
+        {/* Subscription Health strip — QW-13: added paused/blocked context */}
         {health && (
           <Card className="border-l-4 border-l-primary">
             <CardContent className="p-4">
@@ -92,26 +92,35 @@ export default function AdminDashboard() {
                   <HeartPulse size={18} className="text-primary" />
                   <span className="font-semibold text-sm">Subscription Health</span>
                 </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1 bg-green-500/10 text-green-600 px-2 py-1 rounded-md">
-                    <Circle size={8} fill="currentColor" /> {health.active} active
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="flex items-center gap-1 bg-green-500/10 text-green-600 px-2 py-1 rounded-md border border-green-500/20">
+                    <Circle size={7} fill="currentColor" /> {health.active} active
                   </span>
-                  <span className="flex items-center gap-1 bg-blue-500/10 text-blue-600 px-2 py-1 rounded-md">
-                    <Pause size={8} /> {health.paused} paused
-                  </span>
-                  <span className="flex items-center gap-1 bg-amber-500/10 text-amber-600 px-2 py-1 rounded-md">
-                    <AlertCircle size={8} /> {health.expiring} expiring
-                  </span>
-                  <span className="flex items-center gap-1 bg-red-500/10 text-red-600 px-2 py-1 rounded-md">
-                    <AlertCircle size={8} /> {health.missedThisWeek} missed this week
-                  </span>
+                  {/* QW-13: paused count with amber — prominent now */}
+                  {(health.paused ?? 0) > 0 && (
+                    <span className="flex items-center gap-1 bg-amber-500/10 text-amber-700 px-2 py-1 rounded-md border border-amber-500/20 font-medium">
+                      <Pause size={8} /> {health.paused ?? 0} paused (low balance)
+                    </span>
+                  )}
+                  {(health.expiring ?? 0) > 0 && (
+                    <span className="flex items-center gap-1 bg-orange-500/10 text-orange-700 px-2 py-1 rounded-md border border-orange-500/20">
+                      <AlertCircle size={8} /> {health.expiring ?? 0} expiring soon
+                    </span>
+                  )}
+                  {(health.missedThisWeek ?? 0) > 0 && (
+                    <span className="flex items-center gap-1 bg-red-500/10 text-red-700 px-2 py-1 rounded-md border border-red-500/20 font-medium">
+                      <AlertCircle size={8} /> {health.missedThisWeek ?? 0} missed this week
+                    </span>
+                  )}
                   <span className="flex items-center gap-1 bg-muted text-muted-foreground px-2 py-1 rounded-md">
-                    <Circle size={8} fill="currentColor" /> {health.expired} expired
+                    <Circle size={7} fill="currentColor" /> {health.expired} expired
                   </span>
-                  <span className="flex items-center gap-1 bg-destructive/10 text-destructive px-2 py-1 rounded-md">
-                    <TrendingUp size={8} /> {health.churnRate ?? 0}% churn
-                  </span>
-                  <Link href="/admin/subscriptions" className="text-primary hover:underline ml-1">View all</Link>
+                  {(health.churnRate ?? 0) > 0 && (
+                    <span className="flex items-center gap-1 bg-destructive/10 text-destructive px-2 py-1 rounded-md">
+                      <TrendingUp size={8} /> {health.churnRate ?? 0}% churn
+                    </span>
+                  )}
+                  <Link href="/admin/subscriptions" className="text-primary hover:underline ml-1 font-medium">View all →</Link>
                 </div>
               </div>
             </CardContent>

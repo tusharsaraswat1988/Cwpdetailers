@@ -11,6 +11,8 @@ import { DataTable, Column } from "@/components/shared/DataTable";
 import { Funnel, Plus, Phone, Calendar, MessageSquare, ArrowRight, CheckCircle, UserPlus, Search, Clock, BarChart3, X, Send, LayoutGrid, List } from "lucide-react";
 import { DndContext, useDraggable, useDroppable, DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { submitMobile, submitOptionalMobile } from "@/lib/contactForm";
 
 type LeadStatus = "new" | "contacted" | "interested" | "quotation" | "booked" | "completed" | "subscription" | "lost";
 type ViewMode = "kanban" | "list";
@@ -93,7 +95,7 @@ export default function FranchiseeLeads() {
   const { data: stats } = useQuery({ queryKey: ["franchisee-leadStats"], queryFn: fetchLeadStats });
   const { data: detail } = useQuery({ queryKey: ["franchisee-leadDetail", detailId], queryFn: () => (detailId ? fetchLeadDetail(detailId) : null), enabled: !!detailId });
 
-  const createMut = useMutation({ mutationFn: createLead, onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leads"] }); qc.invalidateQueries({ queryKey: ["franchisee-leadStats"] }); setOpen(false); toast({ title: "Lead created" }); }, onError: () => toast({ title: "Failed to create lead", variant: "destructive" }) });
+  const createMut = useMutation({ mutationFn: createLead, onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leads"] }); qc.invalidateQueries({ queryKey: ["franchisee-leadStats"] }); setOpen(false); toast({ title: "Lead created" }); }, onError: (err: any) => toast({ title: "Failed to create lead", description: err?.error ?? err?.message, variant: "destructive" }) });
   const patchMut = useMutation({ mutationFn: ({ id, body }: { id: number; body: Partial<Lead> }) => patchLead(id, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leads"] }); qc.invalidateQueries({ queryKey: ["franchisee-leadStats"] }); qc.invalidateQueries({ queryKey: ["franchisee-leadDetail", detailId] }); toast({ title: "Lead updated" }); } });
   const convertMut = useMutation({ mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => convertLead(id, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leads"] }); setShowConvert(false); setDetailId(null); toast({ title: "Lead converted" }); } });
   const activityMut = useMutation({ mutationFn: ({ id, body }: { id: number; body: { type: string; body: string; followUpAt?: string } }) => addActivity(id, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leadDetail", detailId] }); toast({ title: "Activity added" }); } });
@@ -103,6 +105,7 @@ export default function FranchiseeLeads() {
   for (const l of leads) { (byStatus[l.status] = byStatus[l.status] ?? []).push(l); }
 
   const [form, setForm] = useState({ name: "", phone: "", secondaryPhone: "", city: "", source: "whatsapp", serviceInterest: "", notes: "", valueEstimate: "", nextFollowUpAt: "" });
+  const [formErrors, setFormErrors] = useState<{ phone?: string | null; secondaryPhone?: string | null }>({});
   const [newNote, setNewNote] = useState(""); const [newFollowUp, setNewFollowUp] = useState("");
   const [convertForm, setConvertForm] = useState({ createCustomer: true, createBooking: false, createSubscription: false, serviceId: "", scheduledDate: "", amount: "", subscriptionType: "monthly_wash", subStartDate: "", subEndDate: "", subPrice: "" });
 
@@ -152,8 +155,8 @@ export default function FranchiseeLeads() {
                 <div className="space-y-3 mt-2">
                   <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Full name" /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" /></div>
-                    <div><Label>Alt Phone</Label><Input value={form.secondaryPhone} onChange={e => setForm({ ...form, secondaryPhone: e.target.value })} placeholder="Secondary" /></div>
+                    <PhoneInput label="Phone" value={form.phone} onChange={v => setForm({ ...form, phone: v })} error={formErrors.phone} onErrorChange={err => setFormErrors(e => ({ ...e, phone: err }))} />
+                    <PhoneInput label="Alt Phone" optional value={form.secondaryPhone} onChange={v => setForm({ ...form, secondaryPhone: v })} error={formErrors.secondaryPhone} onErrorChange={err => setFormErrors(e => ({ ...e, secondaryPhone: err }))} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label>City</Label><Input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} placeholder="City" /></div>
@@ -180,7 +183,24 @@ export default function FranchiseeLeads() {
                   </div>
                   <div><Label>Value Estimate (₹)</Label><Input value={form.valueEstimate} onChange={e => setForm({ ...form, valueEstimate: e.target.value })} placeholder="Estimated value" /></div>
                   <div><Label>Notes</Label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm resize-none h-20" placeholder="Initial notes..." /></div>
-                  <Button className="w-full bg-amber-500 text-white" onClick={() => createMut.mutate({ name: form.name, phone: form.phone, secondaryPhone: form.secondaryPhone || undefined, city: form.city || undefined, source: form.source as any, serviceInterest: form.serviceInterest as any || undefined, notes: form.notes || undefined, valueEstimate: form.valueEstimate || undefined, nextFollowUpAt: form.nextFollowUpAt ? new Date(form.nextFollowUpAt).toISOString() : undefined })}>Create Lead</Button>
+                  <Button className="w-full bg-amber-500 text-white" onClick={() => {
+                    const phoneResult = submitMobile(form.phone);
+                    const secondaryResult = submitOptionalMobile(form.secondaryPhone);
+                    setFormErrors({
+                      phone: phoneResult.ok ? null : phoneResult.error,
+                      secondaryPhone: secondaryResult.ok ? null : secondaryResult.error,
+                    });
+                    if (!phoneResult.ok || !secondaryResult.ok) {
+                      toast({ title: "Please fix phone format", variant: "destructive" });
+                      return;
+                    }
+                    createMut.mutate({
+                      name: form.name, phone: phoneResult.value, secondaryPhone: secondaryResult.value,
+                      city: form.city || undefined, source: form.source as any, serviceInterest: form.serviceInterest as any || undefined,
+                      notes: form.notes || undefined, valueEstimate: form.valueEstimate || undefined,
+                      nextFollowUpAt: form.nextFollowUpAt ? new Date(form.nextFollowUpAt).toISOString() : undefined,
+                    });
+                  }}>Create Lead</Button>
                 </div>
               </DialogContent>
             </Dialog>

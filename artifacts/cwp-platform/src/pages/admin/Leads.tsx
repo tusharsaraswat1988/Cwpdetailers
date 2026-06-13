@@ -19,6 +19,8 @@ import {
   DndContext, useDraggable, useDroppable, DragEndEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { submitMobile, submitOptionalMobile } from "@/lib/contactForm";
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 
@@ -243,7 +245,7 @@ export default function AdminLeads() {
   const createMut = useMutation({
     mutationFn: createLead,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["leads"] }); qc.invalidateQueries({ queryKey: ["leadStats"] }); setOpen(false); toast({ title: "Lead created" }); },
-    onError: () => toast({ title: "Failed to create lead", variant: "destructive" }),
+    onError: (err: any) => toast({ title: "Failed to create lead", description: err?.error ?? err?.message, variant: "destructive" }),
   });
 
   const patchMut = useMutation({
@@ -274,6 +276,7 @@ export default function AdminLeads() {
     name: "", phone: "", secondaryPhone: "", city: "", source: "whatsapp" as string,
     serviceInterest: "", notes: "", valueEstimate: "", nextFollowUpAt: "",
   });
+  const [formErrors, setFormErrors] = useState<{ phone?: string | null; secondaryPhone?: string | null }>({});
   const [newNote, setNewNote] = useState("");
   const [newFollowUp, setNewFollowUp] = useState("");
   const [convertForm, setConvertForm] = useState({
@@ -358,8 +361,8 @@ export default function AdminLeads() {
                 <div className="space-y-3 mt-2">
                   <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Full name" /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" /></div>
-                    <div><Label>Alt Phone</Label><Input value={form.secondaryPhone} onChange={e => setForm({ ...form, secondaryPhone: e.target.value })} placeholder="Secondary" /></div>
+                    <PhoneInput label="Phone" value={form.phone} onChange={v => setForm({ ...form, phone: v })} error={formErrors.phone} onErrorChange={err => setFormErrors(e => ({ ...e, phone: err }))} />
+                    <PhoneInput label="Alt Phone" optional value={form.secondaryPhone} onChange={v => setForm({ ...form, secondaryPhone: v })} error={formErrors.secondaryPhone} onErrorChange={err => setFormErrors(e => ({ ...e, secondaryPhone: err }))} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label>City</Label><Input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} placeholder="City" /></div>
@@ -389,13 +392,25 @@ export default function AdminLeads() {
                     <Label>Notes</Label>
                     <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm resize-none h-20" placeholder="Initial notes..." />
                   </div>
-                  <Button className="w-full bg-primary text-secondary" onClick={() => createMut.mutate({
-                    name: form.name, phone: form.phone, secondaryPhone: form.secondaryPhone || undefined,
+                  <Button className="w-full bg-primary text-secondary" onClick={() => {
+                    const phoneResult = submitMobile(form.phone);
+                    const secondaryResult = submitOptionalMobile(form.secondaryPhone);
+                    setFormErrors({
+                      phone: phoneResult.ok ? null : phoneResult.error,
+                      secondaryPhone: secondaryResult.ok ? null : secondaryResult.error,
+                    });
+                    if (!phoneResult.ok || !secondaryResult.ok) {
+                      toast({ title: "Please fix phone format", variant: "destructive" });
+                      return;
+                    }
+                    createMut.mutate({
+                    name: form.name, phone: phoneResult.value, secondaryPhone: secondaryResult.value,
                     city: form.city || undefined, source: form.source as any,
                     serviceInterest: form.serviceInterest as any || undefined,
                     notes: form.notes || undefined, valueEstimate: form.valueEstimate || undefined,
                     nextFollowUpAt: form.nextFollowUpAt ? new Date(form.nextFollowUpAt).toISOString() : undefined,
-                  })}>Create Lead</Button>
+                  });
+                  }}>Create Lead</Button>
                 </div>
               </DialogContent>
             </Dialog>

@@ -3,9 +3,11 @@ import {
   usersTable, branchesTable, customersTable, vehiclesTable,
   servicesTable, subscriptionsTable, staffTable, bookingsTable, attendanceTable,
   complaintsTable, invoicesTable, paymentsTable, notificationsTable,
+  walletTransactionsTable,
 } from "@workspace/db";
 import argon2 from "argon2";
 import { and, eq, sql } from "drizzle-orm";
+import { seedPermissions } from "./seed-permissions";
 
 async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password, {
@@ -207,6 +209,31 @@ async function getOrCreateVehicle(input: {
 /**
  * Idempotent Varanasi pilot seed — safe to re-run on an existing dev database.
  */
+async function seedWalletLedger() {
+  const customers = await db.select().from(customersTable);
+  for (const c of customers) {
+    const bal = parseFloat(c.walletBalance);
+    if (bal <= 0) continue;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(walletTransactionsTable)
+      .where(eq(walletTransactionsTable.customerId, c.id));
+    if (Number(row?.count ?? 0) > 0) continue;
+
+    await db.insert(walletTransactionsTable).values({
+      customerId: c.id,
+      companyId: c.companyId,
+      type: "credit",
+      amount: bal.toFixed(2),
+      balanceAfter: bal.toFixed(2),
+      reference: "wallet_recharge",
+      paymentMode: "cash",
+      notes: "Opening balance (seed migration)",
+    });
+    console.log(`Wallet ledger seeded for customer ${c.id} (₹${bal})`);
+  }
+}
+
 async function seed() {
   console.log("Seeding Varanasi pilot database (idempotent)...");
 
@@ -410,6 +437,10 @@ async function seed() {
     vehicleType: "luxury",
   });
 
+  await db.update(vehiclesTable).set({ assignedStaffId: ravi.id }).where(eq(vehiclesTable.id, v1.id));
+  await db.update(vehiclesTable).set({ assignedStaffId: ravi.id }).where(eq(vehiclesTable.id, v2.id));
+  await db.update(vehiclesTable).set({ assignedStaffId: suresh.id }).where(eq(vehiclesTable.id, v4.id));
+
   const today = new Date().toISOString().split("T")[0];
   const endDate90 = new Date(Date.now() + 90 * 86400000).toISOString().split("T")[0];
   const endDate30 = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
@@ -423,9 +454,9 @@ async function seed() {
 
   if (bookingCount === 0) {
     await db.insert(subscriptionsTable).values([
-      { customerId: arjun.id, serviceId: basicWash.id, type: "daily_wash", status: "active", startDate: today, endDate: endDate90, frequencyDays: 1, price: "8999", paidAmount: "8999", dueAmount: "0", nextServiceDate: today, branchId: varanasi.id },
-      { customerId: sunita.id, serviceId: premiumWash.id, type: "monthly_wash", status: "active", startDate: today, endDate: endDate30, frequencyDays: 7, price: "2499", paidAmount: "0", dueAmount: "2499", nextServiceDate: today, branchId: varanasi.id },
-      { customerId: rohit.id, serviceId: basicWash.id, type: "daily_wash", status: "active", startDate: today, endDate: endDate30, frequencyDays: 1, price: "999", paidAmount: "999", dueAmount: "0", nextServiceDate: today, branchId: varanasi.id },
+      { customerId: arjun.id, vehicleId: v1.id, serviceId: basicWash.id, type: "daily_wash", status: "active", startDate: today, endDate: endDate90, frequencyDays: 1, price: "8999", dailyRate: "300", paidAmount: "8999", dueAmount: "0", nextServiceDate: today, branchId: varanasi.id },
+      { customerId: sunita.id, vehicleId: v3.id, serviceId: premiumWash.id, type: "monthly_wash", status: "active", startDate: today, endDate: endDate30, frequencyDays: 7, price: "2499", paidAmount: "0", dueAmount: "2499", nextServiceDate: today, branchId: varanasi.id },
+      { customerId: rohit.id, vehicleId: v4.id, serviceId: basicWash.id, type: "daily_wash", status: "active", startDate: today, endDate: endDate30, frequencyDays: 1, price: "999", dailyRate: "33.30", paidAmount: "999", dueAmount: "0", nextServiceDate: today, branchId: varanasi.id },
     ]);
 
     await db.insert(bookingsTable).values([
@@ -495,6 +526,9 @@ async function seed() {
       channel: "in_app",
     });
   }
+
+  await seedPermissions();
+  await seedWalletLedger();
 
   console.log("\n✅ Varanasi pilot seed complete.\n");
   console.log("Admin:     phone 9999999999  password admin123");

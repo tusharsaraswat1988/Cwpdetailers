@@ -6,6 +6,13 @@ import {
 } from "@workspace/db";
 import { eq, and, or, ilike, sql, desc, gte, lte } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import {
+  parseRequiredMobile,
+  parseOptionalMobile,
+  applyMobileField,
+  applyOptionalMobileField,
+  normalizeIndianMobile,
+} from "../lib/contactFields";
 
 const router = Router();
 
@@ -121,9 +128,15 @@ router.post("/leads", async (req, res) => {
       assignedToStaffId, notes, nextFollowUpAt, valueEstimate,
     } = req.body;
 
-    if (!name || !phone || !source) {
-      return res.status(400).json({ error: "Name, phone, and source are required" });
+    if (!name || !source) {
+      return res.status(400).json({ error: "Name and source are required" });
     }
+
+    const phoneResult = parseRequiredMobile(phone);
+    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    const secondaryResult = parseOptionalMobile(secondaryPhone);
+    if (!secondaryResult.ok) return res.status(400).json({ error: secondaryResult.error });
 
     // Prevent cross-tenant linking: staff must be in scope
     let assignedToStaffIdVal: number | null = null;
@@ -138,7 +151,7 @@ router.post("/leads", async (req, res) => {
     }
 
     const values = tenantStamp(req, {
-      name, phone, secondaryPhone, city,
+      name, phone: phoneResult.value, secondaryPhone: secondaryResult.value, city,
       source: source as any,
       serviceInterest: serviceInterest as any || null,
       assignedToStaffId: assignedToStaffIdVal,
@@ -261,9 +274,13 @@ router.post("/leads/ingest", async (req, res) => {
     const serviceInterest = parsed?.service || parsed?.service_interest || null;
 
     if (phone) {
+      const normalizedPhone = normalizeIndianMobile(String(phone));
+      if (!normalizedPhone) {
+        return res.status(202).json({ success: false, logId: log.id, error: "Invalid phone number in payload" });
+      }
       const leadValues = tenantStamp(req, {
         name,
-        phone,
+        phone: normalizedPhone,
         city,
         source: source as any,
         serviceInterest: serviceInterest as any,
@@ -354,8 +371,12 @@ router.patch("/leads/:id", async (req, res) => {
 
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
-    if (phone !== undefined) updateData.phone = phone;
-    if (secondaryPhone !== undefined) updateData.secondaryPhone = secondaryPhone;
+
+    const phoneField = applyMobileField(req.body, "phone", updateData);
+    if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
+    const secondaryField = applyOptionalMobileField(req.body, "secondaryPhone", updateData);
+    if (!secondaryField.ok) return res.status(400).json({ error: secondaryField.error });
+
     if (city !== undefined) updateData.city = city;
     if (source !== undefined) updateData.source = source;
     if (serviceInterest !== undefined) updateData.serviceInterest = serviceInterest;

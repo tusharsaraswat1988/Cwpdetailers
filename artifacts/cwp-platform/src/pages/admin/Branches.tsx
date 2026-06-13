@@ -9,12 +9,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, MapPin, Users, UserCog } from "lucide-react";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { submitContactPhone } from "@/lib/contactForm";
 
 export default function AdminBranches() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", city: "", address: "", phone: "", managerName: "" });
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const { data: branches, isLoading } = useListBranches({ query: { queryKey: getListBranchesQueryKey() } });
 
@@ -25,8 +28,24 @@ export default function AdminBranches() {
         setOpen(false);
         toast({ title: "Branch created" });
       },
+      onError: (err: any) => toast({ title: "Failed to create branch", description: err?.response?.data?.error, variant: "destructive" }),
     },
   });
+
+  const handleCreate = () => {
+    const phoneResult = submitContactPhone(form.phone);
+    setPhoneError(phoneResult.ok ? null : phoneResult.error);
+    if (!phoneResult.ok) {
+      toast({ title: phoneResult.error, variant: "destructive" });
+      return;
+    }
+    createMutation.mutate({
+      data: {
+        ...form,
+        phone: phoneResult.value,
+      },
+    });
+  };
 
   return (
     <AdminLayout>
@@ -45,13 +64,23 @@ export default function AdminBranches() {
             <DialogContent>
               <DialogHeader><DialogTitle>New Branch</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-2">
-                {[["name", "Branch Name"], ["city", "City"], ["address", "Address"], ["phone", "Phone"], ["managerName", "Manager Name"]].map(([k, l]) => (
+                {[["name", "Branch Name"], ["city", "City"], ["address", "Address"], ["managerName", "Manager Name"]].map(([k, l]) => (
                   <div key={k}>
                     <Label>{l}</Label>
                     <Input data-testid={`input-branch-${k}`} value={(form as any)[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} className="mt-1" />
                   </div>
                 ))}
-                <Button onClick={() => createMutation.mutate({ data: form })} disabled={createMutation.isPending} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-branch">
+                <PhoneInput
+                  data-testid="input-branch-phone"
+                  label="Phone"
+                  mode="contact"
+                  optional
+                  value={form.phone}
+                  onChange={v => setForm(f => ({ ...f, phone: v }))}
+                  error={phoneError}
+                  onErrorChange={setPhoneError}
+                />
+                <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-branch">
                   {createMutation.isPending ? "Creating..." : "Create Branch"}
                 </Button>
               </div>

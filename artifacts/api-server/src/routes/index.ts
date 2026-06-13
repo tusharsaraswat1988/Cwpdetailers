@@ -20,6 +20,7 @@ import storageRouter from "./storage";
 import quotationsRouter from "./quotations";
 import expensesRouter from "./expenses";
 import billingRouter from "./billing";
+import walletRouter from "./wallet";
 import { guardResource } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -32,6 +33,12 @@ router.use(authRouter);
 // (GET=view, POST=create, PUT/PATCH=edit, DELETE=delete) for that resource.
 // Overrides handle non-CRUD POST endpoints inside each router.
 router.use(guardResource("customers"), customersRouter);
+router.use(
+  guardResource("customers", [
+    { match: /\/wallet\/credit$/, method: "POST", action: "edit" },
+  ]),
+  walletRouter,
+);
 router.use(guardResource("customers"), vehiclesRouter);
 router.use(guardResource("customers"), solarSitesRouter);
 router.use(guardResource("services"), servicesRouter);
@@ -41,6 +48,8 @@ router.use(
     { match: /\/renew$/, method: "POST", action: "edit" },
     { match: /\/pause$/, method: "POST", action: "edit" },
     { match: /\/resume$/, method: "POST", action: "edit" },
+    { match: /\/daily-tick$/, method: "POST", action: "edit" },
+    { match: /\/daily-schedule$/, method: "POST", action: "edit" },
   ]),
   subscriptionsRouter,
 );
@@ -72,6 +81,7 @@ router.use(guardResource("analytics"), analyticsRouter);
 router.use(
   guardResource("notifications", [
     { match: /\/broadcast$/, method: "POST", action: "create" },
+    { match: /\/test-sms$/, method: "POST", action: "create" },
   ]),
   notificationsRouter,
 );

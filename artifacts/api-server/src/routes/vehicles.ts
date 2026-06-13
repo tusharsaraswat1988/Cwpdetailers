@@ -1,8 +1,8 @@
 import { Router, type Request } from "express";
 import { db } from "@workspace/db";
-import { vehiclesTable, customersTable } from "@workspace/db";
+import { vehiclesTable, customersTable, staffTable } from "@workspace/db";
 import { eq, and, inArray, sql } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 
 const router = Router();
 
@@ -69,7 +69,7 @@ router.patch("/vehicles/:id", async (req, res) => {
     if (!existing || !rowInScope(req, existing)) {
       return res.status(404).json({ error: "Vehicle not found" });
     }
-    const { make, model, year, color, registrationNumber, vehicleType, customerId } = req.body;
+    const { make, model, year, color, registrationNumber, vehicleType, customerId, assignedStaffId } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (make !== undefined) updateData.make = make;
     if (model !== undefined) updateData.model = model;
@@ -78,6 +78,26 @@ router.patch("/vehicles/:id", async (req, res) => {
     if (registrationNumber !== undefined) updateData.registrationNumber = registrationNumber;
     if (vehicleType !== undefined) updateData.vehicleType = vehicleType;
     if (customerId !== undefined) updateData.customerId = customerId;
+
+    if (assignedStaffId !== undefined) {
+      if (assignedStaffId === null) {
+        updateData.assignedStaffId = null;
+      } else {
+        const staff = await loadIfInScope(req,
+          () => db.select().from(staffTable).where(eq(staffTable.id, assignedStaffId)).limit(1).then(r => r[0]),
+          r => ({ ...r, staffId: r.id }),
+        );
+        if (!staff) return res.status(404).json({ error: "Staff not found" });
+        if (staff.verificationStatus !== "verified") {
+          return res.status(400).json({ error: "Staff must be verified before assignment" });
+        }
+        if (existing.branchId && staff.branchId !== existing.branchId) {
+          return res.status(400).json({ error: "Staff must belong to the same branch as the vehicle" });
+        }
+        updateData.assignedStaffId = assignedStaffId;
+      }
+    }
+
     const [vehicle] = await db.update(vehiclesTable).set(updateData).where(eq(vehiclesTable.id, id)).returning();
     return res.json(vehicle);
   } catch (err) {

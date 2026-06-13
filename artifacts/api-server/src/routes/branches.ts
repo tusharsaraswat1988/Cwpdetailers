@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { branchesTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
+import { parseOptionalContactPhone, applyOptionalContactPhoneField } from "../lib/contactFields";
 
 const router = Router();
 
@@ -39,7 +40,11 @@ router.post("/branches", async (req, res) => {
   try {
     const { name, city, address, phone, managerName } = req.body;
     if (!name || !city) return res.status(400).json({ error: "name and city are required" });
-    const values = tenantStamp(req, { name, city, address, phone, managerName }) as typeof branchesTable.$inferInsert;
+
+    const phoneResult = parseOptionalContactPhone(phone);
+    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    const values = tenantStamp(req, { name, city, address, phone: phoneResult.value, managerName }) as typeof branchesTable.$inferInsert;
     const [branch] = await db.insert(branchesTable).values(values).returning();
     return res.status(201).json({ ...branch, customerCount: 0, staffCount: 0 });
   } catch (err) {
@@ -60,7 +65,8 @@ router.patch("/branches/:id", async (req, res) => {
     if (name !== undefined) updateData.name = name;
     if (city !== undefined) updateData.city = city;
     if (address !== undefined) updateData.address = address;
-    if (phone !== undefined) updateData.phone = phone;
+    const phoneField = applyOptionalContactPhoneField(req.body, "phone", updateData);
+    if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
     if (managerName !== undefined) updateData.managerName = managerName;
     const [branch] = await db.update(branchesTable).set(updateData).where(eq(branchesTable.id, id)).returning();
     return res.json(branch);

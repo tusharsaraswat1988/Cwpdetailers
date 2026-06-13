@@ -3,6 +3,11 @@ import { db, usersTable, customersTable, sessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { generateToken, hashToken, optionalAuth, requireAuth, getRolePermissions } from "../middlewares/auth";
 import { hashPassword, verifyPasswordWithUpgrade } from "../lib/passwords";
+import {
+  normalizeLoginIdentifier,
+  parseRequiredMobile,
+  parseOptionalEmail,
+} from "../lib/contactFields";
 
 const router = Router();
 
@@ -32,12 +37,15 @@ router.post("/auth/login", async (req, res) => {
     const { phone, email, password } = req.body;
     if (!password) return res.status(400).json({ error: "Password required" });
 
+    const idResult = normalizeLoginIdentifier(phone, email);
+    if (!idResult.ok) return res.status(400).json({ error: idResult.error });
+
     let user;
-    if (phone) {
-      const rows = await db.select().from(usersTable).where(eq(usersTable.phone, phone)).limit(1);
+    if (idResult.value.phone) {
+      const rows = await db.select().from(usersTable).where(eq(usersTable.phone, idResult.value.phone)).limit(1);
       user = rows[0];
-    } else if (email) {
-      const rows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+    } else if (idResult.value.email) {
+      const rows = await db.select().from(usersTable).where(eq(usersTable.email, idResult.value.email)).limit(1);
       user = rows[0];
     }
 
@@ -63,15 +71,24 @@ router.post("/auth/login", async (req, res) => {
 router.post("/auth/register", async (req, res) => {
   try {
     const { name, phone, email, password, address, city, branchId } = req.body;
-    if (!name || !phone || !password) return res.status(400).json({ error: "Name, phone, and password are required" });
+    if (!name || !password) return res.status(400).json({ error: "Name and password are required" });
 
-    const existing = await db.select().from(usersTable).where(eq(usersTable.phone, phone)).limit(1);
+    const phoneResult = parseRequiredMobile(phone);
+    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    const emailResult = parseOptionalEmail(email);
+    if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
+
+    const normalizedPhone = phoneResult.value;
+    const normalizedEmail = emailResult.value;
+
+    const existing = await db.select().from(usersTable).where(eq(usersTable.phone, normalizedPhone)).limit(1);
     if (existing.length > 0) return res.status(400).json({ error: "Phone already registered" });
 
     const passwordHash = await hashPassword(password);
 
     const [user] = await db.insert(usersTable).values({
-      name, phone, email: email || null,
+      name, phone: normalizedPhone, email: normalizedEmail,
       passwordHash,
       role: "customer",
       branchId: branchId || null,
@@ -82,7 +99,7 @@ router.post("/auth/register", async (req, res) => {
 
     const [customer] = await db.insert(customersTable).values({
       userId: user.id,
-      name, phone, email: email || null,
+      name, phone: normalizedPhone, email: normalizedEmail,
       address: address || null,
       city: city || "Varanasi",
       branchId: branchId || null,

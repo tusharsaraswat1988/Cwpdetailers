@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { invoicesTable, paymentsTable, customersTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
-import { computeGst } from "../lib/gst";
+import { computeGst, splitGstInclusive } from "../lib/gst";
 
 const router = Router();
 
@@ -22,8 +22,16 @@ const PAYMENT_SCOPE = {
 };
 
 let invoiceCounter = 1000;
-function generateInvoiceNumber(): string {
-  return `CWP-${new Date().getFullYear()}-${String(++invoiceCounter).padStart(4, '0')}`;
+async function generateInvoiceNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const prefix = `CWP-${year}-`;
+  const [row] = await db
+    .select({ maxNum: sql<string>`max(cast(substring(${invoicesTable.invoiceNumber} from '[0-9]+$') as integer))` })
+    .from(invoicesTable)
+    .where(sql`${invoicesTable.invoiceNumber} like ${prefix + "%"}`);
+  const next = Math.max(invoiceCounter, parseInt(row?.maxNum ?? "0", 10) + 1);
+  invoiceCounter = next;
+  return `${prefix}${String(next).padStart(4, "0")}`;
 }
 
 router.get("/invoices", async (req, res) => {
@@ -63,7 +71,7 @@ router.get("/invoices", async (req, res) => {
 
 router.post("/invoices", async (req, res) => {
   try {
-    const { customerId, subscriptionId, bookingId, items, discount, dueDate } = req.body;
+    const { customerId, subscriptionId, bookingId, items, discount, dueDate, gstInclusive = true } = req.body;
     if (!customerId || !items?.length) return res.status(400).json({ error: "customerId and items required" });
 
     const customer = await loadIfInScope(req,
@@ -72,18 +80,22 @@ router.post("/invoices", async (req, res) => {
     );
     if (!customer) return res.status(404).json({ error: "Customer not found" });
 
-    const subtotal = items.reduce((s: number, item: { total: number }) => s + item.total, 0);
+    const lineTotal = items.reduce((s: number, item: { total: number }) => s + item.total, 0);
     const disc = discount || 0;
-    const { gst, total } = computeGst(subtotal - disc);
+    const net = lineTotal - disc;
+    const { subtotal, gst, total } = gstInclusive
+      ? splitGstInclusive(net)
+      : computeGst(net);
 
     const values = tenantStamp(req, {
-      invoiceNumber: generateInvoiceNumber(),
+      invoiceNumber: await generateInvoiceNumber(),
       customerId, subscriptionId, bookingId, items,
       subtotal: subtotal.toString(), tax: "0", gstAmount: gst.toString(),
       discount: disc.toString(), totalAmount: total.toString(),
       paidAmount: "0", dueAmount: total.toString(), balanceDue: total.toString(),
-      status: "draft" as const, dueDate,
+      status: "sent" as const, dueDate,
       currency: "INR",
+      gstin: customer.gstin ?? null,
       issuedAt: new Date(),
     });
 
@@ -257,7 +269,7 @@ router.get("/invoices/:id/pdf", async (req, res) => {
 
     // Header
     doc.fontSize(18).font("Helvetica-Bold").text("CWP DETAILERS", 40, 40);
-    doc.fontSize(10).font("Helvetica").text("GST Reg: 09ABCDE1234F1Z5 | GST: 18% extra on all prices", 40, 62);
+    doc.fontSize(10).font("Helvetica").text("All prices are GST-inclusive (18% GST included in totals)", 40, 62);
     doc.fontSize(12).font("Helvetica-Bold").text(`TAX INVOICE`, 40, 82);
     doc.fontSize(10).font("Helvetica").text(`Invoice #: ${inv.invoiceNumber ?? ''}`, 40, 98);
     doc.fontSize(10).font("Helvetica").text(`Date: ${inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString('en-IN') : '-'}`, 40, 112);
@@ -290,7 +302,7 @@ router.get("/invoices/:id/pdf", async (req, res) => {
       doc.fontSize(10).font("Helvetica").text(`Discount: -\u20b9${parseFloat(inv.discount).toFixed(2)}`, 320, y, { width: 140, align: "right" });
       y += 16;
     }
-    doc.fontSize(10).font("Helvetica").text(`GST (18%): \u20b9${parseFloat(inv.gstAmount ?? '0').toFixed(2)}`, 320, y, { width: 140, align: "right" });
+    doc.fontSize(10).font("Helvetica").text(`GST (18% included): \u20b9${parseFloat(inv.gstAmount ?? '0').toFixed(2)}`, 320, y, { width: 140, align: "right" });
     y += 16;
     doc.fontSize(12).font("Helvetica-Bold").text(`Total: \u20b9${parseFloat(inv.totalAmount ?? '0').toFixed(2)}`, 320, y, { width: 140, align: "right" });
     y += 16;

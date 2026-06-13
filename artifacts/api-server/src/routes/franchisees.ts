@@ -4,6 +4,14 @@ import { franchiseesTable, branchesTable, usersTable, staffTable } from "@worksp
 import { eq, and, desc, sql } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
 import { hashPassword } from "../lib/passwords";
+import {
+  parseRequiredMobile,
+  parseOptionalEmail,
+  parseOptionalMobile,
+  applyMobileField,
+  applyOptionalEmailField,
+  applyOptionalMobileField,
+} from "../lib/contactFields";
 
 const router = Router();
 
@@ -62,7 +70,16 @@ router.post("/franchisees", async (req, res) => {
       notes,
     } = req.body;
 
-    if (!name || !phone) return res.status(400).json({ error: "name and phone are required" });
+    if (!name) return res.status(400).json({ error: "name is required" });
+
+    const phoneResult = parseRequiredMobile(phone);
+    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    const emailResult = parseOptionalEmail(email);
+    if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
+
+    const secondaryResult = parseOptionalMobile(secondaryPhone);
+    if (!secondaryResult.ok) return res.status(400).json({ error: secondaryResult.error });
 
     const due = finalAmountAgreed && amountDeposited
       ? (parseFloat(finalAmountAgreed) - parseFloat(amountDeposited)).toString()
@@ -70,7 +87,7 @@ router.post("/franchisees", async (req, res) => {
 
     // Strip franchiseeId from stamp (creating a franchisee shouldn't pin itself)
     const stamped = tenantStamp(req, {
-      name, phone, email, secondaryPhone,
+      name, phone: phoneResult.value, email: emailResult.value, secondaryPhone: secondaryResult.value,
       branchId: branchId ? parseInt(branchId) : undefined,
       currentAddress, permanentAddress, aadhaar, pan,
       rentAgreementUrl, franchiseeAgreementUrl,
@@ -149,8 +166,17 @@ router.patch("/franchisees/:id", async (req, res) => {
     ];
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of allowed) {
-      if (req.body[key] !== undefined) updateData[key] = req.body[key];
+      if (req.body[key] !== undefined && !["phone", "email", "secondaryPhone"].includes(key)) {
+        updateData[key] = req.body[key];
+      }
     }
+
+    const phoneField = applyMobileField(req.body, "phone", updateData);
+    if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
+    const emailField = applyOptionalEmailField(req.body, "email", updateData);
+    if (!emailField.ok) return res.status(400).json({ error: emailField.error });
+    const secondaryField = applyOptionalMobileField(req.body, "secondaryPhone", updateData);
+    if (!secondaryField.ok) return res.status(400).json({ error: secondaryField.error });
     const [franchisee] = await db.update(franchiseesTable).set(updateData).where(eq(franchiseesTable.id, id)).returning();
     return res.json(franchisee);
   } catch (err) {

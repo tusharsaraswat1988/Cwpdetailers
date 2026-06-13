@@ -16,6 +16,7 @@ export const vehiclesTable = pgTable("vehicles", {
   companyId: integer("company_id"),
   franchiseeId: integer("franchisee_id"),
   branchId: integer("branch_id"),
+  assignedStaffId: integer("assigned_staff_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

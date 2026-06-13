@@ -330,21 +330,23 @@ export async function cancelSubscription(subscriptionId: number, remark?: string
  * Daily scheduler tick. Runs missed-service check, renewal reminders, and
  * marks expired subscriptions. Uses system_jobs table for idempotency.
  */
-export async function runDailyTick(todayStr?: string) {
+export async function runDailyTick(todayStr?: string, opts?: { force?: boolean }) {
   const today = todayStr ?? getTodayIST();
 
-  // Idempotency check: last successful run within 6 hours
-  const [existing] = await db.select().from(systemJobsTable)
-    .where(and(
-      eq(systemJobsTable.jobType, "daily_tick"),
-      eq(systemJobsTable.status, "success"),
-      sql`${systemJobsTable.lastRunAt} >= ${new Date(Date.now() - SIX_HOURS_MS)}`,
-    ))
-    .limit(1);
+  // Idempotency check: last successful run within 6 hours (skip unless forced)
+  if (!opts?.force) {
+    const [existing] = await db.select().from(systemJobsTable)
+      .where(and(
+        eq(systemJobsTable.jobType, "daily_tick"),
+        eq(systemJobsTable.status, "success"),
+        sql`${systemJobsTable.lastRunAt} >= ${new Date(Date.now() - SIX_HOURS_MS)}`,
+      ))
+      .limit(1);
 
-  if (existing) {
-    logger.info({ today }, "Daily tick already ran within 6 hours");
-    return { skipped: true };
+    if (existing) {
+      logger.info({ today }, "Daily tick already ran within 6 hours");
+      return { skipped: true };
+    }
   }
 
   const [job] = await db.insert(systemJobsTable).values({
@@ -358,6 +360,10 @@ export async function runDailyTick(todayStr?: string) {
   try {
     const missedCount = await markMissed();
     const reminderCount = await sendRenewalReminders();
+
+    const { generateDailyCleaningBookings, detectDueWashes } = await import("./dailyScheduler");
+    const schedulerResult = await generateDailyCleaningBookings(today);
+    const dueWashes = await detectDueWashes(today);
 
     // Mark active subscriptions as expiring when endDate <= 7 days
     const sevenDaysLater = new Date();
@@ -381,11 +387,11 @@ export async function runDailyTick(todayStr?: string) {
       .returning();
 
     await db.update(systemJobsTable)
-      .set({ status: "success", completedAt: new Date(), lastRunAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length } })
+      .set({ status: "success", completedAt: new Date(), lastRunAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, schedulerResult, dueWashCount: dueWashes.length } })
       .where(eq(systemJobsTable.id, job.id));
 
-    logger.info({ today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length }, "Daily tick completed");
-    return { missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length };
+    logger.info({ today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, scheduler: schedulerResult }, "Daily tick completed");
+    return { missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, scheduler: schedulerResult, dueWashCount: dueWashes.length };
   } catch (err) {
     await db.update(systemJobsTable)
       .set({ status: "failed", error: String(err), completedAt: new Date(), lastRunAt: new Date() })

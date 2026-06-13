@@ -4,6 +4,14 @@ import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable }
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
 import { hashPassword } from "../lib/passwords";
+import {
+  parseRequiredMobile,
+  parseOptionalEmail,
+  parseOptionalMobile,
+  applyMobileField,
+  applyOptionalEmailField,
+  applyOptionalMobileField,
+} from "../lib/contactFields";
 
 const router = Router();
 
@@ -69,16 +77,26 @@ router.post("/staff", async (req, res) => {
       guardianName, guardianPhone, aadhaar, pan,
       bankAccountName, bankAccountNumber, bankIfsc, bankPassbookUrl, agreementUrl,
     } = req.body;
-    if (!name || !phone || !role || !branchId) {
-      return res.status(400).json({ error: "name, phone, role, and branchId are required" });
+    if (!name || !role || !branchId) {
+      return res.status(400).json({ error: "name, role, and branchId are required" });
     }
+
+    const phoneResult = parseRequiredMobile(phone);
+    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    const emailResult = parseOptionalEmail(email);
+    if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
+
+    const guardianPhoneResult = parseOptionalMobile(guardianPhone);
+    if (!guardianPhoneResult.ok) return res.status(400).json({ error: guardianPhoneResult.error });
+
     const values = tenantStamp(req, {
-      name, phone, email, role,
+      name, phone: phoneResult.value, email: emailResult.value, role,
       branchId: parseInt(branchId),
       franchiseeId: franchiseeId ? parseInt(franchiseeId) : undefined,
       monthlySalary: monthlySalary?.toString(),
       joiningDate, localAddress, permanentAddress,
-      guardianName, guardianPhone, aadhaar, pan,
+      guardianName, guardianPhone: guardianPhoneResult.value, aadhaar, pan,
       bankAccountName, bankAccountNumber, bankIfsc,
       bankPassbookUrl, agreementUrl,
       verificationStatus: "pending" as const,
@@ -156,8 +174,17 @@ router.patch("/staff/:id", async (req, res) => {
     ];
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of allowed) {
-      if (req.body[key] !== undefined) updateData[key] = req.body[key];
+      if (req.body[key] !== undefined && !["phone", "email", "guardianPhone"].includes(key)) {
+        updateData[key] = req.body[key];
+      }
     }
+
+    const phoneField = applyMobileField(req.body, "phone", updateData);
+    if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
+    const emailField = applyOptionalEmailField(req.body, "email", updateData);
+    if (!emailField.ok) return res.status(400).json({ error: emailField.error });
+    const guardianField = applyOptionalMobileField(req.body, "guardianPhone", updateData);
+    if (!guardianField.ok) return res.status(400).json({ error: guardianField.error });
     const [staff] = await db.update(staffTable).set(updateData).where(eq(staffTable.id, id)).returning();
     return res.json(staff);
   } catch (err) {

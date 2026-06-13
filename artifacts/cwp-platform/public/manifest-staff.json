@@ -1,0 +1,19 @@
+{
+  "name": "CWP Staff",
+  "short_name": "CWP Staff",
+  "description": "Field operations portal for CWP service technicians",
+  "start_url": "/staff/dashboard",
+  "scope": "/staff",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#21252e",
+  "theme_color": "#21252e",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

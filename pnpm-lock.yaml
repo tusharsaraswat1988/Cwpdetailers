@@ -184,6 +184,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/validation':
+        specifier: workspace:*
+        version: link:../../lib/validation
       argon2:
         specifier: ^0.43.0
         version: 0.43.1
@@ -384,6 +387,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/validation':
+        specifier: workspace:*
+        version: link:../../lib/validation
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -710,6 +716,16 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.1.0(react@19.1.0)
+
+  lib/validation:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.3.5
 
   scripts:
     dependencies:

@@ -12,11 +12,14 @@ import { Plus, User, Users } from "lucide-react";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
 import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shared";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { EmailInput } from "@/components/ui/email-input";
+import { submitEmail, submitMobile } from "@/lib/contactForm";
 
 const statusColor: Record<string, string> = {
-  active: "bg-green-500/10 text-green-400 border-green-500/20",
-  inactive: "bg-white/5 text-white/50 border-white/10",
-  suspended: "bg-red-500/10 text-red-400 border-red-500/20",
+  active: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+  inactive: "bg-muted text-muted-foreground border-border",
+  suspended: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
 };
 
 type Row = {
@@ -37,6 +40,7 @@ export default function AdminCustomers() {
   const [open, setOpen] = useState(false);
   type CustomerForm = { name: string; phone: string; email: string; city: string; address: string };
   const [form, setForm] = useState<CustomerForm>({ name: "", phone: "", email: "", city: "", address: "" });
+  const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
 
   const { data, isLoading } = useListCustomers(
     { search: search || undefined },
@@ -51,9 +55,29 @@ export default function AdminCustomers() {
         setForm({ name: "", phone: "", email: "", city: "", address: "" });
         toast({ title: "Customer created successfully" });
       },
-      onError: () => toast({ title: "Failed to create customer", variant: "destructive" }),
+      onError: (err: any) => toast({ title: "Failed to create customer", description: err?.response?.data?.error, variant: "destructive" }),
     },
   });
+
+  const handleCreate = () => {
+    const phoneResult = submitMobile(form.phone);
+    const emailResult = submitEmail(form.email);
+    setErrors({
+      phone: phoneResult.ok ? null : phoneResult.error,
+      email: emailResult.ok ? null : emailResult.error,
+    });
+    if (!phoneResult.ok || !emailResult.ok) {
+      toast({ title: "Please fix phone or email format", variant: "destructive" });
+      return;
+    }
+    createMutation.mutate({
+      data: {
+        ...form,
+        phone: phoneResult.value,
+        email: emailResult.value,
+      },
+    });
+  };
 
   const columns: Column<Row>[] = [
     {
@@ -63,18 +87,18 @@ export default function AdminCustomers() {
           <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
             <User size={13} className="text-primary" />
           </div>
-          <span className="font-medium text-white">{c.name}</span>
+          <span className="font-medium text-foreground">{c.name}</span>
         </div>
       ),
     },
-    { key: "phone", header: "Phone", cell: c => <span className="text-white/60">{c.phone}</span> },
-    { key: "city", header: "City", cell: c => <span className="text-white/60">{c.city ?? "—"}</span> },
+    { key: "phone", header: "Phone", cell: c => <span className="text-muted-foreground">{c.phone}</span> },
+    { key: "city", header: "City", cell: c => <span className="text-muted-foreground">{c.city ?? "—"}</span> },
     {
       key: "status", header: "Status",
       cell: c => <Badge variant="outline" className={`text-xs capitalize ${statusColor[c.status]}`}>{c.status}</Badge>,
     },
     { key: "wallet", header: "Wallet", align: "right", cell: c => <span className="text-primary font-medium">₹{Number(c.walletBalance).toLocaleString("en-IN")}</span> },
-    { key: "dues", header: "Dues", align: "right", cell: c => Number(c.totalDues) > 0 ? <span className="text-red-400 font-medium">₹{Number(c.totalDues).toLocaleString("en-IN")}</span> : <span className="text-white/30">—</span> },
+    { key: "dues", header: "Dues", align: "right", cell: c => Number(c.totalDues) > 0 ? <span className="text-red-600 dark:text-red-400 font-medium">₹{Number(c.totalDues).toLocaleString("en-IN")}</span> : <span className="text-muted-foreground">—</span> },
     { key: "action", header: "", align: "right", cell: c => <Link href={`/admin/customers/${c.id}`} className="text-primary hover:underline text-xs font-medium" data-testid={`btn-view-customer-${c.id}`}>View</Link> },
   ];
 
@@ -95,13 +119,36 @@ export default function AdminCustomers() {
                 <DialogContent>
                   <DialogHeader><DialogTitle>New Customer</DialogTitle></DialogHeader>
                   <div className="space-y-4 mt-2">
-                    {[["name", "Full Name", "text"], ["phone", "Phone", "tel"], ["email", "Email", "email"], ["city", "City", "text"], ["address", "Address", "text"]].map(([k, l, t]) => (
+                    <div>
+                      <Label htmlFor="name">Full Name</Label>
+                      <Input id="name" data-testid="input-customer-name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" />
+                    </div>
+                    <PhoneInput
+                      id="phone"
+                      data-testid="input-customer-phone"
+                      label="Phone"
+                      value={form.phone}
+                      onChange={v => setForm(f => ({ ...f, phone: v }))}
+                      error={errors.phone}
+                      onErrorChange={err => setErrors(e => ({ ...e, phone: err }))}
+                    />
+                    <EmailInput
+                      id="email"
+                      data-testid="input-customer-email"
+                      label="Email"
+                      optional
+                      value={form.email}
+                      onChange={v => setForm(f => ({ ...f, email: v }))}
+                      error={errors.email}
+                      onErrorChange={err => setErrors(e => ({ ...e, email: err }))}
+                    />
+                    {[["city", "City"], ["address", "Address"]].map(([k, l]) => (
                       <div key={k}>
                         <Label htmlFor={k}>{l}</Label>
-                        <Input id={k} data-testid={`input-customer-${k}`} type={t} value={form[k as keyof CustomerForm]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} className="mt-1" />
+                        <Input id={k} data-testid={`input-customer-${k}`} value={form[k as keyof CustomerForm]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} className="mt-1" />
                       </div>
                     ))}
-                    <Button onClick={() => createMutation.mutate({ data: form })} disabled={createMutation.isPending} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-customer">
+                    <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-customer">
                       {createMutation.isPending ? "Creating..." : "Create Customer"}
                     </Button>
                   </div>
@@ -132,7 +179,7 @@ export default function AdminCustomers() {
             </Can>
           }
         />
-        <p className="text-white/30 text-xs"><Users size={11} className="inline mr-1" />Powered by shared DataTable / Can primitives.</p>
+        <p className="text-muted-foreground text-xs"><Users size={11} className="inline mr-1" />Powered by shared DataTable / Can primitives.</p>
       </div>
     </AdminLayout>
   );

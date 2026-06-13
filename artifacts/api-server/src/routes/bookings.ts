@@ -1,10 +1,22 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { bookingsTable, customersTable, staffTable, servicesTable, bookingEventsTable, vehiclesTable, solarSitesTable } from "@workspace/db";
+import { bookingsTable, customersTable, staffTable, servicesTable, bookingEventsTable, vehiclesTable, solarSitesTable, subscriptionsTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
-import { decrementOnCompletion, recomputeNextDueDate, getTodayIST } from "../subscriptions/service";
+import { decrementOnCompletion, recomputeNextDueDate, getTodayIST, type Transaction } from "../subscriptions/service";
 import { computeSolarCleaningPrice } from "../lib/solarPricing";
+import {
+  debitWallet,
+  resolveDailyRate,
+  WalletError,
+} from "../lib/wallet/service";
+import { notifyBookingConfirmed, notifyBookingCompleted, notifyLowBalance } from "../lib/notifications/dispatcher";
+import {
+  getLedgerBalance,
+  resolveDailyRate,
+  isLowBalance,
+} from "../lib/wallet/service";
+import { getTodayIST } from "../subscriptions/service";
 
 const router = Router();
 
@@ -94,6 +106,37 @@ async function getBookingWithScope(req: any, id: number) {
     .where(eq(bookingsTable.id, id));
   if (!booking || !rowInScope(req, booking)) return null;
   return booking;
+}
+
+async function shouldDebitDailyCleaning(
+  booking: { serviceType: string; subscriptionId?: number | null; amount?: string | null },
+  tx: Transaction,
+): Promise<{ debit: boolean; dailyRate: number; subscriptionId?: number }> {
+  if (booking.serviceType === "daily_cleaning") {
+    if (booking.subscriptionId) {
+      const amount = await resolveSubscriptionDailyRate(booking.subscriptionId, tx);
+      if (amount != null) return { debit: true, dailyRate: amount, subscriptionId: booking.subscriptionId };
+    }
+    if (booking.amount && parseFloat(booking.amount) > 0) {
+      return { debit: true, dailyRate: parseFloat(booking.amount) };
+    }
+    return { debit: false, dailyRate: 0 };
+  }
+  if (booking.subscriptionId) {
+    const [sub] = await tx.select().from(subscriptionsTable)
+      .where(eq(subscriptionsTable.id, booking.subscriptionId)).limit(1);
+    if (sub?.type === "daily_wash" && sub.status === "active") {
+      return { debit: true, dailyRate: resolveDailyRate(sub), subscriptionId: sub.id };
+    }
+  }
+  return { debit: false, dailyRate: 0 };
+}
+
+async function resolveSubscriptionDailyRate(subscriptionId: number, tx: Transaction): Promise<number | null> {
+  const [sub] = await tx.select().from(subscriptionsTable)
+    .where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
+  if (!sub || sub.type !== "daily_wash") return null;
+  return resolveDailyRate(sub);
 }
 
 router.get("/bookings/today", async (req, res) => {
@@ -304,29 +347,109 @@ router.post("/bookings/:id/transition", async (req, res) => {
     if (toStatus === "in_progress") updateData.startedAt = new Date();
     if (toStatus === "completed") updateData.completedAt = new Date();
 
-    if (toStatus === "completed" && existing.subscriptionId) {
-      // Atomic booking completion: booking status + subscription counters in
-      // a single transaction. If subscription updates fail, the booking is
-      // NOT marked completed, so the caller can retry without transition
-      // rule violations.
-      const subId = existing.subscriptionId as number;
-      const booking = await db.transaction(async (tx) => {
-        const [b] = await tx.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
-        await logEvent(id, "status_change", {
-          fromStatus: existing.status,
-          toStatus,
-          body: reason,
-          actorId: req.user?.id ?? req.scope?.staffId,
-          actorName: req.user?.name ?? "system",
-        }, tx);
+    if (toStatus === "completed") {
+      const fullBooking = await getBookingWithScope(req, id);
+      if (!fullBooking) return res.status(404).json({ error: "Booking not found" });
 
-        const { recomputeServicesRemaining } = await import("../subscriptions/service");
-        await decrementOnCompletion(subId, tx);
-        await recomputeNextDueDate(subId, tx);
-        await recomputeServicesRemaining(subId, tx);
+      try {
+        let completionDailyRate = 0;
+        const booking = await db.transaction(async (tx) => {
+          const debitInfo = await shouldDebitDailyCleaning(existing, tx);
+          completionDailyRate = debitInfo.dailyRate;
+          if (debitInfo.debit) {
+            await debitWallet({
+              customerId: existing.customerId,
+              amount: debitInfo.dailyRate,
+              reference: "daily_cleaning",
+              referenceId: id,
+              notes: `Daily cleaning booking #${id}`,
+              createdBy: req.user?.id ?? null,
+              companyId: existing.companyId,
+            }, tx);
+          }
 
-        return b;
+          const [b] = await tx.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
+          await logEvent(id, "status_change", {
+            fromStatus: existing.status,
+            toStatus,
+            body: reason,
+            actorId: req.user?.id ?? req.scope?.staffId,
+            actorName: req.user?.name ?? "system",
+          }, tx);
+
+          if (existing.subscriptionId) {
+            const subId = existing.subscriptionId as number;
+            await decrementOnCompletion(subId, tx);
+            const { recomputeServicesRemaining } = await import("../subscriptions/service");
+            await recomputeNextDueDate(subId, tx);
+            await recomputeServicesRemaining(subId, tx);
+          }
+
+          return b;
+        });
+
+        notifyBookingCompleted({
+          id: booking.id,
+          customerId: booking.customerId,
+          customerName: fullBooking.customerName,
+          serviceName: fullBooking.serviceName,
+          serviceType: fullBooking.serviceType,
+          scheduledDate: String(fullBooking.scheduledDate),
+          companyId: fullBooking.companyId,
+          branchId: fullBooking.branchId,
+        }).catch((err) => req.log.error({ err, bookingId: id }, "Completion notification failed"));
+
+        if (existing.subscriptionId || existing.serviceType === "daily_cleaning") {
+          const dailyRate = completionDailyRate > 0 ? completionDailyRate : parseFloat(existing.amount ?? "0");
+          if (dailyRate > 0) {
+            const balance = await getLedgerBalance(existing.customerId);
+            if (await isLowBalance(existing.customerId, dailyRate)) {
+              notifyLowBalance({
+                customerId: existing.customerId,
+                customerName: fullBooking.customerName ?? "Customer",
+                balance,
+                dailyRate,
+                companyId: fullBooking.companyId,
+                branchId: fullBooking.branchId,
+                dedupeKey: `low_balance:${existing.customerId}:${getTodayIST()}`,
+              }).catch((err) => req.log.error({ err }, "Low balance notify failed"));
+            }
+          }
+        }
+
+        return res.json(booking);
+      } catch (err) {
+        if (err instanceof WalletError && err.code === "INSUFFICIENT_BALANCE") {
+          return res.status(400).json({ error: err.message, code: err.code });
+        }
+        throw err;
+      }
+    }
+
+    if (toStatus === "confirmed") {
+      const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
+      await logEvent(id, "status_change", {
+        fromStatus: existing.status,
+        toStatus,
+        body: reason,
+        actorId: req.user?.id ?? req.scope?.staffId,
+        actorName: req.user?.name ?? "system",
       });
+
+      const fullBooking = await getBookingWithScope(req, id);
+      if (fullBooking) {
+        notifyBookingConfirmed({
+          id: fullBooking.id,
+          customerId: fullBooking.customerId,
+          customerName: fullBooking.customerName,
+          serviceName: fullBooking.serviceName,
+          serviceType: fullBooking.serviceType,
+          scheduledDate: String(fullBooking.scheduledDate),
+          companyId: fullBooking.companyId,
+          branchId: fullBooking.branchId,
+        }).catch((err) => req.log.error({ err, bookingId: id }, "Confirmation notification failed"));
+      }
+
       return res.json(booking);
     }
 
