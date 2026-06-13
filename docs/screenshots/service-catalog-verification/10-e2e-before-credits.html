@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>E2E Before Credits</title>
+<style>body{font-family:Segoe UI,sans-serif;background:#0f172a;color:#e2e8f0;padding:24px}pre{background:#1e293b;padding:16px;border-radius:8px;overflow:auto}h1{color:#22d3ee}.badge{display:inline-block;background:#065f46;color:#6ee7b7;padding:4px 12px;border-radius:999px;font-weight:bold;font-size:24px;margin:12px 0}</style></head>
+<body>
+<h1>E2E — Before Credits</h1>
+<p>Customer: Arjun Sharma (customerId=1) · 4 Wash Package granted (entitlementId=3)</p>
+<p>Captured: 2026-06-14 · Route: <code>POST /api/catalog/entitlements/grant-package</code> then <code>GET /api/catalog/entitlements?customerId=1</code></p>
+<div class="badge">Before Credits: 4</div>
+<pre>{
+  "id": 3,
+  "customerId": 1,
+  "packageId": 2,
+  "serviceId": 2,
+  "entitlementType": "wash_credit",
+  "totalCredits": 4,
+  "usedCredits": 0,
+  "remainingCredits": 4,
+  "validFrom": "2026-06-14",
+  "validUntil": "2026-12-11",
+  "status": "active",
+  "notes": "From package: 4 Wash Package"
+}</pre>
+</body></html>
