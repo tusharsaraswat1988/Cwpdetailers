@@ -44,6 +44,21 @@ export function parseMoney(value: unknown, defaultValue = "0"): string {
   return n.toFixed(2);
 }
 
+const CUSTOMER_STATUSES = new Set(["active", "inactive", "suspended"]);
+const LEGACY_SEGMENTS = new Set(["legacy_contact"]);
+
+export function parseCustomerStatus(value: unknown, defaultValue: "active" | "inactive" | "suspended" = "active") {
+  if (value === undefined || value === null || String(value).trim() === "") return defaultValue;
+  const s = String(value).trim().toLowerCase();
+  return CUSTOMER_STATUSES.has(s) ? s as "active" | "inactive" | "suspended" : defaultValue;
+}
+
+export function parseLegacySegment(value: unknown): string | null {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const s = String(value).trim().toLowerCase();
+  return LEGACY_SEGMENTS.has(s) ? s : null;
+}
+
 export function validateCustomerRows(
   rows: CustomerImportRow[],
   existingPhones: Set<string>,
@@ -110,6 +125,18 @@ export function validateCustomerRows(
 
     if (row.createLogin && !row.temporaryPassword) {
       warnings.push(issue("Customers", row.rowNumber, "warning", "AUTO_PASSWORD", "No temporary_password — a random password will be generated", "temporary_password", lid));
+    }
+
+    if (row.status && !CUSTOMER_STATUSES.has(row.status)) {
+      errors.push(issue("Customers", row.rowNumber, "error", "INVALID_STATUS", "status must be active, inactive, or suspended", "status", lid));
+    }
+
+    if (row.legacySegment && !LEGACY_SEGMENTS.has(row.legacySegment)) {
+      errors.push(issue("Customers", row.rowNumber, "error", "INVALID_SEGMENT", "legacy_segment must be legacy_contact or empty", "legacy_segment", lid));
+    }
+
+    if (row.legacySegment === "legacy_contact" && row.status === "active") {
+      warnings.push(issue("Customers", row.rowNumber, "warning", "LEGACY_ACTIVE", "legacy_contact is usually imported as inactive — will import as active", "status", lid));
     }
   }
 

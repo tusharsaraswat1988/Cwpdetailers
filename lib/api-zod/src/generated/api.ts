@@ -115,6 +115,7 @@ export const ListCustomersResponse = zod.object({
       totalDues: zod.number().optional(),
       branchId: zod.number().optional(),
       branchName: zod.string().optional(),
+      photoUrl: zod.string().nullable().optional(),
       createdAt: zod.coerce.date().optional(),
     }),
   ),
@@ -156,6 +157,7 @@ export const GetCustomerResponse = zod
     totalDues: zod.number().optional(),
     branchId: zod.number().optional(),
     branchName: zod.string().optional(),
+    photoUrl: zod.string().nullable().optional(),
     createdAt: zod.coerce.date().optional(),
   })
   .and(
@@ -261,6 +263,7 @@ export const UpdateCustomerBody = zod.object({
   status: zod.enum(["active", "inactive", "suspended"]).optional(),
   walletBalance: zod.number().optional(),
   branchId: zod.number().optional(),
+  photoUrl: zod.string().nullable().optional(),
 });
 
 export const UpdateCustomerResponse = zod.object({
@@ -275,6 +278,7 @@ export const UpdateCustomerResponse = zod.object({
   totalDues: zod.number().optional(),
   branchId: zod.number().optional(),
   branchName: zod.string().optional(),
+  photoUrl: zod.string().nullable().optional(),
   createdAt: zod.coerce.date().optional(),
 });
 

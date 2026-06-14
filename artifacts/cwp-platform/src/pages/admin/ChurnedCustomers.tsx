@@ -1,7 +1,8 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserX, Send, Check, MessageSquare, Phone } from "lucide-react";
+import { UserX, Send, Check, MessageSquare, Phone, ExternalLink } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -176,9 +177,16 @@ export default function AdminChurnedCustomers() {
                       </div>
                     )}
                   </div>
-                  <div className="text-right flex-shrink-0">
+                  <div className="text-right flex-shrink-0 flex flex-col items-end gap-2">
                     <p className="font-bold text-sm">₹{Number(c.price).toLocaleString("en-IN")}</p>
                     <p className="text-xs text-muted-foreground">was paying</p>
+                    {c.customerId && (
+                      <Link href={`/admin/customers/${c.customerId}`} onClick={e => e.stopPropagation()}>
+                        <Button variant="outline" size="sm" className="h-7 text-xs" data-testid={`btn-view-churned-customer-${c.customerId}`}>
+                          <ExternalLink size={11} className="mr-1" />View customer
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))

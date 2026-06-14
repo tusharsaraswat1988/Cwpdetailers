@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const staffRoleEnum = pgEnum("staff_role", ["technician", "supervisor", "driver", "solar_technician"]);
+export const staffCategoryEnum = pgEnum("staff_category", ["supervisor", "cleaning_staff"]);
 export const staffVerificationEnum = pgEnum("staff_verification_status", ["pending", "verified", "rejected", "suspended"]);
 export const staffGenderEnum = pgEnum("staff_gender", ["male", "female", "other", "prefer_not_to_say"]);
 export const staffEmploymentTypeEnum = pgEnum("staff_employment_type", ["salaried", "per_job", "hybrid"]);
@@ -25,6 +26,7 @@ export const staffTable = pgTable("staff", {
   gender: staffGenderEnum("gender"),
   joiningDate: date("joining_date"),
   role: staffRoleEnum("role").notNull(),
+  staffCategory: staffCategoryEnum("staff_category").notNull().default("cleaning_staff"),
   branchId: integer("branch_id").notNull(),
   cityId: integer("city_id"),
   city: text("city"),

@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2 } from "lucide-react";
+import { CustomerSearchSelect, type CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
 
 export default function AdminQuotationBuilder() {
   const { toast } = useToast();
   const [items, setItems] = useState<{ name: string; quantity: number; unitPrice: number; total: number }[]>([
     { name: "", quantity: 1, unitPrice: 0, total: 0 },
   ]);
-  const [customerId, setCustomerId] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchValue | null>(null);
   const [discount, setDiscount] = useState("0");
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
@@ -38,7 +39,7 @@ export default function AdminQuotationBuilder() {
   const removeRow = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
 
   const save = async () => {
-    if (!customerId) { toast({ title: "Customer ID required", variant: "destructive" }); return; }
+    if (!selectedCustomer) { toast({ title: "Select a customer", variant: "destructive" }); return; }
     if (items.some(i => !i.name)) { toast({ title: "All items must have a name", variant: "destructive" }); return; }
     setSaving(true);
     try {
@@ -46,7 +47,7 @@ export default function AdminQuotationBuilder() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerId: parseInt(customerId),
+          customerId: selectedCustomer.id,
           items,
           discount: disc,
           validUntil: validUntil || undefined,
@@ -56,7 +57,7 @@ export default function AdminQuotationBuilder() {
       if (!res.ok) throw new Error("Failed");
       toast({ title: "Quotation created" });
       setItems([{ name: "", quantity: 1, unitPrice: 0, total: 0 }]);
-      setCustomerId("");
+      setSelectedCustomer(null);
       setDiscount("0");
       setValidUntil("");
       setNotes("");
@@ -81,8 +82,10 @@ export default function AdminQuotationBuilder() {
               <CardContent className="p-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Customer ID</Label>
-                    <Input type="number" value={customerId} onChange={e => setCustomerId(e.target.value)} className="mt-1" />
+                    <Label>Customer</Label>
+                    <div className="mt-1">
+                      <CustomerSearchSelect value={selectedCustomer} onChange={setSelectedCustomer} testId="quotation-customer-search" />
+                    </div>
                   </div>
                   <div>
                     <Label>Valid Until</Label>

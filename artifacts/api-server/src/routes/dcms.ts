@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { requireAuth, requirePermission } from "../middlewares/auth";
 import { tenantStamp } from "../middlewares/tenantScope";
 import {
-  listPlans, getPlanById, createPlan, updatePlan, setPlanActive, deletePlan, planHasSubscriptions,
+  listPlans, getPlanById, createPlans, updatePlan, setPlanActive, deletePlan, planHasSubscriptions,
 } from "../lib/dcms/planService";
 import {
   createSubscription, listSubscriptions, getSubscriptionDetail,
@@ -27,8 +27,8 @@ import { dcmsRateLimit } from "../middlewares/dcmsRateLimit";
 import { todayStrInIST } from "../lib/dcms/dateUtils";
 import { ImageValidationError } from "../lib/dcms/imageValidation";
 import { getAdminDashboardStats, getCustomerDashboardStats } from "../lib/dcms/analyticsService";
-import { db, dcmsActivityLogsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { db, dcmsActivityLogsTable, dcmsSubscriptionsTable } from "@workspace/db";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { OPERATIONAL_ROLE_SLUGS, staffHasOperationalRole } from "../lib/staffEcosystem/operationalRoles";
 
 const router = Router();
@@ -70,12 +70,24 @@ router.get(
     try {
       const activeOnly = req.query.active === "true";
       const vehicleId = req.query.vehicleId ? Number(req.query.vehicleId) : undefined;
-      const linkedOnly = req.query.linked === "true" || vehicleId != null;
+      const linkedOnly = req.query.linked === "true";
       const plans = await listPlans(activeOnly, vehicleId, linkedOnly);
-      const withUsage = await Promise.all(plans.map(async p => ({
+      const planIds = plans.map(p => p.id);
+      const usageRows = planIds.length
+        ? await db
+          .select({
+            planId: dcmsSubscriptionsTable.planId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(dcmsSubscriptionsTable)
+          .where(inArray(dcmsSubscriptionsTable.planId, planIds))
+          .groupBy(dcmsSubscriptionsTable.planId)
+        : [];
+      const usageMap = new Map(usageRows.map(r => [r.planId, r.count > 0]));
+      const withUsage = plans.map(p => ({
         ...p,
-        hasSubscriptions: await planHasSubscriptions(p.id),
-      })));
+        hasSubscriptions: usageMap.get(p.id) ?? false,
+      }));
       return res.json(withUsage);
     } catch (err) {
       return handleError(req, res, err);
@@ -104,24 +116,38 @@ router.post(
   requirePermission("daily_cleaning", "manage_plans"),
   async (req, res) => {
     try {
-      const { name, description, price, includedCleanings, includedWashes, weeklyOffs, vehicleCategoryId, seatCategoryId } = req.body;
-      if (!name || !price || includedCleanings == null || !vehicleCategoryId || !seatCategoryId) {
-        return res.status(400).json({
-          error: "name, price, includedCleanings, vehicleCategoryId, and seatCategoryId are required",
-        });
+      const {
+        name, description, price, includedCleanings, includedWashes, weeklyOffs,
+        vehicleCategoryId, seatCategoryId, allVehicleCategories, vehicleCategoryIds,
+        allSeatTiers, seatPricingTiers, addons,
+      } = req.body;
+      if (!name || price == null || includedCleanings == null) {
+        return res.status(400).json({ error: "name, price, and includedCleanings are required" });
       }
-      const plan = await createPlan({
+      const hasScope = allVehicleCategories || allSeatTiers
+        || (vehicleCategoryIds?.length > 0) || (seatPricingTiers?.length > 0)
+        || (vehicleCategoryId != null && seatCategoryId != null);
+      if (!hasScope) {
+        return res.status(400).json({ error: "Select car type(s) and seater tier(s), or choose All" });
+      }
+      const plans = await createPlans({
         name,
         description,
         price: String(price),
         includedCleanings: Number(includedCleanings),
         includedWashes: Number(includedWashes ?? 0),
         weeklyOffs: Number(weeklyOffs ?? 1),
-        vehicleCategoryId: Number(vehicleCategoryId),
-        seatCategoryId: Number(seatCategoryId),
+        vehicleCategoryId: vehicleCategoryId != null ? Number(vehicleCategoryId) : undefined,
+        seatCategoryId: seatCategoryId != null ? Number(seatCategoryId) : undefined,
+        allVehicleCategories: Boolean(allVehicleCategories),
+        vehicleCategoryIds: vehicleCategoryIds?.map(Number),
+        allSeatTiers: Boolean(allSeatTiers),
+        seatPricingTiers,
+        addons,
         companyId: req.user!.companyId,
       }, req.user!.id);
-      return res.status(201).json(plan);
+      if (plans.length === 1) return res.status(201).json(plans[0]);
+      return res.status(201).json({ plans, count: plans.length });
     } catch (err) {
       return handleError(req, res, err);
     }
@@ -135,7 +161,10 @@ router.patch(
   async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const { name, description, price, includedCleanings, includedWashes, weeklyOffs, isActive, vehicleCategoryId, seatCategoryId } = req.body;
+      const {
+        name, description, price, includedCleanings, includedWashes, weeklyOffs, isActive,
+        vehicleCategoryId, seatCategoryId, allVehicleCategories, allSeatTiers, addons,
+      } = req.body;
 
       if (isActive != null) {
         const plan = await setPlanActive(id, Boolean(isActive), req.user!.id);
@@ -148,8 +177,11 @@ router.patch(
         includedCleanings: includedCleanings != null ? Number(includedCleanings) : undefined,
         includedWashes: includedWashes != null ? Number(includedWashes) : undefined,
         weeklyOffs: weeklyOffs != null ? Number(weeklyOffs) : undefined,
-        vehicleCategoryId: vehicleCategoryId != null ? Number(vehicleCategoryId) : undefined,
-        seatCategoryId: seatCategoryId != null ? Number(seatCategoryId) : undefined,
+        vehicleCategoryId: vehicleCategoryId === null ? null : (vehicleCategoryId != null ? Number(vehicleCategoryId) : undefined),
+        seatCategoryId: seatCategoryId === null ? null : (seatCategoryId != null ? Number(seatCategoryId) : undefined),
+        allVehicleCategories: allVehicleCategories != null ? Boolean(allVehicleCategories) : undefined,
+        allSeatTiers: allSeatTiers != null ? Boolean(allSeatTiers) : undefined,
+        addons,
       }, req.user!.id);
       if (!plan) return res.status(404).json({ error: "Plan not found" });
       return res.json(plan);
@@ -165,7 +197,7 @@ router.delete(
   requirePermission("daily_cleaning", "manage_plans"),
   async (req, res) => {
     try {
-      const result = await deletePlan(Number(req.params.id));
+      const result = await deletePlan(Number(req.params.id), req.user!.id);
       if (!result.ok) return res.status(400).json({ error: result.error });
       return res.status(204).send();
     } catch (err) {

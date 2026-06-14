@@ -10,6 +10,10 @@ import {
   applyMobileField,
   applyOptionalEmailField,
 } from "../lib/contactFields";
+import { createCustomerLoginAccount, findCustomerByPhoneInScope } from "../lib/customerAccount";
+import { normalizeGstin } from "../lib/gstin";
+import { resolveSupervisorForCustomer } from "../lib/supervisor/supervisorContact";
+import { isLegacyDormantCustomer, tryReactivateLegacyCustomer } from "../lib/customerReactivation";
 
 const router = Router();
 
@@ -18,6 +22,27 @@ const SCOPE_COLS = {
   branchCol: customersTable.branchId,
   franchiseeCol: customersTable.franchiseeId,
   customerCol: customersTable.id, // a customer-role user can only see their own row
+};
+
+const CUSTOMER_LIST_SELECT = {
+  id: customersTable.id, name: customersTable.name, phone: customersTable.phone,
+  email: customersTable.email, address: customersTable.address, city: customersTable.city,
+  status: customersTable.status, walletBalance: customersTable.walletBalance,
+  totalDues: customersTable.totalDues, branchId: customersTable.branchId,
+  photoUrl: customersTable.photoUrl, lastPaymentDate: customersTable.lastPaymentDate,
+  customerSince: customersTable.customerSince, historicalWashCount: customersTable.historicalWashCount,
+  historicalSolarVisitCount: customersTable.historicalSolarVisitCount,
+  operationalNotes: customersTable.operationalNotes,
+  gstin: customersTable.gstin, billingName: customersTable.billingName,
+  referredByCustomerId: customersTable.referredByCustomerId,
+  legacySegment: customersTable.legacySegment,
+  reactivatedAt: customersTable.reactivatedAt,
+  branchName: branchesTable.name, createdAt: customersTable.createdAt,
+};
+
+const CUSTOMER_DETAIL_SELECT = {
+  ...CUSTOMER_LIST_SELECT,
+  companyId: customersTable.companyId, franchiseeId: customersTable.franchiseeId,
 };
 
 router.get("/customers", async (req, res) => {
@@ -40,17 +65,7 @@ router.get("/customers", async (req, res) => {
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, countResult] = await Promise.all([
-      db.select({
-        id: customersTable.id, name: customersTable.name, phone: customersTable.phone,
-        email: customersTable.email, address: customersTable.address, city: customersTable.city,
-        status: customersTable.status, walletBalance: customersTable.walletBalance,
-        totalDues: customersTable.totalDues, branchId: customersTable.branchId,
-        photoUrl: customersTable.photoUrl, lastPaymentDate: customersTable.lastPaymentDate,
-        customerSince: customersTable.customerSince, historicalWashCount: customersTable.historicalWashCount,
-        historicalSolarVisitCount: customersTable.historicalSolarVisitCount,
-        operationalNotes: customersTable.operationalNotes,
-        branchName: branchesTable.name, createdAt: customersTable.createdAt,
-      }).from(customersTable)
+      db.select(CUSTOMER_LIST_SELECT).from(customersTable)
         .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
         .where(where)
         .orderBy(desc(customersTable.createdAt))
@@ -65,9 +80,85 @@ router.get("/customers", async (req, res) => {
   }
 });
 
+router.get("/customers/legacy-contacts", async (req, res) => {
+  try {
+    const { limit = "50", offset = "0" } = req.query as Record<string, string>;
+    const lim = Math.min(parseInt(limit), 100);
+    const off = parseInt(offset);
+    const conditions = [
+      ...tenantFilters(req, SCOPE_COLS),
+      eq(customersTable.status, "inactive"),
+      eq(customersTable.legacySegment, "legacy_contact"),
+    ];
+    const where = and(...conditions);
+
+    const [data, countResult, reactivatedCount] = await Promise.all([
+      db.select(CUSTOMER_LIST_SELECT).from(customersTable)
+        .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
+        .where(where)
+        .orderBy(desc(customersTable.createdAt))
+        .limit(lim).offset(off),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(where),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(
+        ...tenantFilters(req, SCOPE_COLS),
+        sql`${customersTable.reactivatedAt} IS NOT NULL`,
+      )),
+    ]);
+
+    return res.json({
+      data,
+      total: Number(countResult[0]?.count ?? 0),
+      reactivatedTotal: Number(reactivatedCount[0]?.count ?? 0),
+      limit: lim,
+      offset: off,
+    });
+  } catch (err) {
+    req.log.error({ err }, "List legacy contacts error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/customers/reactivated", async (req, res) => {
+  try {
+    const { limit = "50", offset = "0", days } = req.query as Record<string, string>;
+    const lim = Math.min(parseInt(limit), 100);
+    const off = parseInt(offset);
+    const conditions = [
+      ...tenantFilters(req, SCOPE_COLS),
+      sql`${customersTable.reactivatedAt} IS NOT NULL`,
+    ];
+    if (days) {
+      const d = parseInt(days, 10);
+      if (Number.isFinite(d) && d > 0) {
+        conditions.push(sql`${customersTable.reactivatedAt} >= NOW() - (${d}::int * INTERVAL '1 day')`);
+      }
+    }
+    const where = and(...conditions);
+
+    const [data, countResult] = await Promise.all([
+      db.select(CUSTOMER_LIST_SELECT).from(customersTable)
+        .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
+        .where(where)
+        .orderBy(desc(customersTable.reactivatedAt))
+        .limit(lim).offset(off),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(where),
+    ]);
+
+    return res.json({
+      data,
+      total: Number(countResult[0]?.count ?? 0),
+      limit: lim,
+      offset: off,
+    });
+  } catch (err) {
+    req.log.error({ err }, "List reactivated customers error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.post("/customers", async (req, res) => {
   try {
-    const { name, phone, email, address, city, branchId } = req.body;
+    const { name, phone, email, address, city, branchId, password, gstin, billingName, referredByCustomerId } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
 
     const phoneResult = parseRequiredMobile(phone);
@@ -76,14 +167,58 @@ router.post("/customers", async (req, res) => {
     const emailResult = parseOptionalEmail(email);
     if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
 
-    const values = tenantStamp(req, {
+    const existing = await findCustomerByPhoneInScope(req, phoneResult.value);
+    if (existing) {
+      return res.status(409).json({
+        error: "A customer with this phone number already exists",
+        existingCustomerId: existing.id,
+        existingCustomerName: existing.name,
+      });
+    }
+
+    const stamp = tenantStamp(req, {
       name, phone: phoneResult.value, email: emailResult.value, address, city,
       branchId: branchId || null,
       status: "active" as const,
     });
+    const values: typeof customersTable.$inferInsert = { ...stamp };
 
-    const [customer] = await db.insert(customersTable).values(values as typeof customersTable.$inferInsert).returning();
-    return res.status(201).json({ ...customer, branchName: null });
+    try {
+      if (gstin !== undefined) values.gstin = normalizeGstin(gstin);
+      if (billingName !== undefined) values.billingName = billingName?.trim() || null;
+      if (referredByCustomerId) {
+        const [referrer] = await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.id, referredByCustomerId)).limit(1);
+        if (!referrer || !rowInScope(req, { ...referrer, customerId: referrer.id })) {
+          return res.status(400).json({ error: "Invalid referrer customer" });
+        }
+        values.referredByCustomerId = referredByCustomerId;
+      }
+    } catch (gstErr) {
+      return res.status(400).json({ error: gstErr instanceof Error ? gstErr.message : "Invalid billing fields" });
+    }
+
+    const [customer] = await db.insert(customersTable).values(values).returning();
+
+    let loginAccount: { userId: number; phone: string } | null = null;
+    if (password) {
+      try {
+        loginAccount = await createCustomerLoginAccount(customer, String(password));
+      } catch (accountErr) {
+        req.log.warn({ err: accountErr, customerId: customer.id }, "Customer created but login account failed");
+        return res.status(201).json({
+          ...customer,
+          branchName: null,
+          loginWarning: accountErr instanceof Error ? accountErr.message : "Failed to create login account",
+        });
+      }
+    }
+
+    return res.status(201).json({
+      ...customer,
+      branchName: null,
+      userId: loginAccount?.userId ?? customer.userId ?? null,
+      loginCreated: Boolean(loginAccount),
+    });
   } catch (err) {
     req.log.error({ err }, "Create customer error");
     return res.status(500).json({ error: "Internal server error" });
@@ -95,17 +230,7 @@ router.get("/customers/me", async (req, res) => {
     const customerId = req.scope?.customerId;
     if (!customerId) return res.status(403).json({ error: "Customer profile only" });
 
-    const [customer] = await db.select({
-      id: customersTable.id, name: customersTable.name, phone: customersTable.phone,
-      email: customersTable.email, address: customersTable.address, city: customersTable.city,
-      status: customersTable.status, walletBalance: customersTable.walletBalance,
-      totalDues: customersTable.totalDues, branchId: customersTable.branchId,
-      photoUrl: customersTable.photoUrl, lastPaymentDate: customersTable.lastPaymentDate,
-      customerSince: customersTable.customerSince, historicalWashCount: customersTable.historicalWashCount,
-      historicalSolarVisitCount: customersTable.historicalSolarVisitCount,
-      operationalNotes: customersTable.operationalNotes,
-      branchName: branchesTable.name, createdAt: customersTable.createdAt,
-    }).from(customersTable)
+    const [customer] = await db.select(CUSTOMER_LIST_SELECT).from(customersTable)
       .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
       .where(eq(customersTable.id, customerId))
       .limit(1);
@@ -118,21 +243,23 @@ router.get("/customers/me", async (req, res) => {
   }
 });
 
+router.get("/customers/me/supervisor-contact", async (req, res) => {
+  try {
+    const customerId = req.scope?.customerId;
+    if (!customerId) return res.status(403).json({ error: "Customer profile only" });
+
+    const supervisor = await resolveSupervisorForCustomer(customerId);
+    return res.json({ supervisor });
+  } catch (err) {
+    req.log.error({ err }, "Customer supervisor contact error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/customers/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const [customer] = await db.select({
-      id: customersTable.id, name: customersTable.name, phone: customersTable.phone,
-      email: customersTable.email, address: customersTable.address, city: customersTable.city,
-      status: customersTable.status, walletBalance: customersTable.walletBalance,
-      totalDues: customersTable.totalDues, branchId: customersTable.branchId,
-      companyId: customersTable.companyId, franchiseeId: customersTable.franchiseeId,
-      photoUrl: customersTable.photoUrl, lastPaymentDate: customersTable.lastPaymentDate,
-      customerSince: customersTable.customerSince, historicalWashCount: customersTable.historicalWashCount,
-      historicalSolarVisitCount: customersTable.historicalSolarVisitCount,
-      operationalNotes: customersTable.operationalNotes,
-      branchName: branchesTable.name, createdAt: customersTable.createdAt,
-    }).from(customersTable)
+    const [customer] = await db.select(CUSTOMER_DETAIL_SELECT).from(customersTable)
       .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
       .where(eq(customersTable.id, id));
 
@@ -161,18 +288,30 @@ router.patch("/customers/:id", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    const { name, phone, email, address, city, status, branchId, photoUrl, operationalNotes } = req.body;
+    const { name, phone, email, address, city, status, branchId, photoUrl, operationalNotes, gstin, billingName, referredByCustomerId } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
 
     const phoneField = applyMobileField(req.body, "phone", updateData);
     if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
+    if (typeof updateData.phone === "string") {
+      const dup = await findCustomerByPhoneInScope(req, updateData.phone);
+      if (dup && dup.id !== id) {
+        return res.status(409).json({
+          error: "A customer with this phone number already exists",
+          existingCustomerId: dup.id,
+          existingCustomerName: dup.name,
+        });
+      }
+    }
     const emailField = applyOptionalEmailField(req.body, "email", updateData);
     if (!emailField.ok) return res.status(400).json({ error: emailField.error });
 
     if (address !== undefined) updateData.address = address;
     if (city !== undefined) updateData.city = city;
-    if (status !== undefined) updateData.status = status;
+    if (status !== undefined && !(status === "active" && isLegacyDormantCustomer(existing))) {
+      updateData.status = status;
+    }
     if (branchId !== undefined) updateData.branchId = branchId;
     if (photoUrl !== undefined) {
       if (photoUrl !== null && typeof photoUrl === "string" && photoUrl.trim() && !/^https?:\/\//.test(photoUrl)) {
@@ -183,12 +322,116 @@ router.patch("/customers/:id", async (req, res) => {
     if (operationalNotes !== undefined && req.scope?.isSuperAdmin) {
       updateData.operationalNotes = operationalNotes;
     }
+    try {
+      if (gstin !== undefined) updateData.gstin = normalizeGstin(gstin);
+      if (billingName !== undefined) updateData.billingName = billingName?.trim() || null;
+      if (referredByCustomerId !== undefined) {
+        if (referredByCustomerId === null) {
+          updateData.referredByCustomerId = null;
+        } else {
+          const refId = parseInt(String(referredByCustomerId), 10);
+          if (refId === id) return res.status(400).json({ error: "Customer cannot refer themselves" });
+          const [referrer] = await db.select().from(customersTable).where(eq(customersTable.id, refId)).limit(1);
+          if (!referrer || !rowInScope(req, { ...referrer, customerId: referrer.id })) {
+            return res.status(400).json({ error: "Invalid referrer customer" });
+          }
+          updateData.referredByCustomerId = refId;
+        }
+      }
+    } catch (gstErr) {
+      return res.status(400).json({ error: gstErr instanceof Error ? gstErr.message : "Invalid billing fields" });
+    }
     // walletBalance is derived from ledger — never patch directly
 
     const [customer] = await db.update(customersTable).set(updateData).where(eq(customersTable.id, id)).returning();
-    return res.json({ ...customer, branchName: null });
+
+    let reactivated = false;
+    if (status === "active" && isLegacyDormantCustomer(existing)) {
+      const result = await tryReactivateLegacyCustomer(id, "status_change");
+      reactivated = result.reactivated;
+    }
+
+    const [refreshed] = await db.select(CUSTOMER_LIST_SELECT).from(customersTable)
+      .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
+      .where(eq(customersTable.id, id)).limit(1);
+
+    return res.json({ ...(refreshed ?? customer), reactivated });
   } catch (err) {
     req.log.error({ err }, "Update customer error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/customers/:id/reactivate", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(customersTable).where(eq(customersTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, { ...existing, customerId: existing.id })) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    if (!isLegacyDormantCustomer(existing)) {
+      return res.status(400).json({ error: "Customer is not a dormant legacy contact" });
+    }
+
+    const result = await tryReactivateLegacyCustomer(id, "manual");
+    if (!result.reactivated || !result.customer) {
+      return res.status(400).json({ error: "Reactivation failed" });
+    }
+
+    return res.json({
+      ...result.customer,
+      reactivated: true,
+      welcomeBackQueued: true,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Reactivate customer error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/customers/:id/network", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [customer] = await db.select({
+      id: customersTable.id,
+      referredByCustomerId: customersTable.referredByCustomerId,
+    }).from(customersTable).where(eq(customersTable.id, id)).limit(1);
+
+    if (!customer || !rowInScope(req, { ...customer, customerId: customer.id })) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    const refSelect = {
+      id: customersTable.id,
+      name: customersTable.name,
+      phone: customersTable.phone,
+      city: customersTable.city,
+      status: customersTable.status,
+    };
+
+    const [referrer, referrals, siblings] = await Promise.all([
+      customer.referredByCustomerId
+        ? db.select(refSelect).from(customersTable).where(eq(customersTable.id, customer.referredByCustomerId)).limit(1)
+        : Promise.resolve([]),
+      db.select(refSelect).from(customersTable)
+        .where(eq(customersTable.referredByCustomerId, id))
+        .orderBy(desc(customersTable.createdAt)),
+      customer.referredByCustomerId
+        ? db.select(refSelect).from(customersTable).where(and(
+          eq(customersTable.referredByCustomerId, customer.referredByCustomerId),
+          sql`${customersTable.id} <> ${id}`,
+        ))
+        : Promise.resolve([]),
+    ]);
+
+    return res.json({
+      referrer: referrer[0] ?? null,
+      referrals,
+      siblings,
+      referralCount: referrals.length,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Customer network error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRequestUploadUrl } from "@workspace/api-client-react";
+import { useRequestUploadUrl, getListStaffQueryKey } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { uploadFileToCloudinary } from "@/lib/media-url";
 import { resolveMediaUrl } from "@/lib/media-url";
 import {
-  staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, DOC_LABELS, OPTIONAL_DOCS,
+  staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, DOC_LABELS, OPTIONAL_DOCS, STAFF_CATEGORY_OPTIONS,
   type StaffEcosystemProfile, type StaffDocument,
 } from "@/lib/staff-ecosystem/api";
 import {
@@ -126,15 +126,19 @@ export default function StaffDetail() {
     queryFn: staffEcosystemApi.getRoleMaster,
   });
 
-  const { data: managers } = useQuery({
-    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "managers"],
-    queryFn: () => fetch("/api/staff?isActive=true").then(r => r.json()) as Promise<Array<{ id: number; name: string }>>,
+  const { data: supervisors } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "supervisors"],
+    queryFn: staffEcosystemApi.listSupervisors,
   });
 
   const saveMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => staffEcosystemApi.patchProfile(id, data),
     onSuccess: () => {
+      setDraft({});
       qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, id] });
+      qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "admin-list"] });
+      qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "supervisors"] });
+      qc.invalidateQueries({ queryKey: getListStaffQueryKey() });
       toast({ title: "Saved" });
     },
     onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
@@ -200,8 +204,26 @@ export default function StaffDetail() {
 
   const p = { ...profile, ...draft };
   const set = (key: string, value: unknown) => setDraft(d => ({ ...d, [key]: value }));
+  const staffCategory = (p.staffCategory ?? "cleaning_staff") as "supervisor" | "cleaning_staff";
+  const isCleaningStaff = staffCategory === "cleaning_staff";
   const docMap = Object.fromEntries((profile.documents ?? []).map(d => [d.documentType, d]));
   const bankDoc = docMap.bank_passbook ?? docMap.bank_cancelled_cheque;
+
+  const buildSavePayload = (input: Partial<StaffEcosystemProfile>): Record<string, unknown> => {
+    const payload: Record<string, unknown> = { ...input };
+    if (payload.staffCategory === "supervisor") {
+      payload.reportingManagerId = null;
+    }
+    return payload;
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setDraft(d => ({
+      ...d,
+      staffCategory: value as StaffEcosystemProfile["staffCategory"],
+      ...(value === "supervisor" ? { reportingManagerId: null } : {}),
+    }));
+  };
 
   const toggleRole = (roleId: number, checked: boolean, skillLevel = "basic") => {
     const current = [...(profile.roles ?? [])];
@@ -235,6 +257,9 @@ export default function StaffDetail() {
                 <Badge variant={p.isActive ? "default" : "secondary"}>{p.isActive ? "Active" : "Inactive"}</Badge>
                 <Badge variant="outline" className="capitalize">{p.verificationStatus.replace(/_/g, " ")}</Badge>
                 <Badge variant="outline" className="capitalize">{p.availability ?? "available"}</Badge>
+                <Badge variant="outline">
+                  {staffCategory === "supervisor" ? "Supervisor" : "Cleaning Staff"}
+                </Badge>
                 {profile.userId
                   ? <Badge className="bg-green-500/10 text-green-600 border-green-500/30">Portal Login Active</Badge>
                   : <Badge variant="destructive" className="bg-amber-500/10 text-amber-600 border-amber-500/30">No Portal Login</Badge>}
@@ -254,7 +279,7 @@ export default function StaffDetail() {
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList className="flex flex-wrap h-auto gap-1">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="roles">Roles & Skills</TabsTrigger>
+            {isCleaningStaff && <TabsTrigger value="roles">Roles & Skills</TabsTrigger>}
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="banking">Banking</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
@@ -299,6 +324,16 @@ export default function StaffDetail() {
             <Card>
               <CardHeader><CardTitle className="text-base">Employment & Operations</CardTitle></CardHeader>
               <CardContent className="grid sm:grid-cols-2 gap-4">
+                <Field label="Staff Category">
+                  <Select value={staffCategory} onValueChange={handleCategoryChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {STAFF_CATEGORY_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
                 <Field label="Employment Type">
                   <Select value={p.employmentType ?? "salaried"} onValueChange={v => set("employmentType", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -322,14 +357,26 @@ export default function StaffDetail() {
                 )}
                 <Field label="City"><Input value={p.city ?? ""} onChange={e => set("city", e.target.value)} /></Field>
                 <Field label="Partner"><Input value={p.partnerName ?? "CWP Direct"} disabled /></Field>
-                <Field label="Reporting Manager">
-                  <Select value={p.reportingManagerId ? String(p.reportingManagerId) : ""} onValueChange={v => set("reportingManagerId", parseInt(v))}>
-                    <SelectTrigger><SelectValue placeholder="Select manager" /></SelectTrigger>
-                    <SelectContent>
-                      {(managers ?? []).filter(m => m.id !== id).map(m => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </Field>
+                {isCleaningStaff && p.reportingManagerName && !draft.reportingManagerId && (
+                  <Field label="Current Supervisor">
+                    <Input
+                      value={`${p.reportingManagerName}${p.reportingManagerPhone ? ` · ${p.reportingManagerPhone}` : ""}`}
+                      disabled
+                    />
+                  </Field>
+                )}
+                {isCleaningStaff && (
+                  <Field label="Reporting Manager (Supervisor)">
+                    <Select value={p.reportingManagerId ? String(p.reportingManagerId) : ""} onValueChange={v => set("reportingManagerId", parseInt(v))}>
+                      <SelectTrigger><SelectValue placeholder="Select supervisor" /></SelectTrigger>
+                      <SelectContent>
+                        {(supervisors ?? []).filter(m => m.id !== id).map(m => (
+                          <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
                 <Field label="Availability">
                   <Select value={p.availability ?? "available"} onValueChange={v => set("availability", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -421,12 +468,19 @@ export default function StaffDetail() {
               )}
             </Card>
 
-            <Button onClick={() => saveMutation.mutate(draft)} disabled={saveMutation.isPending || Object.keys(draft).length === 0}>
+            <Button onClick={() => saveMutation.mutate(buildSavePayload(draft))} disabled={saveMutation.isPending || Object.keys(draft).length === 0}>
               Save Overview
             </Button>
           </TabsContent>
 
           <TabsContent value="roles" className="space-y-4">
+            {staffCategory === "supervisor" ? (
+              <Card>
+                <CardContent className="p-5 text-sm text-muted-foreground">
+                  Supervisor operational roles will be configured in a future update.
+                </CardContent>
+              </Card>
+            ) : (
             <Card>
               <CardHeader><CardTitle className="text-base">Operational Roles & Skill Levels</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -451,6 +505,7 @@ export default function StaffDetail() {
                 })}
               </CardContent>
             </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="documents" className="space-y-4">
@@ -484,7 +539,7 @@ export default function StaffDetail() {
                 <Field label="UPI ID"><Input value={p.upiId ?? ""} onChange={e => set("upiId", e.target.value)} /></Field>
               </CardContent>
             </Card>
-            <Button onClick={() => saveMutation.mutate(draft)} disabled={saveMutation.isPending}>Save Banking</Button>
+            <Button onClick={() => saveMutation.mutate(buildSavePayload(draft))} disabled={saveMutation.isPending || Object.keys(draft).length === 0}>Save Banking</Button>
           </TabsContent>
 
           <TabsContent value="performance">

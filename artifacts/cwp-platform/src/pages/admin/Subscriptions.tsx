@@ -6,7 +6,6 @@ import {
   usePauseSubscription, useResumeSubscription, useCancelSubscription,
   useGetSubscriptionHealth,
   useCreateSubscription,
-  useListCustomers, getListCustomersQueryKey,
   useListVehicles, getListVehiclesQueryKey,
 } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
@@ -21,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { AlertCircle, Pause, Play, X, Plus } from "lucide-react";
+import { CustomerSearchSelect, type CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
 
 const statusColors: Record<string, string> = {
   active: "bg-green-500/10 text-green-600 border-green-500/20",
@@ -52,23 +52,22 @@ export default function AdminSubscriptions() {
   const today = new Date().toISOString().split("T")[0];
   const defaultEnd = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
   const [createForm, setCreateForm] = useState({
-    customerId: "",
     vehicleId: "",
     startDate: today,
     endDate: defaultEnd,
     price: "8999",
   });
+  const [createCustomer, setCreateCustomer] = useState<CustomerSearchValue | null>(null);
 
   const { data, isLoading } = useListSubscriptions({}, { query: { queryKey: getListSubscriptionsQueryKey({}) } });
   const { data: expiring } = useGetExpiringSoonSubscriptions({ query: { queryKey: getGetExpiringSoonSubscriptionsQueryKey() } });
   const { data: health } = useGetSubscriptionHealth();
-  const { data: customers } = useListCustomers({ limit: 200 }, { query: { queryKey: getListCustomersQueryKey({ limit: 200 }) } });
   const { data: vehicles } = useListVehicles(
-    { customerId: createForm.customerId ? parseInt(createForm.customerId) : 0 },
+    { customerId: createCustomer?.id ?? 0 },
     {
       query: {
-        queryKey: getListVehiclesQueryKey({ customerId: createForm.customerId ? parseInt(createForm.customerId) : 0 }),
-        enabled: !!createForm.customerId,
+        queryKey: getListVehiclesQueryKey({ customerId: createCustomer?.id ?? 0 }),
+        enabled: !!createCustomer?.id,
       },
     },
   );
@@ -78,7 +77,8 @@ export default function AdminSubscriptions() {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListSubscriptionsQueryKey() });
         setCreateOpen(false);
-        setCreateForm({ customerId: "", vehicleId: "", startDate: today, endDate: defaultEnd, price: "8999" });
+        setCreateCustomer(null);
+        setCreateForm({ vehicleId: "", startDate: today, endDate: defaultEnd, price: "8999" });
         toast({ title: "Daily contract created" });
       },
       onError: (e: any) => toast({ title: e?.response?.data?.error || "Failed to create subscription", variant: "destructive" }),
@@ -193,22 +193,19 @@ export default function AdminSubscriptions() {
                 <div className="space-y-3 pt-2">
                   <div>
                     <Label>Customer</Label>
-                    <Select value={createForm.customerId} onValueChange={v => setCreateForm(f => ({ ...f, customerId: v, vehicleId: "" }))}>
-                      <SelectTrigger className="mt-1" data-testid="select-sub-customer">
-                        <SelectValue placeholder="Select customer..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(customers?.data ?? []).map(c => (
-                          <SelectItem key={c.id} value={String(c.id)}>{c.name} ({c.phone})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="mt-1">
+                      <CustomerSearchSelect
+                        value={createCustomer}
+                        onChange={c => { setCreateCustomer(c); setCreateForm(f => ({ ...f, vehicleId: "" })); }}
+                        testId="select-sub-customer"
+                      />
+                    </div>
                   </div>
                   <div>
                     <Label>Vehicle</Label>
-                    <Select value={createForm.vehicleId} onValueChange={v => setCreateForm(f => ({ ...f, vehicleId: v }))} disabled={!createForm.customerId}>
+                    <Select value={createForm.vehicleId} onValueChange={v => setCreateForm(f => ({ ...f, vehicleId: v }))} disabled={!createCustomer}>
                       <SelectTrigger className="mt-1" data-testid="select-sub-vehicle">
-                        <SelectValue placeholder={createForm.customerId ? "Select vehicle..." : "Pick customer first"} />
+                        <SelectValue placeholder={createCustomer ? "Select vehicle..." : "Pick customer first"} />
                       </SelectTrigger>
                       <SelectContent>
                         {(vehicles ?? []).map(v => (
@@ -233,11 +230,11 @@ export default function AdminSubscriptions() {
                   </div>
                   <Button
                     className="w-full"
-                    disabled={!createForm.customerId || !createForm.vehicleId || !createForm.startDate || !createForm.endDate || createMutation.isPending}
+                    disabled={!createCustomer || !createForm.vehicleId || !createForm.startDate || !createForm.endDate || createMutation.isPending}
                     data-testid="btn-create-daily-sub"
                     onClick={() => createMutation.mutate({
                       data: {
-                        customerId: parseInt(createForm.customerId),
+                        customerId: createCustomer!.id,
                         vehicleId: parseInt(createForm.vehicleId),
                         type: "daily_wash",
                         startDate: createForm.startDate,

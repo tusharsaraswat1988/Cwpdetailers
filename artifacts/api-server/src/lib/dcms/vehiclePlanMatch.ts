@@ -54,10 +54,14 @@ export function planMatchesVehicle(
   vehicle: VehiclePlanContext,
   planSeatCount?: number | null,
 ): boolean {
-  if (plan.vehicleCategoryId == null || plan.seatCategoryId == null) return false;
-  if (plan.vehicleCategoryId !== vehicle.vehicleCategoryId) return false;
-  if (planSeatCount == null) return true;
-  return seatCountsShareTier(planSeatCount, vehicle.seatCount);
+  if (plan.vehicleCategoryId != null && plan.vehicleCategoryId !== vehicle.vehicleCategoryId) {
+    return false;
+  }
+  if (plan.seatCategoryId != null) {
+    if (planSeatCount == null) return false;
+    if (!seatCountsShareTier(planSeatCount, vehicle.seatCount)) return false;
+  }
+  return true;
 }
 
 export function assertPlanMatchesVehicle(
@@ -65,9 +69,6 @@ export function assertPlanMatchesVehicle(
   vehicle: VehiclePlanContext,
   planSeatCount?: number | null,
 ): void {
-  if (plan.vehicleCategoryId == null || plan.seatCategoryId == null) {
-    throw new Error(`Plan "${plan.name}" is not linked to a car type and seater tier`);
-  }
   if (!planMatchesVehicle(plan, vehicle, planSeatCount)) {
     const tierLabel = vehicle.seatPricingTier === "standard" ? "up to 5 seater" : "5+ seater";
     throw new Error(

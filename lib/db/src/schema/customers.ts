@@ -25,6 +25,10 @@ export const customersTable = pgTable("customers", {
   franchiseeId: integer("franchisee_id"),
   branchId: integer("branch_id"),
   gstin: text("gstin"),
+  billingName: text("billing_name"),
+  referredByCustomerId: integer("referred_by_customer_id"),
+  legacySegment: text("legacy_segment"),
+  reactivatedAt: timestamp("reactivated_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

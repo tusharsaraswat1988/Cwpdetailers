@@ -98,6 +98,30 @@ export const dcmsPlansTable = pgTable("dcms_plans", {
 
 
 
+/** Add-ons bundled with a DCMS plan (from service catalog). */
+
+export const dcmsPlanAddonsTable = pgTable("dcms_plan_addons", {
+
+  id: serial("id").primaryKey(),
+
+  planId: integer("plan_id").notNull(),
+
+  addonId: integer("addon_id").notNull(),
+
+  includedCleanings: integer("included_cleanings").notNull().default(0),
+
+  includedWashes: integer("included_washes").notNull().default(0),
+
+  extraPrice: numeric("extra_price", { precision: 10, scale: 2 }),
+
+  sortOrder: integer("sort_order").notNull().default(0),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+
+});
+
+
+
 /** Vehicle-bound subscription instance with visit/wash consumption counters. */
 
 export const dcmsSubscriptionsTable = pgTable("dcms_subscriptions", {
@@ -391,6 +415,8 @@ export const insertDcmsVisitSchema = createInsertSchema(dcmsVisitsTable).omit({ 
 
 
 export type DcmsPlan = typeof dcmsPlansTable.$inferSelect;
+
+export type DcmsPlanAddon = typeof dcmsPlanAddonsTable.$inferSelect;
 
 export type InsertDcmsPlan = z.infer<typeof insertDcmsPlanSchema>;
 

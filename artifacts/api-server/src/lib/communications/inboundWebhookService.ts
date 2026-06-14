@@ -7,8 +7,9 @@ import {
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
-  findOrCreateConversation, appendMessage, resolveCustomerByPhone,
+  findOrCreateConversation, appendMessage,
 } from "./conversationService";
+import { resolveOrCreateInboundContact } from "../inboundContact";
 import { recordJourneyEvent } from "./journeyService";
 import { refreshAiAssistance } from "./aiAssistanceService";
 import { evaluateTicketRules } from "./ticketAutomationService";
@@ -98,7 +99,7 @@ export async function processWhatsAppInbound(
         body = `[${msg.type} message]`;
     }
 
-    const resolved = await resolveCustomerByPhone(phone, companyId);
+    const resolved = await resolveOrCreateInboundContact(phone, { companyId, channel: "whatsapp" });
     const conv = await findOrCreateConversation({
       customerId: resolved.customerId,
       leadId: resolved.leadId,
@@ -149,7 +150,7 @@ export async function processSmsInbound(params: {
   providerMessageId?: string;
   companyId?: number | null;
 }) {
-  const resolved = await resolveCustomerByPhone(params.phone, params.companyId);
+  const resolved = await resolveOrCreateInboundContact(params.phone, { companyId: params.companyId, channel: "sms" });
   const conv = await findOrCreateConversation({
     customerId: resolved.customerId,
     leadId: resolved.leadId,

@@ -331,7 +331,11 @@ router.post("/bookings", async (req, res) => {
       status: initialStatus,
     });
     const [booking] = await db.insert(bookingsTable).values(values as any).returning();
-    return res.status(201).json(booking);
+
+    const { tryReactivateLegacyCustomer } = await import("../lib/customerReactivation");
+    const reactivation = await tryReactivateLegacyCustomer(customerId, "booking", { type: "booking", id: booking.id });
+
+    return res.status(201).json({ ...booking, reactivated: reactivation.reactivated });
   } catch (err) {
     req.log.error({ err }, "Create booking error");
     return res.status(500).json({ error: "Internal server error" });

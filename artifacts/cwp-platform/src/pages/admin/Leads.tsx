@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +22,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { submitMobile, submitOptionalMobile } from "@/lib/contactForm";
+import { ToastAction } from "@/components/ui/toast";
+import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
+
+const CUSTOMER_BASE_PATH = "/admin/customers";
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 
@@ -132,7 +137,12 @@ async function convertLead(id: number, body: Record<string, unknown>) {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error("Failed to convert lead");
-  return res.json();
+  return res.json() as Promise<{
+    customerLinked?: boolean;
+    customer?: { id: number; name?: string };
+    booking?: { id: number };
+    subscription?: { id: number };
+  }>;
 }
 
 async function fetchLeadStats(): Promise<LeadStats> {
@@ -218,6 +228,7 @@ type DetailTab = "overview" | "activity" | "followups";
 export default function AdminLeads() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [view, setView] = useState<ViewMode>("kanban");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("");
@@ -256,7 +267,30 @@ export default function AdminLeads() {
 
   const convertMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => convertLead(id, body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["leads"] }); qc.invalidateQueries({ queryKey: ["leadStats"] }); setShowConvert(false); setDetailId(null); toast({ title: "Lead converted successfully" }); },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["leadStats"] });
+      setShowConvert(false);
+      setDetailId(null);
+      const customerId = data.customer?.id;
+      if (customerId) {
+        toast({
+          title: data.customerLinked ? "Lead linked to existing customer" : "Lead converted successfully",
+          description: `${data.customer?.name ?? "Customer"} #${customerId}${data.customerLinked ? " — no duplicate created." : ""}`,
+          action: (
+            <ToastAction
+              altText="View customer profile"
+              onClick={() => setLocation(`${CUSTOMER_BASE_PATH}/${customerId}`)}
+              data-testid="toast-lead-view-customer"
+            >
+              View customer
+            </ToastAction>
+          ),
+        });
+      } else {
+        toast({ title: "Lead converted successfully" });
+      }
+    },
     onError: () => toast({ title: "Failed to convert", variant: "destructive" }),
   });
 
@@ -556,7 +590,12 @@ export default function AdminLeads() {
                   {(detail.customerId || detail.bookingId || detail.subscriptionId) && (
                     <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-4 space-y-2">
                       <h3 className="font-semibold text-sm text-green-400 flex items-center gap-2"><CheckCircle size={14} />Converted</h3>
-                      {detail.customerId && <p className="text-sm">Customer ID: <span className="font-medium">{detail.customerId}</span></p>}
+                      {detail.customerId && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm">Customer #{detail.customerId}</p>
+                          <CustomerProfileLink customerId={detail.customerId} customerBasePath={CUSTOMER_BASE_PATH} />
+                        </div>
+                      )}
                       {detail.bookingId && <p className="text-sm">Booking ID: <span className="font-medium">{detail.bookingId}</span></p>}
                       {detail.subscriptionId && <p className="text-sm">Subscription ID: <span className="font-medium">{detail.subscriptionId}</span></p>}
                     </div>

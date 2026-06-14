@@ -179,7 +179,8 @@ export function requirePermission(resource: string, action: string) {
       return next();
     }
 
-    // Per-user override wins
+    // Align with client auth: admin/superadmin are not blocked by missing seed rows.
+    if (isSuperAdminRole(req.user.role)) return next();
     const overrides = await db
       .select()
       .from(permissionOverridesTable)

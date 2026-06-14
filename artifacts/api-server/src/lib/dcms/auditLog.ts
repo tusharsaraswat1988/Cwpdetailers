@@ -3,6 +3,7 @@ import { db, dcmsActivityLogsTable } from "@workspace/db";
 export type AuditAction =
   | "plan_created"
   | "plan_updated"
+  | "plan_deleted"
   | "plan_deactivated"
   | "plan_activated"
   | "subscription_created"

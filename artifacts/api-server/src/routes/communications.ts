@@ -303,6 +303,8 @@ router.get("/communications/audience-filters", (_req, res) => {
     { id: "all_customers", label: "All Customers", group: "customers" },
     { id: "active_customers", label: "Active Customers", group: "customers" },
     { id: "inactive_customers", label: "Inactive Customers", group: "customers" },
+    { id: "legacy_contacts", label: "Legacy Contacts (Dormant)", group: "customers" },
+    { id: "reactivated_customers", label: "Reactivated Customers", group: "customers" },
     { id: "payment_due", label: "Payment Due Customers", group: "customers" },
     { id: "wash_due", label: "Wash Due Customers", group: "customers" },
     { id: "amc_due", label: "AMC Due Customers", group: "customers" },

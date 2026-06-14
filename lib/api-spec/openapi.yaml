@@ -204,6 +204,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/Customer"
 
+  /customers/{id}/network:
+    get:
+      operationId: getCustomerNetwork
+      tags: [customers]
+      summary: Get referral network for a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Referrer, referrals, and siblings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerNetwork"
+
   /customers/{id}/summary:
     get:
       operationId: getCustomerSummary
@@ -1769,6 +1788,22 @@ components:
           type: integer
         branchName:
           type: string
+        photoUrl:
+          type: string
+          nullable: true
+          description: Customer profile photo URL (set via file upload; send null to remove)
+        gstin:
+          type: string
+          nullable: true
+          description: 15-character GSTIN for B2B invoicing
+        billingName:
+          type: string
+          nullable: true
+          description: Legal billing name on invoices
+        referredByCustomerId:
+          type: integer
+          nullable: true
+          description: Customer who referred this account
         createdAt:
           type: string
           format: date-time
@@ -1871,6 +1906,51 @@ components:
           type: number
         branchId:
           type: integer
+        photoUrl:
+          type: string
+          nullable: true
+          description: Set via uploaded image URL, or null to remove profile photo
+        gstin:
+          type: string
+          nullable: true
+        billingName:
+          type: string
+          nullable: true
+        referredByCustomerId:
+          type: integer
+          nullable: true
+
+    CustomerNetwork:
+      type: object
+      properties:
+        referrer:
+          $ref: "#/components/schemas/CustomerNetworkPerson"
+          nullable: true
+        referrals:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerNetworkPerson"
+        siblings:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerNetworkPerson"
+        referralCount:
+          type: integer
+
+    CustomerNetworkPerson:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        city:
+          type: string
+          nullable: true
+        status:
+          type: string
 
     # VEHICLES
     Vehicle:

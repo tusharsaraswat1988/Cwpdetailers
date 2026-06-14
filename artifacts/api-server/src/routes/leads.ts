@@ -6,6 +6,7 @@ import {
 } from "@workspace/db";
 import { eq, and, or, ilike, sql, desc, gte, lte } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { findCustomerByPhoneInScope } from "../lib/customerAccount";
 import {
   parseRequiredMobile,
   parseOptionalMobile,
@@ -464,20 +465,27 @@ router.post("/leads/:id/convert", async (req, res) => {
 
     const result: Record<string, unknown> = {};
 
-    // Create customer
+    // Create customer (or link existing by phone)
     if (createCustomer) {
-      const customerValues = tenantStamp(req, {
-        name: lead.name,
-        phone: lead.phone,
-        city: lead.city,
-        status: "active" as const,
-      });
-      const [customer] = await db.insert(customersTable).values(customerValues as typeof customersTable.$inferInsert).returning();
-      result.customer = customer;
+      const existing = await findCustomerByPhoneInScope(req, lead.phone);
+      if (existing) {
+        const [full] = await db.select().from(customersTable).where(eq(customersTable.id, existing.id)).limit(1);
+        result.customer = full ?? existing;
+        result.customerLinked = true;
+      } else {
+        const customerValues = tenantStamp(req, {
+          name: lead.name,
+          phone: lead.phone,
+          city: lead.city,
+          status: "active" as const,
+        });
+        const [customer] = await db.insert(customersTable).values(customerValues as typeof customersTable.$inferInsert).returning();
+        result.customer = customer;
+      }
 
-      // Link lead to customer
+      const linkedId = (result.customer as { id: number }).id;
       await db.update(leadsTable)
-        .set({ customerId: customer.id, updatedAt: new Date() })
+        .set({ customerId: linkedId, updatedAt: new Date() })
         .where(eq(leadsTable.id, id));
     }
 
@@ -539,7 +547,9 @@ router.post("/leads/:id/convert", async (req, res) => {
 
     // Update lead status
     const conversionNote = result.customer
-      ? `Lead converted. Customer #${customerId} created.`
+      ? result.customerLinked
+        ? `Lead converted. Linked to existing customer #${customerId}.`
+        : `Lead converted. Customer #${customerId} created.`
       : result.booking
       ? "Lead converted to booking."
       : "Lead converted to subscription.";

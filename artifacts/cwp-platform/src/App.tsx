@@ -18,6 +18,9 @@ import Register from "@/pages/Register";
 
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminCustomers from "@/pages/admin/Customers";
+import AdminCustomerMigration from "@/pages/admin/CustomerMigration";
+import AdminLegacyContacts from "@/pages/admin/LegacyContacts";
+import AdminReactivatedCustomers from "@/pages/admin/ReactivatedCustomers";
 import AdminCustomerDetail from "@/pages/admin/CustomerDetail";
 import AdminStaff from "@/pages/admin/Staff";
 import AdminStaffDetail from "@/pages/admin/StaffDetail";
@@ -70,12 +73,15 @@ import StaffDashboard from "@/pages/staff/Dashboard";
 import StaffJobs from "@/pages/staff/Jobs";
 import StaffEarnings from "@/pages/staff/Earnings";
 import StaffProfile from "@/pages/staff/Profile";
+import StaffTeam from "@/pages/staff/Team";
 
 import FranchiseeDashboard from "@/pages/franchisee/Dashboard";
 import FranchiseeBookings from "@/pages/franchisee/Bookings";
 import FranchiseeStaff from "@/pages/franchisee/Staff";
 import FranchiseeChurned from "@/pages/franchisee/ChurnedCustomers";
 import FranchiseeLeads from "@/pages/franchisee/Leads";
+import FranchiseeCustomers from "@/pages/franchisee/Customers";
+import FranchiseeCustomerDetail from "@/pages/franchisee/CustomerDetail";
 import OperationsWall from "@/pages/admin/OperationsWall";
 import FounderDashboard from "@/pages/admin/FounderDashboard";
 import {
@@ -151,6 +157,9 @@ function Router() {
 
       {/* Admin — admin/superadmin/manager can reach; per-page permission gates fine-tune */}
       <Route path="/admin/dashboard" component={() => <ProtectedRoute component={AdminDashboard} roles={["admin", "superadmin", "manager"]} loginPath="/admin/login" />} />
+      <Route path="/admin/customers/migration" component={() => <ProtectedRoute component={AdminCustomerMigration} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "create" }} loginPath="/admin/login" />} />
+      <Route path="/admin/customers/legacy-contacts" component={() => <ProtectedRoute component={AdminLegacyContacts} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/customers/reactivated" component={() => <ProtectedRoute component={AdminReactivatedCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/customers/:id" component={() => <ProtectedRoute component={AdminCustomerDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/customers" component={() => <ProtectedRoute component={AdminCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/staff" component={() => <ProtectedRoute component={AdminStaff} roles={["admin", "superadmin", "manager"]} permission={{ resource: "staff", action: "view" }} loginPath="/admin/login" />} />
@@ -209,6 +218,7 @@ function Router() {
 
       {/* Staff — mobile-first field app (Sprint 3) */}
       <Route path="/staff/dashboard" component={() => <ProtectedRoute component={StaffDashboard} roles={["staff"]} />} />
+      <Route path="/staff/team" component={() => <ProtectedRoute component={StaffTeam} roles={["staff"]} />} />
       <Route path="/staff/jobs" component={() => <ProtectedRoute component={StaffJobs} roles={["staff"]} />} />
       <Route path="/staff/earnings" component={() => <ProtectedRoute component={StaffEarnings} roles={["staff"]} />} />
       <Route path="/staff/profile" component={() => <ProtectedRoute component={StaffProfile} roles={["staff"]} />} />
@@ -220,6 +230,8 @@ function Router() {
 
       {/* Franchisee */}
       <Route path="/franchisee/dashboard" component={() => <ProtectedRoute component={FranchiseeDashboard} roles={["franchisee"]} />} />
+      <Route path="/franchisee/customers/:id" component={() => <ProtectedRoute component={FranchiseeCustomerDetail} roles={["franchisee"]} permission={{ resource: "customers", action: "view" }} />} />
+      <Route path="/franchisee/customers" component={() => <ProtectedRoute component={FranchiseeCustomers} roles={["franchisee"]} permission={{ resource: "customers", action: "view" }} />} />
       <Route path="/franchisee/bookings" component={() => <ProtectedRoute component={FranchiseeBookings} roles={["franchisee"]} />} />
       <Route path="/franchisee/staff" component={() => <ProtectedRoute component={FranchiseeStaff} roles={["franchisee"]} />} />
       <Route path="/franchisee/churned" component={() => <ProtectedRoute component={FranchiseeChurned} roles={["franchisee"]} />} />

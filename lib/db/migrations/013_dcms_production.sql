@@ -1,19 +1,27 @@
 -- Migration 013: DCMS production phase — missed logs, pause, feedback, events, subscription type
 
-CREATE TYPE dcms_subscription_type AS ENUM (
-  'daily_cleaning', 'solar_amc', 'housekeeping', 'driver_service', 'security_service'
-);
+DO $$ BEGIN
+  CREATE TYPE dcms_subscription_type AS ENUM (
+    'daily_cleaning', 'solar_amc', 'housekeeping', 'driver_service', 'security_service'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE dcms_pause_action AS ENUM (
-  'pause', 'resume', 'pause_requested', 'pause_approved', 'pause_rejected'
-);
+DO $$ BEGIN
+  CREATE TYPE dcms_pause_action AS ENUM (
+    'pause', 'resume', 'pause_requested', 'pause_approved', 'pause_rejected'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE dcms_pause_approval_status AS ENUM ('pending', 'approved', 'rejected');
+DO $$ BEGIN
+  CREATE TYPE dcms_pause_approval_status AS ENUM ('pending', 'approved', 'rejected');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE dcms_notification_event_type AS ENUM (
-  'visit_completed', 'visit_rejected', 'subscription_paused', 'subscription_resumed',
-  'renewal_eligible', 'missed_visit'
-);
+DO $$ BEGIN
+  CREATE TYPE dcms_notification_event_type AS ENUM (
+    'visit_completed', 'visit_rejected', 'subscription_paused', 'subscription_resumed',
+    'renewal_eligible', 'missed_visit'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS subscription_type dcms_subscription_type NOT NULL DEFAULT 'daily_cleaning';
 ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS pause_start_date DATE;

@@ -1,13 +1,14 @@
 import { useAuth } from "@/lib/auth";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { History, FileText, Car, AlertCircle, User, ChevronRight, Camera, Loader2 } from "lucide-react";
+import { History, FileText, Car, AlertCircle, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRequestUploadUrl } from "@workspace/api-client-react";
-import { resolveMediaUrl, uploadFileToCloudinary } from "@/lib/media-url";
+import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
+import { CustomerPhotoEditor } from "@/components/shared/CustomerPhotoEditor";
+import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
+import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 
 const accountLinks = [
   { href: "/customer/history", label: "Service History", description: "Past bookings & photos", icon: History },
@@ -32,9 +33,6 @@ type CustomerProfile = {
 export default function CustomerAccount() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const requestUpload = useRequestUploadUrl();
 
   const loadProfile = useCallback(async () => {
     const res = await fetch("/api/customers/me");
@@ -43,32 +41,12 @@ export default function CustomerAccount() {
 
   useEffect(() => { void loadProfile(); }, [loadProfile]);
 
-  const onPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !profile) return;
-    setUploading(true);
-    try {
-      const presign = await requestUpload.mutateAsync({
-        data: { name: file.name, size: file.size, contentType: file.type },
-      });
-      const secureUrl = await uploadFileToCloudinary(file, presign);
-      const patch = await fetch(`/api/customers/${profile.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrl: secureUrl }),
-      });
-      if (!patch.ok) throw new Error("Failed to save photo");
-      await loadProfile();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  };
+  const { data: supervisorData } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "customer-supervisor"],
+    queryFn: staffEcosystemApi.getCustomerSupervisorContact,
+  });
 
   const displayName = profile?.name ?? user?.name ?? "Customer";
-  const photoSrc = resolveMediaUrl(profile?.photoUrl);
 
   return (
     <CustomerLayout>
@@ -79,25 +57,18 @@ export default function CustomerAccount() {
         </div>
 
         <Card data-testid="account-profile-card">
-          <CardContent className="p-4 flex items-center gap-4">
-            <button
-              type="button"
-              className="relative w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden group"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              aria-label="Change profile photo"
-            >
-              {photoSrc ? (
-                <img src={photoSrc} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <User size={24} className="text-primary" />
-              )}
-              <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                {uploading ? <Loader2 size={18} className="text-white animate-spin" /> : <Camera size={18} className="text-white" />}
-              </span>
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPhotoSelect} />
-            <div className="flex-1 min-w-0">
+          <CardContent className="p-4 space-y-4">
+            {profile ? (
+              <CustomerPhotoEditor
+                customerId={profile.id}
+                name={displayName}
+                photoUrl={profile.photoUrl}
+                size="lg"
+                onUpdated={() => void loadProfile()}
+                testIdPrefix="account-photo"
+              />
+            ) : null}
+            <div className="min-w-0 border-t border-border pt-3">
               <p className="font-semibold">{displayName}</p>
               <p className="text-sm text-muted-foreground">{profile?.phone ?? user?.phone}</p>
               {(profile?.email ?? user?.email) && (
@@ -107,11 +78,16 @@ export default function CustomerAccount() {
                 <p className="text-xs text-muted-foreground mt-1">Customer since {profile.customerSince}</p>
               )}
             </div>
-            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-              {uploading ? "Uploading…" : "Photo"}
-            </Button>
           </CardContent>
         </Card>
+
+        <SupervisorContactCard
+          supervisor={supervisorData?.supervisor}
+          compact
+          title="Field Supervisor"
+          description="Contact your assigned supervisor for service issues."
+          whatsAppMessage="Hi, I need help regarding my CWP service."
+        />
 
         {(profile?.totalDues && parseFloat(profile.totalDues) > 0) && (
           <Card>

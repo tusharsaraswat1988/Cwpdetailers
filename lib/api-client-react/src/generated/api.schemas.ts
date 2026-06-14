@@ -86,6 +86,7 @@ export interface Customer {
   totalDues?: number;
   branchId?: number;
   branchName?: string;
+  photoUrl?: string | null;
   createdAt?: string;
 }
 
@@ -336,6 +337,7 @@ export interface UpdateCustomerBody {
   status?: UpdateCustomerBodyStatus;
   walletBalance?: number;
   branchId?: number;
+  photoUrl?: string | null;
 }
 
 export type CreateVehicleBodyVehicleType =

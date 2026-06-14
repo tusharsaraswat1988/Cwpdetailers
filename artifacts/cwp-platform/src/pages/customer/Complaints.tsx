@@ -15,6 +15,9 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, AlertCircle, MessageSquare } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
+import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 
 export default function CustomerComplaints() {
   const qc = useQueryClient();
@@ -45,6 +48,12 @@ export default function CustomerComplaints() {
     },
   });
 
+  const { data: supervisorData } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "customer-supervisor"],
+    queryFn: staffEcosystemApi.getCustomerSupervisorContact,
+    enabled: customerId != null,
+  });
+
   return (
     <CustomerLayout>
       {scopeLoading ? (
@@ -59,6 +68,13 @@ export default function CustomerComplaints() {
         </div>
       ) : (
         <div className="space-y-5">
+          <SupervisorContactCard
+            supervisor={supervisorData?.supervisor}
+            title="Your Field Supervisor"
+            description="For urgent service issues, you can contact your supervisor directly. Complaints are also routed to them automatically."
+            whatsAppMessage="Hi, I have a service issue I'd like to discuss."
+          />
+
           <div className="flex items-center justify-between">
             <div>
               <h1 className="font-display font-bold text-2xl">Support</h1>

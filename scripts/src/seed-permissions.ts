@@ -121,8 +121,11 @@ async function seedPermissions() {
     console.log("No permissions to insert.");
     return;
   }
-  await db.insert(permissionsTable).values(rows.map(r => ({ ...r, allow: true })));
-  console.log(`Inserted ${rows.length} permission rows.`);
+  const deduped = Array.from(
+    new Map(rows.map(r => [`${r.role}:${r.resource}:${r.action}`, r])).values(),
+  );
+  await db.insert(permissionsTable).values(deduped.map(r => ({ ...r, allow: true })));
+  console.log(`Inserted ${deduped.length} permission rows.`);
 }
 
 export { seedPermissions };

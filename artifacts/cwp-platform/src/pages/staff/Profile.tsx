@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import {
   useGetStaffAttendance,
   getGetStaffAttendanceQueryKey,
@@ -19,6 +19,9 @@ import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Lo
 import { todayIso } from "@/lib/staff-jobs";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 import { markAttendanceWithLocation } from "@/lib/location";
+import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
+import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
+import { Link } from "wouter";
 
 const statusColors: Record<string, string> = {
   present: "bg-green-500/10 text-green-600 border-green-500/20",
@@ -85,6 +88,13 @@ export default function StaffProfile() {
       toast({ title: "Check-in failed", description: err.message, variant: "destructive" }),
   });
 
+  const { data: myContext } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-context"],
+    queryFn: staffEcosystemApi.getMyContext,
+    enabled: staffId != null,
+  });
+
+  const roleLabel = myContext?.staffCategory === "supervisor" ? "Supervisor" : "Cleaning Staff";
   const todayStr = todayIso();
   const todayRecord = (attendance ?? []).find(a => a.date === todayStr);
   const todayMarked = Boolean(todayRecord);
@@ -111,11 +121,26 @@ export default function StaffProfile() {
           </div>
           <div className="min-w-0">
             <h1 className="font-display font-bold text-xl truncate">{user?.name}</h1>
-            <p className="text-sm text-muted-foreground">Field Technician</p>
+            <p className="text-sm text-muted-foreground">{roleLabel}</p>
             {user?.phone && <p className="text-xs text-muted-foreground mt-0.5">{user.phone}</p>}
           </div>
         </div>
 
+        {myContext?.staffCategory === "cleaning_staff" && (
+          <SupervisorContactCard
+            supervisor={myContext.reportingManager}
+            compact
+            whatsAppMessage={`Hi ${myContext.reportingManager?.name ?? "Supervisor"}, I need help with a field issue.`}
+          />
+        )}
+
+        {myContext?.staffCategory === "supervisor" && (
+          <Link href="/staff/team" className="block rounded-2xl border border-primary/30 bg-primary/5 p-4 text-sm font-medium text-primary hover:bg-primary/10">
+            View my team & customer complaints →
+          </Link>
+        )}
+
+        {myContext?.staffCategory !== "supervisor" && (
         <section
           className="rounded-2xl border border-border bg-card p-4 space-y-3"
           data-testid="profile-attendance-today"
@@ -157,7 +182,9 @@ export default function StaffProfile() {
             )}
           </div>
         </section>
+        )}
 
+        {myContext?.staffCategory !== "supervisor" && (
         <div className="grid grid-cols-2 gap-3" data-testid="profile-stats">
           {[
             { label: "Jobs this month", value: perf?.jobsCompleted, icon: Calendar },
@@ -181,7 +208,9 @@ export default function StaffProfile() {
             </div>
           ))}
         </div>
+        )}
 
+        {myContext?.staffCategory !== "supervisor" && (
         <section className="rounded-2xl border border-border overflow-hidden">
           <button
             type="button"
@@ -230,6 +259,7 @@ export default function StaffProfile() {
             </div>
           )}
         </section>
+        )}
 
         <PushNotificationSettings />
 

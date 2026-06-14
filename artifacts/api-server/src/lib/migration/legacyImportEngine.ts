@@ -8,6 +8,7 @@ import {
   migrationBatchesTable,
   migrationEntityMapTable,
   migrationRowLogTable,
+  commCustomerConsentsTable,
 } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import type { CustomerImportRow, CustomerImportResult, ParsedWorkbook, PreviewResult } from "./types";
@@ -16,8 +17,11 @@ import {
   parseMoney,
   parseOptionalDate,
   parseOptionalInt,
+  parseCustomerStatus,
+  parseLegacySegment,
   validateCustomerRows,
 } from "./validators";
+import { LEGACY_SEGMENT_CONTACT } from "../customerReactivation";
 
 export { MIGRATION_PACKAGE_MAP, resolvePackageSlug } from "./packageMap";
 export type { CustomerImportRow, PreviewResult, CustomerImportResult, MigrationIssue } from "./types";
@@ -42,6 +46,8 @@ const CUSTOMER_HEADERS: Record<string, keyof CustomerImportRow | "skip"> = {
   photo_url: "photoUrl",
   temporary_password: "temporaryPassword",
   create_login: "createLogin",
+  status: "status",
+  legacy_segment: "legacySegment",
 };
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -73,6 +79,8 @@ function rowToCustomer(row: ExcelJS.Row, headerMap: Map<number, string>, rowNumb
     if (key) raw[key] = cellText(cell.value);
   });
 
+  const legacySegment = parseLegacySegment(raw.legacy_segment);
+
   return {
     rowNumber,
     legacyCustomerId: raw.legacy_customer_id ?? "",
@@ -91,7 +99,9 @@ function rowToCustomer(row: ExcelJS.Row, headerMap: Map<number, string>, rowNumb
     operationalNotes: raw.operational_notes || raw.contract_notes || null,
     photoUrl: raw.photo_url || null,
     temporaryPassword: raw.temporary_password || null,
-    createLogin: parseBool(raw.create_login, true),
+    createLogin: parseBool(raw.create_login, legacySegment !== LEGACY_SEGMENT_CONTACT),
+    status: parseCustomerStatus(raw.status, legacySegment === LEGACY_SEGMENT_CONTACT ? "inactive" : "active"),
+    legacySegment,
   };
 }
 
@@ -178,6 +188,8 @@ type ImportOpts = {
 };
 
 function customerPayload(row: CustomerImportRow, opts: ImportOpts) {
+  const notes = row.operationalNotes
+    ?? (row.legacySegment === LEGACY_SEGMENT_CONTACT ? "source:legacy_contact" : null);
   return {
     name: row.name.trim(),
     phone: row.phone,
@@ -187,7 +199,8 @@ function customerPayload(row: CustomerImportRow, opts: ImportOpts) {
     branchId: row.branchId ?? opts.defaultBranchId ?? null,
     companyId: opts.companyId ?? null,
     franchiseeId: opts.franchiseeId ?? null,
-    status: "active" as const,
+    status: row.status,
+    legacySegment: row.legacySegment,
     walletBalance: row.walletBalance,
     totalDues: row.outstandingAmount,
     photoUrl: row.photoUrl,
@@ -195,7 +208,7 @@ function customerPayload(row: CustomerImportRow, opts: ImportOpts) {
     customerSince: row.customerSince,
     historicalWashCount: row.historicalWashCount,
     historicalSolarVisitCount: row.historicalSolarVisitCount,
-    operationalNotes: row.operationalNotes,
+    operationalNotes: notes,
     updatedAt: new Date(),
   };
 }
@@ -267,6 +280,30 @@ export async function importCustomers(
           legacyId: row.legacyCustomerId,
           platformId: customerId,
         });
+
+        if (row.legacySegment === LEGACY_SEGMENT_CONTACT) {
+          const [existingConsent] = await tx.select({ id: commCustomerConsentsTable.id })
+            .from(commCustomerConsentsTable)
+            .where(eq(commCustomerConsentsTable.customerId, customerId)).limit(1);
+          if (existingConsent) {
+            await tx.update(commCustomerConsentsTable).set({
+              smsConsent: true,
+              whatsappConsent: true,
+              consentSource: "import",
+              consentDate: new Date(),
+              updatedAt: new Date(),
+            }).where(eq(commCustomerConsentsTable.customerId, customerId));
+          } else {
+            await tx.insert(commCustomerConsentsTable).values({
+              customerId,
+              smsConsent: true,
+              whatsappConsent: true,
+              consentSource: "import",
+              notes: "Legacy contact import — re-engagement messaging",
+              companyId: opts.companyId ?? null,
+            });
+          }
+        }
 
         if (row.createLogin) {
           const password = row.temporaryPassword ?? generatePassword();

@@ -77,7 +77,12 @@ export function isStaffAssignable(staff: Pick<Staff, "isActive" | "verificationS
   return true;
 }
 
-export function staffAssignableError(staff: Pick<Staff, "isActive" | "verificationStatus">): string | null {
+export function staffAssignableError(
+  staff: Pick<Staff, "isActive" | "verificationStatus" | "staffCategory">,
+): string | null {
+  if (staff.staffCategory === "supervisor") {
+    return "Supervisors cannot be assigned to field jobs — assign cleaning staff instead";
+  }
   if (!staff.isActive) return "Staff member is inactive and cannot receive new assignments";
   if (staff.verificationStatus === "suspended") return "Staff member is suspended and cannot receive new assignments";
   return null;

@@ -32,6 +32,16 @@ function filterToSql(filter: string, params: Record<string, unknown> = {}, scope
     case "inactive_customers":
       return and(...base, eq(customersTable.status, "inactive"));
 
+    case "legacy_contacts":
+      return and(
+        ...base,
+        eq(customersTable.status, "inactive"),
+        eq(customersTable.legacySegment, "legacy_contact"),
+      );
+
+    case "reactivated_customers":
+      return and(...base, isNotNull(customersTable.reactivatedAt));
+
     case "payment_due":
       return and(...base, gt(customersTable.totalDues, "0"));
 

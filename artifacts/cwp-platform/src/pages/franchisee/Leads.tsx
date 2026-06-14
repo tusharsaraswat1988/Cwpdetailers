@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import FranchiseeLayout from "@/components/layout/FranchiseeLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +14,10 @@ import { DndContext, useDraggable, useDroppable, DragEndEvent } from "@dnd-kit/c
 import { CSS } from "@dnd-kit/utilities";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { submitMobile, submitOptionalMobile } from "@/lib/contactForm";
+import { ToastAction } from "@/components/ui/toast";
+import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
+
+const CUSTOMER_BASE_PATH = "/franchisee/customers";
 
 type LeadStatus = "new" | "contacted" | "interested" | "quotation" | "booked" | "completed" | "subscription" | "lost";
 type ViewMode = "kanban" | "list";
@@ -49,7 +54,14 @@ async function fetchLeads(params: Record<string, string> = {}): Promise<{ data: 
 async function createLead(body: Partial<Lead>) { const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error("Failed to create lead"); return res.json(); }
 async function patchLead(id: number, body: Partial<Lead>) { const res = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error("Failed to update lead"); return res.json(); }
 async function addActivity(id: number, body: { type: string; body: string; followUpAt?: string }) { const res = await fetch(`/api/leads/${id}/activities`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error("Failed to add activity"); return res.json(); }
-async function convertLead(id: number, body: Record<string, unknown>) { const res = await fetch(`/api/leads/${id}/convert`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error("Failed to convert lead"); return res.json(); }
+async function convertLead(id: number, body: Record<string, unknown>) {
+  const res = await fetch(`/api/leads/${id}/convert`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error("Failed to convert lead");
+  return res.json() as Promise<{
+    customerLinked?: boolean;
+    customer?: { id: number; name?: string };
+  }>;
+}
 async function fetchLeadStats(): Promise<LeadStats> { const res = await fetch("/api/leads/stats"); if (!res.ok) throw new Error("Failed to fetch stats"); return res.json(); }
 async function fetchLeadDetail(id: number): Promise<Lead & { activities: LeadActivity[] }> { const res = await fetch(`/api/leads/${id}`); if (!res.ok) throw new Error("Failed to fetch lead"); return res.json(); }
 
@@ -86,6 +98,7 @@ function DroppableColumn({ status, children, label, color, borderColor, count }:
 
 export default function FranchiseeLeads() {
   const qc = useQueryClient(); const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [view, setView] = useState<ViewMode>("kanban");
   const [search, setSearch] = useState(""); const [filterStatus, setFilterStatus] = useState<string>(""); const [filterSource, setFilterSource] = useState<string>("");
   const [open, setOpen] = useState(false); const [detailId, setDetailId] = useState<number | null>(null); const [detailTab, setDetailTab] = useState<DetailTab>("overview");
@@ -97,7 +110,32 @@ export default function FranchiseeLeads() {
 
   const createMut = useMutation({ mutationFn: createLead, onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leads"] }); qc.invalidateQueries({ queryKey: ["franchisee-leadStats"] }); setOpen(false); toast({ title: "Lead created" }); }, onError: (err: any) => toast({ title: "Failed to create lead", description: err?.error ?? err?.message, variant: "destructive" }) });
   const patchMut = useMutation({ mutationFn: ({ id, body }: { id: number; body: Partial<Lead> }) => patchLead(id, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leads"] }); qc.invalidateQueries({ queryKey: ["franchisee-leadStats"] }); qc.invalidateQueries({ queryKey: ["franchisee-leadDetail", detailId] }); toast({ title: "Lead updated" }); } });
-  const convertMut = useMutation({ mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => convertLead(id, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leads"] }); setShowConvert(false); setDetailId(null); toast({ title: "Lead converted" }); } });
+  const convertMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => convertLead(id, body),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["franchisee-leads"] });
+      setShowConvert(false);
+      setDetailId(null);
+      const customerId = data.customer?.id;
+      if (customerId) {
+        toast({
+          title: data.customerLinked ? "Lead linked to existing customer" : "Lead converted",
+          description: `${data.customer?.name ?? "Customer"} #${customerId}`,
+          action: (
+            <ToastAction
+              altText="View customer profile"
+              onClick={() => setLocation(`${CUSTOMER_BASE_PATH}/${customerId}`)}
+              data-testid="toast-franchisee-lead-view-customer"
+            >
+              View customer
+            </ToastAction>
+          ),
+        });
+      } else {
+        toast({ title: "Lead converted" });
+      }
+    },
+  });
   const activityMut = useMutation({ mutationFn: ({ id, body }: { id: number; body: { type: string; body: string; followUpAt?: string } }) => addActivity(id, body), onSuccess: () => { qc.invalidateQueries({ queryKey: ["franchisee-leadDetail", detailId] }); toast({ title: "Activity added" }); } });
 
   const leads = leadsData?.data ?? [];
@@ -317,7 +355,12 @@ export default function FranchiseeLeads() {
                   {(detail.customerId || detail.bookingId || detail.subscriptionId) && (
                     <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-4 space-y-2">
                       <h3 className="font-semibold text-sm text-green-400 flex items-center gap-2"><CheckCircle size={14} />Converted</h3>
-                      {detail.customerId && <p className="text-sm">Customer ID: <span className="font-medium">{detail.customerId}</span></p>}
+                      {detail.customerId && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm">Customer #{detail.customerId}</p>
+                          <CustomerProfileLink customerId={detail.customerId} customerBasePath={CUSTOMER_BASE_PATH} />
+                        </div>
+                      )}
                       {detail.bookingId && <p className="text-sm">Booking ID: <span className="font-medium">{detail.bookingId}</span></p>}
                       {detail.subscriptionId && <p className="text-sm">Subscription ID: <span className="font-medium">{detail.subscriptionId}</span></p>}
                     </div>

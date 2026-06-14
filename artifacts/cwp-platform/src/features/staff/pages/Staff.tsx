@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useListStaff, getListStaffQueryKey, useListBranches, getListBranchesQueryKey } from "@workspace/api-client-react";
+import { getListStaffQueryKey, useListBranches, getListBranchesQueryKey } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,19 @@ import { PageHeader, EmptyState } from "@/components/shared";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { EmailInput } from "@/components/ui/email-input";
 import { submitEmail, submitMobile } from "@/lib/contactForm";
-import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, type RoleMaster } from "@/lib/staff-ecosystem/api";
+import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, STAFF_CATEGORY_OPTIONS, type RoleMaster, type StaffCategory } from "@/lib/staff-ecosystem/api";
 
-type StaffForm = { name: string; phone: string; email: string; operationalRoleId: string; branchId: string; monthlySalary: string; initialPassword: string };
+type StaffForm = {
+  name: string;
+  phone: string;
+  email: string;
+  staffCategory: StaffCategory;
+  operationalRoleId: string;
+  reportingManagerId: string;
+  branchId: string;
+  monthlySalary: string;
+  initialPassword: string;
+};
 
 type StaffListRow = {
   id: number;
@@ -35,21 +45,59 @@ type StaffListRow = {
   employeeCode?: string;
   profilePhotoUrl?: string;
   profileCompletionPercent?: number;
+  staffCategory?: StaffCategory;
+  role?: string;
   operationalRoles?: Array<{ roleName: string; roleSlug: string }>;
 };
+
+function resolveStaffCategory(row: Pick<StaffListRow, "staffCategory" | "role">): StaffCategory {
+  if (row.staffCategory === "supervisor" || row.staffCategory === "cleaning_staff") {
+    return row.staffCategory;
+  }
+  if (row.role === "supervisor") return "supervisor";
+  return "cleaning_staff";
+}
+
+function staffCategoryLabel(category: StaffCategory) {
+  return category === "supervisor" ? "Supervisor" : "Cleaning Staff";
+}
+
+function staffCategoryHeaderStyles(category: StaffCategory) {
+  if (category === "supervisor") {
+    return "bg-violet-600 text-white border-violet-700";
+  }
+  return "bg-sky-600 text-white border-sky-700";
+}
 
 export default function AdminStaff() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<StaffForm>({ name: "", phone: "", email: "", operationalRoleId: "", branchId: "", monthlySalary: "", initialPassword: "staff123" });
+  const [form, setForm] = useState<StaffForm>({
+    name: "", phone: "", email: "", staffCategory: "cleaning_staff",
+    operationalRoleId: "", reportingManagerId: "", branchId: "", monthlySalary: "", initialPassword: "staff123",
+  });
   const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
 
-  const { data: staff, isLoading } = useListStaff({}, { query: { queryKey: getListStaffQueryKey({}) } });
+  const [categoryFilter, setCategoryFilter] = useState<"" | StaffCategory>("");
+
+  const { data: staff, isLoading } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "admin-list"],
+    queryFn: async () => {
+      const res = await fetch("/api/staff", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load staff");
+      return res.json() as Promise<StaffListRow[]>;
+    },
+  });
   const { data: branches } = useListBranches({ query: { queryKey: getListBranchesQueryKey() } });
   const { data: roleMaster } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "roles"],
     queryFn: staffEcosystemApi.getRoleMaster,
+  });
+  const { data: supervisors } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "supervisors"],
+    queryFn: staffEcosystemApi.listSupervisors,
+    enabled: open && form.staffCategory === "cleaning_staff",
   });
 
   const createMutation = useMutation({
@@ -57,9 +105,11 @@ export default function AdminStaff() {
       name: string;
       phone: string;
       email: string;
+      staffCategory: StaffCategory;
       branchId: number;
       monthlySalary?: number;
-      operationalRoleIds: number[];
+      operationalRoleIds?: number[];
+      reportingManagerId?: number;
       initialPassword: string;
     }) => {
       const res = await fetch("/api/staff", {
@@ -76,8 +126,13 @@ export default function AdminStaff() {
     },
     onSuccess: (data: { loginCreated?: boolean; loginWarning?: string; phone?: string }) => {
       qc.invalidateQueries({ queryKey: getListStaffQueryKey() });
+      qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "admin-list"] });
+      qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "list"] });
       setOpen(false);
-      setForm({ name: "", phone: "", email: "", operationalRoleId: "", branchId: "", monthlySalary: "", initialPassword: "staff123" });
+      setForm({
+        name: "", phone: "", email: "", staffCategory: "cleaning_staff",
+        operationalRoleId: "", reportingManagerId: "", branchId: "", monthlySalary: "", initialPassword: "staff123",
+      });
       if (data.loginWarning) {
         toast({ title: "Staff saved — login not created", description: data.loginWarning, variant: "destructive" });
       } else if (data.loginCreated) {
@@ -100,7 +155,7 @@ export default function AdminStaff() {
       toast({ title: "Please fix phone or email format", variant: "destructive" });
       return;
     }
-    if (!form.operationalRoleId) {
+    if (form.staffCategory === "cleaning_staff" && !form.operationalRoleId) {
       toast({ title: "Select an operational role", variant: "destructive" });
       return;
     }
@@ -112,21 +167,46 @@ export default function AdminStaff() {
       name: form.name,
       phone: phoneResult.value,
       email: emailResult.value ?? "",
+      staffCategory: form.staffCategory,
       branchId: parseInt(form.branchId),
       monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : undefined,
-      operationalRoleIds: [parseInt(form.operationalRoleId, 10)],
+      operationalRoleIds: form.staffCategory === "cleaning_staff" ? [parseInt(form.operationalRoleId, 10)] : undefined,
+      reportingManagerId: form.staffCategory === "cleaning_staff" && form.reportingManagerId
+        ? parseInt(form.reportingManagerId, 10)
+        : undefined,
       initialPassword: form.initialPassword,
     });
   };
 
-  const list = (staff ?? []) as StaffListRow[];
+  const isCleaningStaff = form.staffCategory === "cleaning_staff";
+  const canSubmit = Boolean(form.branchId) && (form.staffCategory === "supervisor" || form.operationalRoleId);
+
+  const allStaff = useMemo(
+    () => (staff ?? []).map(row => ({ ...row, staffCategory: resolveStaffCategory(row) })),
+    [staff],
+  );
+
+  const list = useMemo(() => {
+    if (!categoryFilter) return allStaff;
+    return allStaff.filter(s => s.staffCategory === categoryFilter);
+  }, [allStaff, categoryFilter]);
+
+  const filterDescription = categoryFilter
+    ? `${list.length} ${staffCategoryLabel(categoryFilter).toLowerCase()}`
+    : `${list.length} team members`;
+
+  const categoryCounts = useMemo(() => ({
+    all: allStaff.length,
+    cleaning_staff: allStaff.filter(s => s.staffCategory === "cleaning_staff").length,
+    supervisor: allStaff.filter(s => s.staffCategory === "supervisor").length,
+  }), [allStaff]);
 
   return (
     <AdminLayout>
       <div className="p-6 space-y-5">
         <PageHeader
           title="Staff"
-          description={`${list.length} team members`}
+          description={filterDescription}
           actions={
             <Can resource="staff" action="create">
               <Dialog open={open} onOpenChange={setOpen}>
@@ -181,19 +261,56 @@ export default function AdminStaff() {
                       </p>
                     </div>
                     <div>
-                      <Label>Operational Role</Label>
-                      <Select value={form.operationalRoleId} onValueChange={v => setForm(f => ({ ...f, operationalRoleId: v }))}>
-                        <SelectTrigger className="mt-1" data-testid="select-staff-role"><SelectValue placeholder="Select role" /></SelectTrigger>
+                      <Label>Staff Category</Label>
+                      <Select
+                        value={form.staffCategory}
+                        onValueChange={v => setForm(f => ({
+                          ...f,
+                          staffCategory: v as StaffCategory,
+                          operationalRoleId: v === "supervisor" ? "" : f.operationalRoleId,
+                          reportingManagerId: v === "supervisor" ? "" : f.reportingManagerId,
+                        }))}
+                      >
+                        <SelectTrigger className="mt-1" data-testid="select-staff-category"><SelectValue placeholder="Select category" /></SelectTrigger>
                         <SelectContent>
-                          {(roleMaster ?? []).map((r: RoleMaster) => (
-                            <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+                          {STAFF_CATEGORY_OPTIONS.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Roles control DCMS, booking, and field assignments. Add more roles on the staff profile later.
+                        Cleaning staff use field roles and report to a supervisor. Supervisor roles will be configured later.
                       </p>
                     </div>
+                    {isCleaningStaff && (
+                      <>
+                        <div>
+                          <Label>Operational Role</Label>
+                          <Select value={form.operationalRoleId} onValueChange={v => setForm(f => ({ ...f, operationalRoleId: v }))}>
+                            <SelectTrigger className="mt-1" data-testid="select-staff-role"><SelectValue placeholder="Select role" /></SelectTrigger>
+                            <SelectContent>
+                              {(roleMaster ?? []).map((r: RoleMaster) => (
+                                <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Roles control DCMS, booking, and field assignments. Add more roles on the staff profile later.
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Reporting Manager (Supervisor)</Label>
+                          <Select value={form.reportingManagerId} onValueChange={v => setForm(f => ({ ...f, reportingManagerId: v }))}>
+                            <SelectTrigger className="mt-1" data-testid="select-reporting-manager"><SelectValue placeholder="Select supervisor" /></SelectTrigger>
+                            <SelectContent>
+                              {(supervisors ?? []).map(s => (
+                                <SelectItem key={s.id} value={String(s.id)}>{s.name}{s.employeeCode ? ` (${s.employeeCode})` : ""}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    )}
                     <div>
                       <Label>Branch</Label>
                       <Select value={form.branchId} onValueChange={v => setForm(f => ({ ...f, branchId: v }))}>
@@ -205,7 +322,7 @@ export default function AdminStaff() {
                     </div>
                     <Button
                       onClick={handleCreate}
-                      disabled={createMutation.isPending || !form.branchId || !form.operationalRoleId}
+                      disabled={createMutation.isPending || !canSubmit}
                       className="w-full bg-primary text-secondary hover:bg-primary/90"
                       data-testid="btn-submit-staff">
                       {createMutation.isPending ? "Creating..." : "Create Staff Member"}
@@ -217,16 +334,45 @@ export default function AdminStaff() {
           }
         />
 
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={categoryFilter === "" ? "default" : "outline"}
+            onClick={() => setCategoryFilter("")}
+          >
+            All ({categoryCounts.all})
+          </Button>
+          {STAFF_CATEGORY_OPTIONS.map(opt => (
+            <Button
+              key={opt.value}
+              size="sm"
+              variant={categoryFilter === opt.value ? "default" : "outline"}
+              onClick={() => setCategoryFilter(opt.value)}
+            >
+              {opt.label} ({categoryCounts[opt.value]})
+            </Button>
+          ))}
+        </div>
+
         {isLoading ? (
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36 w-full rounded-xl" />)}
           </div>
         ) : list.length === 0 ? (
-          <EmptyState title="No staff yet" description="Add your first team member to start scheduling jobs." />
+          <EmptyState
+            title={categoryFilter ? `No ${staffCategoryLabel(categoryFilter).toLowerCase()} found` : "No staff yet"}
+            description={categoryFilter ? "Try another category or add a new staff member." : "Add your first team member to start scheduling jobs."}
+          />
         ) : (
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {list.map(s => (
-              <div key={s.id} className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors" data-testid={`staff-card-${s.id}`}>
+            {list.map(s => {
+              const category = s.staffCategory!;
+              return (
+              <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/30 transition-colors" data-testid={`staff-card-${s.id}`}>
+                <div className={`px-4 py-2.5 border-b text-xs font-semibold tracking-wide uppercase ${staffCategoryHeaderStyles(category)}`}>
+                  Staff Category · {staffCategoryLabel(category)}
+                </div>
+                <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     {(s as { profilePhotoUrl?: string }).profilePhotoUrl ? (
@@ -276,8 +422,9 @@ export default function AdminStaff() {
                   </div>
                 </div>
                 <Link href={`/admin/staff/${s.id}`} className="text-primary hover:underline text-xs font-medium" data-testid={`btn-view-staff-${s.id}`}>View Details →</Link>
+                </div>
               </div>
-            ))}
+            );})}
           </div>
         )}
       </div>

@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, RefreshCw, Pause, Play } from "lucide-react";
+import { Plus, RefreshCw, Pause, Play, UserPlus } from "lucide-react";
+import { QuickCreateCustomerForm } from "@/features/customers/components/QuickCreateCustomerForm";
 
 export default function DcmsSubscriptionsPage() {
   const { data: subs, isLoading } = useDcmsSubscriptions();
@@ -22,6 +23,7 @@ export default function DcmsSubscriptionsPage() {
   const { pause, resume } = usePauseMutations();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [quickCustomerOpen, setQuickCustomerOpen] = useState(false);
   const [pauseOpen, setPauseOpen] = useState<number | null>(null);
   const [pauseForm, setPauseForm] = useState({ pauseStartDate: "", pauseEndDate: "", pauseReason: "" });
   const [form, setForm] = useState({
@@ -95,7 +97,28 @@ export default function DcmsSubscriptionsPage() {
               <DialogHeader><DialogTitle>New Subscription</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <div>
-                  <Label>Customer</Label>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <Label>Customer</Label>
+                    <Dialog open={quickCustomerOpen} onOpenChange={setQuickCustomerOpen}>
+                      <DialogTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs">
+                          <UserPlus size={12} className="mr-1" /> New customer
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader><DialogTitle>Quick create customer</DialogTitle></DialogHeader>
+                        <QuickCreateCustomerForm
+                          idPrefix="dcms-quick-customer"
+                          customerBasePath="/admin/customers"
+                          onCreated={c => {
+                            setCustomer({ id: c.id, label: `${c.name} · ${c.phone}`, meta: c.phone });
+                            setVehicle(null);
+                            setQuickCustomerOpen(false);
+                          }}
+                        />
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                   <DcmsEntitySearch type="customers" value={customer} onChange={v => { setCustomer(v); setVehicle(null); setForm(f => ({ ...f, planId: "" })); }} placeholder="Search name or mobile…" />
                 </div>
                 <div>

@@ -13,6 +13,7 @@ import {
   getStaffOperationalRoles,
   operationalSlugToLegacyRole,
 } from "../lib/staffEcosystem/operationalRoles";
+import { isSupervisorStaff } from "../lib/staffEcosystem/staffCategory";
 import {
   parseRequiredMobile,
   parseOptionalEmail,
@@ -38,10 +39,11 @@ const SCOPE_COLS = {
 
 router.get("/staff", async (req, res) => {
   try {
-    const { branchId, role, isActive, verificationStatus, franchiseeId, forAssignment, roleSlug } = req.query as Record<string, string>;
+    const { branchId, role, isActive, verificationStatus, franchiseeId, forAssignment, roleSlug, staffCategory } = req.query as Record<string, string>;
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
     if (branchId) conditions.push(eq(staffTable.branchId, parseInt(branchId)));
     if (role) conditions.push(eq(staffTable.role, role as (typeof staffTable.role)["_"]["data"]));
+    if (staffCategory) conditions.push(eq(staffTable.staffCategory, staffCategory as (typeof staffTable.staffCategory)["_"]["data"]));
     if (isActive !== undefined) conditions.push(eq(staffTable.isActive, isActive === "true"));
     else if (forAssignment === "true") conditions.push(eq(staffTable.isActive, true));
     if (verificationStatus) conditions.push(eq(staffTable.verificationStatus, verificationStatus as (typeof staffTable.verificationStatus)["_"]["data"]));
@@ -65,6 +67,7 @@ router.get("/staff", async (req, res) => {
       employeeCode: staffTable.employeeCode, name: staffTable.name,
       profilePhotoUrl: staffTable.profilePhotoUrl,
       phone: staffTable.phone, email: staffTable.email, role: staffTable.role,
+      staffCategory: staffTable.staffCategory,
       branchId: staffTable.branchId, branchName: branchesTable.name,
       monthlySalary: staffTable.monthlySalary, joiningDate: staffTable.joiningDate,
       verificationStatus: staffTable.verificationStatus, isActive: staffTable.isActive,
@@ -97,6 +100,24 @@ router.get("/staff", async (req, res) => {
   }
 });
 
+async function loadStaffInScope(req: Request, id: number) {
+  const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, id)).limit(1);
+  if (!staff) return null;
+  if (!rowInScope(req, { ...staff, staffId: staff.id })) return null;
+  return staff;
+}
+
+async function validateReportingManager(
+  req: Request,
+  reportingManagerId: number,
+): Promise<string | null> {
+  const manager = await loadStaffInScope(req, reportingManagerId);
+  if (!manager) return "Reporting manager not found";
+  if (!manager.isActive) return "Reporting manager must be active";
+  if (!isSupervisorStaff(manager)) return "Reporting manager must be a supervisor";
+  return null;
+}
+
 router.post("/staff", async (req, res) => {
   try {
     const {
@@ -106,7 +127,12 @@ router.post("/staff", async (req, res) => {
       bankAccountName, bankAccountNumber, bankIfsc, bankPassbookUrl, agreementUrl,
       operationalRoleIds,
       initialPassword,
+      staffCategory: staffCategoryRaw,
+      reportingManagerId,
     } = req.body;
+
+    const staffCategory = staffCategoryRaw === "supervisor" ? "supervisor" : "cleaning_staff";
+
     if (!name || !branchId) {
       return res.status(400).json({ error: "name and branchId are required" });
     }
@@ -116,15 +142,32 @@ router.post("/staff", async (req, res) => {
       ? operationalRoleIds.map(Number).filter(n => Number.isFinite(n) && n > 0)
       : [];
 
-    if (!resolvedRole && roleIds.length > 0) {
-      const roles = await db.select({ slug: staffRoleMasterTable.slug })
-        .from(staffRoleMasterTable)
-        .where(inArray(staffRoleMasterTable.id, roleIds))
-        .limit(1);
-      if (roles[0]) resolvedRole = operationalSlugToLegacyRole(roles[0].slug);
+    if (staffCategory === "supervisor") {
+      resolvedRole = "supervisor";
+    } else {
+      if (!resolvedRole && roleIds.length > 0) {
+        const roles = await db.select({ slug: staffRoleMasterTable.slug })
+          .from(staffRoleMasterTable)
+          .where(inArray(staffRoleMasterTable.id, roleIds))
+          .limit(1);
+        if (roles[0]) resolvedRole = operationalSlugToLegacyRole(roles[0].slug);
+      }
+      if (!resolvedRole) {
+        return res.status(400).json({ error: "operationalRoleIds is required for cleaning staff" });
+      }
     }
-    if (!resolvedRole) {
-      return res.status(400).json({ error: "role or operationalRoleIds is required" });
+
+    let parsedReportingManagerId: number | undefined;
+    if (reportingManagerId !== undefined && reportingManagerId !== null && reportingManagerId !== "") {
+      parsedReportingManagerId = parseInt(String(reportingManagerId), 10);
+      if (!Number.isFinite(parsedReportingManagerId) || parsedReportingManagerId <= 0) {
+        return res.status(400).json({ error: "Invalid reportingManagerId" });
+      }
+      if (staffCategory !== "cleaning_staff") {
+        return res.status(400).json({ error: "Only cleaning staff can have a reporting manager" });
+      }
+      const managerErr = await validateReportingManager(req, parsedReportingManagerId);
+      if (managerErr) return res.status(400).json({ error: managerErr });
     }
 
     const phoneResult = parseRequiredMobile(phone);
@@ -138,8 +181,10 @@ router.post("/staff", async (req, res) => {
 
     const values = tenantStamp(req, {
       name, phone: phoneResult.value, email: emailResult.value, role: resolvedRole,
+      staffCategory,
       branchId: parseInt(branchId),
       franchiseeId: franchiseeId ? parseInt(franchiseeId) : undefined,
+      reportingManagerId: parsedReportingManagerId,
       monthlySalary: monthlySalary?.toString(),
       joiningDate, localAddress, permanentAddress,
       guardianName, guardianPhone: guardianPhoneResult.value, aadhaar, pan,
@@ -184,13 +229,6 @@ router.post("/staff", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-
-async function loadStaffInScope(req: Request, id: number) {
-  const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, id)).limit(1);
-  if (!staff) return null;
-  if (!rowInScope(req, { ...staff, staffId: staff.id })) return null;
-  return staff;
-}
 
 async function createStaffLoginAccount(
   staffMember: typeof staffTable.$inferSelect,

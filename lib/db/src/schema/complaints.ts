@@ -20,6 +20,8 @@ export const complaintsTable = pgTable("complaints", {
   companyId: integer("company_id"),
   franchiseeId: integer("franchisee_id"),
   branchId: integer("branch_id"),
+  relatedStaffId: integer("related_staff_id"),
+  assignedSupervisorId: integer("assigned_supervisor_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

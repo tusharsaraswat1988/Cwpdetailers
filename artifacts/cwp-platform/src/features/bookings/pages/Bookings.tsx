@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useListBookings, getListBookingsQueryKey,
   useUpdateBooking, type ListBookingsParams,
@@ -21,6 +21,7 @@ import { Calendar, Clock, User, ChevronLeft, ChevronRight, MapPin, Camera, Route
 import { Can } from "@/components/Can";
 import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shared";
 import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
+import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
 import { roleSlugForBookingService, OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
 import { format, isToday, parseISO } from "date-fns";
 
@@ -36,7 +37,7 @@ const statusColors: Record<string, string> = {
 };
 
 type B = {
-  id: number; customerName?: string; customerPhone?: string;
+  id: number; customerId?: number; customerName?: string; customerPhone?: string;
   serviceName?: string | null; serviceType?: string | null; staffName?: string | null;
   scheduledDate?: string; scheduledTime?: string | null; status?: string;
   area?: string | null; address?: string | null; amount?: string | number | null;
@@ -55,12 +56,19 @@ export default function AdminBookings() {
   const [showAssign, setShowAssign] = useState(false);
   const [assignStaffId, setAssignStaffId] = useState("");
   const [assignReason, setAssignReason] = useState("");
+  const [customerFilter, setCustomerFilter] = useState<string | undefined>(undefined);
   const limit = 15;
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("customerId");
+    setCustomerFilter(id ?? undefined);
+  }, []);
 
   const params: ListBookingsParams = {
     status: statusFilter !== "all" ? (statusFilter as ListBookingsStatus) : undefined,
     limit,
     offset,
+    ...(customerFilter ? { customerId: customerFilter } as ListBookingsParams : {}),
   };
 
   const { data, isLoading } = useListBookings(params, {
@@ -169,6 +177,15 @@ export default function AdminBookings() {
       <div className="p-6 space-y-5">
         <PageHeader title="Bookings" description={`${data?.total ?? 0} total bookings`} />
 
+        {customerFilter && (
+          <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2 text-sm">
+            <span>Showing bookings for customer #{customerFilter}</span>
+            <Button variant="ghost" size="sm" onClick={() => { setCustomerFilter(undefined); window.history.replaceState({}, "", "/admin/bookings"); }}>
+              Clear filter
+            </Button>
+          </div>
+        )}
+
         <FilterBar>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40" data-testid="select-booking-status">
@@ -222,7 +239,18 @@ export default function AdminBookings() {
 
               <TabsContent value="details" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><p className="text-muted-foreground">Customer</p><p className="font-medium">{detailBooking.customerName}</p></div>
+                  <div>
+                    <p className="text-muted-foreground">Customer</p>
+                    <p className="font-medium">{detailBooking.customerName}</p>
+                    {detailBooking.customerId && (
+                      <CustomerProfileLink
+                        customerId={detailBooking.customerId}
+                        customerBasePath="/admin/customers"
+                        name={detailBooking.customerName}
+                        className="mt-2 h-7 text-xs"
+                      />
+                    )}
+                  </div>
                   <div><p className="text-muted-foreground">Service</p><p className="font-medium">{detailBooking.serviceName ?? detailBooking.serviceType?.replace(/_/g, " ")}</p></div>
                   <div><p className="text-muted-foreground">Date</p><p className="font-medium">{detailBooking.scheduledDate}</p></div>
                   <div><p className="text-muted-foreground">Time</p><p className="font-medium">{detailBooking.scheduledTime ?? "—"}</p></div>

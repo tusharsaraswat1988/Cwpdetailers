@@ -17,6 +17,11 @@ const PENDING = [
   "016_push_notification_logs.sql",
   "017_staff_location_logs.sql",
   "018_dcms_plan_vehicle_type.sql",
+  "019_customer_tier3.sql",
+  "020_dcms_plan_addons.sql",
+  "021_staff_category.sql",
+  "022_complaints_supervisor.sql",
+  "023_customer_reactivation.sql",
 ];
 
 async function main() {

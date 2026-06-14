@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
+import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
 import { roleSlugForBookingService, OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
 import type { ListBookingsStatus } from "@workspace/api-client-react";
 
@@ -156,7 +157,18 @@ export default function FranchiseeBookings() {
 
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <div><p className="text-muted-foreground">Customer</p><p className="font-medium">{detailBooking.customerName}</p></div>
+                <div>
+                  <p className="text-muted-foreground">Customer</p>
+                  <p className="font-medium">{detailBooking.customerName}</p>
+                  {detailBooking.customerId && (
+                    <CustomerProfileLink
+                      customerId={detailBooking.customerId}
+                      customerBasePath="/franchisee/customers"
+                      name={detailBooking.customerName}
+                      className="mt-2 h-7 text-xs"
+                    />
+                  )}
+                </div>
                 <div><p className="text-muted-foreground">Service</p><p className="font-medium">{detailBooking.serviceName ?? detailBooking.serviceType?.replace(/_/g, " ")}</p></div>
                 <div><p className="text-muted-foreground">Date</p><p className="font-medium">{detailBooking.scheduledDate}</p></div>
                 <div><p className="text-muted-foreground">Staff</p><p className="font-medium">{detailBooking.staffName ?? "Unassigned"}</p></div>

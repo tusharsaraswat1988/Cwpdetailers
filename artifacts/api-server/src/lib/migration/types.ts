@@ -29,6 +29,8 @@ export type CustomerImportRow = {
   photoUrl: string | null;
   temporaryPassword: string | null;
   createLogin: boolean;
+  status: "active" | "inactive" | "suspended";
+  legacySegment: string | null;
 };
 
 export type ParsedWorkbook = {

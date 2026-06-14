@@ -60,6 +60,7 @@ export type StaffEcosystemProfile = {
   gender?: string | null;
   joiningDate?: string | null;
   role: string;
+  staffCategory?: "supervisor" | "cleaning_staff";
   branchId: number;
   branchName?: string;
   city?: string | null;
@@ -68,6 +69,8 @@ export type StaffEcosystemProfile = {
   partnerName?: string | null;
   reportingManagerId?: number | null;
   reportingManagerName?: string | null;
+  reportingManagerPhone?: string | null;
+  reportingManagerEmail?: string | null;
   employmentType?: string | null;
   monthlySalary?: string | null;
   perWashRate?: string | null;
@@ -120,6 +123,43 @@ export type StaffEcosystemProfile = {
 
 export type RoleMaster = { id: number; name: string; slug: string };
 
+export const STAFF_CATEGORY_OPTIONS = [
+  { value: "cleaning_staff", label: "Cleaning Staff" },
+  { value: "supervisor", label: "Supervisor" },
+] as const;
+
+export type StaffCategory = (typeof STAFF_CATEGORY_OPTIONS)[number]["value"];
+
+export type SupervisorContact = {
+  id: number;
+  name: string;
+  phone: string;
+  email: string | null;
+  employeeCode: string | null;
+};
+
+export type StaffMeContext = {
+  staffId: number;
+  name: string;
+  staffCategory: StaffCategory;
+  branchId: number;
+  reportingManager: SupervisorContact | null;
+  directReports: Array<{ id: number; name: string; phone: string; employeeCode: string | null; isActive: boolean }>;
+  openTeamComplaints: number;
+};
+
+export type TeamComplaint = {
+  id: number;
+  customerId: number;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  type: string;
+  relatedStaffId: number | null;
+  createdAt: string;
+};
+
 export type StaffDashboardStats = {
   totalStaff: number;
   averageCompletion: number;
@@ -161,12 +201,18 @@ export const staffEcosystemApi = {
     api(`/api/staff/${id}/notes`, { method: "POST", body: JSON.stringify({ note }) }),
   dashboardStats: () => api<StaffDashboardStats>("/api/staff/dashboard-stats"),
   listStaffForAssignment: (roleSlug?: string) => {
-    const qs = new URLSearchParams({ forAssignment: "true", isActive: "true" });
+    const qs = new URLSearchParams({ forAssignment: "true", isActive: "true", staffCategory: "cleaning_staff" });
     if (roleSlug) qs.set("roleSlug", roleSlug);
     return api<Array<{ id: number; name: string; employeeCode?: string | null }>>(`/api/staff?${qs.toString()}`);
   },
+  listSupervisors: () =>
+    api<Array<{ id: number; name: string; employeeCode?: string | null }>>("/api/staff?isActive=true&staffCategory=supervisor"),
   getMyOperationalRoles: () =>
     api<{ slugs: string[]; roles: StaffRoleAssignment[] }>("/api/staff/me/operational-roles"),
+  getMyContext: () => api<StaffMeContext>("/api/staff/me/context"),
+  getMyTeamComplaints: () => api<TeamComplaint[]>("/api/staff/me/team-complaints"),
+  getCustomerSupervisorContact: () =>
+    api<{ supervisor: SupervisorContact | null }>("/api/customers/me/supervisor-contact"),
   createLogin: (id: number, password: string) =>
     api<{ message: string; userId: number; phone: string }>(`/api/staff/${id}/create-account`, {
       method: "POST",

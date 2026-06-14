@@ -104,7 +104,11 @@ router.post("/subscriptions", async (req, res) => {
       nextDueDate: startDate,
     });
     const [sub] = await db.insert(subscriptionsTable).values(values as typeof subscriptionsTable.$inferInsert).returning();
-    return res.status(201).json(sub);
+
+    const { tryReactivateLegacyCustomer } = await import("../lib/customerReactivation");
+    const reactivation = await tryReactivateLegacyCustomer(customerId, "subscription", { type: "subscription", id: sub.id });
+
+    return res.status(201).json({ ...sub, reactivated: reactivation.reactivated });
   } catch (err) {
     req.log.error({ err }, "Create subscription error");
     return res.status(500).json({ error: "Internal server error" });

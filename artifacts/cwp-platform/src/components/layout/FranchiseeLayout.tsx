@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { SidebarRenderProps } from "./PanelShell";
 import {
   LayoutDashboard, Calendar, UserCog, LogOut,
-  UserX, Bell, Funnel,
+  UserX, Bell, Funnel, Users,
 } from "lucide-react";
 import PanelShell from "./PanelShell";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
@@ -22,6 +22,7 @@ type NavItem = {
 
 const ALL_NAV: NavItem[] = [
   { href: "/franchisee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/franchisee/customers", label: "Customers", icon: Users, permission: { resource: "customers", action: "view" } },
   { href: "/franchisee/leads", label: "Leads", icon: Funnel, permission: { resource: "leads", action: "view" } },
   { href: "/franchisee/bookings", label: "Booking Requests", icon: Calendar, permission: { resource: "bookings", action: "view" } },
   { href: "/franchisee/staff", label: "My Staff", icon: UserCog, permission: { resource: "staff", action: "view" } },

@@ -3,8 +3,9 @@ import { db } from "@workspace/db";
 import {
   staffTable, staffRoleMasterTable, staffRoleAssignmentsTable,
   staffDocumentsTable, staffNotesTable, branchesTable, franchiseesTable,
+  complaintsTable,
 } from "@workspace/db";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, or, sql } from "drizzle-orm";
 import { rowInScope } from "../middlewares/tenantScope";
 import {
   computeProfileCompletion, generateEmployeeCode, isStaffAssignable,
@@ -31,6 +32,16 @@ async function loadStaffInScope(req: Request, id: number) {
 
 import { recalculateStaffProfile } from "../lib/staffEcosystem/recalculate";
 import { getStaffOperationalRoles } from "../lib/staffEcosystem/operationalRoles";
+import {
+  resolveSupervisorForStaff,
+  listDirectReports,
+} from "../lib/supervisor/supervisorContact";
+import {
+  applyStaffCategoryFields,
+  isSupervisorStaff,
+  normalizeStaffCategory,
+  resolveStaffCategory,
+} from "../lib/staffEcosystem/staffCategory";
 
 function applyPermanentAddress(body: Record<string, unknown>) {
   if (!body.permanentSameAsCurrent) return body;
@@ -81,6 +92,84 @@ router.get("/staff/me/operational-roles", async (req, res) => {
   }
 });
 
+router.get("/staff/me/context", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+    const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
+    if (!staff) return res.status(404).json({ error: "Staff profile not found" });
+
+    const reportingManager = staff.staffCategory === "cleaning_staff"
+      ? await resolveSupervisorForStaff(staffId)
+      : null;
+
+    const directReports = staff.staffCategory === "supervisor"
+      ? await listDirectReports(staffId)
+      : [];
+
+    let openTeamComplaints = 0;
+    if (staff.staffCategory === "supervisor") {
+      const [countRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(complaintsTable)
+        .where(and(
+          eq(complaintsTable.assignedSupervisorId, staffId),
+          or(
+            eq(complaintsTable.status, "open"),
+            eq(complaintsTable.status, "in_progress"),
+          ),
+        ));
+      openTeamComplaints = Number(countRow?.count ?? 0);
+    }
+
+    return res.json({
+      staffId: staff.id,
+      name: staff.name,
+      staffCategory: staff.staffCategory,
+      branchId: staff.branchId,
+      reportingManager,
+      directReports,
+      openTeamComplaints,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Staff me context error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/staff/me/team-complaints", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+    const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
+    if (!staff || staff.staffCategory !== "supervisor") {
+      return res.status(403).json({ error: "Supervisor account required" });
+    }
+
+    const rows = await db.select({
+      id: complaintsTable.id,
+      customerId: complaintsTable.customerId,
+      title: complaintsTable.title,
+      description: complaintsTable.description,
+      status: complaintsTable.status,
+      priority: complaintsTable.priority,
+      type: complaintsTable.type,
+      relatedStaffId: complaintsTable.relatedStaffId,
+      createdAt: complaintsTable.createdAt,
+    }).from(complaintsTable)
+      .where(eq(complaintsTable.assignedSupervisorId, staffId))
+      .orderBy(desc(complaintsTable.createdAt))
+      .limit(50);
+
+    return res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "Staff team complaints error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/staff/:id/ecosystem", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -92,7 +181,13 @@ router.get("/staff/:id/ecosystem", async (req, res) => {
       ? (await db.select().from(franchiseesTable).where(eq(franchiseesTable.id, staff.franchiseeId)).limit(1))[0]
       : null;
     const manager = staff.reportingManagerId
-      ? (await db.select({ id: staffTable.id, name: staffTable.name }).from(staffTable).where(eq(staffTable.id, staff.reportingManagerId)).limit(1))[0]
+      ? (await db.select({
+        id: staffTable.id,
+        name: staffTable.name,
+        phone: staffTable.phone,
+        email: staffTable.email,
+        employeeCode: staffTable.employeeCode,
+      }).from(staffTable).where(eq(staffTable.id, staff.reportingManagerId)).limit(1))[0]
       : null;
 
     const roleRows = await db.select({
@@ -121,6 +216,8 @@ router.get("/staff/:id/ecosystem", async (req, res) => {
       branchName: branch?.name,
       partnerName: partner?.name ?? null,
       reportingManagerName: manager?.name ?? null,
+      reportingManagerPhone: manager?.phone ?? null,
+      reportingManagerEmail: manager?.email ?? null,
       roles: roleRows,
       documents,
       notes,
@@ -136,7 +233,7 @@ router.get("/staff/:id/ecosystem", async (req, res) => {
 
 const PATCH_FIELDS = [
   "name", "profilePhotoUrl", "alternatePhone", "dateOfBirth", "gender", "joiningDate",
-  "branchId", "franchiseeId", "cityId", "city", "reportingManagerId",
+  "branchId", "franchiseeId", "cityId", "city", "reportingManagerId", "staffCategory",
   "employmentType", "monthlySalary", "perWashRate", "perDailyCleaningRate",
   "perSolarPanelRate", "perSolarAmcVisitRate", "ownsVehicle", "vehicleType",
   "vehicleRegistrationNumber", "petrolModel", "ratePerKm", "availability",
@@ -153,9 +250,43 @@ const PATCH_FIELDS = [
 router.patch("/staff/:id/ecosystem", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    if (!(await loadStaffInScope(req, id))) return res.status(404).json({ error: "Staff not found" });
+    const existing = await loadStaffInScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Staff not found" });
 
     const body = applyPermanentAddress(req.body as Record<string, unknown>);
+    const existingCategory = resolveStaffCategory(existing);
+    const nextCategory = body.staffCategory !== undefined
+      ? normalizeStaffCategory(body.staffCategory)
+      : existingCategory;
+    const categoryChanging = nextCategory !== existingCategory;
+
+    if (body.reportingManagerId !== undefined && body.reportingManagerId !== null && body.reportingManagerId !== "") {
+      if (nextCategory !== "cleaning_staff") {
+        return res.status(400).json({ error: "Only cleaning staff can have a reporting manager" });
+      }
+      const managerId = parseInt(String(body.reportingManagerId), 10);
+      if (!Number.isFinite(managerId) || managerId <= 0) {
+        return res.status(400).json({ error: "Invalid reportingManagerId" });
+      }
+      if (managerId === id) {
+        return res.status(400).json({ error: "Staff cannot be their own reporting manager" });
+      }
+      const [manager] = await db.select().from(staffTable).where(eq(staffTable.id, managerId)).limit(1);
+      if (!manager || !rowInScope(req, { ...manager, staffId: manager.id })) {
+        return res.status(400).json({ error: "Reporting manager not found" });
+      }
+      if (!isSupervisorStaff(manager)) {
+        return res.status(400).json({ error: "Reporting manager must be a supervisor" });
+      }
+      if (!manager.isActive) {
+        return res.status(400).json({ error: "Reporting manager must be active" });
+      }
+    }
+
+    if (nextCategory === "supervisor") {
+      body.reportingManagerId = null;
+    }
+
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of PATCH_FIELDS) {
       if (body[key] !== undefined) {
@@ -163,6 +294,15 @@ router.patch("/staff/:id/ecosystem", async (req, res) => {
         updateData[key] = numericFields.includes(key) && body[key] !== null && body[key] !== ""
           ? String(body[key])
           : body[key];
+      }
+    }
+
+    if (body.staffCategory !== undefined || categoryChanging) {
+      const categoryFields = applyStaffCategoryFields(nextCategory);
+      updateData.staffCategory = categoryFields.staffCategory;
+      updateData.role = categoryFields.role;
+      if (categoryFields.reportingManagerId === null) {
+        updateData.reportingManagerId = null;
       }
     }
     if (body.phone !== undefined) updateData.phone = body.phone;
@@ -181,9 +321,13 @@ router.patch("/staff/:id/ecosystem", async (req, res) => {
 router.put("/staff/:id/roles", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    if (!(await loadStaffInScope(req, id))) return res.status(404).json({ error: "Staff not found" });
+    const existing = await loadStaffInScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Staff not found" });
     const { roles } = req.body as { roles: { roleId: number; skillLevel?: string }[] };
     if (!Array.isArray(roles)) return res.status(400).json({ error: "roles array required" });
+    if (isSupervisorStaff(existing)) {
+      return res.status(400).json({ error: "Operational roles are not assigned to supervisors yet" });
+    }
 
     await db.delete(staffRoleAssignmentsTable).where(eq(staffRoleAssignmentsTable.staffId, id));
     if (roles.length > 0) {

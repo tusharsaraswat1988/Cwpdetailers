@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle, FileDown, FileText, ArrowRightLeft } from "lucide-react";
+import { CustomerSearchSelect, type CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
 
 const statusColors: Record<string, string> = {
   paid: "bg-green-500/10 text-green-600 border-green-500/20",
@@ -66,9 +67,10 @@ export default function AdminInvoices() {
   const { toast } = useToast();
   const [payOpen, setPayOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
-  const [payForm, setPayForm] = useState({ customerId: "", invoiceId: "", amount: "", method: "upi" });
+  const [invCustomer, setInvCustomer] = useState<CustomerSearchValue | null>(null);
+  const [payCustomer, setPayCustomer] = useState<CustomerSearchValue | null>(null);
+  const [payForm, setPayForm] = useState({ invoiceId: "", amount: "", method: "upi" });
   const [invForm, setInvForm] = useState({
-    customerId: "",
     description: "",
     amount: "",
     subscriptionId: "",
@@ -96,7 +98,7 @@ export default function AdminInvoices() {
     mutationFn: () => {
       const total = parseFloat(invForm.amount);
       return createInvoice({
-        customerId: parseInt(invForm.customerId),
+        customerId: invCustomer!.id,
         subscriptionId: invForm.subscriptionId ? parseInt(invForm.subscriptionId) : undefined,
         gstInclusive: true,
         items: [{
@@ -110,7 +112,8 @@ export default function AdminInvoices() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       setInvOpen(false);
-      setInvForm({ customerId: "", description: "", amount: "", subscriptionId: "", invoiceType: "package" });
+      setInvCustomer(null);
+      setInvForm({ description: "", amount: "", subscriptionId: "", invoiceType: "package" });
       toast({ title: "Invoice created" });
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
@@ -135,8 +138,11 @@ export default function AdminInvoices() {
                 <DialogHeader><DialogTitle>Create Invoice</DialogTitle></DialogHeader>
                 <div className="space-y-4 mt-2">
                   <div>
-                    <Label>Customer ID</Label>
-                    <Input value={invForm.customerId} onChange={e => setInvForm(f => ({ ...f, customerId: e.target.value }))} className="mt-1" data-testid="input-invoice-customer-id" />
+                    <Label>Customer</Label>
+                    <CustomerSearchSelect
+                      value={invCustomer}
+                      onChange={setInvCustomer}
+                    />
                   </div>
                   <div>
                     <Label>Type</Label>
@@ -161,7 +167,7 @@ export default function AdminInvoices() {
                     <Label>Subscription ID (optional)</Label>
                     <Input value={invForm.subscriptionId} onChange={e => setInvForm(f => ({ ...f, subscriptionId: e.target.value }))} className="mt-1" />
                   </div>
-                  <Button onClick={() => createInvMutation.mutate()} disabled={createInvMutation.isPending || !invForm.customerId || !invForm.amount} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-invoice">
+                  <Button onClick={() => createInvMutation.mutate()} disabled={createInvMutation.isPending || !invCustomer || !invForm.amount} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-invoice">
                     {createInvMutation.isPending ? "Creating..." : "Create invoice"}
                   </Button>
                 </div>
@@ -176,7 +182,11 @@ export default function AdminInvoices() {
             <DialogContent>
               <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-2">
-                {[["customerId", "Customer ID", "number"], ["invoiceId", "Invoice ID (optional)", "number"], ["amount", "Amount (\u20b9)", "number"]].map(([k, l, t]) => (
+                <div>
+                  <Label>Customer</Label>
+                  <CustomerSearchSelect value={payCustomer} onChange={setPayCustomer} />
+                </div>
+                {[["invoiceId", "Invoice ID (optional)", "number"], ["amount", "Amount (\u20b9)", "number"]].map(([k, l, t]) => (
                   <div key={k}>
                     <Label>{l}</Label>
                     <Input data-testid={`input-pay-${k}`} type={t} value={(payForm as any)[k]} onChange={e => setPayForm(f => ({ ...f, [k]: e.target.value }))} className="mt-1" />
@@ -193,8 +203,8 @@ export default function AdminInvoices() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={() => payMutation.mutate({ data: { ...payForm, customerId: parseInt(payForm.customerId), invoiceId: payForm.invoiceId ? parseInt(payForm.invoiceId) : undefined, amount: parseFloat(payForm.amount) } as any })}
-                  disabled={payMutation.isPending} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-payment">
+                <Button onClick={() => payMutation.mutate({ data: { ...payForm, customerId: payCustomer!.id, invoiceId: payForm.invoiceId ? parseInt(payForm.invoiceId) : undefined, amount: parseFloat(payForm.amount) } as any })}
+                  disabled={payMutation.isPending || !payCustomer || !payForm.amount} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-payment">
                   {payMutation.isPending ? "Recording..." : "Record Payment"}
                 </Button>
               </div>

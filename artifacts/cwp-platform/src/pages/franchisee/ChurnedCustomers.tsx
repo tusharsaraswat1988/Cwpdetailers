@@ -2,7 +2,8 @@ import { useState } from "react";
 import FranchiseeLayout from "@/components/layout/FranchiseeLayout";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { UserX, MessageSquare, Send, Check } from "lucide-react";
+import { UserX, MessageSquare, Send, Check, ExternalLink } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -145,9 +146,16 @@ export default function FranchiseeChurned() {
                       <p className="text-xs text-muted-foreground italic mt-1">"{c.cancellationRemark}"</p>
                     )}
                   </div>
-                  <div className="text-right flex-shrink-0">
+                  <div className="text-right flex-shrink-0 flex flex-col items-end gap-2">
                     <p className="font-bold text-sm">₹{Number(c.price).toLocaleString("en-IN")}</p>
                     <p className="text-xs text-muted-foreground">was paying/mo</p>
+                    {c.customerId && (
+                      <Link href={`/franchisee/customers/${c.customerId}`} onClick={e => e.stopPropagation()}>
+                        <Button variant="outline" size="sm" className="h-7 text-xs">
+                          <ExternalLink size={11} className="mr-1" />View customer
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))

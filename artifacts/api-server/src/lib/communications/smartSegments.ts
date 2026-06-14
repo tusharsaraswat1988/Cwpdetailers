@@ -98,6 +98,18 @@ export const SYSTEM_SMART_SEGMENTS: SystemSegmentDef[] = [
     configJson: { type: "filter", filter: "franchise_customers" },
   },
   {
+    segmentKey: "legacy_contacts",
+    name: "Legacy Contacts (Dormant)",
+    description: "Imported old customers with phone only — inactive, ready for re-engagement campaigns",
+    configJson: { type: "filter", filter: "legacy_contacts" },
+  },
+  {
+    segmentKey: "reactivated_customers",
+    name: "Reactivated Customers",
+    description: "Former legacy contacts who returned and booked or subscribed again",
+    configJson: { type: "filter", filter: "reactivated_customers" },
+  },
+  {
     segmentKey: "open_complaints",
     name: "Customers With Open Complaints",
     description: "Customers with unresolved complaints",

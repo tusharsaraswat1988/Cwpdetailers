@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useListComplaints, getListComplaintsQueryKey, useUpdateComplaint } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Badge } from "@/components/ui/badge";
@@ -19,10 +20,34 @@ const priorityColors: Record<string, string> = {
   low: "text-muted-foreground",
 };
 
+type ComplaintRow = {
+  id: number;
+  title: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  type?: string;
+  customerName?: string;
+  createdAt?: string;
+  resolution?: string;
+  assignedSupervisorName?: string | null;
+  relatedStaffName?: string | null;
+};
+
 export default function AdminComplaints() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data, isLoading } = useListComplaints({}, { query: { queryKey: getListComplaintsQueryKey({}) } });
+  const [customerFilter, setCustomerFilter] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("customerId");
+    setCustomerFilter(id ?? undefined);
+  }, []);
+
+  const { data, isLoading } = useListComplaints(
+    customerFilter ? { customerId: customerFilter } as any : {},
+    { query: { queryKey: getListComplaintsQueryKey(customerFilter ? { customerId: customerFilter } as any : {}) } },
+  );
 
   const updateMutation = useUpdateComplaint({
     mutation: {
@@ -38,12 +63,15 @@ export default function AdminComplaints() {
       <div className="p-6 space-y-5">
         <div>
           <h1 className="font-display font-bold text-2xl">Complaints</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{data?.total ?? 0} total complaints</p>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            {data?.total ?? 0} total complaints
+            {customerFilter ? ` · filtered to customer #${customerFilter}` : ""}
+          </p>
         </div>
 
         <div className="space-y-3">
           {isLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />) :
-            (data?.data ?? []).map(c => (
+            (data?.data ?? []).map((c: ComplaintRow) => (
               <div key={c.id} className="bg-card border border-border rounded-xl p-5" data-testid={`complaint-${c.id}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
@@ -54,6 +82,13 @@ export default function AdminComplaints() {
                     </div>
                     <p className="font-semibold text-sm">{c.title}</p>
                     <p className="text-muted-foreground text-sm mt-1">{c.description}</p>
+                    {(c.assignedSupervisorName || c.relatedStaffName) && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {c.relatedStaffName && <>Field staff: {c.relatedStaffName}</>}
+                        {c.relatedStaffName && c.assignedSupervisorName && " · "}
+                        {c.assignedSupervisorName && <>Supervisor: {c.assignedSupervisorName}</>}
+                      </p>
+                    )}
                     {c.resolution && <p className="text-primary text-xs mt-1.5 bg-primary/5 px-2 py-1 rounded">Resolution: {c.resolution}</p>}
                   </div>
                   <div className="text-right flex-shrink-0">

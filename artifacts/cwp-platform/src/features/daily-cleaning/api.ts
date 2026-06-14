@@ -14,6 +14,18 @@ async function dcmsFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type DcmsPlanAddon = {
+  id: number;
+  planId: number;
+  addonId: number;
+  addonName: string;
+  addonBasePrice: string;
+  includedCleanings: number;
+  includedWashes: number;
+  extraPrice?: string | null;
+  sortOrder: number;
+};
+
 export type DcmsPlan = {
   id: number;
   name: string;
@@ -29,9 +41,14 @@ export type DcmsPlan = {
   seatCount?: number | null;
   seatPricingTier?: "standard" | "large" | null;
   seatPricingTierLabel?: string | null;
+  scopeVehicleLabel?: string | null;
+  scopeSeatLabel?: string | null;
+  addons?: DcmsPlanAddon[];
   isActive: boolean;
   hasSubscriptions?: boolean;
 };
+
+export type CreatePlansResult = DcmsPlan | { plans: DcmsPlan[]; count: number };
 
 export type DcmsSubscriptionRow = {
   subscription: {
@@ -180,12 +197,17 @@ export function useDcmsPlanMutations() {
   return {
     create: useMutation({
       mutationFn: (data: Record<string, unknown>) =>
-        dcmsFetch<DcmsPlan>("/daily-cleaning/plans", { method: "POST", body: JSON.stringify(data) }),
+        dcmsFetch<CreatePlansResult>("/daily-cleaning/plans", { method: "POST", body: JSON.stringify(data) }),
       onSuccess: invalidate,
     }),
     update: useMutation({
       mutationFn: ({ id, ...data }: Record<string, unknown> & { id: number }) =>
         dcmsFetch<DcmsPlan>(`/daily-cleaning/plans/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: number) =>
+        dcmsFetch(`/daily-cleaning/plans/${id}`, { method: "DELETE" }),
       onSuccess: invalidate,
     }),
   };

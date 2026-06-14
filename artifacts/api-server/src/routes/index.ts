@@ -32,6 +32,7 @@ import masterDataRouter from "./master-data";
 import serviceCatalogRouter from "./service-catalog";
 import dcmsRouter from "./dcms";
 import pushRouter from "./push";
+import migrationRouter from "./migration";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -44,12 +45,26 @@ router.use(authRouter);
 // Resource-guarded routers. Each guard maps HTTP method → permission action
 // (GET=view, POST=create, PUT/PATCH=edit, DELETE=delete) for that resource.
 // Overrides handle non-CRUD POST endpoints inside each router.
-router.use(guardResource("customers"), customersRouter);
+router.use(
+  guardResource("customers", [
+    { match: /\/customers\/\d+\/reactivate$/, method: "POST", action: "edit" },
+  ]),
+  customersRouter,
+);
 router.use(
   guardResource("customers", [
     { match: /\/wallet\/credit$/, method: "POST", action: "edit" },
+    { match: /\/migration\/customers\/preview$/, method: "POST", action: "create" },
+    { match: /\/migration\/customers\/import$/, method: "POST", action: "create" },
   ]),
   walletRouter,
+);
+router.use(
+  guardResource("customers", [
+    { match: /\/migration\/customers\/preview$/, method: "POST", action: "create" },
+    { match: /\/migration\/customers\/import$/, method: "POST", action: "create" },
+  ]),
+  migrationRouter,
 );
 router.use(guardResource("customers"), vehiclesRouter);
 router.use(guardResource("customers"), solarSitesRouter);

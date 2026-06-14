@@ -1,6 +1,9 @@
 import { useAuth } from "@/lib/auth";
+import { useQuery } from "@tanstack/react-query";
+import { Redirect } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import StaffAppShell from "@/components/layout/StaffAppShell";
+import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { ActiveJobHero } from "@/components/staff/ActiveJobHero";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
@@ -14,6 +17,16 @@ import { Link } from "wouter";
 export default function StaffDashboard() {
   const { user } = useAuth();
   const jobs = useStaffJobsData();
+
+  const { data: myContext } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-context"],
+    queryFn: staffEcosystemApi.getMyContext,
+    enabled: Boolean(user?.staffId),
+  });
+
+  if (myContext?.staffCategory === "supervisor") {
+    return <Redirect to="/staff/team" />;
+  }
 
   const gate = (
     <StaffAccountGate

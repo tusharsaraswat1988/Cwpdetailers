@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, UserCog, Calendar, CreditCard, FileText,
   AlertCircle, GitBranch, BarChart3, Bell, LogOut, ChevronRight,
   Menu, Building2, ShieldCheck, Key, UserX, Funnel, IndianRupee, Sparkles,
-  Monitor, Crown, Radio, Palette, Activity, Scale, Search, Info, Database, BellRing,
+  Monitor, Crown, Radio, Palette, Activity, Scale, Search, Info, Database, BellRing, Upload, Contact, UserCheck,
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
@@ -28,6 +28,9 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: null },
       { href: "/admin/leads", label: "Leads & CRM", icon: Funnel, perm: { resource: "leads", action: "view" } },
       { href: "/admin/customers", label: "Customers", icon: Users, perm: { resource: "customers", action: "view" } },
+      { href: "/admin/customers/migration", label: "Customer Import", icon: Upload, perm: { resource: "customers", action: "create" } },
+      { href: "/admin/customers/legacy-contacts", label: "Legacy Contacts", icon: Contact, perm: { resource: "customers", action: "view" } },
+      { href: "/admin/customers/reactivated", label: "Reactivated", icon: UserCheck, perm: { resource: "customers", action: "view" } },
       { href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
       { href: "/admin/bookings", label: "Bookings", icon: Calendar, perm: { resource: "bookings", action: "view" } },
       { href: "/admin/daily-cleaning", label: "Daily Cleaning", icon: Sparkles, perm: { resource: "daily_cleaning", action: "view" } },

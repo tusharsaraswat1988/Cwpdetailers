@@ -29,6 +29,8 @@ const CUSTOMER_HEADERS = [
   "photo_url",
   "temporary_password",
   "create_login*",
+  "status",
+  "legacy_segment",
 ];
 
 const SAMPLE_ROWS = [
@@ -50,6 +52,8 @@ const SAMPLE_ROWS = [
     "",
     "legacy9001",
     "Y",
+    "active",
+    "",
   ],
   [
     "LEG-9002",
@@ -69,6 +73,29 @@ const SAMPLE_ROWS = [
     "",
     "legacy9002",
     "Y",
+    "active",
+    "",
+  ],
+  [
+    "LEG-CONTACT-9876543210",
+    "Legacy Contact",
+    "9876543210",
+    "",
+    "",
+    "Varanasi",
+    "",
+    "0",
+    "0",
+    "",
+    "",
+    "",
+    "",
+    "Imported from mobile contacts",
+    "",
+    "",
+    "N",
+    "inactive",
+    "legacy_contact",
   ],
 ];
 
@@ -83,6 +110,8 @@ async function main() {
   instructions.addRow(["Required columns marked with *"]);
   instructions.addRow(["outstanding_amount maps to platform total_dues"]);
   instructions.addRow(["photo_url optional — customer can also upload from portal"]);
+  instructions.addRow(["legacy_segment=legacy_contact + status=inactive for old phone-only contacts"]);
+  instructions.addRow(["Use Communication Center audience Legacy Contacts for re-engagement campaigns"]);
 
   const customers = wb.addWorksheet("Customers");
   customers.addRow(CUSTOMER_HEADERS);

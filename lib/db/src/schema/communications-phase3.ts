@@ -28,6 +28,7 @@ export const commJourneyEventTypeEnum = pgEnum("comm_journey_event_type", [
   "booking_created", "invoice_generated", "payment_received", "package_purchased",
   "service_completed", "review_submitted", "conversation_opened", "conversation_closed",
   "ticket_created", "csat_submitted", "link_clicked", "campaign_converted",
+  "customer_reactivated",
 ]);
 
 export const commKbCategoryEnum = pgEnum("comm_kb_category", [
