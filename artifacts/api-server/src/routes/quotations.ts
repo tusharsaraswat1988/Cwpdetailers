@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { quotationsTable, invoicesTable, customersTable } from "@workspace/db";
+import { quotationsTable, customersTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { computeGst } from "../lib/gst";
+import { createInvoiceFromQuotation } from "../lib/billing/invoiceService";
 
 const router = Router();
 
@@ -151,27 +152,25 @@ router.post("/quotations/:id/convert", async (req, res) => {
     }
 
     const customer = await db.select().from(customersTable).where(eq(customersTable.id, q.customerId)).limit(1).then(r => r[0]);
-    const gstin = customer?.gstin ?? null;
+    const stamped = tenantStamp(req, {});
 
-    const [invoice] = await db.insert(invoicesTable).values(tenantStamp(req, {
-      invoiceNumber: `INV-${new Date().getFullYear()}-${String(++qCounter).padStart(4, '0')}`,
-      customerId: q.customerId,
-      bookingId: q.bookingId,
-      quotationId: q.id,
-      items: q.items,
-      subtotal: q.subtotal,
-      gstAmount: q.gstAmount,
-      discount: q.discount,
-      totalAmount: q.totalAmount,
-      paidAmount: "0",
-      dueAmount: q.totalAmount,
-      balanceDue: q.totalAmount,
-      status: "draft" as const,
-      gstin,
-      currency: "INR",
-      dueDate: req.body.dueDate ?? null,
-      issuedAt: new Date(),
-    })).returning();
+    const invoice = await createInvoiceFromQuotation(
+      {
+        id: q.id,
+        customerId: q.customerId,
+        bookingId: q.bookingId,
+        items: q.items as import("@workspace/db").InvoiceItem[],
+        subtotal: q.subtotal,
+        gstAmount: q.gstAmount,
+        discount: q.discount,
+        totalAmount: q.totalAmount,
+      },
+      {
+        ...stamped,
+        dueDate: req.body.dueDate ?? null,
+        gstin: customer?.gstin ?? null,
+      },
+    );
 
     await db.update(quotationsTable).set({ status: "converted", updatedAt: new Date() }).where(eq(quotationsTable.id, id));
     return res.json({ invoice, quotation: { id: q.id, status: "converted" } });

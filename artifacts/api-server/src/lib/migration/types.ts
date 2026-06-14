@@ -44,6 +44,7 @@ export type CustomerImportResult = {
   updated: number;
   skipped: number;
   usersCreated: number;
+  locationsCreated: number;
   issues: MigrationIssue[];
 };
 

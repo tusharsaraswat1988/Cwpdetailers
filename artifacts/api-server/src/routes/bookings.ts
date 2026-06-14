@@ -452,6 +452,13 @@ router.post("/bookings/:id/transition", async (req, res) => {
             await consumeEntitlementOnCompletion(existing.entitlementId as number, id, 1, tx);
           }
 
+          const {
+            maybeCreateInvoiceOnBookingComplete,
+            resolveBookingServiceName,
+          } = await import("../lib/billing/invoiceService");
+          const serviceName = await resolveBookingServiceName(existing.serviceId, tx);
+          await maybeCreateInvoiceOnBookingComplete(existing, { serviceName }, tx);
+
           return b;
         });
 

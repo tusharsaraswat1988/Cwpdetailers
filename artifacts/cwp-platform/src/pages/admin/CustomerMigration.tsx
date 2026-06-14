@@ -27,6 +27,7 @@ type ImportResult = {
   updated: number;
   skipped: number;
   usersCreated: number;
+  locationsCreated: number;
   batchId: number | null;
   issues: Array<{ row: number; message: string; severity: string }>;
 };
@@ -61,7 +62,7 @@ export default function AdminCustomerMigration() {
       setResult(data);
       toast({
         title: dryRun ? "Dry run complete" : "Import committed",
-        description: `Created ${data.created}, updated ${data.updated}, logins ${data.usersCreated}`,
+        description: `Created ${data.created}, updated ${data.updated}, logins ${data.usersCreated}, locations ${data.locationsCreated ?? 0}`,
       });
     } catch (err) {
       toast({ title: "Import failed", description: err instanceof Error ? err.message : "Error", variant: "destructive" });
@@ -163,7 +164,7 @@ export default function AdminCustomerMigration() {
               <CardTitle className="text-base">{result.dryRun ? "Dry run result" : "Import result"}</CardTitle>
             </CardHeader>
             <CardContent className="text-sm space-y-2">
-              <p>Created: {result.created} · Updated: {result.updated} · Logins: {result.usersCreated}</p>
+              <p>Created: {result.created} · Updated: {result.updated} · Logins: {result.usersCreated} · Locations: {result.locationsCreated ?? 0}</p>
               {result.batchId && <p className="text-muted-foreground">Batch #{result.batchId}</p>}
               {result.issues.slice(0, 10).map((issue, i) => (
                 <p key={i} className="text-muted-foreground">Row {issue.row}: {issue.message}</p>

@@ -2,7 +2,7 @@ import { useGetCustomerSummary, getGetCustomerSummaryQueryKey } from "@workspace
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, IndianRupee, Wallet, Car, AlertCircle, Plus } from "lucide-react";
+import { Calendar, IndianRupee, Wallet, Car, AlertCircle, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
 import { Customer360BillingPanels } from "./Customer360BillingPanels";
 
@@ -122,24 +122,30 @@ export function Customer360Overview({ customerId, basePath, customer }: Props) {
           {(customer?.historicalWashCount ?? 0) > 0 && (
             <span className="text-muted-foreground">· {customer?.historicalWashCount} legacy washes</span>
           )}
-          <Link href={`${basePath}/${customerId}?tab=services&action=add`} className="inline-flex items-center gap-1 text-primary hover:underline">
-            <Plus size={14} /> Add service
+          <Link href={`${basePath.startsWith("/admin") ? `/admin/book-services?customerId=${customerId}` : `${basePath}/${customerId}?tab=services`}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+            <CalendarCheck size={14} /> Book Service
           </Link>
           <Link href={`${basePath}/${customerId}?tab=services`} className="inline-flex items-center gap-1 text-primary hover:underline">
             <Car size={14} /> All services & plans
           </Link>
-          <Link href={`${basePath}/${customerId}?tab=support`} className="inline-flex items-center gap-1 text-primary hover:underline ml-auto">
-            <AlertCircle size={14} /> View support tickets
+          <Link href={`${basePath}/${customerId}?tab=wallet`} className="inline-flex items-center gap-1 text-primary hover:underline">
+            <Wallet size={14} /> Wallet
+          </Link>
+          <Link href={`${basePath}/${customerId}?tab=billing`} className="inline-flex items-center gap-1 text-primary hover:underline">
+            <IndianRupee size={14} /> Billing & invoices
           </Link>
           {basePath.startsWith("/admin") && (
             <Link href={`/admin/bookings?customerId=${customerId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
               <Calendar size={14} /> All bookings
             </Link>
           )}
+          <Link href={`${basePath}/${customerId}?tab=support`} className="inline-flex items-center gap-1 text-primary hover:underline ml-auto">
+            <AlertCircle size={14} /> View support tickets
+          </Link>
         </CardContent>
       </Card>
 
-      <Customer360BillingPanels customerId={customerId} />
+      <Customer360BillingPanels customerId={customerId} basePath={basePath} />
     </div>
   );
 }

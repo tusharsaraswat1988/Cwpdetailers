@@ -15,6 +15,8 @@ export type EntitlementGrantInput = {
   packageId?: number;
   subscriptionId?: number;
   serviceId: number;
+  serviceLocationId?: number;
+  assetId?: number;
   vehicleId?: number;
   solarSiteId?: number;
   cityId?: number;
@@ -37,6 +39,8 @@ export async function grantEntitlement(input: EntitlementGrantInput, tx?: Transa
     packageId: input.packageId ?? null,
     subscriptionId: input.subscriptionId ?? null,
     serviceId: input.serviceId,
+    serviceLocationId: input.serviceLocationId ?? null,
+    assetId: input.assetId ?? null,
     vehicleId: input.vehicleId ?? null,
     solarSiteId: input.solarSiteId ?? null,
     cityId: input.cityId ?? null,
@@ -52,7 +56,9 @@ export async function grantEntitlement(input: EntitlementGrantInput, tx?: Transa
 
   logger.info({ entitlementId: ent.id, customerId: input.customerId, credits: input.creditCount }, "Entitlement granted");
   const { syncContractFromEntitlement } = await import("../contracts/contractRegistry");
-  await syncContractFromEntitlement(ent);
+  await syncContractFromEntitlement(ent, {
+    contractType: input.entitlementType === "solar_visit" ? undefined : "contract_credits",
+  });
   return ent;
 }
 
@@ -81,6 +87,8 @@ export async function grantEntitlementWithBalance(
     packageId: input.packageId ?? null,
     subscriptionId: input.subscriptionId ?? null,
     serviceId: input.serviceId,
+    serviceLocationId: input.serviceLocationId ?? null,
+    assetId: input.assetId ?? null,
     vehicleId: input.vehicleId ?? null,
     solarSiteId: input.solarSiteId ?? null,
     cityId: input.cityId ?? null,
@@ -103,7 +111,16 @@ export async function grantEntitlementWithBalance(
 export async function grantPackageEntitlements(
   customerId: number,
   packageId: number,
-  opts?: { subscriptionId?: number; cityId?: number; validFrom?: string; vehicleId?: number; solarSiteId?: number },
+  opts?: {
+    subscriptionId?: number;
+    cityId?: number;
+    validFrom?: string;
+    vehicleId?: number;
+    solarSiteId?: number;
+    serviceLocationId?: number;
+    assetId?: number;
+    skipBilling?: boolean;
+  },
   tx?: Transaction,
 ) {
   const ctx = tx ?? db;
@@ -122,6 +139,8 @@ export async function grantPackageEntitlements(
       packageId,
       subscriptionId: opts?.subscriptionId,
       serviceId: item.serviceId,
+      serviceLocationId: opts?.serviceLocationId,
+      assetId: opts?.assetId,
       vehicleId: opts?.vehicleId,
       solarSiteId: opts?.solarSiteId,
       cityId: opts?.cityId ?? pkg.cityId ?? undefined,

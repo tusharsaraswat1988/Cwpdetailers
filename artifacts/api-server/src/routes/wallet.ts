@@ -9,6 +9,7 @@ import {
   getLedgerBalance,
   WalletError,
 } from "../lib/wallet/service";
+import { createPaidInvoiceForWalletRecharge } from "../lib/billing/invoiceService";
 
 const router = Router();
 
@@ -83,23 +84,39 @@ router.post("/customers/:id/wallet/credit", async (req, res) => {
     );
     if (!customer) return res.status(404).json({ error: "Customer not found" });
 
-    const entry = await creditWallet({
-      customerId: id,
-      amount,
-      paymentMode,
-      reference: "wallet_recharge",
-      notes: notes ?? `Recharge via ${paymentMode}`,
-      createdBy: req.user?.id ?? null,
-      companyId: customer.companyId,
+    const result = await db.transaction(async (tx) => {
+      const entry = await creditWallet({
+        customerId: id,
+        amount,
+        paymentMode,
+        reference: "wallet_recharge",
+        notes: notes ?? `Recharge via ${paymentMode}`,
+        createdBy: req.user?.id ?? null,
+        companyId: customer.companyId,
+      }, tx);
+
+      const invoice = await createPaidInvoiceForWalletRecharge({
+        customerId: id,
+        amount,
+        paymentMode,
+        walletTransactionId: entry.id,
+        notes: notes ?? `Recharge via ${paymentMode}`,
+        receivedByStaffId: req.user?.staffId ?? null,
+        companyId: customer.companyId,
+        branchId: customer.branchId,
+      }, tx);
+
+      return { entry, invoice };
     });
 
     const balance = await getLedgerBalance(id);
     return res.status(201).json({
       transaction: {
-        ...entry,
-        amount: parseFloat(entry.amount),
-        balanceAfter: parseFloat(entry.balanceAfter),
+        ...result.entry,
+        amount: parseFloat(result.entry.amount),
+        balanceAfter: parseFloat(result.entry.balanceAfter),
       },
+      invoice: result.invoice,
       balance,
     });
   } catch (err) {

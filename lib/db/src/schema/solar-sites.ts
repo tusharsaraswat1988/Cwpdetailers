@@ -8,6 +8,8 @@ export const solarSitesTable = pgTable("solar_sites", {
   address: text("address").notNull(),
   city: text("city"),
   panelCount: integer("panel_count").notNull(),
+  siteName: text("site_name"),
+  notes: text("notes"),
   panelCapacityKw: numeric("panel_capacity_kw", { precision: 8, scale: 2 }),
   installationDate: date("installation_date"),
   lastCleanedDate: date("last_cleaned_date"),

@@ -5,6 +5,8 @@ import { eq, and, inArray, sql, ne } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { roleSlugForVehicleAssignment, staffOperationalRoleError } from "../lib/staffEcosystem/operationalRoles";
 import { normalizeRegistration } from "../lib/dcms/registration";
+import { registerVehicleAsset } from "../lib/assets/assetService";
+import { isAssetsModuleEnabled } from "../lib/assets/featureFlag";
 
 const router = Router();
 
@@ -46,7 +48,7 @@ router.post("/vehicles", async (req, res) => {
   try {
     const {
       customerId, vehicleModelId, make, model, year, color, registrationNumber, vehicleType,
-      serviceAddress, serviceLat, serviceLng, placeId, locationLabel,
+      serviceAddress, serviceLat, serviceLng, placeId, locationLabel, serviceLocationId,
     } = req.body;
     if (!customerId || !registrationNumber) {
       return res.status(400).json({ error: "customerId and registrationNumber are required" });
@@ -114,6 +116,17 @@ router.post("/vehicles", async (req, res) => {
       locationComplete,
     });
     const [vehicle] = await db.insert(vehiclesTable).values(values as typeof vehiclesTable.$inferInsert).returning();
+
+    if (isAssetsModuleEnabled()) {
+      try {
+        await registerVehicleAsset(req, vehicle, {
+          serviceLocationId: serviceLocationId ? parseInt(String(serviceLocationId), 10) : undefined,
+        });
+      } catch (assetErr) {
+        req.log.warn({ err: assetErr, vehicleId: vehicle.id }, "Vehicle created but asset registration failed");
+      }
+    }
+
     return res.status(201).json(vehicle);
   } catch (err) {
     req.log.error({ err }, "Create vehicle error");

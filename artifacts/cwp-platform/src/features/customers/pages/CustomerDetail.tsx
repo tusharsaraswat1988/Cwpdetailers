@@ -5,13 +5,10 @@ import {
   useGetCustomer,
   getGetCustomerQueryKey,
   getListCustomersQueryKey,
-  useListVehicles,
-  getListVehiclesQueryKey,
-  useUpdateVehicle,
   useUpdateCustomer,
-  useCreateVehicle,
   useListBranches,
   getListBranchesQueryKey,
+  getGetCustomerSummaryQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,18 +18,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, IndianRupee, Wallet, Car, Plus, Pencil, User, LayoutDashboard, MessageSquare, LifeBuoy, Layers } from "lucide-react";
+import { ArrowLeft, IndianRupee, Wallet, Pencil, User, LayoutDashboard, MessageSquare, LifeBuoy, Layers, FileText, MapPin, Boxes } from "lucide-react";
 import { Link } from "wouter";
 import CommunicationTimeline from "@/features/communications/components/CommunicationTimeline";
 import CommunicationPreferences from "@/features/communications/components/CommunicationPreferences";
-import { VehicleReferencePhotoEditor } from "@/components/shared/VehicleReferencePhotoEditor";
-import { vehiclePhotosFromRecord } from "@/components/shared/VehicleReferencePhotos";
-import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
-import { VehicleModelSelect } from "@/components/shared/VehicleModelSelect";
-import { LocationPicker } from "@/components/shared/LocationPicker";
-import type { LocationValue, VehicleModel } from "@/features/master-data/api";
 import { CustomerPhotoEditor } from "@/components/shared/CustomerPhotoEditor";
-import { roleSlugForVehicleAssignment } from "@/lib/staff-ecosystem/roles";
 import { Can } from "@/components/Can";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { EmailInput } from "@/components/ui/email-input";
@@ -43,6 +33,9 @@ import { CustomerReferralPanel } from "@/features/customers/components/CustomerR
 import { CustomerComplaintsPanel } from "@/features/customers/components/CustomerComplaintsPanel";
 import { CustomerServicesTab } from "@/features/customers/components/CustomerServicesTab";
 import { CustomerPersonaBadges } from "@/features/customers/components/CustomerPersonaBadges";
+import { Customer360BillingPanels } from "@/features/customers/components/Customer360BillingPanels";
+import { CustomerServiceLocationsPanel } from "@/features/customers/components/CustomerServiceLocationsPanel";
+import { CustomerLinkedAssetsPanel } from "@/features/customers/components/CustomerLinkedAssetsPanel";
 import { fetchCustomerServicesHub } from "@/features/customers/api";
 
 type WalletTx = {
@@ -119,10 +112,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
   });
   const [activeTab, setActiveTab] = useState("overview");
   const [editErrors, setEditErrors] = useState<{ phone?: string | null; email?: string | null }>({});
-  const [showAddVehicle, setShowAddVehicle] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<VehicleModel | null>(null);
-  const [vehicleForm, setVehicleForm] = useState({ year: "", color: "", registrationNumber: "" });
-  const [vehicleLocation, setVehicleLocation] = useState<LocationValue | null>(null);
 
   const { data: customer, isLoading } = useGetCustomer(id, {
     query: { queryKey: getGetCustomerQueryKey(id), enabled: id > 0 },
@@ -170,26 +159,11 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
     enabled: id > 0,
   });
 
-  const { data: vehicles, isLoading: vehiclesLoading } = useListVehicles(
-    { customerId: String(id) } as any,
-    { query: { queryKey: getListVehiclesQueryKey({ customerId: String(id) } as any), enabled: id > 0 } },
-  );
-
   const { data: servicesHub } = useQuery({
     queryKey: ["customer", id, "services-hub"],
     queryFn: () => fetchCustomerServicesHub(id),
     enabled: id > 0,
     staleTime: 60_000,
-  });
-
-  const assignStaffMutation = useUpdateVehicle({
-    mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListVehiclesQueryKey({ customerId: String(id) } as any) });
-        toast({ title: "Staff assignment updated" });
-      },
-      onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
-    },
   });
 
   const updateCustomerMutation = useUpdateCustomer({
@@ -215,20 +189,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
     },
   });
 
-  const createVehicleMutation = useCreateVehicle({
-    mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListVehiclesQueryKey({ customerId: String(id) } as any) });
-        setShowAddVehicle(false);
-        setSelectedModel(null);
-        setVehicleForm({ year: "", color: "", registrationNumber: "" });
-        setVehicleLocation(null);
-        toast({ title: "Vehicle added" });
-      },
-      onError: (err: any) => toast({ title: "Failed to add vehicle", description: err?.response?.data?.error, variant: "destructive" }),
-    },
-  });
-
   const creditMutation = useMutation({
     mutationFn: () => creditWallet(id, {
       amount: parseFloat(amount),
@@ -238,6 +198,8 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["wallet", id] });
       qc.invalidateQueries({ queryKey: ["wallet-transactions", id] });
+      qc.invalidateQueries({ queryKey: ["customer-360-invoices", id] });
+      qc.invalidateQueries({ queryKey: getGetCustomerSummaryQueryKey(id) });
       qc.invalidateQueries({ queryKey: getGetCustomerQueryKey(id) });
       qc.invalidateQueries({ queryKey: getListCustomersQueryKey() });
       setAmount("");
@@ -270,31 +232,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
         branchId: editForm.branchId ? parseInt(editForm.branchId, 10) : undefined,
         gstin: editForm.gstin.trim() || null,
         billingName: editForm.billingName.trim() || null,
-      } as any,
-    });
-  };
-
-  const handleAddVehicle = () => {
-    if (!selectedModel || !vehicleForm.registrationNumber.trim()) {
-      toast({ title: "Select model and enter registration number", variant: "destructive" });
-      return;
-    }
-    createVehicleMutation.mutate({
-      data: {
-        customerId: id,
-        vehicleModelId: selectedModel.id,
-        make: selectedModel.brandName,
-        model: selectedModel.name,
-        year: vehicleForm.year ? parseInt(vehicleForm.year, 10) : undefined,
-        color: vehicleForm.color || undefined,
-        registrationNumber: vehicleForm.registrationNumber.trim().toUpperCase(),
-        ...(vehicleLocation ? {
-          serviceAddress: vehicleLocation.address,
-          serviceLat: vehicleLocation.latitude,
-          serviceLng: vehicleLocation.longitude,
-          placeId: vehicleLocation.placeId,
-          locationLabel: "Default Service Location",
-        } : {}),
       } as any,
     });
   };
@@ -361,7 +298,9 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
               <TabsTrigger value="services" data-testid="tab-services"><Layers size={14} className="mr-1.5" />Services & Plans</TabsTrigger>
               <TabsTrigger value="profile" data-testid="tab-profile"><User size={14} className="mr-1.5" />Profile</TabsTrigger>
               <TabsTrigger value="wallet" data-testid="tab-wallet"><Wallet size={14} className="mr-1.5" />Wallet</TabsTrigger>
-              <TabsTrigger value="vehicles" data-testid="tab-vehicles"><Car size={14} className="mr-1.5" />Vehicles</TabsTrigger>
+              <TabsTrigger value="billing" data-testid="tab-billing"><FileText size={14} className="mr-1.5" />Billing</TabsTrigger>
+              <TabsTrigger value="assets" data-testid="tab-assets"><Boxes size={14} className="mr-1.5" />Assets</TabsTrigger>
+              <TabsTrigger value="locations" data-testid="tab-locations"><MapPin size={14} className="mr-1.5" />Locations</TabsTrigger>
               <TabsTrigger value="communications" data-testid="tab-communications"><MessageSquare size={14} className="mr-1.5" />Communications</TabsTrigger>
               <TabsTrigger value="support" data-testid="tab-support"><LifeBuoy size={14} className="mr-1.5" />Support</TabsTrigger>
             </TabsList>
@@ -597,93 +536,12 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
         </Card>
             </TabsContent>
 
-            <TabsContent value="vehicles" className="mt-4">
-        <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Car size={16} className="text-primary" /> Vehicles & staff assignment
-            </CardTitle>
-            <Can resource="customers" action="edit">
-              <Button variant="outline" size="sm" onClick={() => setShowAddVehicle(v => !v)} data-testid="btn-toggle-add-vehicle">
-                <Plus size={14} className="mr-1" />{showAddVehicle ? "Cancel" : "Add vehicle"}
-              </Button>
-            </Can>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {showAddVehicle && (
-              <div className="p-4 rounded-lg border border-dashed border-primary/30 space-y-4 bg-primary/5">
-                <p className="text-sm font-medium">New vehicle</p>
-                <VehicleModelSelect modelId={selectedModel?.id} onSelect={setSelectedModel} />
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Year</Label>
-                    <Input type="number" className="mt-1" value={vehicleForm.year} onChange={e => setVehicleForm(f => ({ ...f, year: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label>Color</Label>
-                    <Input className="mt-1" value={vehicleForm.color} onChange={e => setVehicleForm(f => ({ ...f, color: e.target.value }))} />
-                  </div>
-                </div>
-                <div>
-                  <Label>Registration number</Label>
-                  <Input
-                    className="mt-1"
-                    value={vehicleForm.registrationNumber}
-                    onChange={e => setVehicleForm(f => ({ ...f, registrationNumber: e.target.value.toUpperCase() }))}
-                    data-testid="input-admin-vehicle-reg"
-                  />
-                </div>
-                <LocationPicker value={vehicleLocation} onChange={loc => setVehicleLocation(loc)} />
-                <Button
-                  onClick={handleAddVehicle}
-                  disabled={createVehicleMutation.isPending || !selectedModel || !vehicleForm.registrationNumber.trim()}
-                  className="bg-primary text-secondary hover:bg-primary/90"
-                  data-testid="btn-save-admin-vehicle"
-                >
-                  {createVehicleMutation.isPending ? "Saving..." : "Save vehicle"}
-                </Button>
-              </div>
-            )}
+            <TabsContent value="billing" className="mt-4">
+              <Customer360BillingPanels customerId={id} basePath={basePath} />
+            </TabsContent>
 
-            {vehiclesLoading ? (
-              <Skeleton className="h-20 w-full" />
-            ) : (vehicles ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">No vehicles registered</p>
-            ) : (
-              <div className="space-y-3">
-                {(vehicles ?? []).map((v: any) => (
-                  <div key={v.id} className="flex flex-col gap-3 p-3 rounded-lg border border-border" data-testid={`vehicle-staff-${v.id}`}>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{v.registrationNumber}</p>
-                        <p className="text-xs text-muted-foreground">{v.make} {v.model} · {v.vehicleType}</p>
-                      </div>
-                      <StaffAssignSelect
-                        roleSlug={roleSlugForVehicleAssignment()}
-                        allowUnassigned
-                        value={v.assignedStaffId ? String(v.assignedStaffId) : "none"}
-                        onValueChange={(val) => {
-                          assignStaffMutation.mutate({
-                            id: v.id,
-                            data: { assignedStaffId: val === "none" ? null : parseInt(val, 10) } as any,
-                          });
-                        }}
-                        className="w-full sm:w-48"
-                        data-testid={`select-staff-${v.id}`}
-                      />
-                    </div>
-                    <VehicleReferencePhotoEditor
-                      vehicleId={v.id}
-                      initialPhotos={vehiclePhotosFromRecord(v)}
-                      compact
-                      onUpdated={() => qc.invalidateQueries({ queryKey: getListVehiclesQueryKey({ customerId: String(id) } as any) })}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <TabsContent value="assets" className="mt-4">
+              <CustomerLinkedAssetsPanel customerId={id} />
             </TabsContent>
 
             <TabsContent value="communications" className="mt-4 space-y-4">
@@ -708,6 +566,10 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
 
             <TabsContent value="support" className="mt-4">
               <CustomerComplaintsPanel customerId={id} complaintsAdminPath="/admin/complaints" />
+            </TabsContent>
+
+            <TabsContent value="locations" className="mt-4">
+              <CustomerServiceLocationsPanel customerId={id} readOnly />
             </TabsContent>
           </Tabs>
         )}

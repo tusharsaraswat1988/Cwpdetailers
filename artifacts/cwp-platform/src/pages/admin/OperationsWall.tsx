@@ -111,7 +111,7 @@ export default function OperationsWall() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div>
-            <h1 className="font-display font-bold text-3xl tracking-tight">CWP Operations</h1>
+            <h1 className="font-display font-bold text-3xl tracking-tight">Service Updates</h1>
             <p className="text-white/40 text-sm mt-0.5">
               Unified timeline · {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
             </p>

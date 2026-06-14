@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Key,
   Funnel,
-  IndianRupee,
   Sparkles,
   Monitor,
   Crown,
@@ -31,6 +30,10 @@ import {
   UserX,
   ClipboardList,
   Package,
+  Layers,
+  MapPin,
+  Receipt,
+  CalendarCheck,
 } from "lucide-react";
 
 export type AdminNavPermission = { resource: string; action: string };
@@ -59,7 +62,7 @@ export function isAdminNavGroup(entry: AdminNavEntry): entry is AdminNavGroup {
   return "children" in entry;
 }
 
-/** Customer-facing operations only — catalog/plan setup lives under Products & Plans. */
+/** Customer-facing operations only — catalog/plan setup lives under Services. */
 export const CUSTOMER_HUB_CHILDREN: AdminNavItem[] = [
   {
     id: "directory",
@@ -124,9 +127,30 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         children: CUSTOMER_HUB_CHILDREN,
       },
       {
-        id: "products",
-        href: "/admin/products",
-        label: "Products & Plans",
+        id: "service-locations",
+        href: "/admin/service-locations",
+        label: "Service Locations",
+        icon: MapPin,
+        perm: { resource: "customers", action: "view" },
+      },
+      {
+        id: "assets",
+        href: "/admin/assets",
+        label: "Assets",
+        icon: Layers,
+        perm: { resource: "customers", action: "view" },
+      },
+      {
+        id: "book-services",
+        href: "/admin/book-services",
+        label: "Book Services",
+        icon: CalendarCheck,
+        perm: { resource: "bookings", action: "view" },
+      },
+      {
+        id: "services",
+        href: "/admin/services",
+        label: "Services",
         icon: Package,
         perm: { resource: "services", action: "view" },
       },
@@ -138,11 +162,22 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         perm: { resource: "daily_cleaning", action: "view" },
       },
       { id: "staff", href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
-      { id: "invoices", href: "/admin/invoices", label: "Invoices & Payments", icon: FileText, perm: { resource: "invoices", action: "view" } },
-      { id: "quotations", href: "/admin/quotations", label: "Quotations", icon: FileText, perm: { resource: "invoices", action: "view" } },
-      { id: "expenses", href: "/admin/expenses", label: "Expenses", icon: IndianRupee, perm: { resource: "invoices", action: "view" } },
+      {
+        id: "billing",
+        href: "/admin/billing",
+        label: "Billing & Finance",
+        icon: FileText,
+        perm: { resource: "invoices", action: "view" },
+      },
       { id: "dues", href: "/admin/dues", label: "Dues & Collections", icon: AlertCircle, perm: { resource: "invoices", action: "view" } },
       { id: "complaints", href: "/admin/complaints", label: "Complaints", icon: AlertCircle, perm: { resource: "complaints", action: "view" } },
+      {
+        id: "service-updates",
+        href: "/admin/service-updates",
+        label: "Service Updates",
+        icon: Monitor,
+        perm: null,
+      },
     ],
   },
   {
@@ -168,6 +203,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     label: "Settings",
     entries: [
       { id: "brand", href: "/admin/settings/brand", label: "Brand Identity", icon: Palette, perm: { resource: "settings", action: "view" } },
+      { id: "invoice_billing", href: "/admin/settings/invoice-billing", label: "Invoice & GST", icon: Receipt, perm: { resource: "invoices", action: "view" } },
       { id: "business", href: "/admin/settings/business", label: "Business Info", icon: Info, perm: { resource: "settings", action: "view" } },
       { id: "seo", href: "/admin/settings/seo", label: "SEO Management", icon: Search, perm: { resource: "settings", action: "view" } },
       { id: "system", href: "/admin/settings/system", label: "System Status", icon: Activity, perm: { resource: "settings", action: "view" } },
@@ -183,7 +219,6 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   {
     label: "Views",
     entries: [
-      { id: "operations-wall", href: "/admin/operations-wall", label: "Operations Wall", icon: Monitor, perm: null },
       { id: "founder", href: "/admin/founder", label: "Founder Dashboard", icon: Crown, perm: null },
     ],
   },
@@ -194,9 +229,29 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
     if (location === "/admin/customers") return true;
     return /^\/admin\/customers\/\d+/.test(location);
   }
-  if (item.id === "products") {
+  if (item.id === "book-services") {
     const path = location.split("?")[0]!;
-    return path === "/admin/products" || path === "/admin/catalog" || path === "/admin/services";
+    return path === "/admin/book-services";
+  }
+  if (item.id === "assets") {
+    const path = location.split("?")[0]!;
+    return path === "/admin/assets" || /^\/admin\/assets\/\d+/.test(path);
+  }
+  if (item.id === "service-locations") {
+    const path = location.split("?")[0]!;
+    return path === "/admin/service-locations" || /^\/admin\/service-locations\/\d+/.test(path);
+  }
+  if (item.id === "services") {
+    const path = location.split("?")[0]!;
+    return path === "/admin/services" || path === "/admin/products" || path === "/admin/catalog";
+  }
+  if (item.id === "billing") {
+    const path = location.split("?")[0]!;
+    return path === "/admin/billing" || path === "/admin/invoices";
+  }
+  if (item.id === "service-updates") {
+    const path = location.split("?")[0]!;
+    return path === "/admin/service-updates" || path === "/admin/operations-wall";
   }
   if (item.id === "dcms_ops") {
     return location.startsWith("/admin/daily-cleaning");

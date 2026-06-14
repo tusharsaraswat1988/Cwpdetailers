@@ -1,0 +1,74 @@
+import { Router } from "express";
+import { requireAuth } from "../middlewares/auth";
+import { isBookServicesContractsEnabled } from "../lib/contracts/featureFlag";
+import {
+  createServiceContract,
+  getServiceContract,
+  updateContractStatus,
+  listCustomerContracts,
+  type CreateServiceContractBody,
+} from "../lib/contracts/serviceContractService";
+
+const router = Router();
+
+router.post("/service-contracts", requireAuth, async (req, res) => {
+  try {
+    if (!isBookServicesContractsEnabled()) {
+      return res.status(503).json({ error: "Book Services contracts are disabled" });
+    }
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const body = req.body as CreateServiceContractBody;
+    const result = await createServiceContract(req, body, userId);
+    return res.status(201).json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Contract creation failed";
+    req.log.error({ err }, "Create service contract error");
+    return res.status(400).json({ error: message });
+  }
+});
+
+router.get("/service-contracts/:id", requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid contract id" });
+    const row = await getServiceContract(id);
+    if (!row) return res.status(404).json({ error: "Contract not found" });
+    return res.json(row);
+  } catch (err) {
+    req.log.error({ err }, "Get service contract error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/service-contracts/:id/status", requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { status } = req.body as { status?: string };
+    const allowed = ["active", "paused", "completed", "expired", "cancelled", "expiring"];
+    if (!status || !allowed.includes(status)) {
+      return res.status(400).json({ error: `status must be one of: ${allowed.join(", ")}` });
+    }
+    const updated = await updateContractStatus(id, status as "active");
+    return res.json(updated);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Status update failed";
+    req.log.error({ err }, "Update contract status error");
+    return res.status(400).json({ error: message });
+  }
+});
+
+router.get("/customers/:customerId/service-contracts", requireAuth, async (req, res) => {
+  try {
+    const customerId = parseInt(req.params.customerId, 10);
+    if (!Number.isFinite(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+    const rows = await listCustomerContracts(customerId);
+    return res.json({ data: rows });
+  } catch (err) {
+    req.log.error({ err }, "List customer service contracts error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+export default router;

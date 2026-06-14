@@ -3,7 +3,20 @@ import { db } from "@workspace/db";
 import { invoicesTable, paymentsTable, customersTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
-import { computeGst, splitGstInclusive } from "../lib/gst";
+import {
+  createInvoice as createInvoiceRecord,
+  createCreditNote,
+  recordPayment,
+  syncCustomerTotalDues,
+} from "../lib/billing/invoiceService";
+import {
+  getInvoiceBillingSettings,
+  getInvoiceBillingSettingsForAdmin,
+  getServiceCategoryTermsPreview,
+  saveInvoiceBillingSettings,
+  type InvoiceBillingSettingsPatch,
+} from "../lib/billing/invoiceBillingSettings";
+import { renderInvoicePdf } from "../lib/billing/invoicePdfGenerator";
 
 const router = Router();
 
@@ -21,18 +34,30 @@ const PAYMENT_SCOPE = {
   customerCol: paymentsTable.customerId,
 };
 
-let invoiceCounter = 1000;
-async function generateInvoiceNumber(): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `CWP-${year}-`;
-  const [row] = await db
-    .select({ maxNum: sql<string>`max(cast(substring(${invoicesTable.invoiceNumber} from '[0-9]+$') as integer))` })
-    .from(invoicesTable)
-    .where(sql`${invoicesTable.invoiceNumber} like ${prefix + "%"}`);
-  const next = Math.max(invoiceCounter, parseInt(row?.maxNum ?? "0", 10) + 1);
-  invoiceCounter = next;
-  return `${prefix}${String(next).padStart(4, "0")}`;
-}
+router.get("/invoices/billing-settings", async (_req, res) => {
+  try {
+    const settings = await getInvoiceBillingSettingsForAdmin();
+    const serviceCategoryTerms = getServiceCategoryTermsPreview();
+    return res.json({ settings, serviceCategoryTerms });
+  } catch (err) {
+    req.log.error({ err }, "Get invoice billing settings error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/invoices/billing-settings", async (req, res) => {
+  try {
+    const patch = req.body as InvoiceBillingSettingsPatch;
+    if (patch.terms && !Array.isArray(patch.terms)) {
+      return res.status(400).json({ error: "terms must be an array of strings" });
+    }
+    const settings = await saveInvoiceBillingSettings(patch);
+    return res.json({ settings });
+  } catch (err) {
+    req.log.error({ err }, "Update invoice billing settings error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/invoices", async (req, res) => {
   try {
@@ -47,13 +72,22 @@ router.get("/invoices", async (req, res) => {
     const [data, countResult] = await Promise.all([
       db.select({
         id: invoicesTable.id, invoiceNumber: invoicesTable.invoiceNumber,
+        documentType: invoicesTable.documentType,
+        referenceInvoiceId: invoicesTable.referenceInvoiceId,
+        referenceInvoiceNumber: invoicesTable.referenceInvoiceNumber,
         customerId: invoicesTable.customerId, customerName: customersTable.name,
         subscriptionId: invoicesTable.subscriptionId, bookingId: invoicesTable.bookingId,
         items: invoicesTable.items, subtotal: invoicesTable.subtotal,
-        tax: invoicesTable.tax, gstAmount: invoicesTable.gstAmount, discount: invoicesTable.discount,
-        totalAmount: invoicesTable.totalAmount, paidAmount: invoicesTable.paidAmount,
+        tax: invoicesTable.tax, gstAmount: invoicesTable.gstAmount,
+        cgstAmount: invoicesTable.cgstAmount, sgstAmount: invoicesTable.sgstAmount,
+        igstAmount: invoicesTable.igstAmount,
+        discount: invoicesTable.discount, totalAmount: invoicesTable.totalAmount,
+        paidAmount: invoicesTable.paidAmount,
         dueAmount: invoicesTable.dueAmount, balanceDue: invoicesTable.balanceDue,
-        status: invoicesTable.status, gstin: invoicesTable.gstin, currency: invoicesTable.currency,
+        status: invoicesTable.status, gstin: invoicesTable.gstin,
+        placeOfSupply: invoicesTable.placeOfSupply,
+        notes: invoicesTable.notes,
+        currency: invoicesTable.currency,
         dueDate: invoicesTable.dueDate, issuedAt: invoicesTable.issuedAt,
         paidAt: invoicesTable.paidAt, createdAt: invoicesTable.createdAt,
       }).from(invoicesTable)
@@ -71,7 +105,11 @@ router.get("/invoices", async (req, res) => {
 
 router.post("/invoices", async (req, res) => {
   try {
-    const { customerId, subscriptionId, bookingId, items, discount, dueDate, gstInclusive = true } = req.body;
+    const {
+      customerId, subscriptionId, bookingId, items, discount, dueDate,
+      gstInclusive = true, documentType, referenceInvoiceId, creditReason,
+      notes, terms, customerSnapshot, placeOfSupply,
+    } = req.body;
     if (!customerId || !items?.length) return res.status(400).json({ error: "customerId and items required" });
 
     const customer = await loadIfInScope(req,
@@ -80,30 +118,62 @@ router.post("/invoices", async (req, res) => {
     );
     if (!customer) return res.status(404).json({ error: "Customer not found" });
 
-    const lineTotal = items.reduce((s: number, item: { total: number }) => s + item.total, 0);
-    const disc = discount || 0;
-    const net = lineTotal - disc;
-    const { subtotal, gst, total } = gstInclusive
-      ? splitGstInclusive(net)
-      : computeGst(net);
-
-    const values = tenantStamp(req, {
-      invoiceNumber: await generateInvoiceNumber(),
-      customerId, subscriptionId, bookingId, items,
-      subtotal: subtotal.toString(), tax: "0", gstAmount: gst.toString(),
-      discount: disc.toString(), totalAmount: total.toString(),
-      paidAmount: "0", dueAmount: total.toString(), balanceDue: total.toString(),
-      status: "sent" as const, dueDate,
-      currency: "INR",
-      gstin: customer.gstin ?? null,
-      issuedAt: new Date(),
+    const stamped = tenantStamp(req, {});
+    const invoice = await createInvoiceRecord({
+      customerId,
+      subscriptionId,
+      bookingId,
+      items,
+      discount: discount || 0,
+      gstInclusive: gstInclusive !== false,
+      dueDate,
+      status: "sent",
+      gstin: customerSnapshot?.gstin ?? customer.gstin ?? null,
+      documentType,
+      referenceInvoiceId,
+      creditReason,
+      notes,
+      terms,
+      customerSnapshot,
+      placeOfSupply,
+      companyId: stamped.companyId,
+      franchiseeId: stamped.franchiseeId,
+      branchId: stamped.branchId,
     });
-
-    const [invoice] = await db.insert(invoicesTable).values(values as typeof invoicesTable.$inferInsert).returning();
     return res.status(201).json(invoice);
   } catch (err) {
     req.log.error({ err }, "Create invoice error");
-    return res.status(500).json({ error: "Internal server error" });
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return res.status(err instanceof Error && message !== "Internal server error" ? 400 : 500).json({ error: message });
+  }
+});
+
+router.post("/invoices/:id/credit-note", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Invoice not found" });
+    if (existing.documentType !== "tax_invoice") {
+      return res.status(400).json({ error: "Credit notes can only be issued against tax invoices" });
+    }
+
+    const { items, creditAmount, creditReason, notes } = req.body;
+    const stamped = tenantStamp(req, {});
+    const creditNote = await createCreditNote({
+      referenceInvoiceId: id,
+      items,
+      creditAmount: creditAmount != null ? parseFloat(String(creditAmount)) : undefined,
+      creditReason,
+      notes,
+      companyId: stamped.companyId,
+      franchiseeId: stamped.franchiseeId,
+      branchId: stamped.branchId,
+    });
+    return res.status(201).json(creditNote);
+  } catch (err) {
+    req.log.error({ err }, "Create credit note error");
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return res.status(err instanceof Error ? 400 : 500).json({ error: message });
   }
 });
 
@@ -156,6 +226,7 @@ router.patch("/invoices/:id", async (req, res) => {
     }
     if (paidAt !== undefined) updateData.paidAt = new Date(paidAt);
     const [invoice] = await db.update(invoicesTable).set(updateData).where(eq(invoicesTable.id, id)).returning();
+    await syncCustomerTotalDues(existing.customerId);
     return res.json(invoice);
   } catch (err) {
     req.log.error({ err }, "Update invoice error");
@@ -212,25 +283,18 @@ router.post("/payments", async (req, res) => {
       invoiceRow = inv;
     }
 
-    const values = tenantStamp(req, {
-      customerId, invoiceId, amount: amount.toString(), method, transactionId, notes, receivedByStaffId,
-      receivedAt: new Date(),
-      status: "completed" as const,
+    const stamped = tenantStamp(req, {});
+    const payment = await recordPayment({
+      customerId,
+      invoiceId,
+      amount: parseFloat(amount.toString()),
+      method,
+      transactionId,
+      notes,
+      receivedByStaffId,
+      companyId: stamped.companyId,
+      branchId: stamped.branchId,
     });
-    const [payment] = await db.insert(paymentsTable).values(values as typeof paymentsTable.$inferInsert).returning();
-
-    if (invoiceRow) {
-      const newPaid = parseFloat(invoiceRow.paidAmount) + parseFloat(amount.toString());
-      const newDue = parseFloat(invoiceRow.totalAmount) - newPaid;
-      const balanceDue = Math.max(0, newDue);
-      await db.update(invoicesTable).set({
-        paidAmount: newPaid.toString(),
-        dueAmount: newDue.toString(),
-        balanceDue: balanceDue.toString(),
-        status: balanceDue <= 0 ? "paid" : invoiceRow.status,
-        paidAt: balanceDue <= 0 ? new Date() : invoiceRow.paidAt,
-      }).where(eq(invoicesTable.id, invoiceRow.id));
-    }
 
     return res.status(201).json(payment);
   } catch (err) {
@@ -239,30 +303,32 @@ router.post("/payments", async (req, res) => {
   }
 });
 
-import PDFDocument from "pdfkit";
-import { getInvoiceBranding } from "../lib/brandIdentityService";
-
-async function fetchImageBuffer(url: string): Promise<Buffer | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    return Buffer.from(await res.arrayBuffer());
-  } catch {
-    return null;
-  }
-}
-
 router.get("/invoices/:id/pdf", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const [inv] = await db.select({
       id: invoicesTable.id, invoiceNumber: invoicesTable.invoiceNumber,
+      documentType: invoicesTable.documentType,
+      referenceInvoiceNumber: invoicesTable.referenceInvoiceNumber,
+      referenceInvoiceDate: invoicesTable.referenceInvoiceDate,
+      creditReason: invoicesTable.creditReason,
       customerId: invoicesTable.customerId, customerName: customersTable.name,
+      customerPhone: customersTable.phone,
+      customerSnapshot: invoicesTable.customerSnapshot,
       items: invoicesTable.items, subtotal: invoicesTable.subtotal,
-      tax: invoicesTable.tax, gstAmount: invoicesTable.gstAmount, discount: invoicesTable.discount,
+      tax: invoicesTable.tax, gstAmount: invoicesTable.gstAmount,
+      cgstAmount: invoicesTable.cgstAmount, sgstAmount: invoicesTable.sgstAmount,
+      igstAmount: invoicesTable.igstAmount, roundOff: invoicesTable.roundOff,
+      hsnSummary: invoicesTable.hsnSummary,
+      discount: invoicesTable.discount,
       totalAmount: invoicesTable.totalAmount, paidAmount: invoicesTable.paidAmount,
       dueAmount: invoicesTable.dueAmount, balanceDue: invoicesTable.balanceDue,
-      status: invoicesTable.status, gstin: invoicesTable.gstin, currency: invoicesTable.currency,
+      status: invoicesTable.status, gstin: invoicesTable.gstin,
+      placeOfSupply: invoicesTable.placeOfSupply,
+      supplyStateCode: invoicesTable.supplyStateCode,
+      isInterState: invoicesTable.isInterState,
+      notes: invoicesTable.notes, terms: invoicesTable.terms,
+      currency: invoicesTable.currency,
       dueDate: invoicesTable.dueDate, issuedAt: invoicesTable.issuedAt,
       paidAt: invoicesTable.paidAt, createdAt: invoicesTable.createdAt,
       companyId: invoicesTable.companyId, branchId: invoicesTable.branchId,
@@ -272,71 +338,52 @@ router.get("/invoices/:id/pdf", async (req, res) => {
       .where(eq(invoicesTable.id, id));
     if (!inv || !rowInScope(req, inv)) return res.status(404).json({ error: "Invoice not found" });
 
-    const brand = await getInvoiceBranding();
-    const doc = new PDFDocument({ size: "A4", margin: 40 });
-    const filename = `${inv.invoiceNumber?.replace(/\//g, '-') ?? 'invoice'}.pdf`;
+    const settings = await getInvoiceBillingSettings();
+    const filename = `${inv.invoiceNumber?.replace(/\//g, "-") ?? "invoice"}.pdf`;
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-    doc.pipe(res);
 
-    let headerY = 40;
-    if (brand.pdfLogoUrl) {
-      const logoBuf = await fetchImageBuffer(brand.pdfLogoUrl);
-      if (logoBuf) {
-        doc.image(logoBuf, 40, 40, { height: 48 });
-        headerY = 96;
-      }
-    }
-
-    // Header
-    doc.fontSize(18).font("Helvetica-Bold").text(brand.companyName.toUpperCase(), 40, headerY);
-    doc.fontSize(10).font("Helvetica").text("All prices are GST-inclusive (18% GST included in totals)", 40, headerY + 22);
-    if (brand.gstNumber) doc.fontSize(9).font("Helvetica").text(`GSTIN: ${brand.gstNumber}`, 40, headerY + 36);
-    if (brand.address) doc.fontSize(9).font("Helvetica").text(brand.address, 40, headerY + (brand.gstNumber ? 50 : 36), { width: 300 });
-    doc.fontSize(12).font("Helvetica-Bold").text(`TAX INVOICE`, 40, headerY + 68);
-    doc.fontSize(10).font("Helvetica").text(`Invoice #: ${inv.invoiceNumber ?? ''}`, 40, headerY + 84);
-    doc.fontSize(10).font("Helvetica").text(`Date: ${inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString('en-IN') : '-'}`, 40, headerY + 98);
-    if (inv.gstin) doc.fontSize(10).font("Helvetica").text(`Customer GSTIN: ${inv.gstin}`, 40, headerY + 112);
-    if (inv.customerName) doc.fontSize(10).font("Helvetica").text(`Customer: ${inv.customerName}`, 40, inv.gstin ? headerY + 126 : headerY + 112);
-
-    // Line items
-    const items = Array.isArray(inv.items) ? inv.items as { description: string; quantity: number; unitPrice: number; total: number }[] : [];
-    let y = headerY + 166;
-    doc.fontSize(10).font("Helvetica-Bold");
-    doc.text("Item", 40, y, { width: 180 });
-    doc.text("Qty", 230, y, { width: 50, align: "right" });
-    doc.text("Rate", 290, y, { width: 80, align: "right" });
-    doc.text("Amount", 380, y, { width: 80, align: "right" });
-    y += 18;
-    doc.fontSize(10).font("Helvetica");
-    for (const item of items) {
-      doc.text(item.description || "", 40, y, { width: 180 });
-      doc.text(String(item.quantity || 0), 230, y, { width: 50, align: "right" });
-      doc.text(`\u20b9${(item.unitPrice || 0).toFixed(2)}`, 290, y, { width: 80, align: "right" });
-      doc.text(`\u20b9${(item.total || 0).toFixed(2)}`, 380, y, { width: 80, align: "right" });
-      y += 18;
-    }
-
-    // Totals
-    y += 20;
-    doc.fontSize(10).font("Helvetica-Bold").text(`Subtotal: \u20b9${parseFloat(inv.subtotal ?? '0').toFixed(2)}`, 320, y, { width: 140, align: "right" });
-    y += 16;
-    if (inv.discount && parseFloat(inv.discount) > 0) {
-      doc.fontSize(10).font("Helvetica").text(`Discount: -\u20b9${parseFloat(inv.discount).toFixed(2)}`, 320, y, { width: 140, align: "right" });
-      y += 16;
-    }
-    doc.fontSize(10).font("Helvetica").text(`GST (18% included): \u20b9${parseFloat(inv.gstAmount ?? '0').toFixed(2)}`, 320, y, { width: 140, align: "right" });
-    y += 16;
-    doc.fontSize(12).font("Helvetica-Bold").text(`Total: \u20b9${parseFloat(inv.totalAmount ?? '0').toFixed(2)}`, 320, y, { width: 140, align: "right" });
-    y += 16;
-    if (inv.balanceDue && parseFloat(inv.balanceDue) > 0) {
-      doc.fontSize(10).font("Helvetica").text(`Balance Due: \u20b9${parseFloat(inv.balanceDue).toFixed(2)}`, 320, y, { width: 140, align: "right" });
-    }
-    doc.end();
-    return;
+    const items = Array.isArray(inv.items) ? inv.items : [];
+    const snap = inv.customerSnapshot;
+    await renderInvoicePdf(
+      {
+        invoiceNumber: inv.invoiceNumber ?? "",
+        documentType: inv.documentType ?? "tax_invoice",
+        referenceInvoiceNumber: inv.referenceInvoiceNumber,
+        referenceInvoiceDate: inv.referenceInvoiceDate,
+        creditReason: inv.creditReason,
+        customerName: snap?.name ?? inv.customerName ?? "Customer",
+        customerPhone: snap?.phone ?? inv.customerPhone ?? null,
+        customerEmail: snap?.email ?? null,
+        customerAddress: snap?.address ?? null,
+        customerCity: snap?.city ?? null,
+        customerGstin: snap?.gstin ?? inv.gstin ?? null,
+        placeOfSupply: inv.placeOfSupply ?? snap?.placeOfSupply ?? settings.placeOfSupply,
+        supplyStateCode: inv.supplyStateCode ?? snap?.supplyStateCode ?? "09",
+        isInterState: inv.isInterState ?? false,
+        items,
+        subtotal: parseFloat(inv.subtotal ?? "0"),
+        gstAmount: parseFloat(inv.gstAmount ?? "0"),
+        cgstAmount: parseFloat(inv.cgstAmount ?? "0"),
+        sgstAmount: parseFloat(inv.sgstAmount ?? "0"),
+        igstAmount: parseFloat(inv.igstAmount ?? "0"),
+        roundOff: parseFloat(inv.roundOff ?? "0"),
+        hsnSummary: inv.hsnSummary ?? [],
+        discount: parseFloat(inv.discount ?? "0"),
+        totalAmount: parseFloat(inv.totalAmount ?? "0"),
+        paidAmount: parseFloat(inv.paidAmount ?? "0"),
+        balanceDue: parseFloat(inv.balanceDue ?? "0"),
+        dueDate: inv.dueDate ?? null,
+        issuedAt: inv.issuedAt ?? inv.createdAt ?? null,
+        notes: inv.notes,
+        terms: inv.terms ?? settings.terms,
+      },
+      settings,
+      res,
+    );
   } catch (err) {
     req.log.error({ err }, "PDF generation error");
-    return res.status(500).json({ error: "Internal server error" });
+    if (!res.headersSent) return res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -370,9 +417,11 @@ router.post("/payments/:id/reverse", async (req, res) => {
           paidAmount: newPaid.toString(),
           dueAmount: newDue.toString(),
           balanceDue: balanceDue.toString(),
-          status: balanceDue <= 0 ? "paid" : (inv.status === "paid" ? "draft" : inv.status),
+          status: balanceDue <= 0 ? "paid" : (inv.status === "paid" ? "sent" : inv.status),
           paidAt: balanceDue <= 0 ? inv.paidAt : null,
+          updatedAt: new Date(),
         }).where(eq(invoicesTable.id, inv.id));
+        await syncCustomerTotalDues(inv.customerId);
       }
     }
 

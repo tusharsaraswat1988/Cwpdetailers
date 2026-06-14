@@ -5,6 +5,7 @@ import {
   dcmsPlansTable,
   subscriptionsTable,
   customerEntitlementsTable,
+  bookingsTable,
   vehiclesTable,
   solarSitesTable,
   catalogPackagesTable,
@@ -12,6 +13,7 @@ import {
   type DcmsSubscription,
   type Subscription,
   type CustomerEntitlement,
+  type Booking,
 } from "@workspace/db";
 import { eq, and, sql, inArray, desc } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -72,13 +74,19 @@ function productLineFromSubscription(type: string): typeof customerContractsTabl
   return "monthly_wash";
 }
 
-async function upsertContract(row: typeof customerContractsTable.$inferInsert) {
-  await db.insert(customerContractsTable).values(row).onConflictDoUpdate({
+async function upsertContract(row: typeof customerContractsTable.$inferInsert): Promise<number> {
+  const [result] = await db.insert(customerContractsTable).values(row).onConflictDoUpdate({
     target: [customerContractsTable.sourceSystem, customerContractsTable.sourceId],
     set: {
       customerId: row.customerId,
       assetType: row.assetType,
       assetId: row.assetId,
+      serviceLocationId: row.serviceLocationId,
+      registryAssetId: row.registryAssetId,
+      serviceId: row.serviceId,
+      contractType: row.contractType,
+      catalogRefKind: row.catalogRefKind,
+      catalogRefId: row.catalogRefId,
       productLine: row.productLine,
       status: row.status,
       validFrom: row.validFrom,
@@ -89,7 +97,8 @@ async function upsertContract(row: typeof customerContractsTable.$inferInsert) {
       branchId: row.branchId,
       updatedAt: new Date(),
     },
-  });
+  }).returning({ id: customerContractsTable.id });
+  return result!.id;
 }
 
 export async function syncContractFromDcms(sub: DcmsSubscription, planName?: string) {
@@ -98,6 +107,12 @@ export async function syncContractFromDcms(sub: DcmsSubscription, planName?: str
     customerId: sub.customerId,
     assetType: "vehicle",
     assetId: sub.vehicleId,
+    serviceLocationId: sub.serviceLocationId ?? null,
+    registryAssetId: sub.assetId ?? null,
+    serviceId: null,
+    contractType: "contract_recurring",
+    catalogRefKind: "plan",
+    catalogRefId: sub.planId,
     productLine: "daily_cleaning",
     sourceSystem: "dcms",
     sourceId: sub.id,
@@ -123,7 +138,16 @@ export async function syncContractFromDcms(sub: DcmsSubscription, planName?: str
   });
 }
 
-export async function syncContractFromSubscription(sub: Subscription) {
+export async function syncContractFromSubscription(sub: Subscription, extras?: {
+  contractType?: "contract_recurring" | "contract_credits";
+  registryAssetId?: number | null;
+  serviceLocationId?: number | null;
+  serviceId?: number | null;
+  catalogRefKind?: string;
+  catalogRefId?: number;
+  packageName?: string;
+  paymentTerms?: string;
+}) {
   const assetType = sub.vehicleId ? "vehicle" as const
     : sub.solarSiteId ? "solar_site" as const
       : "customer" as const;
@@ -131,6 +155,12 @@ export async function syncContractFromSubscription(sub: Subscription) {
     customerId: sub.customerId,
     assetType,
     assetId: sub.vehicleId ?? sub.solarSiteId ?? null,
+    serviceLocationId: extras?.serviceLocationId ?? sub.serviceLocationId ?? null,
+    registryAssetId: extras?.registryAssetId ?? sub.assetId ?? null,
+    serviceId: extras?.serviceId ?? sub.serviceId ?? null,
+    contractType: extras?.contractType ?? (sub.type === "solar_amc" ? "contract_recurring" : "contract_recurring"),
+    catalogRefKind: extras?.catalogRefKind ?? null,
+    catalogRefId: extras?.catalogRefId ?? null,
     productLine: productLineFromSubscription(sub.type),
     sourceSystem: "subscription",
     sourceId: sub.id,
@@ -139,10 +169,12 @@ export async function syncContractFromSubscription(sub: Subscription) {
     validUntil: String(sub.endDate),
     summaryJson: {
       type: sub.type,
+      packageName: extras?.packageName,
       servicesRemaining: sub.servicesRemaining,
       totalServices: sub.totalServices,
       nextDueDate: sub.nextDueDate,
       price: sub.price,
+      paymentTerms: extras?.paymentTerms,
     },
     companyId: sub.companyId,
     franchiseeId: sub.franchiseeId,
@@ -153,14 +185,22 @@ export async function syncContractFromSubscription(sub: Subscription) {
 export async function syncContractFromEntitlement(ent: CustomerEntitlement, extras?: {
   packageName?: string | null;
   serviceName?: string | null;
+  contractType?: "contract_credits";
 }) {
   const assetType = ent.solarSiteId ? "solar_site" as const
     : ent.vehicleId ? "vehicle" as const
       : "customer" as const;
+  const isWash = ent.entitlementType !== "solar_visit";
   await upsertContract({
     customerId: ent.customerId,
     assetType,
     assetId: ent.solarSiteId ?? ent.vehicleId ?? null,
+    serviceLocationId: ent.serviceLocationId ?? null,
+    registryAssetId: ent.assetId ?? null,
+    serviceId: ent.serviceId,
+    contractType: extras?.contractType ?? (isWash ? "contract_credits" : "contract_recurring"),
+    catalogRefKind: ent.packageId ? "package" : null,
+    catalogRefId: ent.packageId ?? null,
     productLine: productLineFromEntitlement(ent.entitlementType),
     sourceSystem: "entitlement",
     sourceId: ent.id,
@@ -182,9 +222,51 @@ export async function syncContractFromEntitlement(ent: CustomerEntitlement, extr
   });
 }
 
+export async function syncContractFromBooking(booking: Booking, extras: {
+  serviceName: string;
+  catalogRefKind: string;
+  catalogRefId: number;
+  registryAssetId: number;
+  paymentTerms?: string;
+  discountType?: string;
+  discountValue?: string;
+}): Promise<number> {
+  const assetType = booking.solarSiteId ? "solar_site" as const
+    : booking.vehicleId ? "vehicle" as const
+      : "customer" as const;
+  return upsertContract({
+    customerId: booking.customerId,
+    assetType,
+    assetId: booking.solarSiteId ?? booking.vehicleId ?? null,
+    serviceLocationId: booking.serviceLocationId ?? null,
+    registryAssetId: extras.registryAssetId,
+    serviceId: booking.serviceId ?? null,
+    contractType: "one_time",
+    catalogRefKind: extras.catalogRefKind,
+    catalogRefId: extras.catalogRefId,
+    productLine: "one_time_service",
+    sourceSystem: "booking",
+    sourceId: booking.id,
+    status: booking.status === "cancelled" ? "cancelled" : "active",
+    validFrom: String(booking.scheduledDate),
+    validUntil: String(booking.scheduledDate),
+    summaryJson: {
+      serviceName: extras.serviceName,
+      bookingId: booking.id,
+      amount: booking.amount,
+      paymentTerms: extras.paymentTerms,
+      discountType: extras.discountType,
+      discountValue: extras.discountValue,
+    },
+    companyId: booking.companyId,
+    franchiseeId: booking.franchiseeId,
+    branchId: booking.branchId,
+  });
+}
+
 /** Reconcile registry rows for one customer from all source systems. */
 export async function syncCustomerContracts(customerId: number) {
-  const [dcmsRows, subs, ents] = await Promise.all([
+  const [dcmsRows, subs, ents, bookingRows] = await Promise.all([
     db.select({ sub: dcmsSubscriptionsTable, planName: dcmsPlansTable.name })
       .from(dcmsSubscriptionsTable)
       .innerJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
@@ -199,6 +281,13 @@ export async function syncCustomerContracts(customerId: number) {
       .leftJoin(catalogPackagesTable, eq(customerEntitlementsTable.packageId, catalogPackagesTable.id))
       .leftJoin(servicesTable, eq(customerEntitlementsTable.serviceId, servicesTable.id))
       .where(eq(customerEntitlementsTable.customerId, customerId)),
+    db.select({
+      booking: bookingsTable,
+      serviceName: servicesTable.name,
+    })
+      .from(bookingsTable)
+      .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
+      .where(eq(bookingsTable.customerId, customerId)),
   ]);
 
   for (const row of dcmsRows) {
@@ -211,6 +300,16 @@ export async function syncCustomerContracts(customerId: number) {
     await syncContractFromEntitlement(row.ent, {
       packageName: row.packageName,
       serviceName: row.serviceName,
+      contractType: row.ent.entitlementType === "solar_visit" ? undefined : "contract_credits",
+    });
+  }
+  for (const row of bookingRows) {
+    if (!row.booking.serviceId) continue;
+    await syncContractFromBooking(row.booking, {
+      serviceName: row.serviceName ?? "One-time service",
+      catalogRefKind: "service",
+      catalogRefId: row.booking.serviceId,
+      registryAssetId: row.booking.assetId ?? 0,
     });
   }
 }

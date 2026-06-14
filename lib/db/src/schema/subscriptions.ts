@@ -11,6 +11,8 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
 export const subscriptionsTable = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull(),
+  serviceLocationId: integer("service_location_id"),
+  assetId: integer("asset_id"),
   vehicleId: integer("vehicle_id"),
   solarSiteId: integer("solar_site_id"),
   serviceId: integer("service_id"),

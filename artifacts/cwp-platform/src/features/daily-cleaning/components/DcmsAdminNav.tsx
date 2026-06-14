@@ -5,7 +5,7 @@ import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHub
 
 const tabs = [
   { href: "/admin/daily-cleaning", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/admin/products?tab=dcms-plans", label: "Plans", icon: Package },
+  { href: "/admin/services?tab=dcms-plans", label: "Plans", icon: Package },
   { href: "/admin/daily-cleaning/subscriptions", label: "Subscriptions", icon: CreditCard },
   { href: "/admin/daily-cleaning/visits", label: "Visits", icon: ClipboardList },
   { href: "/admin/daily-cleaning/washes", label: "Wash History", icon: Droplets },

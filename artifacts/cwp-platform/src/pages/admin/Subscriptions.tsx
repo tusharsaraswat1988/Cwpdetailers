@@ -136,8 +136,8 @@ export default function AdminSubscriptions() {
   return (
     <AdminLayout>
       <div className="p-6 space-y-5">
-        <Link href="/admin/products" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
-          <ArrowLeft size={14} /> Products & Plans
+        <Link href="/admin/services" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
+          <ArrowLeft size={14} /> Services
         </Link>
         <div className="flex items-center justify-between">
           <div>

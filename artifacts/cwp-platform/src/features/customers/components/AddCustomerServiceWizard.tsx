@@ -6,6 +6,7 @@ import {
   useListSolarSites,
   getListSolarSitesQueryKey,
   getGetCustomerSummaryQueryKey,
+  getListInvoicesQueryKey,
 } from "@workspace/api-client-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,6 @@ import type { LocationValue } from "@/features/master-data/api";
 import { useCatalogServices } from "@/features/master-data/api";
 import {
   grantCustomerPackage,
-  createCustomerSolarSite,
   createCustomerBooking,
 } from "../api";
 import { useDcmsPlans, useDcmsSubscriptionMutations, type DcmsPlan } from "@/features/daily-cleaning/api";
@@ -119,9 +119,6 @@ export function AddCustomerServiceWizard({
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
 
   const [solarSiteId, setSolarSiteId] = useState("");
-  const [solarMode, setSolarMode] = useState<"existing" | "new">("existing");
-  const [solarLocation, setSolarLocation] = useState<LocationValue | null>(null);
-  const [panelCount, setPanelCount] = useState("");
 
   const { data: vehicles } = useListVehicles(
     { customerId: String(customerId) } as any,
@@ -237,6 +234,8 @@ export function AddCustomerServiceWizard({
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["customer", customerId, "services-hub"] });
     qc.invalidateQueries({ queryKey: getGetCustomerSummaryQueryKey(customerId) });
+    qc.invalidateQueries({ queryKey: ["customer-360-invoices", customerId] });
+    qc.invalidateQueries({ queryKey: getListInvoicesQueryKey({ customerId: String(customerId) } as any) });
     qc.invalidateQueries({ queryKey: getListVehiclesQueryKey({ customerId: String(customerId) } as any) });
     qc.invalidateQueries({ queryKey: getListSolarSitesQueryKey({ customerId } as any) });
     qc.invalidateQueries({ queryKey: ["dcms"] });
@@ -249,26 +248,8 @@ export function AddCustomerServiceWizard({
   };
 
   const resolveSolarSiteId = async (): Promise<number> => {
-    if (solarMode === "existing") {
-      if (!solarSiteId) throw new Error("Select a solar site");
-      return parseInt(solarSiteId, 10);
-    }
-    if (!solarLocation || !panelCount || parseInt(panelCount, 10) < 1) {
-      throw new Error("Location and panel count required for new solar site");
-    }
-    const created = await createCustomerSolarSite({
-      customerId,
-      address: solarLocation.address,
-      panelCount: parseInt(panelCount, 10),
-      serviceLat: solarLocation.latitude,
-      serviceLng: solarLocation.longitude,
-      placeId: solarLocation.placeId,
-      locationLabel: "Solar Site",
-    });
-    await refetchSolarSites();
-    const id = (created as { id?: number }).id;
-    if (!id) throw new Error("Solar site created but id missing");
-    return id;
+    if (!solarSiteId) throw new Error("Select a solar site");
+    return parseInt(solarSiteId, 10);
   };
 
   const getSolarSiteLocation = async (siteId: number) => {
@@ -482,15 +463,9 @@ export function AddCustomerServiceWizard({
             {product === "solar_amc" && (
               <>
                 <SolarSiteFields
-                  mode={solarMode}
-                  onModeChange={setSolarMode}
                   sites={solarSitesList}
                   siteId={solarSiteId}
                   onSiteIdChange={setSolarSiteId}
-                  location={solarLocation}
-                  onLocationChange={setSolarLocation}
-                  panelCount={panelCount}
-                  onPanelCountChange={setPanelCount}
                 />
                 <div>
                   <Label>AMC package</Label>
@@ -522,15 +497,9 @@ export function AddCustomerServiceWizard({
                 )}
                 {product === "one_time_solar" && (
                   <SolarSiteFields
-                    mode={solarMode}
-                    onModeChange={setSolarMode}
                     sites={solarSitesList}
                     siteId={solarSiteId}
                     onSiteIdChange={setSolarSiteId}
-                    location={solarLocation}
-                    onLocationChange={setSolarLocation}
-                    panelCount={panelCount}
-                    onPanelCountChange={setPanelCount}
                   />
                 )}
                 <div>
@@ -658,70 +627,31 @@ function VehicleSelect({
 }
 
 function SolarSiteFields({
-  mode,
-  onModeChange,
   sites,
   siteId,
   onSiteIdChange,
-  location,
-  onLocationChange,
-  panelCount,
-  onPanelCountChange,
 }: {
-  mode: "existing" | "new";
-  onModeChange: (m: "existing" | "new") => void;
   sites: SolarSiteRow[];
   siteId: string;
   onSiteIdChange: (v: string) => void;
-  location: LocationValue | null;
-  onLocationChange: (v: LocationValue | null) => void;
-  panelCount: string;
-  onPanelCountChange: (v: string) => void;
 }) {
   return (
     <div className="space-y-3">
       <Label>Solar site</Label>
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={mode === "existing" ? "default" : "outline"}
-          className={mode === "existing" ? "bg-primary text-secondary" : ""}
-          onClick={() => onModeChange("existing")}
-        >
-          Existing site
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={mode === "new" ? "default" : "outline"}
-          className={mode === "new" ? "bg-primary text-secondary" : ""}
-          onClick={() => onModeChange("new")}
-        >
-          <Plus size={12} className="mr-1" /> New site
-        </Button>
-      </div>
-      {mode === "existing" ? (
-        <Select value={siteId || "none"} onValueChange={v => onSiteIdChange(v === "none" ? "" : v)}>
-          <SelectTrigger><SelectValue placeholder="Select solar site" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none" disabled>Select site</SelectItem>
-            {sites.map(s => (
-              <SelectItem key={s.id} value={String(s.id)}>{s.address} ({s.panelCount} panels)</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : (
-        <>
-          <LocationPicker value={location} onChange={onLocationChange} required />
-          <div>
-            <Label>Panel count</Label>
-            <Input type="number" min={1} className="mt-1" value={panelCount} onChange={e => onPanelCountChange(e.target.value)} />
-          </div>
-        </>
-      )}
-      {mode === "existing" && sites.length === 0 && (
-        <p className="text-xs text-muted-foreground">No sites yet — switch to “New site”.</p>
+      <Select value={siteId || "none"} onValueChange={v => onSiteIdChange(v === "none" ? "" : v)}>
+        <SelectTrigger><SelectValue placeholder="Select solar site" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none" disabled>Select site</SelectItem>
+          {sites.map(s => (
+            <SelectItem key={s.id} value={String(s.id)}>{s.address} ({s.panelCount} panels)</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {sites.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          No solar sites linked to this customer. Create one in{" "}
+          <Link href="/admin/assets" className="text-primary hover:underline">Assets</Link> first.
+        </p>
       )}
     </div>
   );

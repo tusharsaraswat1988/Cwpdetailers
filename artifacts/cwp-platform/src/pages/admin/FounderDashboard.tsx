@@ -106,9 +106,9 @@ export default function FounderDashboard() {
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> All systems healthy
               </span>
             )}
-            <Link href="/admin/operations-wall">
+            <Link href="/admin/service-updates">
               <Button variant="outline" size="sm">
-                <Activity size={14} className="mr-1.5" /> Live Wall
+                <Activity size={14} className="mr-1.5" /> Service Updates
               </Button>
             </Link>
           </div>

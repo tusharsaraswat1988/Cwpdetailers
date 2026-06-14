@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { FileText, Download, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { InvoicePdfButton } from "@/features/billing/components/InvoicePdfButton";
 
 export default function CustomerInvoices() {
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
@@ -85,15 +86,14 @@ export default function CustomerInvoices() {
                           <span className="text-xs font-normal text-muted-foreground ml-1">(GST incl.)</span>
                         </p>
                         <p className="text-xs text-muted-foreground">{new Date(inv.createdAt!).toLocaleDateString("en-IN")}</p>
-                        <a
-                          href={`/api/invoices/${inv.id}/pdf`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1.5"
+                        <InvoicePdfButton
+                          invoiceId={inv.id!}
+                          invoiceNumber={inv.invoiceNumber}
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1.5 disabled:opacity-50"
                           data-testid={`invoice-pdf-${inv.id}`}
                         >
                           <Download size={12} /> Download PDF
-                        </a>
+                        </InvoicePdfButton>
                       </div>
                     </div>
                     <div className="text-right space-y-1">

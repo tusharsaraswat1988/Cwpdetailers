@@ -7,11 +7,15 @@ import { z } from "zod/v4";
 export const contractAssetTypeEnum = pgEnum("contract_asset_type", ["vehicle", "solar_site", "customer"]);
 
 export const contractProductLineEnum = pgEnum("contract_product_line", [
-  "daily_cleaning", "wash_package", "monthly_wash", "solar_amc", "detailing_plan",
+  "daily_cleaning", "wash_package", "monthly_wash", "solar_amc", "detailing_plan", "one_time_service",
 ]);
 
 export const contractSourceSystemEnum = pgEnum("contract_source_system", [
-  "dcms", "entitlement", "subscription",
+  "dcms", "entitlement", "subscription", "booking",
+]);
+
+export const contractFulfillmentTypeEnum = pgEnum("contract_fulfillment_type", [
+  "one_time", "contract_recurring", "contract_credits",
 ]);
 
 export const contractRegistryStatusEnum = pgEnum("contract_registry_status", [
@@ -23,6 +27,12 @@ export const customerContractsTable = pgTable("customer_contracts", {
   customerId: integer("customer_id").notNull(),
   assetType: contractAssetTypeEnum("asset_type"),
   assetId: integer("asset_id"),
+  serviceLocationId: integer("service_location_id"),
+  registryAssetId: integer("registry_asset_id"),
+  serviceId: integer("service_id"),
+  contractType: contractFulfillmentTypeEnum("contract_type"),
+  catalogRefKind: text("catalog_ref_kind"),
+  catalogRefId: integer("catalog_ref_id"),
   productLine: contractProductLineEnum("product_line").notNull(),
   sourceSystem: contractSourceSystemEnum("source_system").notNull(),
   sourceId: integer("source_id").notNull(),

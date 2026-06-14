@@ -26,9 +26,12 @@ export async function createSubscription(
     latitude?: number;
     longitude?: number;
     radiusMeters?: number;
+    serviceLocationId?: number | null;
+    assetId?: number | null;
     companyId?: number | null;
     franchiseeId?: number | null;
     branchId?: number | null;
+    skipBilling?: boolean;
   },
   performedBy: number,
 ): Promise<DcmsSubscription> {
@@ -43,6 +46,8 @@ export async function createSubscription(
 
   const [sub] = await db.insert(dcmsSubscriptionsTable).values({
     customerId: data.customerId,
+    serviceLocationId: data.serviceLocationId ?? null,
+    assetId: data.assetId ?? null,
     vehicleId: data.vehicleId,
     planId: data.planId,
     startDate: data.startDate,
@@ -78,6 +83,19 @@ export async function createSubscription(
 
   const { syncContractFromDcms } = await import("../contracts/contractRegistry");
   await syncContractFromDcms(sub!, plan.name);
+
+  if (!data.skipBilling) {
+    const { createInvoiceForDcmsPlan } = await import("../billing/invoiceService");
+    await createInvoiceForDcmsPlan(
+      data.customerId,
+      { name: plan.name, price: plan.price },
+      {
+        companyId: data.companyId,
+        franchiseeId: data.franchiseeId,
+        branchId: data.branchId,
+      },
+    );
+  }
 
   return sub!;
 }
@@ -280,6 +298,17 @@ export async function renewSubscription(subscriptionId: number, performedBy: num
     entityId: subscriptionId,
     performedBy,
   });
+
+  const { createInvoiceForDcmsPlan } = await import("../billing/invoiceService");
+  await createInvoiceForDcmsPlan(
+    detail.subscription.customerId,
+    { name: `${plan.name} (renewal)`, price: plan.price },
+    {
+      companyId: detail.subscription.companyId,
+      franchiseeId: detail.subscription.franchiseeId,
+      branchId: detail.subscription.branchId,
+    },
+  );
 
   return updated!;
 }

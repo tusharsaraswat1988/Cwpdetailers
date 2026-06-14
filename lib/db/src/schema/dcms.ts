@@ -132,6 +132,10 @@ export const dcmsSubscriptionsTable = pgTable("dcms_subscriptions", {
 
   customerId: integer("customer_id").notNull(),
 
+  serviceLocationId: integer("service_location_id"),
+
+  assetId: integer("asset_id"),
+
   vehicleId: integer("vehicle_id").notNull(),
 
   planId: integer("plan_id").notNull(),

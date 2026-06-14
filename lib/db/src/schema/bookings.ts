@@ -12,6 +12,8 @@ export const bookingServiceTypeEnum = pgEnum("booking_service_type", [
 export const bookingsTable = pgTable("bookings", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull(),
+  serviceLocationId: integer("service_location_id"),
+  assetId: integer("asset_id"),
   vehicleId: integer("vehicle_id"),
   solarSiteId: integer("solar_site_id"),
   subscriptionId: integer("subscription_id"),

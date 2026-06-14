@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation } from "wouter";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,7 +49,7 @@ export default function ProductsAndPlansPage() {
   const onTabChange = (value: string) => {
     const next = value as TabValue;
     setTab(next);
-    setLocation(`/admin/products?tab=${next}`);
+    setLocation(`/admin/services?tab=${next}`);
   };
 
   return (
@@ -58,14 +58,11 @@ export default function ProductsAndPlansPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="font-display font-bold text-2xl flex items-center gap-2">
-              <Sparkles className="text-primary" size={24} /> Products & Plans
+              <Sparkles className="text-primary" size={24} /> Services
             </h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              Services · add-ons · packages · DCMS plans · pricing · homepage visibility
+              Catalog setup — one-time services, packages, daily cleaning plans, pricing, and homepage visibility
             </p>
-            <Link href="/admin/subscriptions" className="text-xs text-primary hover:underline mt-1 inline-block">
-              Legacy contracts (monthly wash, solar AMC) →
-            </Link>
           </div>
           <Badge variant="outline" className="w-fit">Unified catalog</Badge>
         </div>

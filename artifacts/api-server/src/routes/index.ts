@@ -35,6 +35,9 @@ import dcmsRouter from "./dcms";
 import pushRouter from "./push";
 import operationsRouter from "./operations";
 import migrationRouter from "./migration";
+import serviceLocationsRouter from "./service-locations";
+import assetsRouter from "./assets";
+import serviceContractsRouter from "./service-contracts";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -54,6 +57,8 @@ router.use(
   ]),
   customersRouter,
 );
+router.use(guardResource("customers"), assetsRouter);
+router.use(guardResource("customers"), serviceLocationsRouter);
 router.use(
   guardResource("customers", [
     { match: /\/wallet\/credit$/, method: "POST", action: "edit" },
@@ -80,6 +85,13 @@ router.use(
     { match: /\/resume$/, method: "POST", action: "edit" },
   ]),
   subscriptionsRouter,
+);
+router.use(
+  guardResource("bookings", [
+    { match: /\/service-contracts$/, method: "POST", action: "create" },
+    { match: /\/service-contracts\/\d+\/status$/, method: "PATCH", action: "edit" },
+  ]),
+  serviceContractsRouter,
 );
 router.use(
   guardResource("bookings", [
@@ -120,7 +132,13 @@ router.use(
   staffEcosystemRouter,
 );
 router.use(guardResource("complaints"), complaintsRouter);
-router.use(guardResource("invoices"), paymentsRouter);
+router.use(
+  guardResource("invoices", [
+    { match: /\/invoices\/billing-settings$/, method: "PUT", action: "edit" },
+    { match: /\/invoices\/\d+\/credit-note$/, method: "POST", action: "create" },
+  ]),
+  paymentsRouter,
+);
 router.use(guardResource("branches"), branchesRouter);
 router.use(guardResource("analytics"), analyticsRouter);
 router.use(guardResource("bookings"), operationsRouter);

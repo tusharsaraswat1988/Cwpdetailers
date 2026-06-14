@@ -167,7 +167,7 @@ export async function fetchCustomerSubscriptions(customerId: number) {
 export async function fetchCustomerInvoices(customerId: number) {
   const res = await fetch(`/api/invoices?customerId=${customerId}&limit=10`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load invoices");
-  return res.json() as Promise<{ data: Array<{ id: number; invoiceNumber?: string; totalAmount?: string | number; status?: string; issuedAt?: string }>; total: number }>;
+  return res.json() as Promise<{ data: Array<{ id: number; invoiceNumber?: string; totalAmount?: string | number; balanceDue?: string | number; status?: string; issuedAt?: string }>; total: number }>;
 }
 
 export function migrationSampleDownloadUrl() {

@@ -1,19 +1,22 @@
-import { useState } from "react";
-import { useListInvoices, getListInvoicesQueryKey, useListPayments, getListPaymentsQueryKey, useRecordPayment } from "@workspace/api-client-react";
+import { useState, useEffect } from "react";
+import { useListInvoices, getListInvoicesQueryKey, useListPayments, getListPaymentsQueryKey, useRecordPayment, useGetCustomer } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, FileDown, FileText, ArrowRightLeft } from "lucide-react";
+import { PlusCircle, FileDown, FileText, ArrowRightLeft, Settings2 } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { CustomerSearchSelect, type CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
+import { CreateInvoiceDialog } from "@/features/billing/components/CreateInvoiceDialog";
+import { CreateCreditNoteDialog } from "@/features/billing/components/CreateCreditNoteDialog";
+import { InvoicePdfButton } from "@/features/billing/components/InvoicePdfButton";
 
 const statusColors: Record<string, string> = {
   paid: "bg-green-500/10 text-green-600 border-green-500/20",
@@ -32,21 +35,7 @@ const qStatusColors: Record<string, string> = {
   expired: "bg-muted text-muted-foreground border-muted",
 };
 
-// Manual fetch helpers for new endpoints not yet in generated spec
-async function createInvoice(body: Record<string, unknown>) {
-  const res = await fetch("/api/invoices", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? "Failed to create invoice");
-  }
-  return res.json();
-}
-
+// Manual fetch helpers for endpoints not yet in generated spec
 async function fetchQuotations(params?: Record<string, string>) {
   const url = new URL("/api/quotations", window.location.origin);
   Object.entries(params ?? {}).forEach(([k, v]) => url.searchParams.set(k, v));
@@ -62,23 +51,64 @@ async function fetchExpenses(params?: Record<string, string>) {
   return res.json();
 }
 
+const BILLING_TABS = ["invoices", "payments", "quotations", "expenses"] as const;
+type BillingTab = typeof BILLING_TABS[number];
+
+function billingTabFromSearch(search: string): BillingTab {
+  const tab = new URLSearchParams(search).get("tab");
+  return BILLING_TABS.includes(tab as BillingTab) ? (tab as BillingTab) : "invoices";
+}
+
 export default function AdminInvoices() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
+  const search = location.includes("?") ? location.slice(location.indexOf("?")) : "";
+  const [billingTab, setBillingTab] = useState<BillingTab>(() => billingTabFromSearch(search));
   const [payOpen, setPayOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
-  const [invCustomer, setInvCustomer] = useState<CustomerSearchValue | null>(null);
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [creditInvoice, setCreditInvoice] = useState<{ id: number; invoiceNumber?: string | null; balanceDue?: string | number; totalAmount?: string | number } | null>(null);
   const [payCustomer, setPayCustomer] = useState<CustomerSearchValue | null>(null);
   const [payForm, setPayForm] = useState({ invoiceId: "", amount: "", method: "upi" });
-  const [invForm, setInvForm] = useState({
-    description: "",
-    amount: "",
-    subscriptionId: "",
-    invoiceType: "package",
+  const [customerFilter, setCustomerFilter] = useState<string | undefined>();
+  const [prefillCustomerId, setPrefillCustomerId] = useState<number | undefined>();
+
+  useEffect(() => {
+    setBillingTab(billingTabFromSearch(search));
+  }, [search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const customerId = params.get("customerId");
+    const action = params.get("action");
+    if (customerId) {
+      setCustomerFilter(customerId);
+      const idNum = parseInt(customerId, 10);
+      if (idNum > 0) setPrefillCustomerId(idNum);
+    }
+    if (action === "create") setInvOpen(true);
+    if (action === "pay") setPayOpen(true);
+  }, []);
+
+  const { data: prefillCustomer } = useGetCustomer(prefillCustomerId ?? 0, {
+    query: { enabled: !!prefillCustomerId && prefillCustomerId > 0 },
   });
 
-  const { data: invoices, isLoading } = useListInvoices({}, { query: { queryKey: getListInvoicesQueryKey({}) } });
-  const { data: payments } = useListPayments({}, { query: { queryKey: getListPaymentsQueryKey({}) } });
+  useEffect(() => {
+    if (!prefillCustomer || !prefillCustomerId) return;
+    const row = {
+      id: prefillCustomer.id!,
+      name: prefillCustomer.name ?? `Customer #${prefillCustomerId}`,
+      phone: prefillCustomer.phone ?? "",
+    };
+    setPayCustomer(row);
+  }, [prefillCustomer, prefillCustomerId]);
+
+  const invoiceQueryParams = customerFilter ? { customerId: customerFilter } : {};
+  const { data: invoices, isLoading } = useListInvoices(invoiceQueryParams as any, { query: { queryKey: getListInvoicesQueryKey(invoiceQueryParams as any) } });
+  const paymentQueryParams = customerFilter ? { customerId: customerFilter } : {};
+  const { data: payments } = useListPayments(paymentQueryParams as any, { query: { queryKey: getListPaymentsQueryKey(paymentQueryParams as any) } });
   const { data: quotations, isLoading: qLoading } = useQuery({ queryKey: ["quotations"], queryFn: () => fetchQuotations({ limit: "50" }) });
   const { data: expenses, isLoading: eLoading } = useQuery({ queryKey: ["expenses"], queryFn: () => fetchExpenses({ limit: "50" }) });
 
@@ -94,30 +124,11 @@ export default function AdminInvoices() {
     },
   });
 
-  const createInvMutation = useMutation({
-    mutationFn: () => {
-      const total = parseFloat(invForm.amount);
-      return createInvoice({
-        customerId: invCustomer!.id,
-        subscriptionId: invForm.subscriptionId ? parseInt(invForm.subscriptionId) : undefined,
-        gstInclusive: true,
-        items: [{
-          description: invForm.description || `${invForm.invoiceType} purchase`,
-          quantity: 1,
-          unitPrice: total,
-          total,
-        }],
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-      setInvOpen(false);
-      setInvCustomer(null);
-      setInvForm({ description: "", amount: "", subscriptionId: "", invoiceType: "package" });
-      toast({ title: "Invoice created" });
-    },
-    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
-  });
+  const createInvSuccess = () => {
+    qc.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+    qc.invalidateQueries({ queryKey: ["customer-360-invoices"] });
+    toast({ title: "Invoice created" });
+  };
 
   return (
     <AdminLayout>
@@ -127,52 +138,32 @@ export default function AdminInvoices() {
             <h1 className="font-display font-bold text-2xl">Billing & Finance</h1>
             <p className="text-muted-foreground text-sm mt-0.5">Invoices, quotations, payments, and expenses</p>
           </div>
-          <div className="flex gap-2">
-            <Dialog open={invOpen} onOpenChange={setInvOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" data-testid="btn-create-invoice">
-                  <FileText size={15} className="mr-1.5" />Create Invoice
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Create Invoice</DialogTitle></DialogHeader>
-                <div className="space-y-4 mt-2">
-                  <div>
-                    <Label>Customer</Label>
-                    <CustomerSearchSelect
-                      value={invCustomer}
-                      onChange={setInvCustomer}
-                    />
-                  </div>
-                  <div>
-                    <Label>Type</Label>
-                    <Select value={invForm.invoiceType} onValueChange={v => setInvForm(f => ({ ...f, invoiceType: v }))}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="package">Wash package</SelectItem>
-                        <SelectItem value="solar_amc">Solar AMC</SelectItem>
-                        <SelectItem value="manual">Manual invoice</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Description</Label>
-                    <Textarea value={invForm.description} onChange={e => setInvForm(f => ({ ...f, description: e.target.value }))} className="mt-1" placeholder="e.g. 6-month wash package" />
-                  </div>
-                  <div>
-                    <Label>Amount (₹, GST inclusive)</Label>
-                    <Input type="number" value={invForm.amount} onChange={e => setInvForm(f => ({ ...f, amount: e.target.value }))} className="mt-1" data-testid="input-invoice-amount" />
-                  </div>
-                  <div>
-                    <Label>Subscription ID (optional)</Label>
-                    <Input value={invForm.subscriptionId} onChange={e => setInvForm(f => ({ ...f, subscriptionId: e.target.value }))} className="mt-1" />
-                  </div>
-                  <Button onClick={() => createInvMutation.mutate()} disabled={createInvMutation.isPending || !invCustomer || !invForm.amount} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-invoice">
-                    {createInvMutation.isPending ? "Creating..." : "Create invoice"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/admin/settings/invoice-billing">
+              <Button variant="outline" size="sm">
+                <Settings2 size={15} className="mr-1.5" />Invoice & GST Settings
+              </Button>
+            </Link>
+            <Button variant="outline" data-testid="btn-create-invoice" onClick={() => setInvOpen(true)}>
+              <FileText size={15} className="mr-1.5" />Create Invoice
+            </Button>
+            <CreateInvoiceDialog
+              open={invOpen}
+              onOpenChange={setInvOpen}
+              initialCustomerId={prefillCustomerId}
+              onCreated={createInvSuccess}
+            />
+            {creditInvoice && (
+              <CreateCreditNoteDialog
+                open={creditOpen}
+                onOpenChange={setCreditOpen}
+                invoice={creditInvoice}
+                onCreated={() => {
+                  qc.invalidateQueries({ queryKey: getListInvoicesQueryKey(invoiceQueryParams as any) });
+                  setCreditInvoice(null);
+                }}
+              />
+            )}
             <Dialog open={payOpen} onOpenChange={setPayOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="btn-record-payment">
@@ -213,7 +204,15 @@ export default function AdminInvoices() {
           </div>
         </div>
 
-        <Tabs defaultValue="invoices">
+        <Tabs
+          value={billingTab}
+          onValueChange={(value) => {
+            const next = value as BillingTab;
+            setBillingTab(next);
+            if (next === "invoices") setLocation("/admin/billing");
+            else setLocation(`/admin/billing?tab=${next}`);
+          }}
+        >
           <TabsList>
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="payments">Payments</TabsTrigger>
@@ -232,7 +231,12 @@ export default function AdminInvoices() {
                   {isLoading ? Array.from({ length: 4 }).map((_, i) => <tr key={i}><td colSpan={8} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>) :
                     (invoices?.data ?? []).map(inv => (
                       <tr key={inv.id} className="hover:bg-muted/20" data-testid={`invoice-row-${inv.id}`}>
-                        <td className="px-4 py-3 font-mono text-xs font-medium">{inv.invoiceNumber}</td>
+                        <td className="px-4 py-3 font-mono text-xs font-medium">
+                          {inv.invoiceNumber}
+                          {(inv as { documentType?: string }).documentType === "credit_note" && (
+                            <Badge variant="outline" className="ml-2 text-[10px] h-5">CN</Badge>
+                          )}
+                        </td>
                         <td className="px-4 py-3 font-medium">{inv.customerName}</td>
                         <td className="px-4 py-3">\u20b9{Number(inv.totalAmount).toLocaleString("en-IN")}</td>
                         <td className="px-4 py-3 text-green-600">\u20b9{Number(inv.paidAmount).toLocaleString("en-IN")}</td>
@@ -244,10 +248,28 @@ export default function AdminInvoices() {
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">{inv.dueDate ?? "\u2014"}</td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <InvoicePdfButton invoiceId={inv.id!} invoiceNumber={inv.invoiceNumber}>
                               <FileDown size={12} />PDF
-                            </a>
+                            </InvoicePdfButton>
+                            {(inv as { documentType?: string }).documentType !== "credit_note"
+                              && Number((inv as any).balanceDue ?? 0) > 0 && (
+                              <button
+                                type="button"
+                                className="text-xs text-amber-700 hover:underline"
+                                onClick={() => {
+                                  setCreditInvoice({
+                                    id: inv.id!,
+                                    invoiceNumber: inv.invoiceNumber,
+                                    balanceDue: (inv as any).balanceDue,
+                                    totalAmount: inv.totalAmount,
+                                  });
+                                  setCreditOpen(true);
+                                }}
+                              >
+                                Credit note
+                              </button>
+                            )}
                             {(inv as any).quotationId && (
                               <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 <ArrowRightLeft size={12} />From quote

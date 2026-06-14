@@ -34,6 +34,8 @@ export * from "./legal-cms";
 export * from "./vehicle-masters";
 export * from "./city-masters";
 export * from "./saved-locations";
+export * from "./service-locations";
+export * from "./assets";
 export * from "./service-management";
 export * from "./legacy-migration";
 export * from "./dcms";

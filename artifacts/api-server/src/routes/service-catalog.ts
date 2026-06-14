@@ -19,6 +19,8 @@ import {
 import { eq, and, asc, desc } from "drizzle-orm";
 import { listHomepagePlans } from "../lib/catalog/homepagePlans";
 import { resolveCatalogPricing, resolveCityId } from "../lib/catalog/pricingEngine";
+import { tenantStamp } from "../middlewares/tenantScope";
+import { createInvoiceForPackagePurchase } from "../lib/billing/invoiceService";
 import {
   grantPackageEntitlements,
   checkSelfBookingEligibility,
@@ -248,10 +250,22 @@ router.get("/catalog/entitlements", async (req, res) => {
 router.post("/catalog/entitlements/grant-package", async (req, res) => {
   const { customerId, packageId, cityId, subscriptionId, vehicleId, solarSiteId } = req.body;
   if (!customerId || !packageId) return res.status(400).json({ error: "customerId and packageId required" });
-  const grants = await grantPackageEntitlements(customerId, packageId, {
-    cityId, subscriptionId, vehicleId, solarSiteId,
+  const stamped = tenantStamp(req, {});
+
+  const result = await db.transaction(async (tx) => {
+    const grants = await grantPackageEntitlements(customerId, packageId, {
+      cityId, subscriptionId, vehicleId, solarSiteId,
+    }, tx);
+    const invoice = await createInvoiceForPackagePurchase(
+      customerId,
+      packageId,
+      stamped,
+      tx,
+    );
+    return { grants, invoice };
   });
-  return res.status(201).json(grants);
+
+  return res.status(201).json(result);
 });
 
 router.get("/catalog/self-booking/check", async (req, res) => {

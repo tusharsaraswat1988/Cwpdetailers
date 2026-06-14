@@ -2,7 +2,9 @@ import { Router, type Request } from "express";
 import { db } from "@workspace/db";
 import { solarSitesTable, customersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { registerSolarAsset } from "../lib/assets/assetService";
+import { isAssetsModuleEnabled } from "../lib/assets/featureFlag";
 
 const router = Router();
 
@@ -41,19 +43,21 @@ router.get("/solar-sites", async (req, res) => {
 });
 
 const SOLAR_SITE_FIELDS = [
-  "address", "city", "panelCount", "panelCapacityKw",
+  "address", "city", "panelCount", "panelCapacityKw", "siteName", "notes",
   "installationDate", "lastCleanedDate", "nextServiceDate",
   "serviceLat", "serviceLng", "placeId", "locationLabel",
 ] as const;
 
 router.post("/solar-sites", async (req, res) => {
   try {
-    const { customerId, address, panelCount, serviceLat, serviceLng } = req.body;
+    const { customerId, address, panelCount, serviceLat, serviceLng, serviceLocationId, siteName, panelCapacityKw } = req.body;
     if (!customerId || !address || panelCount == null) {
       return res.status(400).json({ error: "customerId, address, panelCount are required" });
     }
     if (serviceLat == null || serviceLng == null) {
-      return res.status(400).json({ error: "serviceLat and serviceLng are required for solar site location" });
+      if (!serviceLocationId) {
+        return res.status(400).json({ error: "serviceLat and serviceLng are required unless serviceLocationId is provided" });
+      }
     }
     const allowed = await callerCustomerIds(req);
     if (allowed !== null && !allowed.includes(customerId)) {
@@ -66,8 +70,25 @@ router.post("/solar-sites", async (req, res) => {
     for (const k of SOLAR_SITE_FIELDS) {
       if (req.body[k] !== undefined) base[k] = req.body[k];
     }
+    if (!base.siteName || !String(base.siteName).trim()) {
+      base.siteName = String(address).slice(0, 80);
+    }
+    if (base.panelCapacityKw == null) {
+      base.panelCapacityKw = String(panelCount);
+    }
     const values = tenantStamp(req, base) as typeof solarSitesTable.$inferInsert;
     const [site] = await db.insert(solarSitesTable).values(values).returning();
+
+    if (isAssetsModuleEnabled()) {
+      try {
+        await registerSolarAsset(req, site, {
+          serviceLocationId: serviceLocationId ? parseInt(String(serviceLocationId), 10) : undefined,
+        });
+      } catch (assetErr) {
+        req.log.warn({ err: assetErr, solarSiteId: site.id }, "Solar site created but asset registration failed");
+      }
+    }
+
     return res.status(201).json(site);
   } catch (err) {
     req.log.error({ err }, "Create solar site error");

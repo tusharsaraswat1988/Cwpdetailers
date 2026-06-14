@@ -118,6 +118,8 @@ export const customerEntitlementsTable = pgTable("customer_entitlements", {
   packageId: integer("package_id"),
   subscriptionId: integer("subscription_id"),
   serviceId: integer("service_id").notNull(),
+  serviceLocationId: integer("service_location_id"),
+  assetId: integer("asset_id"),
   vehicleId: integer("vehicle_id"),
   solarSiteId: integer("solar_site_id"),
   cityId: integer("city_id"),

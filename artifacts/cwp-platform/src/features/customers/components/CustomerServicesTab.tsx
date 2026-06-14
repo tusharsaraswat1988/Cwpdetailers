@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,23 +10,15 @@ import {
   Sun,
   Car,
   Calendar,
-  Plus,
   ExternalLink,
   ClipboardList,
+  CalendarCheck,
 } from "lucide-react";
 import { fetchCustomerServicesHub } from "../api";
-import { Can } from "@/components/Can";
-import {
-  AddCustomerServiceWizard,
-  type CustomerServiceProduct,
-} from "./AddCustomerServiceWizard";
 import { CustomerPersonaSummary } from "./CustomerPersonaBadges";
 import {
-  SERVICE_PRODUCTS,
   formatProductLineLabel,
-  type ServiceProductId,
 } from "@workspace/customer-model";
-import { serviceProductIcon } from "./serviceProductIcons";
 
 type Props = {
   customerId: number;
@@ -46,14 +37,6 @@ function formatTypeLabel(type: string) {
   return formatProductLineLabel(type);
 }
 
-const QUICK_ACTIONS: ServiceProductId[] = [
-  "daily_cleaning",
-  "wash_package",
-  "one_time_wash",
-  "one_time_solar",
-  "solar_amc",
-];
-
 function formatBundledAddonNames(
   addons?: string[] | Array<{ name?: string }> | null,
 ): string | null {
@@ -67,34 +50,13 @@ function formatBundledAddonNames(
 export function CustomerServicesTab({ customerId, basePath }: Props) {
   const isAdmin = basePath.startsWith("/admin");
   const bookingsPath = isAdmin ? "/admin/bookings" : "/franchisee/bookings";
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardProduct, setWizardProduct] = useState<CustomerServiceProduct | undefined>();
+  const bookServicesPath = isAdmin ? `/admin/book-services?customerId=${customerId}` : null;
 
-  const { data: hub, isLoading, refetch } = useQuery({
+  const { data: hub, isLoading } = useQuery({
     queryKey: ["customer", customerId, "services-hub"],
     queryFn: () => fetchCustomerServicesHub(customerId),
     enabled: customerId > 0,
   });
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("action") === "add") {
-      setWizardOpen(true);
-      const url = new URL(window.location.href);
-      url.searchParams.delete("action");
-      window.history.replaceState({}, "", url.pathname + url.search);
-    }
-  }, []);
-
-  const openWizard = (product?: CustomerServiceProduct) => {
-    setWizardProduct(product);
-    setWizardOpen(true);
-  };
-
-  const handleWizardOpenChange = (open: boolean) => {
-    setWizardOpen(open);
-    if (!open) setWizardProduct(undefined);
-  };
 
   if (isLoading) {
     return (
@@ -114,9 +76,6 @@ export function CustomerServicesTab({ customerId, basePath }: Props) {
     solarSites: 0,
     activeContracts: 0,
   };
-
-  const availableProducts = hub?.profile?.availableServiceProducts ?? QUICK_ACTIONS;
-  const quickActions = QUICK_ACTIONS.filter(id => availableProducts.includes(id));
 
   const kpiItems = [
     { label: "Active plans", value: counts.activeContracts, icon: ClipboardList },
@@ -145,45 +104,25 @@ export function CustomerServicesTab({ customerId, basePath }: Props) {
 
       <Card>
         <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">Add & manage</CardTitle>
-          <Can resource="customers" action="edit">
-            <Button
-              size="sm"
-              className="bg-primary text-secondary shrink-0"
-              onClick={() => openWizard()}
-              data-testid="btn-add-service"
-            >
-              <Plus size={14} className="mr-1.5" />Add service
-            </Button>
-          </Can>
+          <CardTitle className="text-base">Active plans</CardTitle>
+          {bookServicesPath && (
+            <Link href={bookServicesPath}>
+              <Button size="sm" className="bg-primary text-secondary shrink-0" data-testid="btn-book-service">
+                <CalendarCheck size={14} className="mr-1.5" />Book Service
+              </Button>
+            </Link>
+          )}
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Can resource="customers" action="edit">
-            {quickActions.map(id => {
-              const def = SERVICE_PRODUCTS[id];
-              const Icon = serviceProductIcon(def.icon);
-              return (
-                <Button
-                  key={id}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => openWizard(id)}
-                  data-testid={id === "daily_cleaning" ? "btn-add-dcms-plan" : id === "wash_package" ? "btn-grant-package" : undefined}
-                >
-                  <Icon size={14} className="mr-1.5" />{def.label}
-                </Button>
-              );
-            })}
-          </Can>
           <Link href={`${bookingsPath}?customerId=${customerId}`}>
-            <Button size="sm" variant="outline" data-testid="btn-book-service">
+            <Button size="sm" variant="outline">
               <Calendar size={14} className="mr-1.5" />All bookings
             </Button>
           </Link>
           {isAdmin && (
             <Link href="/admin/daily-cleaning/subscriptions">
               <Button size="sm" variant="ghost" className="text-muted-foreground">
-                <ExternalLink size={14} className="mr-1.5" />DCMS admin
+                <ExternalLink size={14} className="mr-1.5" />DCMS operations
               </Button>
             </Link>
           )}
@@ -226,21 +165,19 @@ export function CustomerServicesTab({ customerId, basePath }: Props) {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+        <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Sparkles size={16} className="text-primary" />Daily car cleaning (DCMS)
           </CardTitle>
-          {(hub?.dailyCleaning ?? []).length === 0 && (
-            <Can resource="customers" action="edit">
-              <Button size="sm" variant="ghost" onClick={() => openWizard("daily_cleaning")}>
-                <Plus size={14} className="mr-1" />Add plan
-              </Button>
-            </Can>
-          )}
         </CardHeader>
         <CardContent className="space-y-2">
           {(hub?.dailyCleaning ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">No daily cleaning plans yet.</p>
+            <p className="text-sm text-muted-foreground">
+              No daily cleaning plans yet.
+              {bookServicesPath && (
+                <> Use <Link href={bookServicesPath} className="text-primary hover:underline">Book Service</Link> to sell a plan.</>
+              )}
+            </p>
           ) : (
             hub!.dailyCleaning.map(row => (
               <div key={row.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-border rounded-lg px-3 py-2.5 text-sm">
@@ -324,21 +261,19 @@ export function CustomerServicesTab({ customerId, basePath }: Props) {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+        <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Sun size={16} className="text-primary" />Solar sites
           </CardTitle>
-          {(hub?.solarSites ?? []).length === 0 && (
-            <Can resource="customers" action="edit">
-              <Button size="sm" variant="ghost" onClick={() => openWizard("one_time_solar")}>
-                <Plus size={14} className="mr-1" />Add site
-              </Button>
-            </Can>
-          )}
         </CardHeader>
         <CardContent className="space-y-2">
           {(hub?.solarSites ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">No solar sites registered.</p>
+            <p className="text-sm text-muted-foreground">
+              No solar sites registered.
+              {isAdmin && (
+                <> Register sites in <Link href={`/admin/assets?customerId=${customerId}`} className="text-primary hover:underline">Assets</Link>.</>
+              )}
+            </p>
           ) : (
             hub!.solarSites.map(site => (
               <div key={site.id} className="border border-border rounded-lg px-3 py-2.5 text-sm">
@@ -385,15 +320,6 @@ export function CustomerServicesTab({ customerId, basePath }: Props) {
           )}
         </CardContent>
       </Card>
-
-      <AddCustomerServiceWizard
-        open={wizardOpen}
-        onOpenChange={handleWizardOpenChange}
-        customerId={customerId}
-        basePath={basePath}
-        initialProduct={wizardProduct}
-        onSuccess={() => refetch()}
-      />
     </div>
   );
 }

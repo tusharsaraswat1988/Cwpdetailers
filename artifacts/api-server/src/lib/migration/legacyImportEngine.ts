@@ -22,6 +22,7 @@ import {
   validateCustomerRows,
 } from "./validators";
 import { LEGACY_SEGMENT_CONTACT } from "../customerReactivation";
+import { ensureDefaultServiceLocation } from "../serviceLocations/defaultLocationService";
 
 export { MIGRATION_PACKAGE_MAP, resolvePackageSlug } from "./packageMap";
 export type { CustomerImportRow, PreviewResult, CustomerImportResult, MigrationIssue } from "./types";
@@ -226,6 +227,7 @@ export async function importCustomers(
       updated: 0,
       skipped: 0,
       usersCreated: 0,
+      locationsCreated: 0,
       issues: preview.sheets.Customers.errors,
     };
   }
@@ -237,6 +239,7 @@ export async function importCustomers(
     updated: 0,
     skipped: 0,
     usersCreated: 0,
+    locationsCreated: 0,
     issues: [],
   };
 
@@ -258,12 +261,14 @@ export async function importCustomers(
           .where(eq(customersTable.phone, row.phone)).limit(1);
 
         let customerId: number;
+        let customerRow: typeof customersTable.$inferSelect;
         if (existingCustomer) {
           const [updated] = await tx.update(customersTable)
             .set(payload)
             .where(eq(customersTable.id, existingCustomer.id))
             .returning();
           customerId = updated.id;
+          customerRow = updated;
           result.updated++;
         } else {
           const [created] = await tx.insert(customersTable).values({
@@ -271,8 +276,12 @@ export async function importCustomers(
             createdAt: new Date(),
           }).returning();
           customerId = created.id;
+          customerRow = created;
           result.created++;
         }
+
+        const locResult = await ensureDefaultServiceLocation(customerRow, tx);
+        if (locResult.created) result.locationsCreated++;
 
         await tx.insert(migrationEntityMapTable).values({
           batchId: batch.id,

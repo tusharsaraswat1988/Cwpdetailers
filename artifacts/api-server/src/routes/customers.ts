@@ -4,6 +4,7 @@ import { customersTable, vehiclesTable, solarSitesTable, subscriptionsTable, boo
 import { eq, ilike, or, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { getLedgerBalance } from "../lib/wallet/service";
+import { getCustomerOutstandingDues } from "../lib/billing/invoiceService";
 import {
   parseRequiredMobile,
   parseOptionalEmail,
@@ -15,6 +16,7 @@ import { createCustomerLoginAccount } from "../lib/customerAccount";
 import { normalizeGstin } from "../lib/gstin";
 import { resolveSupervisorForCustomer } from "../lib/supervisor/supervisorContact";
 import { isLegacyDormantCustomer, tryReactivateLegacyCustomer } from "../lib/customerReactivation";
+import { ensureDefaultServiceLocation } from "../lib/serviceLocations/defaultLocationService";
 
 const router = Router();
 
@@ -196,6 +198,12 @@ router.post("/customers", async (req, res) => {
     }
 
     const [customer] = await db.insert(customersTable).values(values).returning();
+
+    try {
+      await ensureDefaultServiceLocation(customer);
+    } catch (locErr) {
+      req.log.warn({ err: locErr, customerId: customer.id }, "Customer created but default service location failed");
+    }
 
     let loginAccount: { userId: number; phone: string } | null = null;
     if (password) {
@@ -496,12 +504,14 @@ router.get("/customers/:id/summary", async (req, res) => {
         sql`DATE_TRUNC('month', ${bookingsTable.scheduledDate}::date) = DATE_TRUNC('month', NOW())`,
       ));
 
+    const pendingDues = await getCustomerOutstandingDues(id);
+
     return res.json({
       activeSubscriptions: activeContracts,
       activeContracts,
       upcomingServices: Number(upcomingBookings[0]?.count ?? 0),
       walletBalance: await getLedgerBalance(id),
-      pendingDues: parseFloat(customer.totalDues),
+      pendingDues,
       totalServicesThisMonth: Number(thisMonthBookings[0]?.count ?? 0),
       totalSpend: Number(totalSpendResult[0]?.total ?? 0),
       recentBookings,

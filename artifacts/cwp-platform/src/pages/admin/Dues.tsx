@@ -3,6 +3,7 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IndianRupee } from "lucide-react";
+import { Link } from "wouter";
 
 async function fetchBillingHealth() {
   const res = await fetch("/api/billing/health");
@@ -66,7 +67,11 @@ export default function AdminDues() {
                   {dLoading ? Array.from({ length: 4 }).map((_, i) => <tr key={i}><td colSpan={3} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td></tr>) :
                     (dues?.data ?? []).map((d: any) => (
                       <tr key={d.customerId} className="hover:bg-muted/20">
-                        <td className="px-4 py-3 font-medium">{d.customerName}</td>
+                        <td className="px-4 py-3 font-medium">
+                          <Link href={`/admin/customers/${d.customerId}?tab=billing`} className="text-primary hover:underline">
+                            {d.customerName}
+                          </Link>
+                        </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">{d.invoiceCount}</td>
                         <td className="px-4 py-3 font-semibold text-destructive">\u20b9{(d.totalDue ?? 0).toLocaleString("en-IN")}</td>
                       </tr>
