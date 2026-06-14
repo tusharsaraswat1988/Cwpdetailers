@@ -224,7 +224,7 @@ export default function BrandIdentity() {
             <CardDescription>How branding appears in the admin sidebar</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center gap-3 bg-secondary rounded-lg p-4 w-fit">
-            <BrandLogo variant="navbar" imgClassName="h-8" fallbackClassName="w-8 h-8" lazy={false} />
+            <BrandLogo variant="navbar" lazy={false} />
             <div>
               <p className="text-white font-display font-bold text-sm">{merged.brandName ?? "Brand"}</p>
               <p className="text-white/40 text-xs">{merged.tagline ?? "Tagline"}</p>

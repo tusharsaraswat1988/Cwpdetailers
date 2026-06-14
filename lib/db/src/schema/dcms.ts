@@ -82,6 +82,10 @@ export const dcmsPlansTable = pgTable("dcms_plans", {
 
   weeklyOffs: integer("weekly_offs").notNull().default(1),
 
+  vehicleCategoryId: integer("vehicle_category_id"),
+
+  seatCategoryId: integer("seat_category_id"),
+
   isActive: boolean("is_active").notNull().default(true),
 
   companyId: integer("company_id"),

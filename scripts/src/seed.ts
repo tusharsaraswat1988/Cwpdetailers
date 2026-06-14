@@ -6,6 +6,7 @@ import {
   servicesTable, subscriptionsTable, staffTable, bookingsTable, attendanceTable,
   complaintsTable, invoicesTable, paymentsTable, notificationsTable,
   walletTransactionsTable,
+  staffRoleMasterTable, staffRoleAssignmentsTable,
 } from "@workspace/db";
 import argon2 from "argon2";
 import { and, eq, sql } from "drizzle-orm";
@@ -19,6 +20,35 @@ async function hashPassword(password: string): Promise<string> {
     timeCost: 2,
     parallelism: 1,
   });
+}
+
+async function ensureStaffOperationalRoles(staffId: number, slugs: string[]) {
+  for (const slug of slugs) {
+    const [role] = await db
+      .select()
+      .from(staffRoleMasterTable)
+      .where(eq(staffRoleMasterTable.slug, slug))
+      .limit(1);
+    if (!role) continue;
+    await db
+      .insert(staffRoleAssignmentsTable)
+      .values({ staffId, roleId: role.id, skillLevel: "basic" })
+      .onConflictDoNothing();
+  }
+}
+
+async function syncLegacyStaffOperationalRoles() {
+  const legacyMap: Record<string, string[]> = {
+    technician: ["car_washer", "daily_car_cleaner"],
+    supervisor: ["car_washer"],
+    driver: [],
+    solar_technician: ["solar_cleaner"],
+  };
+  const allStaff = await db.select({ id: staffTable.id, role: staffTable.role }).from(staffTable);
+  for (const member of allStaff) {
+    const slugs = legacyMap[member.role] ?? ["car_washer"];
+    if (slugs.length > 0) await ensureStaffOperationalRoles(member.id, slugs);
+  }
 }
 
 async function getOrCreateVaranasiBranch() {
@@ -534,6 +564,7 @@ async function seed() {
   await seedPermissions();
   await seedMasterData();
   await seedWalletLedger();
+  await syncLegacyStaffOperationalRoles();
 
   console.log("\n✅ Varanasi pilot seed complete.\n");
   console.log(`Admin:     phone ${adminCreds.phone}  password (from ADMIN_PASSWORD in .env)`);

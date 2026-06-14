@@ -55,7 +55,7 @@ export default function ContactUs() {
       <header className="bg-secondary border-b border-white/5 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
-            <BrandLogo variant="navbar" imgClassName="h-7 w-auto max-w-[140px]" fallbackClassName="w-7 h-7" lazy={false} />
+            <BrandLogo variant="navbar" lazy={false} />
             <span className="text-white font-display font-bold text-sm hidden sm:block">{businessName}</span>
           </Link>
           <nav className="hidden md:flex items-center gap-1 flex-wrap">
@@ -251,7 +251,7 @@ export default function ContactUs() {
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <BrandLogo variant="full" imgClassName="h-7 max-w-[150px]" fallbackClassName="w-7 h-7" lazy />
+              <BrandLogo variant="full" lazy />
               <div>
                 <p className="font-display font-bold text-white text-sm">{businessName}</p>
                 <p className="text-white/30 text-xs">{info?.city ?? "Varanasi"}, {info?.state ?? "UP"}</p>

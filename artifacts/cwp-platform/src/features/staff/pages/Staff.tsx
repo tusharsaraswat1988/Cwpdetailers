@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useListStaff, getListStaffQueryKey, useCreateStaff, useListBranches, getListBranchesQueryKey, type CreateStaffBody } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
+import { useListStaff, getListStaffQueryKey, useListBranches, getListBranchesQueryKey } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Star, UserCog } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -18,28 +19,74 @@ import { PageHeader, EmptyState } from "@/components/shared";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { EmailInput } from "@/components/ui/email-input";
 import { submitEmail, submitMobile } from "@/lib/contactForm";
+import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, type RoleMaster } from "@/lib/staff-ecosystem/api";
 
-type StaffForm = { name: string; phone: string; email: string; role: string; branchId: string; monthlySalary: string };
+type StaffForm = { name: string; phone: string; email: string; operationalRoleId: string; branchId: string; monthlySalary: string; initialPassword: string };
+
+type StaffListRow = {
+  id: number;
+  userId?: number | null;
+  name: string;
+  phone?: string;
+  branchName?: string;
+  isActive?: boolean;
+  rating?: number;
+  jobsCompletedThisMonth?: number;
+  employeeCode?: string;
+  profilePhotoUrl?: string;
+  profileCompletionPercent?: number;
+  operationalRoles?: Array<{ roleName: string; roleSlug: string }>;
+};
 
 export default function AdminStaff() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<StaffForm>({ name: "", phone: "", email: "", role: "technician", branchId: "", monthlySalary: "" });
+  const [form, setForm] = useState<StaffForm>({ name: "", phone: "", email: "", operationalRoleId: "", branchId: "", monthlySalary: "", initialPassword: "staff123" });
   const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
 
   const { data: staff, isLoading } = useListStaff({}, { query: { queryKey: getListStaffQueryKey({}) } });
   const { data: branches } = useListBranches({ query: { queryKey: getListBranchesQueryKey() } });
+  const { data: roleMaster } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "roles"],
+    queryFn: staffEcosystemApi.getRoleMaster,
+  });
 
-  const createMutation = useCreateStaff({
-    mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListStaffQueryKey() });
-        setOpen(false);
-        toast({ title: "Staff member created" });
-      },
-      onError: (err: any) => toast({ title: "Failed to create staff", description: err?.response?.data?.error, variant: "destructive" }),
+  const createMutation = useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      phone: string;
+      email: string;
+      branchId: number;
+      monthlySalary?: number;
+      operationalRoleIds: number[];
+      initialPassword: string;
+    }) => {
+      const res = await fetch("/api/staff", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to create staff");
+      }
+      return res.json();
     },
+    onSuccess: (data: { loginCreated?: boolean; loginWarning?: string; phone?: string }) => {
+      qc.invalidateQueries({ queryKey: getListStaffQueryKey() });
+      setOpen(false);
+      setForm({ name: "", phone: "", email: "", operationalRoleId: "", branchId: "", monthlySalary: "", initialPassword: "staff123" });
+      if (data.loginWarning) {
+        toast({ title: "Staff saved — login not created", description: data.loginWarning, variant: "destructive" });
+      } else if (data.loginCreated) {
+        toast({ title: "Staff member created", description: `Login ready: ${data.phone} / password set` });
+      } else {
+        toast({ title: "Staff member created" });
+      }
+    },
+    onError: (err: Error) => toast({ title: "Failed to create staff", description: err.message, variant: "destructive" }),
   });
 
   const handleCreate = () => {
@@ -53,18 +100,26 @@ export default function AdminStaff() {
       toast({ title: "Please fix phone or email format", variant: "destructive" });
       return;
     }
-    const payload: CreateStaffBody = {
+    if (!form.operationalRoleId) {
+      toast({ title: "Select an operational role", variant: "destructive" });
+      return;
+    }
+    if (form.initialPassword.length < 6) {
+      toast({ title: "Portal password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    createMutation.mutate({
       name: form.name,
       phone: phoneResult.value,
-      email: emailResult.value,
-      role: form.role as CreateStaffBody["role"],
+      email: emailResult.value ?? "",
       branchId: parseInt(form.branchId),
       monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : undefined,
-    };
-    createMutation.mutate({ data: payload });
+      operationalRoleIds: [parseInt(form.operationalRoleId, 10)],
+      initialPassword: form.initialPassword,
+    });
   };
 
-  const list = staff ?? [];
+  const list = (staff ?? []) as StaffListRow[];
 
   return (
     <AdminLayout>
@@ -111,15 +166,33 @@ export default function AdminStaff() {
                       <Input id="monthlySalary" data-testid="input-staff-monthlySalary" type="number" value={form.monthlySalary} onChange={e => setForm(f => ({ ...f, monthlySalary: e.target.value }))} className="mt-1" />
                     </div>
                     <div>
-                      <Label>Role</Label>
-                      <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
-                        <SelectTrigger className="mt-1" data-testid="select-staff-role"><SelectValue /></SelectTrigger>
+                      <Label htmlFor="initialPassword">Portal Login Password</Label>
+                      <Input
+                        id="initialPassword"
+                        type="password"
+                        data-testid="input-staff-password"
+                        value={form.initialPassword}
+                        onChange={e => setForm(f => ({ ...f, initialPassword: e.target.value }))}
+                        className="mt-1"
+                        placeholder="Min 6 characters"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Staff will sign in at /login with their phone number and this password.
+                      </p>
+                    </div>
+                    <div>
+                      <Label>Operational Role</Label>
+                      <Select value={form.operationalRoleId} onValueChange={v => setForm(f => ({ ...f, operationalRoleId: v }))}>
+                        <SelectTrigger className="mt-1" data-testid="select-staff-role"><SelectValue placeholder="Select role" /></SelectTrigger>
                         <SelectContent>
-                          {["technician", "supervisor", "driver", "solar_technician"].map(r => (
-                            <SelectItem key={r} value={r}>{r.replace(/_/g, " ")}</SelectItem>
+                          {(roleMaster ?? []).map((r: RoleMaster) => (
+                            <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Roles control DCMS, booking, and field assignments. Add more roles on the staff profile later.
+                      </p>
                     </div>
                     <div>
                       <Label>Branch</Label>
@@ -132,7 +205,7 @@ export default function AdminStaff() {
                     </div>
                     <Button
                       onClick={handleCreate}
-                      disabled={createMutation.isPending || !form.branchId}
+                      disabled={createMutation.isPending || !form.branchId || !form.operationalRoleId}
                       className="w-full bg-primary text-secondary hover:bg-primary/90"
                       data-testid="btn-submit-staff">
                       {createMutation.isPending ? "Creating..." : "Create Staff Member"}
@@ -165,13 +238,25 @@ export default function AdminStaff() {
                     )}
                     <div>
                       <p className="font-semibold text-sm text-foreground">{s.name}</p>
-                      <p className="text-xs text-muted-foreground">{(s as { employeeCode?: string }).employeeCode ?? s.role?.replace(/_/g, " ")}</p>
+                      <p className="text-xs text-muted-foreground">{s.employeeCode ?? `ID ${s.id}`}</p>
+                      {(s.operationalRoles?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {s.operationalRoles!.map(r => (
+                            <Badge key={r.roleSlug} variant="secondary" className="text-[10px] font-normal">
+                              {r.roleName}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <Badge variant="outline" className={s.isActive ? "text-green-600 dark:text-green-400 border-green-500/20 bg-green-500/10 text-xs" : "text-xs text-muted-foreground"}>
                     {s.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </div>
+                {!s.userId && (
+                  <p className="text-xs text-amber-600 mb-2">No portal login — open profile to create</p>
+                )}
                 <div className="space-y-1.5 text-xs text-muted-foreground mb-3">
                   <p>{s.phone}</p>
                   <p>{s.branchName}</p>

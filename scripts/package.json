@@ -12,6 +12,7 @@
     "migrate:catalog": "tsx ./src/run-migration.ts 008_service_catalog.sql",
     "migrate:legacy": "tsx ./src/run-migration.ts 009_legacy_migration.sql",
     "migrate:pending": "tsx ./src/run-pending-migrations.ts",
+    "migrate:dcms-plans": "tsx ./src/migrate-dcms-plans.ts",
     "migration:sample": "tsx ./src/generate-migration-sample.ts",
     "verify:migration-lm6": "tsx ./src/verify-migration-lm6.ts",
     "seed:catalog": "tsx ./src/seed-catalog-migration.ts",

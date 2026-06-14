@@ -112,7 +112,7 @@ export default function AdminSidebar({ onNavigate, embedded = false, className }
       )}
     >
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
-        <BrandLogo variant="navbar" imgClassName="h-8 w-8" fallbackClassName="w-8 h-8" lazy={false} />
+        <BrandLogo variant="navbar" lazy={false} />
         {!showCollapsed && (
           <div className="min-w-0">
             <p className="text-white font-display font-bold text-sm leading-tight">{branding.brandName} Admin</p>

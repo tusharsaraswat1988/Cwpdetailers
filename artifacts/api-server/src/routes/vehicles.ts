@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { vehiclesTable, customersTable, staffTable } from "@workspace/db";
 import { eq, and, inArray, sql, ne } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { roleSlugForVehicleAssignment, staffOperationalRoleError } from "../lib/staffEcosystem/operationalRoles";
 import { normalizeRegistration } from "../lib/dcms/registration";
 
 const router = Router();
@@ -168,6 +169,8 @@ router.patch("/vehicles/:id", async (req, res) => {
           r => ({ ...r, staffId: r.id }),
         );
         if (!staff) return res.status(404).json({ error: "Staff not found" });
+        const assignErr = await staffOperationalRoleError(staff, roleSlugForVehicleAssignment());
+        if (assignErr) return res.status(409).json({ error: assignErr });
         if (staff.verificationStatus !== "verified") {
           return res.status(400).json({ error: "Staff must be verified before assignment" });
         }

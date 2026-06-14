@@ -2,6 +2,24 @@
  * Resolve a stored media reference to a browser-loadable URL.
  * Cloudinary secure URLs are stored as absolute https links on bookings/assets.
  */
+/** Trim transparent padding and optimize Cloudinary logos for crisp UI display. */
+export function optimizeBrandLogoUrl(url: string | null | undefined): string {
+  const resolved = resolveMediaUrl(url);
+  if (!resolved) return "";
+  if (!resolved.includes("res.cloudinary.com") || !resolved.includes("/image/upload/")) {
+    return resolved;
+  }
+
+  const marker = "/image/upload/";
+  const idx = resolved.indexOf(marker);
+  if (idx === -1) return resolved;
+
+  const after = resolved.slice(idx + marker.length);
+  if (after.startsWith("e_trim,") || after.includes("/e_trim,")) return resolved;
+
+  return `${resolved.slice(0, idx + marker.length)}e_trim,f_auto,q_auto/${after}`;
+}
+
 export function resolveMediaUrl(stored: string | null | undefined): string {
   if (!stored) return "";
   if (stored.startsWith("http://") || stored.startsWith("https://")) return stored;

@@ -49,6 +49,7 @@ export type ProfileCompletion = {
 
 export type StaffEcosystemProfile = {
   id: number;
+  userId?: number | null;
   employeeCode?: string | null;
   name: string;
   profilePhotoUrl?: string | null;
@@ -159,7 +160,18 @@ export const staffEcosystemApi = {
   addNote: (id: number, note: string) =>
     api(`/api/staff/${id}/notes`, { method: "POST", body: JSON.stringify({ note }) }),
   dashboardStats: () => api<StaffDashboardStats>("/api/staff/dashboard-stats"),
-  listStaffForAssignment: () => api<Array<{ id: number; name: string }>>("/api/staff?forAssignment=true&isActive=true"),
+  listStaffForAssignment: (roleSlug?: string) => {
+    const qs = new URLSearchParams({ forAssignment: "true", isActive: "true" });
+    if (roleSlug) qs.set("roleSlug", roleSlug);
+    return api<Array<{ id: number; name: string; employeeCode?: string | null }>>(`/api/staff?${qs.toString()}`);
+  },
+  getMyOperationalRoles: () =>
+    api<{ slugs: string[]; roles: StaffRoleAssignment[] }>("/api/staff/me/operational-roles"),
+  createLogin: (id: number, password: string) =>
+    api<{ message: string; userId: number; phone: string }>(`/api/staff/${id}/create-account`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
 };
 
 export const STAFF_ECOSYSTEM_QUERY_KEY = "staff-ecosystem";

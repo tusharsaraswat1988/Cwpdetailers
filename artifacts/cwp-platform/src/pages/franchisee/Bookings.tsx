@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
+import { roleSlugForBookingService, OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
 import type { ListBookingsStatus } from "@workspace/api-client-react";
 
 const statusColors: Record<string, string> = {
@@ -195,7 +197,12 @@ export default function FranchiseeBookings() {
         <DialogContent>
           <DialogHeader><DialogTitle>Assign Staff</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <Input type="number" placeholder="Staff ID" value={assignStaffId} onChange={e => setAssignStaffId(e.target.value)} />
+            <StaffAssignSelect
+              roleSlug={roleSlugForBookingService(detailBooking?.serviceType) ?? OPERATIONAL_ROLE_SLUGS.CAR_WASHER}
+              value={assignStaffId}
+              onValueChange={setAssignStaffId}
+              placeholder="Select qualified staff"
+            />
             <Textarea placeholder="Reason (optional)" value={assignReason} onChange={e => setAssignReason(e.target.value)} />
           </div>
           <DialogFooter>

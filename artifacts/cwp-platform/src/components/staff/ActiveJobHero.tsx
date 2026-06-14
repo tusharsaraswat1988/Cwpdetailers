@@ -7,7 +7,7 @@ import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 
 type Mutations = Pick<
   ReturnType<typeof useStaffJobsData>,
-  "transitionMutation" | "uploadPhoto" | "uploadingJobId" | "isActionPending"
+  "transitionJob" | "uploadPhoto" | "uploadingJobId" | "locatingJobId" | "isActionPending"
 >;
 
 interface Props extends Mutations {
@@ -46,6 +46,12 @@ export function ActiveJobHero({ job, ...actions }: Props) {
           <MapPin size={16} className="shrink-0 text-primary mt-0.5" />
           <span>{addressLine}</span>
         </div>
+      )}
+
+      {isLive && (
+        <p className="text-xs text-muted-foreground bg-primary/5 border border-primary/10 rounded-lg px-3 py-2">
+          GPS required for job updates. Start and complete only within 150m of the customer location.
+        </p>
       )}
 
       <div className="flex gap-2">

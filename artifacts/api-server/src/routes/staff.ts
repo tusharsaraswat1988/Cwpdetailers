@@ -1,11 +1,18 @@
 import { Router, type Request } from "express";
 import { db } from "@workspace/db";
-import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable, staffRoleMasterTable, staffLocationLogsTable } from "@workspace/db";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
 import { hashPassword } from "../lib/passwords";
 import { generateEmployeeCode } from "../lib/staffEcosystem/profileCompletion";
 import { recalculateStaffProfile } from "../lib/staffEcosystem/recalculate";
+import {
+  attachOperationalRoles,
+  assignOperationalRoles,
+  getStaffIdsWithOperationalRole,
+  getStaffOperationalRoles,
+  operationalSlugToLegacyRole,
+} from "../lib/staffEcosystem/operationalRoles";
 import {
   parseRequiredMobile,
   parseOptionalEmail,
@@ -14,6 +21,11 @@ import {
   applyOptionalEmailField,
   applyOptionalMobileField,
 } from "../lib/contactFields";
+import {
+  handleLocationError,
+  parseStaffLocation,
+  recordStaffLocation,
+} from "../lib/staffLocation/locationService";
 
 const router = Router();
 
@@ -26,7 +38,7 @@ const SCOPE_COLS = {
 
 router.get("/staff", async (req, res) => {
   try {
-    const { branchId, role, isActive, verificationStatus, franchiseeId, forAssignment } = req.query as Record<string, string>;
+    const { branchId, role, isActive, verificationStatus, franchiseeId, forAssignment, roleSlug } = req.query as Record<string, string>;
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
     if (branchId) conditions.push(eq(staffTable.branchId, parseInt(branchId)));
     if (role) conditions.push(eq(staffTable.role, role as (typeof staffTable.role)["_"]["data"]));
@@ -36,6 +48,15 @@ router.get("/staff", async (req, res) => {
     if (franchiseeId) conditions.push(eq(staffTable.franchiseeId, parseInt(franchiseeId)));
     if (forAssignment === "true") {
       conditions.push(sql`${staffTable.verificationStatus} != 'suspended'`);
+    }
+
+    let roleFilteredIds: number[] | null = null;
+    if (roleSlug) {
+      roleFilteredIds = await getStaffIdsWithOperationalRole(roleSlug);
+      if (roleFilteredIds.length === 0) {
+        return res.json([]);
+      }
+      conditions.push(inArray(staffTable.id, roleFilteredIds));
     }
 
     const where = conditions.length ? and(...conditions) : undefined;
@@ -68,7 +89,8 @@ router.get("/staff", async (req, res) => {
       .leftJoin(branchesTable, eq(staffTable.branchId, branchesTable.id))
       .where(where);
 
-    return res.json(data);
+    const withRoles = await attachOperationalRoles(data);
+    return res.json(withRoles);
   } catch (err) {
     req.log.error({ err }, "List staff error");
     return res.status(500).json({ error: "Internal server error" });
@@ -82,9 +104,27 @@ router.post("/staff", async (req, res) => {
       monthlySalary, joiningDate, localAddress, permanentAddress,
       guardianName, guardianPhone, aadhaar, pan,
       bankAccountName, bankAccountNumber, bankIfsc, bankPassbookUrl, agreementUrl,
+      operationalRoleIds,
+      initialPassword,
     } = req.body;
-    if (!name || !role || !branchId) {
-      return res.status(400).json({ error: "name, role, and branchId are required" });
+    if (!name || !branchId) {
+      return res.status(400).json({ error: "name and branchId are required" });
+    }
+
+    let resolvedRole = role;
+    const roleIds: number[] = Array.isArray(operationalRoleIds)
+      ? operationalRoleIds.map(Number).filter(n => Number.isFinite(n) && n > 0)
+      : [];
+
+    if (!resolvedRole && roleIds.length > 0) {
+      const roles = await db.select({ slug: staffRoleMasterTable.slug })
+        .from(staffRoleMasterTable)
+        .where(inArray(staffRoleMasterTable.id, roleIds))
+        .limit(1);
+      if (roles[0]) resolvedRole = operationalSlugToLegacyRole(roles[0].slug);
+    }
+    if (!resolvedRole) {
+      return res.status(400).json({ error: "role or operationalRoleIds is required" });
     }
 
     const phoneResult = parseRequiredMobile(phone);
@@ -97,7 +137,7 @@ router.post("/staff", async (req, res) => {
     if (!guardianPhoneResult.ok) return res.status(400).json({ error: guardianPhoneResult.error });
 
     const values = tenantStamp(req, {
-      name, phone: phoneResult.value, email: emailResult.value, role,
+      name, phone: phoneResult.value, email: emailResult.value, role: resolvedRole,
       branchId: parseInt(branchId),
       franchiseeId: franchiseeId ? parseInt(franchiseeId) : undefined,
       monthlySalary: monthlySalary?.toString(),
@@ -112,7 +152,33 @@ router.post("/staff", async (req, res) => {
     const [updated] = await db.update(staffTable).set({ employeeCode, updatedAt: new Date() })
       .where(eq(staffTable.id, staff.id)).returning();
     await recalculateStaffProfile(staff.id);
-    return res.status(201).json(updated ?? staff);
+    if (roleIds.length > 0) {
+      await assignOperationalRoles(staff.id, roleIds);
+    }
+    const operationalRoles = await getStaffOperationalRoles(staff.id);
+
+    let loginAccount: { userId: number; phone: string } | null = null;
+    if (initialPassword) {
+      try {
+        const staffRow = updated ?? staff;
+        loginAccount = await createStaffLoginAccount(staffRow, String(initialPassword));
+      } catch (accountErr) {
+        req.log.warn({ err: accountErr, staffId: staff.id }, "Staff created but login account failed");
+        return res.status(201).json({
+          ...(updated ?? staff),
+          operationalRoles,
+          loginWarning: accountErr instanceof Error ? accountErr.message : "Failed to create login account",
+        });
+      }
+    }
+
+    return res.status(201).json({
+      ...(updated ?? staff),
+      operationalRoles,
+      userId: loginAccount?.userId ?? null,
+      loginCreated: Boolean(loginAccount),
+      phone: loginAccount?.phone ?? (updated ?? staff).phone,
+    });
   } catch (err) {
     req.log.error({ err }, "Create staff error");
     return res.status(500).json({ error: "Internal server error" });
@@ -124,6 +190,45 @@ async function loadStaffInScope(req: Request, id: number) {
   if (!staff) return null;
   if (!rowInScope(req, { ...staff, staffId: staff.id })) return null;
   return staff;
+}
+
+async function createStaffLoginAccount(
+  staffMember: typeof staffTable.$inferSelect,
+  password: string,
+) {
+  if (!password || String(password).length < 6) {
+    throw new Error("Password must be at least 6 characters");
+  }
+  if (staffMember.userId) {
+    throw new Error("Account already exists");
+  }
+
+  const existing = await db.select().from(usersTable).where(eq(usersTable.phone, staffMember.phone)).limit(1);
+  if (existing[0]) {
+    throw new Error("A login account with this phone number already exists");
+  }
+
+  const passwordHash = await hashPassword(password);
+  const [user] = await db.insert(usersTable).values({
+    name: staffMember.name,
+    phone: staffMember.phone,
+    email: staffMember.email ?? undefined,
+    passwordHash,
+    role: "staff",
+    branchId: staffMember.branchId,
+    companyId: staffMember.companyId ?? undefined,
+    franchiseeId: staffMember.franchiseeId ?? undefined,
+    staffId: staffMember.id,
+  }).returning();
+
+  await db.update(staffTable).set({
+    userId: user.id,
+    verificationStatus: "verified",
+    verifiedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(staffTable.id, staffMember.id));
+
+  return { userId: user.id, phone: user.phone };
 }
 
 router.get("/staff/:id", async (req, res) => {
@@ -227,33 +332,31 @@ router.post("/staff/:id/verify", async (req, res) => {
 router.post("/staff/:id/create-account", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const staffMember = await loadStaffInScope(req, id);
+    let staffMember = await loadStaffInScope(req, id);
     if (!staffMember) return res.status(404).json({ error: "Staff not found" });
 
     const { password } = req.body;
     if (!password) return res.status(400).json({ error: "password is required" });
     if (staffMember.userId) return res.status(400).json({ error: "Account already exists" });
-    if (staffMember.verificationStatus !== "verified") {
+    if (staffMember.verificationStatus === "rejected" || staffMember.verificationStatus === "suspended") {
       return res.status(400).json({ error: "Staff must be verified before creating an account" });
     }
 
-    const passwordHash = await hashPassword(password);
-    const [user] = await db.insert(usersTable).values({
-      name: staffMember.name,
-      phone: staffMember.phone,
-      email: staffMember.email ?? undefined,
-      passwordHash,
-      role: "staff",
-      branchId: staffMember.branchId,
-      companyId: staffMember.companyId ?? undefined,
-      franchiseeId: staffMember.franchiseeId ?? undefined,
-      staffId: staffMember.id,
-    }).returning();
+    if (staffMember.verificationStatus !== "verified") {
+      const [verified] = await db.update(staffTable).set({
+        verificationStatus: "verified",
+        verifiedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(staffTable.id, id)).returning();
+      if (verified) staffMember = verified;
+    }
 
-    await db.update(staffTable).set({ userId: user.id, updatedAt: new Date() }).where(eq(staffTable.id, id));
-
-    return res.json({ message: "Account created", userId: user.id, phone: user.phone });
+    const result = await createStaffLoginAccount(staffMember, password);
+    return res.json({ message: "Account created", ...result });
   } catch (err) {
+    if (err instanceof Error && err.message.includes("already exists")) {
+      return res.status(400).json({ error: err.message });
+    }
     req.log.error({ err }, "Create staff account error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -325,10 +428,72 @@ router.post("/staff/:id/attendance", async (req, res) => {
     if (!(await loadStaffInScope(req, staffId))) return res.status(404).json({ error: "Staff not found" });
     const { date, status, checkInTime, checkOutTime, notes } = req.body;
     if (!date || !status) return res.status(400).json({ error: "date and status are required" });
+
+    const isSelfCheckIn =
+      req.user?.role === "staff"
+      && req.user.staffId === staffId
+      && ["present", "late"].includes(status);
+
+    if (isSelfCheckIn) {
+      try {
+        const location = parseStaffLocation(req.body as Record<string, unknown>, { required: true });
+        await recordStaffLocation({
+          staffId,
+          action: "attendance",
+          latitude: location!.latitude,
+          longitude: location!.longitude,
+          accuracy: location!.accuracy,
+          metadata: { status, date },
+        });
+      } catch (locErr) {
+        const handled = handleLocationError(locErr);
+        if (handled) return res.status(handled.status).json(handled.body);
+        throw locErr;
+      }
+    }
+
     const [attendance] = await db.insert(attendanceTable).values({ staffId, date, status, checkInTime, checkOutTime, notes }).returning();
     return res.status(201).json(attendance);
   } catch (err) {
     req.log.error({ err }, "Mark attendance error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/staff/:id/location-logs", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!(await loadStaffInScope(req, id))) return res.status(404).json({ error: "Staff not found" });
+    const { month, limit: limitStr } = req.query as Record<string, string>;
+    const monthFilter = month || new Date().toISOString().slice(0, 7);
+    const rowLimit = Math.min(parseInt(limitStr ?? "100", 10) || 100, 500);
+
+    const data = await db.select({
+      id: staffLocationLogsTable.id,
+      staffId: staffLocationLogsTable.staffId,
+      bookingId: staffLocationLogsTable.bookingId,
+      action: staffLocationLogsTable.action,
+      latitude: staffLocationLogsTable.latitude,
+      longitude: staffLocationLogsTable.longitude,
+      accuracyMeters: staffLocationLogsTable.accuracyMeters,
+      geoFenceVerified: staffLocationLogsTable.geoFenceVerified,
+      geoFenceRadiusMeters: staffLocationLogsTable.geoFenceRadiusMeters,
+      distanceMeters: staffLocationLogsTable.distanceMeters,
+      targetLatitude: staffLocationLogsTable.targetLatitude,
+      targetLongitude: staffLocationLogsTable.targetLongitude,
+      recordedAt: staffLocationLogsTable.recordedAt,
+      metadata: staffLocationLogsTable.metadata,
+    }).from(staffLocationLogsTable)
+      .where(and(
+        eq(staffLocationLogsTable.staffId, id),
+        sql`TO_CHAR(${staffLocationLogsTable.recordedAt}::date, 'YYYY-MM') = ${monthFilter}`,
+      ))
+      .orderBy(desc(staffLocationLogsTable.recordedAt))
+      .limit(rowLimit);
+
+    return res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "Staff location logs error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

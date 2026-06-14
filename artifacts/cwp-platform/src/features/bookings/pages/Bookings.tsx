@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Calendar, Clock, User, ChevronLeft, ChevronRight, MapPin, Camera, Route, CheckCircle, XCircle, ArrowRight, Loader2 } from "lucide-react";
 import { Can } from "@/components/Can";
 import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shared";
+import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
+import { roleSlugForBookingService, OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
 import { format, isToday, parseISO } from "date-fns";
 
 const statusColors: Record<string, string> = {
@@ -318,7 +320,13 @@ export default function AdminBookings() {
         <DialogContent>
           <DialogHeader><DialogTitle>Assign Staff</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <Input type="number" placeholder="Staff ID" value={assignStaffId} onChange={e => setAssignStaffId(e.target.value)} />
+            <StaffAssignSelect
+              roleSlug={roleSlugForBookingService(detailBooking?.serviceType) ?? OPERATIONAL_ROLE_SLUGS.CAR_WASHER}
+              value={assignStaffId}
+              onValueChange={setAssignStaffId}
+              placeholder="Select qualified staff"
+              data-testid="select-booking-staff"
+            />
             <Textarea placeholder="Reason (optional)" value={assignReason} onChange={e => setAssignReason(e.target.value)} />
           </div>
           <DialogFooter>

@@ -51,7 +51,7 @@ export default function CustomerLayout({ children }: { children: ReactNode }) {
       appBar={{
         leading: (
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <BrandLogo variant="mobile" imgClassName="h-8 w-8" fallbackClassName="w-8 h-8" lazy={false} />
+            <BrandLogo variant="mobile" lazy={false} />
           </Link>
         ),
         title: pageTitle,

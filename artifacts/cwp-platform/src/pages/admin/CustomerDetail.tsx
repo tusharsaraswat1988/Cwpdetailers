@@ -7,8 +7,6 @@ import {
   getListCustomersQueryKey,
   useListVehicles,
   getListVehiclesQueryKey,
-  useListStaff,
-  getListStaffQueryKey,
   useUpdateVehicle,
 } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
@@ -26,6 +24,8 @@ import CommunicationTimeline from "@/features/communications/components/Communic
 import CommunicationPreferences from "@/features/communications/components/CommunicationPreferences";
 import { VehicleReferencePhotoEditor } from "@/components/shared/VehicleReferencePhotoEditor";
 import { vehiclePhotosFromRecord } from "@/components/shared/VehicleReferencePhotos";
+import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
+import { roleSlugForVehicleAssignment } from "@/lib/staff-ecosystem/roles";
 
 type WalletTx = {
   id: number;
@@ -92,11 +92,6 @@ export default function AdminCustomerDetail() {
   const { data: vehicles, isLoading: vehiclesLoading } = useListVehicles(
     { customerId: String(id) } as any,
     { query: { queryKey: getListVehiclesQueryKey({ customerId: String(id) } as any), enabled: id > 0 } },
-  );
-
-  const { data: staffList } = useListStaff(
-    { status: "active" } as any,
-    { query: { queryKey: getListStaffQueryKey({ status: "active" } as any), enabled: id > 0 } },
   );
 
   const assignStaffMutation = useUpdateVehicle({
@@ -236,7 +231,9 @@ export default function AdminCustomerDetail() {
                         <p className="text-sm font-medium">{v.registrationNumber}</p>
                         <p className="text-xs text-muted-foreground">{v.make} {v.model} · {v.vehicleType}</p>
                       </div>
-                      <Select
+                      <StaffAssignSelect
+                        roleSlug={roleSlugForVehicleAssignment()}
+                        allowUnassigned
                         value={v.assignedStaffId ? String(v.assignedStaffId) : "none"}
                         onValueChange={(val) => {
                           assignStaffMutation.mutate({
@@ -244,17 +241,9 @@ export default function AdminCustomerDetail() {
                             data: { assignedStaffId: val === "none" ? null : parseInt(val, 10) } as any,
                           });
                         }}
-                      >
-                        <SelectTrigger className="w-full sm:w-48" data-testid={`select-staff-${v.id}`}>
-                          <SelectValue placeholder="Assign staff" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Unassigned</SelectItem>
-                          {(staffList ?? []).map((s: any) => (
-                            <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        className="w-full sm:w-48"
+                        data-testid={`select-staff-${v.id}`}
+                      />
                     </div>
                     <VehicleReferencePhotoEditor
                       vehicleId={v.id}

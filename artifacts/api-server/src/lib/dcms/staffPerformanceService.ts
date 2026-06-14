@@ -7,7 +7,8 @@ import {
   dcmsSubscriptionsTable,
   staffTable,
 } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { OPERATIONAL_ROLE_SLUGS, getStaffIdsWithOperationalRole } from "../staffEcosystem/operationalRoles";
 
 export type StaffPerformanceRow = {
   staffId: number;
@@ -26,6 +27,11 @@ export async function getStaffPerformanceMetrics(): Promise<{
   topPerformers: StaffPerformanceRow[];
   lowestPerformers: StaffPerformanceRow[];
 }> {
+  const dailyCleanerIds = await getStaffIdsWithOperationalRole(OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
+  if (dailyCleanerIds.length === 0) {
+    return { staff: [], topPerformers: [], lowestPerformers: [] };
+  }
+
   const assignments = await db
     .select({
       staffId: dcmsStaffAssignmentsTable.staffId,
@@ -38,6 +44,7 @@ export async function getStaffPerformanceMetrics(): Promise<{
     .where(and(
       eq(dcmsStaffAssignmentsTable.isActive, true),
       eq(dcmsSubscriptionsTable.status, "active"),
+      inArray(dcmsStaffAssignmentsTable.staffId, dailyCleanerIds),
     ))
     .groupBy(dcmsStaffAssignmentsTable.staffId, staffTable.name);
 
@@ -86,6 +93,7 @@ export async function getStaffPerformanceMetrics(): Promise<{
   const staff: StaffPerformanceRow[] = [];
 
   for (const staffId of staffIds) {
+    if (!dailyCleanerIds.includes(staffId)) continue;
     const a = assignmentMap.get(staffId);
     const v = visitMap.get(staffId);
     const m = missedMap.get(staffId);

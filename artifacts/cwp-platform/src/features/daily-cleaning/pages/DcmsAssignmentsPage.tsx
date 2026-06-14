@@ -68,7 +68,7 @@ export default function DcmsAssignmentsPage() {
                   <DcmsEntitySearch type="subscriptions" value={subscription} onChange={setSubscription} placeholder="Customer or vehicle registration…" />
                 </div>
                 <div>
-                  <Label>Staff</Label>
+                  <Label>Staff (Daily Car Cleaner role only)</Label>
                   <DcmsEntitySearch type="staff" value={staff} onChange={setStaff} placeholder="Search name or mobile…" />
                 </div>
                 <div>

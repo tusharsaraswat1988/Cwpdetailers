@@ -37,3 +37,4 @@ export * from "./service-management";
 export * from "./legacy-migration";
 export * from "./dcms";
 export * from "./push-notifications";
+export * from "./staff-location";

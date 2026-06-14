@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   useGetStaffAttendance,
   getGetStaffAttendanceQueryKey,
-  useMarkAttendance,
   useGetStaffPerformance,
   getGetStaffPerformanceQueryKey,
   useGetStaffLeaderboard,
@@ -16,9 +15,10 @@ import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Loader2, MapPin } from "lucide-react";
 import { todayIso } from "@/lib/staff-jobs";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
+import { markAttendanceWithLocation } from "@/lib/location";
 
 const statusColors: Record<string, string> = {
   present: "bg-green-500/10 text-green-600 border-green-500/20",
@@ -72,15 +72,17 @@ export default function StaffProfile() {
     { query: { queryKey: getGetStaffLeaderboardQueryKey({ month }) } },
   );
 
-  const markMutation = useMarkAttendance({
-    mutation: {
-      onSuccess: () => {
-        if (staffId != null) {
-          qc.invalidateQueries({ queryKey: getGetStaffAttendanceQueryKey(staffId) });
-        }
-        toast({ title: "Attendance marked" });
-      },
+  const markMutation = useMutation({
+    mutationFn: (payload: { date: string; status: string; checkInTime?: string }) =>
+      markAttendanceWithLocation(staffId!, payload),
+    onSuccess: () => {
+      if (staffId != null) {
+        qc.invalidateQueries({ queryKey: getGetStaffAttendanceQueryKey(staffId) });
+      }
+      toast({ title: "Attendance marked", description: "Location recorded for shift check-in" });
     },
+    onError: (err: Error) =>
+      toast({ title: "Check-in failed", description: err.message, variant: "destructive" }),
   });
 
   const todayStr = todayIso();
@@ -124,7 +126,7 @@ export default function StaffProfile() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {todayMarked
                   ? `Marked ${todayRecord?.status?.replace(/_/g, " ")}${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
-                  : "Not marked yet"}
+                  : "GPS check-in required — same as field partner apps"}
               </p>
             </div>
             {todayMarked ? (
@@ -139,17 +141,18 @@ export default function StaffProfile() {
                 data-testid="btn-mark-present"
                 onClick={() =>
                   markMutation.mutate({
-                    id: staffId,
-                    data: {
-                      date: todayStr,
-                      status: "present",
-                      checkInTime: new Date().toTimeString().slice(0, 5),
-                    },
+                    date: todayStr,
+                    status: "present",
+                    checkInTime: new Date().toTimeString().slice(0, 5),
                   })
                 }
               >
-                <CheckCircle size={16} className="mr-2" />
-                Mark present
+                {markMutation.isPending ? (
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <MapPin size={16} className="mr-2" />
+                )}
+                {markMutation.isPending ? "Getting GPS…" : "Check in with GPS"}
               </Button>
             )}
           </div>

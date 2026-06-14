@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Sun } from "lucide-react";
 import { useBranding, resolveLogoUrl, type BrandLogoVariant } from "@/lib/branding";
+import { optimizeBrandLogoUrl } from "@/lib/media-url";
 
 type BrandLogoProps = {
   variant?: BrandLogoVariant;
@@ -9,6 +10,34 @@ type BrandLogoProps = {
   imgClassName?: string;
   fallbackClassName?: string;
   lazy?: boolean;
+};
+
+const VARIANT_IMG_CLASS: Record<BrandLogoVariant, string> = {
+  navbar: "h-[39px] max-w-[196px]",
+  mobile: "h-[31px] w-auto max-w-[126px]",
+  login: "h-[67px] max-w-[252px]",
+  full: "h-[39px] max-w-[210px]",
+  light: "h-[34px] max-w-[182px]",
+  dark: "h-[34px] max-w-[182px]",
+  email: "h-[34px] max-w-[182px]",
+  invoice: "h-[34px] max-w-[182px]",
+  pdf: "h-[34px] max-w-[182px]",
+  favicon: "h-[22px] w-[22px]",
+  pwa: "h-[28px] w-[28px]",
+};
+
+const VARIANT_FALLBACK_CLASS: Record<BrandLogoVariant, string> = {
+  navbar: "w-[39px] h-[39px]",
+  mobile: "w-[31px] h-[31px]",
+  login: "w-[67px] h-[67px]",
+  full: "w-[39px] h-[39px]",
+  light: "w-[34px] h-[34px]",
+  dark: "w-[34px] h-[34px]",
+  email: "w-[34px] h-[34px]",
+  invoice: "w-[34px] h-[34px]",
+  pdf: "w-[34px] h-[34px]",
+  favicon: "w-[22px] h-[22px]",
+  pwa: "w-[28px] h-[28px]",
 };
 
 export function BrandLogo({
@@ -20,18 +49,22 @@ export function BrandLogo({
   lazy = true,
 }: BrandLogoProps) {
   const branding = useBranding();
-  const src = resolveLogoUrl(branding, variant);
+  const rawSrc = resolveLogoUrl(branding, variant);
+  const src = rawSrc ? optimizeBrandLogoUrl(rawSrc) : null;
   const label = alt ?? branding.brandName;
 
   if (src) {
     return (
-      <div className={cn("flex items-center", className)}>
+      <div className={cn("flex shrink-0 items-center", className)}>
         <img
           src={src}
           alt={label}
           loading={lazy ? "lazy" : "eager"}
           decoding="async"
-          className={cn("max-h-full max-w-full object-contain", imgClassName)}
+          className={cn(
+            "block max-h-full max-w-full object-contain object-left",
+            imgClassName ?? VARIANT_IMG_CLASS[variant],
+          )}
         />
       </div>
     );
@@ -40,13 +73,13 @@ export function BrandLogo({
   return (
     <div
       className={cn(
-        "flex items-center justify-center rounded-lg bg-primary text-secondary",
-        fallbackClassName ?? "w-8 h-8",
+        "flex shrink-0 items-center justify-center rounded-lg bg-primary text-secondary",
+        fallbackClassName ?? VARIANT_FALLBACK_CLASS[variant],
         className,
       )}
       aria-label={label}
     >
-      <Sun size={16} />
+      <Sun size={variant === "login" ? 20 : variant === "navbar" || variant === "full" ? 14 : 11} />
     </div>
   );
 }

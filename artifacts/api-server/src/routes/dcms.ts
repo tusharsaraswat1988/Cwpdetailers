@@ -29,6 +29,7 @@ import { ImageValidationError } from "../lib/dcms/imageValidation";
 import { getAdminDashboardStats, getCustomerDashboardStats } from "../lib/dcms/analyticsService";
 import { db, dcmsActivityLogsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { OPERATIONAL_ROLE_SLUGS, staffHasOperationalRole } from "../lib/staffEcosystem/operationalRoles";
 
 const router = Router();
 
@@ -39,6 +40,7 @@ function handleError(req: Request, res: Response, err: unknown, fallback = "Requ
   if (err instanceof ImageValidationError) return res.status(422).json({ error: msg });
   if (msg.includes("not found") || msg.includes("not assigned")) return res.status(404).json({ error: msg });
   if (msg.includes("blocked") || msg.includes("No remaining")) return res.status(400).json({ error: msg });
+  if (msg.includes("does not match") || msg.includes("must be linked")) return res.status(400).json({ error: msg });
   return res.status(500).json({ error: msg });
 }
 
@@ -67,7 +69,9 @@ router.get(
   async (req, res) => {
     try {
       const activeOnly = req.query.active === "true";
-      const plans = await listPlans(activeOnly);
+      const vehicleId = req.query.vehicleId ? Number(req.query.vehicleId) : undefined;
+      const linkedOnly = req.query.linked === "true" || vehicleId != null;
+      const plans = await listPlans(activeOnly, vehicleId, linkedOnly);
       const withUsage = await Promise.all(plans.map(async p => ({
         ...p,
         hasSubscriptions: await planHasSubscriptions(p.id),
@@ -100,9 +104,11 @@ router.post(
   requirePermission("daily_cleaning", "manage_plans"),
   async (req, res) => {
     try {
-      const { name, description, price, includedCleanings, includedWashes, weeklyOffs } = req.body;
-      if (!name || !price || includedCleanings == null) {
-        return res.status(400).json({ error: "name, price, and includedCleanings are required" });
+      const { name, description, price, includedCleanings, includedWashes, weeklyOffs, vehicleCategoryId, seatCategoryId } = req.body;
+      if (!name || !price || includedCleanings == null || !vehicleCategoryId || !seatCategoryId) {
+        return res.status(400).json({
+          error: "name, price, includedCleanings, vehicleCategoryId, and seatCategoryId are required",
+        });
       }
       const plan = await createPlan({
         name,
@@ -111,6 +117,8 @@ router.post(
         includedCleanings: Number(includedCleanings),
         includedWashes: Number(includedWashes ?? 0),
         weeklyOffs: Number(weeklyOffs ?? 1),
+        vehicleCategoryId: Number(vehicleCategoryId),
+        seatCategoryId: Number(seatCategoryId),
         companyId: req.user!.companyId,
       }, req.user!.id);
       return res.status(201).json(plan);
@@ -127,7 +135,7 @@ router.patch(
   async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const { name, description, price, includedCleanings, includedWashes, weeklyOffs, isActive } = req.body;
+      const { name, description, price, includedCleanings, includedWashes, weeklyOffs, isActive, vehicleCategoryId, seatCategoryId } = req.body;
 
       if (isActive != null) {
         const plan = await setPlanActive(id, Boolean(isActive), req.user!.id);
@@ -140,6 +148,8 @@ router.patch(
         includedCleanings: includedCleanings != null ? Number(includedCleanings) : undefined,
         includedWashes: includedWashes != null ? Number(includedWashes) : undefined,
         weeklyOffs: weeklyOffs != null ? Number(weeklyOffs) : undefined,
+        vehicleCategoryId: vehicleCategoryId != null ? Number(vehicleCategoryId) : undefined,
+        seatCategoryId: seatCategoryId != null ? Number(seatCategoryId) : undefined,
       }, req.user!.id);
       if (!plan) return res.status(404).json({ error: "Plan not found" });
       return res.json(plan);
@@ -426,6 +436,10 @@ router.get(
     try {
       const staffId = req.user!.staffId;
       if (!staffId) return res.status(403).json({ error: "Staff account required" });
+      const hasRole = await staffHasOperationalRole(staffId, OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
+      if (!hasRole) {
+        return res.status(403).json({ error: "Daily Car Cleaner operational role required for daily cleaning assignments" });
+      }
       const assignments = await listStaffAssignments(staffId);
       return res.json(assignments);
     } catch (err) {
@@ -457,7 +471,10 @@ router.get("/daily-cleaning/search/vehicles", requireAuth, requirePermission("da
 
 router.get("/daily-cleaning/search/staff", requireAuth, requirePermission("daily_cleaning", "view"), async (req, res) => {
   try {
-    return res.json(await searchStaff(String(req.query.q ?? "")));
+    const roleSlug = typeof req.query.roleSlug === "string" && req.query.roleSlug.trim()
+      ? req.query.roleSlug.trim()
+      : undefined;
+    return res.json(await searchStaff(String(req.query.q ?? ""), { roleSlug }));
   } catch (err) { return handleError(req, res, err); }
 });
 
@@ -473,6 +490,10 @@ router.get("/daily-cleaning/staff/daily-route", requireAuth, requirePermission("
   try {
     const staffId = req.user!.staffId;
     if (!staffId) return res.status(403).json({ error: "Staff account required" });
+    const hasRole = await staffHasOperationalRole(staffId, OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
+    if (!hasRole) {
+      return res.status(403).json({ error: "Daily Car Cleaner operational role required for the daily route" });
+    }
     const date = req.query.date as string | undefined;
     return res.json(await getStaffDailyRoute(staffId, date));
   } catch (err) { return handleError(req, res, err); }

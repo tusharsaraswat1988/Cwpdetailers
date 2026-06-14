@@ -22,6 +22,13 @@ export type DcmsPlan = {
   includedCleanings: number;
   includedWashes: number;
   weeklyOffs: number;
+  vehicleCategoryId?: number | null;
+  seatCategoryId?: number | null;
+  vehicleCategoryName?: string | null;
+  seatCategoryName?: string | null;
+  seatCount?: number | null;
+  seatPricingTier?: "standard" | "large" | null;
+  seatPricingTierLabel?: string | null;
   isActive: boolean;
   hasSubscriptions?: boolean;
 };
@@ -132,10 +139,16 @@ export function useDcmsDashboard() {
   });
 }
 
-export function useDcmsPlans() {
+export function useDcmsPlans(vehicleId?: number) {
+  const params = new URLSearchParams();
+  if (vehicleId) {
+    params.set("vehicleId", String(vehicleId));
+    params.set("linked", "true");
+  }
+  const qs = params.toString() ? `?${params}` : "";
   return useQuery({
-    queryKey: ["dcms", "plans"],
-    queryFn: () => dcmsFetch<DcmsPlan[]>("/daily-cleaning/plans"),
+    queryKey: ["dcms", "plans", vehicleId],
+    queryFn: () => dcmsFetch<DcmsPlan[]>(`/daily-cleaning/plans${qs}`),
   });
 }
 

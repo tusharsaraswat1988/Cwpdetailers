@@ -1,8 +1,11 @@
 import {
   db, customersTable, vehiclesTable, staffTable, dcmsSubscriptionsTable,
+  staffRoleMasterTable, staffRoleAssignmentsTable,
+  vehicleModelsTable, vehicleCategoriesTable, seatCategoriesTable,
 } from "@workspace/db";
 import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
 import { normalizeRegistration } from "./registration";
+import { OPERATIONAL_ROLE_SLUGS } from "../staffEcosystem/operationalRoles";
 
 export async function searchCustomers(query: string, limit = 20) {
   const q = query.trim();
@@ -86,21 +89,39 @@ export async function searchVehicles(params: {
       registrationNumber: vehiclesTable.registrationNumber,
       make: vehiclesTable.make,
       model: vehiclesTable.model,
+      vehicleModelId: vehiclesTable.vehicleModelId,
       customerName: customersTable.name,
+      vehicleCategoryName: vehicleCategoriesTable.name,
+      seatCategoryName: seatCategoriesTable.name,
+      seatCount: seatCategoriesTable.seatCount,
       label: sql<string>`${vehiclesTable.registrationNumber} || ' · ' || ${vehiclesTable.make} || ' ' || ${vehiclesTable.model}`,
     })
     .from(vehiclesTable)
     .innerJoin(customersTable, eq(vehiclesTable.customerId, customersTable.id))
+    .leftJoin(vehicleModelsTable, eq(vehiclesTable.vehicleModelId, vehicleModelsTable.id))
+    .leftJoin(vehicleCategoriesTable, eq(vehicleModelsTable.vehicleCategoryId, vehicleCategoriesTable.id))
+    .leftJoin(seatCategoriesTable, eq(vehicleModelsTable.seatCategoryId, seatCategoriesTable.id))
     .where(and(...conditions))
     .orderBy(vehiclesTable.registrationNumber)
     .limit(limit);
 }
 
-export async function searchStaff(query: string, limit = 20) {
+export async function searchStaff(
+  query: string,
+  options?: { limit?: number; roleSlug?: string },
+) {
+  const limit = options?.limit ?? 20;
+  const roleSlug = options?.roleSlug ?? OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER;
   const q = query.trim();
   if (q.length < 2) return [];
 
   const phoneDigits = q.replace(/\D/g, "");
+
+  const textMatch = or(
+    ilike(staffTable.name, `%${q}%`),
+    ilike(staffTable.phone, `%${q}%`),
+    phoneDigits.length >= 4 ? ilike(staffTable.phone, `%${phoneDigits}%`) : undefined,
+  );
 
   return db
     .select({
@@ -110,13 +131,14 @@ export async function searchStaff(query: string, limit = 20) {
       label: sql<string>`${staffTable.name} || ' · ' || coalesce(${staffTable.phone}, '')`,
     })
     .from(staffTable)
+    .innerJoin(staffRoleAssignmentsTable, eq(staffRoleAssignmentsTable.staffId, staffTable.id))
+    .innerJoin(staffRoleMasterTable, eq(staffRoleAssignmentsTable.roleId, staffRoleMasterTable.id))
     .where(and(
       eq(staffTable.isActive, true),
-      or(
-        ilike(staffTable.name, `%${q}%`),
-        ilike(staffTable.phone, `%${q}%`),
-        phoneDigits.length >= 4 ? ilike(staffTable.phone, `%${phoneDigits}%`) : undefined,
-      ),
+      sql`${staffTable.verificationStatus} != 'suspended'`,
+      eq(staffRoleMasterTable.slug, roleSlug),
+      eq(staffRoleMasterTable.isActive, true),
+      textMatch,
     ))
     .orderBy(staffTable.name)
     .limit(limit);

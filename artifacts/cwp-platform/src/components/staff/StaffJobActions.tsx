@@ -1,9 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Camera, CheckCircle, Route, ArrowRight } from "lucide-react";
+import { Camera, CheckCircle, Route, ArrowRight, Loader2 } from "lucide-react";
 import type { StaffJob } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 
-type Mutations = Pick<ReturnType<typeof useStaffJobsData>, "transitionMutation" | "uploadPhoto" | "uploadingJobId" | "isActionPending">;
+type Mutations = Pick<
+  ReturnType<typeof useStaffJobsData>,
+  "transitionJob" | "uploadPhoto" | "uploadingJobId" | "locatingJobId" | "isActionPending"
+>;
 
 interface Props extends Mutations {
   job: StaffJob;
@@ -12,24 +15,26 @@ interface Props extends Mutations {
 
 export function StaffJobActions({
   job,
-  transitionMutation,
+  transitionJob,
   uploadPhoto,
   uploadingJobId,
+  locatingJobId,
   isActionPending,
   size = "default",
 }: Props) {
   const btnClass = size === "hero" ? "w-full h-14 text-base font-semibold" : "w-full h-12 text-sm font-semibold";
+  const isLocating = locatingJobId === job.id;
 
   if (job.status === "scheduled") {
     return (
       <Button
         className={`${btnClass} bg-orange-500 hover:bg-orange-600 text-white`}
-        onClick={() => transitionMutation.mutate({ id: job.id, data: { toStatus: "en_route" } })}
+        onClick={() => void transitionJob(job.id, "en_route")}
         disabled={isActionPending}
         data-testid={`btn-en-route-${job.id}`}
       >
-        <Route size={size === "hero" ? 18 : 15} className="mr-2" />
-        On My Way
+        {isLocating ? <Loader2 size={size === "hero" ? 18 : 15} className="mr-2 animate-spin" /> : <Route size={size === "hero" ? 18 : 15} className="mr-2" />}
+        {isLocating ? "Getting location…" : "On My Way"}
       </Button>
     );
   }
@@ -63,12 +68,12 @@ export function StaffJobActions({
     return (
       <Button
         className={`${btnClass} bg-primary text-secondary hover:bg-primary/90`}
-        onClick={() => transitionMutation.mutate({ id: job.id, data: { toStatus: "in_progress" } })}
+        onClick={() => void transitionJob(job.id, "in_progress")}
         disabled={isActionPending}
         data-testid={`btn-start-job-${job.id}`}
       >
-        <ArrowRight size={size === "hero" ? 18 : 15} className="mr-2" />
-        Start Job
+        {isLocating ? <Loader2 size={size === "hero" ? 18 : 15} className="mr-2 animate-spin" /> : <ArrowRight size={size === "hero" ? 18 : 15} className="mr-2" />}
+        {isLocating ? "Verifying location…" : "Start Job"}
       </Button>
     );
   }
@@ -102,12 +107,12 @@ export function StaffJobActions({
     return (
       <Button
         className={`${btnClass} bg-green-600 hover:bg-green-700 text-white`}
-        onClick={() => transitionMutation.mutate({ id: job.id, data: { toStatus: "completed" } })}
+        onClick={() => void transitionJob(job.id, "completed")}
         disabled={isActionPending}
         data-testid={`btn-complete-${job.id}`}
       >
-        <CheckCircle size={size === "hero" ? 18 : 15} className="mr-2" />
-        Complete Job
+        {isLocating ? <Loader2 size={size === "hero" ? 18 : 15} className="mr-2 animate-spin" /> : <CheckCircle size={size === "hero" ? 18 : 15} className="mr-2" />}
+        {isLocating ? "Verifying location…" : "Complete Job"}
       </Button>
     );
   }

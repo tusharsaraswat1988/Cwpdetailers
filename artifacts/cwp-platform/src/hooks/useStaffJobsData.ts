@@ -1,17 +1,17 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   useGetTodayBookings,
   getGetTodayBookingsQueryKey,
   useListBookings,
   getListBookingsQueryKey,
-  useTransitionBooking,
   useUpdateBooking,
   useRequestUploadUrl,
 } from "@workspace/api-client-react";
 import { useAccountScope } from "@/lib/account-scope";
 import { uploadFileToCloudinary } from "@/lib/media-url";
 import { useToast } from "@/hooks/use-toast";
+import { transitionBookingWithLocation } from "@/lib/location";
 import {
   type StaffJob,
   partitionStaffJobs,
@@ -23,6 +23,7 @@ export function useStaffJobsData() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [uploadingJobId, setUploadingJobId] = useState<number | null>(null);
+  const [locatingJobId, setLocatingJobId] = useState<number | null>(null);
 
   const { data: todayJobs, isLoading: loadingToday, isError: errorToday, refetch: refetchToday } =
     useGetTodayBookings(
@@ -50,15 +51,15 @@ export function useStaffJobsData() {
     qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
   };
 
-  const transitionMutation = useTransitionBooking({
-    mutation: {
-      onSuccess: () => {
-        invalidateJobs();
-        toast({ title: "Status updated" });
-      },
-      onError: (e: { response?: { data?: { error?: string } } }) =>
-        toast({ title: e?.response?.data?.error || "Transition failed", variant: "destructive" }),
+  const transitionMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: { toStatus: string; reason?: string } }) =>
+      transitionBookingWithLocation(id, data),
+    onSuccess: () => {
+      invalidateJobs();
+      toast({ title: "Status updated" });
     },
+    onError: (err: Error) =>
+      toast({ title: "Action blocked", description: err.message, variant: "destructive" }),
   });
 
   const updateMutation = useUpdateBooking({
@@ -84,6 +85,15 @@ export function useStaffJobsData() {
   const { upcoming, done } = partitionStaffJobs(all, today);
   const activeJob = pickActiveJob(today);
   const remainingToday = activeJob ? today.filter(j => j.id !== activeJob.id) : today;
+
+  async function transitionJob(jobId: number, toStatus: string) {
+    setLocatingJobId(jobId);
+    try {
+      await transitionMutation.mutateAsync({ id: jobId, data: { toStatus } });
+    } finally {
+      setLocatingJobId(null);
+    }
+  }
 
   async function uploadPhoto(jobId: number, field: "beforePhotoUrl" | "afterPhotoUrl", file: File) {
     if (staffId == null) return;
@@ -118,8 +128,9 @@ export function useStaffJobsData() {
     refetchToday,
     refetchAll,
     uploadingJobId,
-    transitionMutation,
+    locatingJobId,
+    transitionJob,
     uploadPhoto,
-    isActionPending: transitionMutation.isPending || updateMutation.isPending,
+    isActionPending: transitionMutation.isPending || updateMutation.isPending || locatingJobId != null,
   };
 }

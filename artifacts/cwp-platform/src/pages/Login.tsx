@@ -65,7 +65,7 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8 sm:mb-10">
           <div className="inline-flex items-center justify-center mb-4">
-            <BrandLogo variant="login" imgClassName="h-14 max-w-[240px]" fallbackClassName="w-14 h-14" lazy={false} />
+            <BrandLogo variant="login" lazy={false} />
           </div>
           <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">Welcome back</h1>
           <p className="text-white/50 mt-1 text-sm sm:text-base">Sign in to {branding.companyName}</p>

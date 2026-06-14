@@ -147,7 +147,7 @@ export default function Landing() {
       <header className="sticky top-0 z-40 bg-secondary/95 backdrop-blur border-b border-white/5 safe-area-top">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BrandLogo variant="navbar" imgClassName="h-9 max-w-[160px]" fallbackClassName="w-9 h-9" lazy={false} />
+            <BrandLogo variant="navbar" lazy={false} />
             <div>
               <p className="font-display font-bold text-white text-base leading-tight">{branding.brandName}</p>
               <p className="text-white/40 text-xs">{branding.tagline ?? branding.companyName}</p>
@@ -545,7 +545,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto space-y-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <BrandLogo variant="full" imgClassName="h-8 max-w-[180px]" fallbackClassName="w-8 h-8" lazy />
+              <BrandLogo variant="full" lazy />
               <div>
                 <p className="font-display font-bold text-white text-sm">{branding.companyName}</p>
                 <p className="text-white/30 text-xs">{branding.tagline ?? branding.address ?? ""}</p>

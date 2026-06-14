@@ -23,8 +23,9 @@ import {
   type StaffEcosystemProfile, type StaffDocument,
 } from "@/lib/staff-ecosystem/api";
 import {
-  ArrowLeft, CheckCircle2, Circle, Download, Eye, Printer, Upload, User, Star, Briefcase,
+  ArrowLeft, CheckCircle2, Circle, Download, Eye, Printer, Upload, User, Star, Briefcase, Key, MapPin,
 } from "lucide-react";
+import { StaffLocationHistory } from "@/features/staff/components/StaffLocationHistory";
 
 function ProfileCompletionBar({ p }: { p: StaffEcosystemProfile["profileCompletion"] }) {
   const items = [
@@ -111,6 +112,8 @@ export default function StaffDetail() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
   const [draft, setDraft] = useState<Partial<StaffEcosystemProfile>>({});
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginPassword, setLoginPassword] = useState("staff123");
 
   const { data: profile, isLoading } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, id],
@@ -148,6 +151,16 @@ export default function StaffDetail() {
       setNoteText("");
       qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, id] });
     },
+  });
+
+  const createLoginMutation = useMutation({
+    mutationFn: (password: string) => staffEcosystemApi.createLogin(id, password),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, id] });
+      setLoginOpen(false);
+      toast({ title: "Portal login created", description: `Phone: ${data.phone} — staff can sign in at /login` });
+    },
+    onError: (e: Error) => toast({ title: "Login creation failed", description: e.message, variant: "destructive" }),
   });
 
   const uploadDoc = async (documentType: string, file: File, extra?: Record<string, unknown>) => {
@@ -222,10 +235,20 @@ export default function StaffDetail() {
                 <Badge variant={p.isActive ? "default" : "secondary"}>{p.isActive ? "Active" : "Inactive"}</Badge>
                 <Badge variant="outline" className="capitalize">{p.verificationStatus.replace(/_/g, " ")}</Badge>
                 <Badge variant="outline" className="capitalize">{p.availability ?? "available"}</Badge>
+                {profile.userId
+                  ? <Badge className="bg-green-500/10 text-green-600 border-green-500/30">Portal Login Active</Badge>
+                  : <Badge variant="destructive" className="bg-amber-500/10 text-amber-600 border-amber-500/30">No Portal Login</Badge>}
               </div>
             </div>
           </div>
-          <div className="w-full md:w-64"><ProfileCompletionBar p={profile.profileCompletion} /></div>
+          <div className="flex flex-col gap-2 w-full md:w-auto md:items-end">
+            {!profile.userId && (
+              <Button size="sm" variant="outline" onClick={() => { setLoginPassword("staff123"); setLoginOpen(true); }}>
+                <Key size={14} className="mr-1.5" />Create Portal Login
+              </Button>
+            )}
+            <div className="w-full md:w-64"><ProfileCompletionBar p={profile.profileCompletion} /></div>
+          </div>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-4">
@@ -236,6 +259,7 @@ export default function StaffDetail() {
             <TabsTrigger value="banking">Banking</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
+            <TabsTrigger value="location">Location Log</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -508,6 +532,23 @@ export default function StaffDetail() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="location" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin size={16} className="text-primary" />
+                  Field location history
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground mb-4">
+                  GPS audit trail from shift check-in and job actions (On my way, Start, Complete). Geofence shows whether staff was within 150m of the customer at start/complete.
+                </p>
+                <StaffLocationHistory staffId={id} />
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -528,6 +569,37 @@ export default function StaffDetail() {
               ? <iframe src={resolveMediaUrl(viewerUrl)} className="w-full h-[70vh] rounded border" title="Document" />
               : <img src={resolveMediaUrl(viewerUrl)} alt="Document" className="max-h-[70vh] mx-auto rounded" />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Create Portal Login</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Staff will sign in at <span className="font-medium">/login</span> with phone <span className="font-medium">{profile.phone}</span>
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="loginPassword">Password</Label>
+            <Input
+              id="loginPassword"
+              type="password"
+              value={loginPassword}
+              onChange={e => setLoginPassword(e.target.value)}
+              placeholder="Minimum 6 characters"
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setLoginOpen(false)}>Cancel</Button>
+            <Button
+              className="flex-1"
+              disabled={loginPassword.length < 6 || createLoginMutation.isPending}
+              onClick={() => createLoginMutation.mutate(loginPassword)}
+            >
+              {createLoginMutation.isPending ? "Creating..." : "Create Login"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </AdminLayout>

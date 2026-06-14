@@ -31,9 +31,10 @@ export default function StaffDashboard() {
 
   const completedToday = jobs.today.filter(j => j.status === "completed").length;
   const mutations = {
-    transitionMutation: jobs.transitionMutation,
+    transitionJob: jobs.transitionJob,
     uploadPhoto: jobs.uploadPhoto,
     uploadingJobId: jobs.uploadingJobId,
+    locatingJobId: jobs.locatingJobId,
     isActionPending: jobs.isActionPending,
   };
 

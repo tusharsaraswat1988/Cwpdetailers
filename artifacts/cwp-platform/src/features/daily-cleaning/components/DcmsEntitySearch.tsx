@@ -5,8 +5,17 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { dcmsFetch } from "../api";
+import { OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
 
-export type SearchOption = { id: number; label: string; meta?: string };
+export type SearchOption = {
+  id: number;
+  label: string;
+  meta?: string;
+  vehicleModelId?: number | null;
+  vehicleCategoryName?: string | null;
+  seatCategoryName?: string | null;
+  seatCount?: number | null;
+};
 
 type Props = {
   type: "customers" | "vehicles" | "staff" | "subscriptions";
@@ -22,11 +31,28 @@ async function fetchOptions(type: Props["type"], query: string, vehicleFilters?:
   const paths: Record<Props["type"], string> = {
     customers: `/daily-cleaning/search/customers?q=${encodeURIComponent(query)}`,
     vehicles: `/daily-cleaning/search/vehicles?q=${encodeURIComponent(query)}${vehicleFilters?.customerId ? `&customerId=${vehicleFilters.customerId}` : ""}${vehicleFilters?.registration ? `&registration=${encodeURIComponent(vehicleFilters.registration)}` : ""}${vehicleFilters?.brand ? `&brand=${encodeURIComponent(vehicleFilters.brand)}` : ""}${vehicleFilters?.model ? `&model=${encodeURIComponent(vehicleFilters.model)}` : ""}`,
-    staff: `/daily-cleaning/search/staff?q=${encodeURIComponent(query)}`,
+    staff: `/daily-cleaning/search/staff?q=${encodeURIComponent(query)}&roleSlug=${OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER}`,
     subscriptions: `/daily-cleaning/search/subscriptions?q=${encodeURIComponent(query)}`,
   };
-  const rows = await dcmsFetch<Array<{ id: number; label: string; phone?: string; customerName?: string }>>(paths[type]);
-  return rows.map(r => ({ id: r.id, label: r.label, meta: r.phone ?? r.customerName }));
+  const rows = await dcmsFetch<Array<{
+    id: number;
+    label: string;
+    phone?: string;
+    customerName?: string;
+    vehicleModelId?: number | null;
+    vehicleCategoryName?: string | null;
+    seatCategoryName?: string | null;
+    seatCount?: number | null;
+  }>>(paths[type]);
+  return rows.map(r => ({
+    id: r.id,
+    label: r.label,
+    meta: r.phone ?? r.customerName,
+    vehicleModelId: r.vehicleModelId,
+    vehicleCategoryName: r.vehicleCategoryName,
+    seatCategoryName: r.seatCategoryName,
+    seatCount: r.seatCount,
+  }));
 }
 
 export function DcmsEntitySearch({ type, value, onChange, placeholder, disabled, vehicleFilters }: Props) {

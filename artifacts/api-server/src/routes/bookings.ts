@@ -6,6 +6,7 @@ import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middle
 import { decrementOnCompletion, recomputeNextDueDate, getTodayIST, type Transaction } from "../subscriptions/service";
 import { resolveBookingAmount } from "../lib/dynamicPricing";
 import { staffAssignableError } from "../lib/staffEcosystem/profileCompletion";
+import { roleSlugForBookingService, staffOperationalRoleError } from "../lib/staffEcosystem/operationalRoles";
 import {
   debitWallet,
   resolveDailyRate,
@@ -14,8 +15,19 @@ import {
   isLowBalance,
 } from "../lib/wallet/service";
 import { notifyBookingConfirmed, notifyBookingCompleted, notifyLowBalance } from "../lib/notifications/dispatcher";
+import { captureBookingTransitionLocation } from "../lib/staffLocation/bookingLocation";
+import { handleLocationError } from "../lib/staffLocation/locationService";
 
 const router = Router();
+
+async function validateStaffAssignmentForService(
+  staff: typeof staffTable.$inferSelect,
+  serviceType: string,
+): Promise<string | null> {
+  const roleSlug = roleSlugForBookingService(serviceType);
+  if (!roleSlug) return staffAssignableError(staff);
+  return staffOperationalRoleError(staff, roleSlug);
+}
 
 const SCOPE_COLS = {
   companyCol: bookingsTable.companyId,
@@ -221,7 +233,7 @@ router.post("/bookings", async (req, res) => {
         r => ({ ...r, staffId: r.id }),
       );
       if (!staff) return res.status(404).json({ error: "Staff not found" });
-      const assignErr = staffAssignableError(staff);
+      const assignErr = await validateStaffAssignmentForService(staff, serviceType);
       if (assignErr) return res.status(409).json({ error: assignErr });
     }
 
@@ -354,7 +366,7 @@ router.patch("/bookings/:id", async (req, res) => {
       } else {
         const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
         if (!staff) return res.status(404).json({ error: "Staff not found" });
-        const assignErr = staffAssignableError(staff);
+        const assignErr = await validateStaffAssignmentForService(staff, existing.serviceType);
         if (assignErr) return res.status(409).json({ error: assignErr });
         updateData.staffId = staffId;
       }
@@ -416,9 +428,34 @@ router.post("/bookings/:id/transition", async (req, res) => {
       return res.status(400).json({ error: "Upload an after photo before completing the job" });
     }
 
+    const isAssignedStaff =
+      req.user?.staffId != null
+      && existing.staffId != null
+      && req.user.staffId === existing.staffId;
+    const locationRequired = isAssignedStaff && ["en_route", "in_progress", "completed"].includes(toStatus);
+
+    let locationLog: Awaited<ReturnType<typeof captureBookingTransitionLocation>> = null;
+    try {
+      locationLog = await captureBookingTransitionLocation(
+        existing,
+        existing.staffId!,
+        toStatus,
+        req.body as Record<string, unknown>,
+        { requireLocation: locationRequired },
+      );
+    } catch (locErr) {
+      const handled = handleLocationError(locErr);
+      if (handled) return res.status(handled.status).json(handled.body);
+      throw locErr;
+    }
+
     const updateData: Record<string, unknown> = { status: toStatus, updatedAt: new Date() };
     if (toStatus === "in_progress") updateData.startedAt = new Date();
     if (toStatus === "completed") updateData.completedAt = new Date();
+
+    const eventLocation = locationLog
+      ? { locationLat: String(locationLog.latitude), locationLng: String(locationLog.longitude) }
+      : undefined;
 
     if (toStatus === "completed") {
       const fullBooking = await getBookingWithScope(req, id);
@@ -448,6 +485,7 @@ router.post("/bookings/:id/transition", async (req, res) => {
             body: reason,
             actorId: req.user?.id ?? req.scope?.staffId,
             actorName: req.user?.name ?? "system",
+            ...eventLocation,
           }, tx);
 
           if (existing.subscriptionId) {
@@ -538,6 +576,7 @@ router.post("/bookings/:id/transition", async (req, res) => {
       body: reason,
       actorId: req.user?.id ?? req.scope?.staffId,
       actorName: req.user?.name ?? "system",
+      ...eventLocation,
     });
 
     return res.json(booking);
@@ -583,7 +622,7 @@ router.post("/bookings/:id/assign", async (req, res) => {
       r => ({ ...r, staffId: r.id }),
     );
     if (!staff) return res.status(404).json({ error: "Staff not found" });
-    const assignErr = staffAssignableError(staff);
+    const assignErr = await validateStaffAssignmentForService(staff, existing.serviceType);
     if (assignErr) return res.status(409).json({ error: assignErr });
     if (staff.verificationStatus !== "verified") {
       return res.status(400).json({ error: "Staff must be verified before assignment" });

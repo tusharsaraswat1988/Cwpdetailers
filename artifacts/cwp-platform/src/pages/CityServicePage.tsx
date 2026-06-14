@@ -63,7 +63,7 @@ export default function CityServicePage() {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/"><BrandLogo className="h-8" /></Link>
+          <Link href="/"><BrandLogo variant="navbar" lazy={false} /></Link>
           <Badge variant="outline" className="gap-1"><MapPin size={12} />{data.city.name}</Badge>
         </div>
       </header>

@@ -14,6 +14,8 @@ import { logDcmsActivity } from "./auditLog";
 import { DEFAULT_RADIUS_METERS } from "./geoFence";
 import { getPlanById } from "./planService";
 import { isRenewalEligible, getVisitStats } from "./missedVisitService";
+import { OPERATIONAL_ROLE_SLUGS, staffOperationalRoleError } from "../staffEcosystem/operationalRoles";
+import { getVehiclePlanContext, assertPlanMatchesVehicle } from "./vehiclePlanMatch";
 
 export async function createSubscription(
   data: {
@@ -32,6 +34,12 @@ export async function createSubscription(
 ): Promise<DcmsSubscription> {
   const plan = await getPlanById(data.planId);
   if (!plan || !plan.isActive) throw new Error("Plan not found or inactive");
+
+  const vehicleCtx = await getVehiclePlanContext(data.vehicleId);
+  if (!vehicleCtx) {
+    throw new Error("Vehicle must be linked to a car model (type + seater) before creating a subscription");
+  }
+  assertPlanMatchesVehicle(plan, vehicleCtx, plan.seatCount);
 
   const [sub] = await db.insert(dcmsSubscriptionsTable).values({
     customerId: data.customerId,
@@ -169,6 +177,11 @@ export async function assignStaff(
   assignedBy: number,
   routeOrder?: number,
 ) {
+  const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
+  if (!staff) throw new Error("Staff not found");
+  const roleErr = await staffOperationalRoleError(staff, OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
+  if (roleErr) throw new Error(roleErr);
+
   await db.update(dcmsStaffAssignmentsTable)
     .set({ isActive: false })
     .where(and(eq(dcmsStaffAssignmentsTable.subscriptionId, subscriptionId), eq(dcmsStaffAssignmentsTable.isActive, true)));

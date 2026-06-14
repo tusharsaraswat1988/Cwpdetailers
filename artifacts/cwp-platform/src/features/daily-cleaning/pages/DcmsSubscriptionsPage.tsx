@@ -15,15 +15,15 @@ import { Plus, RefreshCw, Pause, Play } from "lucide-react";
 
 export default function DcmsSubscriptionsPage() {
   const { data: subs, isLoading } = useDcmsSubscriptions();
-  const { data: plans } = useDcmsPlans();
+  const [customer, setCustomer] = useState<SearchOption | null>(null);
+  const [vehicle, setVehicle] = useState<SearchOption | null>(null);
+  const { data: plans } = useDcmsPlans(vehicle?.id);
   const { create, renew } = useDcmsSubscriptionMutations();
   const { pause, resume } = usePauseMutations();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [pauseOpen, setPauseOpen] = useState<number | null>(null);
   const [pauseForm, setPauseForm] = useState({ pauseStartDate: "", pauseEndDate: "", pauseReason: "" });
-  const [customer, setCustomer] = useState<SearchOption | null>(null);
-  const [vehicle, setVehicle] = useState<SearchOption | null>(null);
   const [form, setForm] = useState({
     planId: "", startDate: new Date().toISOString().slice(0, 10),
     latitude: "", longitude: "",
@@ -96,29 +96,51 @@ export default function DcmsSubscriptionsPage() {
               <div className="space-y-3">
                 <div>
                   <Label>Customer</Label>
-                  <DcmsEntitySearch type="customers" value={customer} onChange={v => { setCustomer(v); setVehicle(null); }} placeholder="Search name or mobile…" />
+                  <DcmsEntitySearch type="customers" value={customer} onChange={v => { setCustomer(v); setVehicle(null); setForm(f => ({ ...f, planId: "" })); }} placeholder="Search name or mobile…" />
                 </div>
                 <div>
                   <Label>Vehicle</Label>
                   <DcmsEntitySearch
                     type="vehicles"
                     value={vehicle}
-                    onChange={setVehicle}
+                    onChange={v => { setVehicle(v); setForm(f => ({ ...f, planId: "" })); }}
                     disabled={!customer}
                     vehicleFilters={{ customerId: customer?.id }}
                     placeholder={customer ? "Registration, brand, or model…" : "Select customer first"}
                   />
+                  {vehicle && !vehicle.vehicleModelId && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Vehicle is not linked to a car model. Update the vehicle with type + seater before subscribing.
+                    </p>
+                  )}
+                  {vehicle?.vehicleCategoryName && vehicle.seatCategoryName && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {vehicle.vehicleCategoryName} · {vehicle.seatCategoryName}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>Plan</Label>
-                  <Select value={form.planId} onValueChange={v => setForm(f => ({ ...f, planId: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
+                  <Select
+                    value={form.planId}
+                    onValueChange={v => setForm(f => ({ ...f, planId: v }))}
+                    disabled={!vehicle?.vehicleModelId}
+                  >
+                    <SelectTrigger><SelectValue placeholder={vehicle ? "Select matching plan" : "Select vehicle first"} /></SelectTrigger>
                     <SelectContent>
                       {plans?.filter(p => p.isActive).map(p => (
-                        <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name} — ₹{Number(p.price).toLocaleString("en-IN")}
+                          {p.seatPricingTierLabel ? ` (${p.seatPricingTierLabel})` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {vehicle?.vehicleModelId && plans?.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      No plans for this car type and seater count. Create a matching plan first.
+                    </p>
+                  )}
                 </div>
                 <div><Label>Start Date</Label><Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} /></div>
                 <div className="grid grid-cols-2 gap-2">

@@ -30,6 +30,7 @@ async function loadStaffInScope(req: Request, id: number) {
 }
 
 import { recalculateStaffProfile } from "../lib/staffEcosystem/recalculate";
+import { getStaffOperationalRoles } from "../lib/staffEcosystem/operationalRoles";
 
 function applyPermanentAddress(body: Record<string, unknown>) {
   if (!body.permanentSameAsCurrent) return body;
@@ -61,6 +62,20 @@ router.get("/staff-role-master", async (_req, res) => {
       .where(eq(staffRoleMasterTable.isActive, true))
       .orderBy(asc(staffRoleMasterTable.sortOrder));
     return res.json(roles);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/staff/me/operational-roles", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+    const roles = await getStaffOperationalRoles(staffId);
+    return res.json({
+      slugs: roles.map(r => r.roleSlug),
+      roles,
+    });
   } catch (err) {
     return res.status(500).json({ error: "Internal server error" });
   }
