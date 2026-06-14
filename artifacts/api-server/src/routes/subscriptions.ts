@@ -86,6 +86,11 @@ router.post("/subscriptions", async (req, res) => {
     if (!customerId || !type || !startDate || !endDate || price === undefined) {
       return res.status(400).json({ error: "customerId, type, startDate, endDate, and price are required" });
     }
+    if (type === "daily_wash") {
+      return res.status(400).json({
+        error: "Daily car cleaning uses DCMS. Create a plan at Daily Cleaning → Subscriptions instead.",
+      });
+    }
     const customer = await loadIfInScope(req,
       () => db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1).then(r => r[0]),
       r => ({ ...r, customerId: r.id }),
@@ -107,6 +112,9 @@ router.post("/subscriptions", async (req, res) => {
 
     const { tryReactivateLegacyCustomer } = await import("../lib/customerReactivation");
     const reactivation = await tryReactivateLegacyCustomer(customerId, "subscription", { type: "subscription", id: sub.id });
+
+    const { syncContractFromSubscription } = await import("../lib/contracts/contractRegistry");
+    await syncContractFromSubscription(sub);
 
     return res.status(201).json({ ...sub, reactivated: reactivation.reactivated });
   } catch (err) {
@@ -187,54 +195,13 @@ router.get("/subscriptions/health", async (req, res) => {
   }
 });
 
-router.get("/subscriptions/daily-ops", async (req, res) => {
-  try {
-    const { getDailyOpsSummary } = await import("../subscriptions/dailyScheduler");
-    const summary = await getDailyOpsSummary();
-    return res.json(summary);
-  } catch (err) {
-    req.log.error({ err }, "Daily ops summary error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
 router.get("/subscriptions/due-washes", async (req, res) => {
   try {
-    const { detectDueWashes } = await import("../subscriptions/dailyScheduler");
+    const { detectDueWashes } = await import("../subscriptions/dueWashDetection");
     const due = await detectDueWashes();
     return res.json({ data: due, total: due.length });
   } catch (err) {
     req.log.error({ err }, "Due washes error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-router.post("/subscriptions/daily-schedule", async (req, res) => {
-  if (!req.user || !["admin", "superadmin", "manager"].includes(req.user.role)) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-  try {
-    const { date } = req.body ?? {};
-    const { generateDailyCleaningBookings } = await import("../subscriptions/dailyScheduler");
-    const result = await generateDailyCleaningBookings(date);
-    return res.json(result);
-  } catch (err) {
-    req.log.error({ err }, "Daily schedule error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-router.post("/subscriptions/daily-tick", async (req, res) => {
-  if (!req.user || !["admin", "superadmin", "manager"].includes(req.user.role ?? "")) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-  try {
-    const { force } = req.body ?? {};
-    const { runDailyTick } = await import("../subscriptions/service");
-    const result = await runDailyTick(undefined, { force: force === true });
-    return res.json(result);
-  } catch (err) {
-    req.log.error({ err }, "Daily tick error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

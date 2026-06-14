@@ -119,7 +119,7 @@ router.post(
       const {
         name, description, price, includedCleanings, includedWashes, weeklyOffs,
         vehicleCategoryId, seatCategoryId, allVehicleCategories, vehicleCategoryIds,
-        allSeatTiers, seatPricingTiers, addons,
+        allSeatTiers, seatPricingTiers, addons, showOnHomepage,
       } = req.body;
       if (!name || price == null || includedCleanings == null) {
         return res.status(400).json({ error: "name, price, and includedCleanings are required" });
@@ -144,6 +144,7 @@ router.post(
         allSeatTiers: Boolean(allSeatTiers),
         seatPricingTiers,
         addons,
+        showOnHomepage: showOnHomepage != null ? Boolean(showOnHomepage) : undefined,
         companyId: req.user!.companyId,
       }, req.user!.id);
       if (plans.length === 1) return res.status(201).json(plans[0]);
@@ -163,8 +164,14 @@ router.patch(
       const id = Number(req.params.id);
       const {
         name, description, price, includedCleanings, includedWashes, weeklyOffs, isActive,
-        vehicleCategoryId, seatCategoryId, allVehicleCategories, allSeatTiers, addons,
+        vehicleCategoryId, seatCategoryId, allVehicleCategories, allSeatTiers, addons, showOnHomepage,
       } = req.body;
+
+      if (showOnHomepage != null && Object.keys(req.body).length === 1) {
+        const plan = await updatePlan(id, { showOnHomepage: Boolean(showOnHomepage) }, req.user!.id);
+        if (!plan) return res.status(404).json({ error: "Plan not found" });
+        return res.json(plan);
+      }
 
       if (isActive != null) {
         const plan = await setPlanActive(id, Boolean(isActive), req.user!.id);
@@ -182,6 +189,7 @@ router.patch(
         allVehicleCategories: allVehicleCategories != null ? Boolean(allVehicleCategories) : undefined,
         allSeatTiers: allSeatTiers != null ? Boolean(allSeatTiers) : undefined,
         addons,
+        showOnHomepage: showOnHomepage != null ? Boolean(showOnHomepage) : undefined,
       }, req.user!.id);
       if (!plan) return res.status(404).json({ error: "Plan not found" });
       return res.json(plan);

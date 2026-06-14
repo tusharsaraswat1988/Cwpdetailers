@@ -122,8 +122,6 @@ export function CustomerOnboardingWizard({ open, onOpenChange, basePath = "/admi
     done: "Onboarding complete",
   };
 
-  const isAdminPortal = basePath.startsWith("/admin");
-
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -248,18 +246,21 @@ export function CustomerOnboardingWizard({ open, onOpenChange, basePath = "/admi
             <CheckCircle size={40} className="mx-auto text-green-500" />
             <p className="font-medium">{customer.name} is ready for operations.</p>
             <div className="flex flex-col gap-2">
+              <Link href={`${basePath}/${customer.id}?tab=services&action=add`}>
+                <Button className="w-full bg-primary text-secondary" onClick={() => close(false)} data-testid="btn-onboard-add-service">
+                  Add first service
+                </Button>
+              </Link>
+              <Link href={`${basePath}/${customer.id}?tab=services`}>
+                <Button variant="outline" className="w-full" onClick={() => close(false)} data-testid="btn-onboard-services">
+                  View services & plans
+                </Button>
+              </Link>
               <Link href={`${basePath}/${customer.id}`}>
-                <Button className="w-full bg-primary text-secondary" onClick={() => close(false)}>
+                <Button variant="ghost" className="w-full" onClick={() => close(false)}>
                   Open customer profile
                 </Button>
               </Link>
-              {isAdminPortal && (
-                <Link href="/admin/daily-cleaning/subscriptions">
-                  <Button variant="outline" className="w-full" onClick={() => close(false)} data-testid="btn-onboard-dcms">
-                    Create daily-cleaning plan
-                  </Button>
-                </Link>
-              )}
               <Button variant="ghost" onClick={() => close(false)}>Close</Button>
             </div>
           </div>

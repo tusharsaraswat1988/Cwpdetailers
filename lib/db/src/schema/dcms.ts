@@ -88,6 +88,8 @@ export const dcmsPlansTable = pgTable("dcms_plans", {
 
   isActive: boolean("is_active").notNull().default(true),
 
+  showOnHomepage: boolean("show_on_homepage").notNull().default(false),
+
   companyId: integer("company_id"),
 
   createdAt: timestamp("created_at").notNull().defaultNow(),

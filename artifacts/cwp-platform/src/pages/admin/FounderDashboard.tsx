@@ -129,7 +129,7 @@ export default function FounderDashboard() {
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Business Health</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard title="Active Customers" value={stats?.totalCustomers ?? "—"} icon={Users} loading={isLoading} trend="up" href="/admin/customers" />
-            <KpiCard title="Active Contracts" value={stats?.activeSubscriptions ?? "—"} icon={CreditCard} loading={isLoading} href="/admin/subscriptions" />
+            <KpiCard title="Active Contracts" value={stats?.activeContracts ?? stats?.activeSubscriptions ?? "—"} icon={CreditCard} loading={isLoading} href="/admin/customers" />
             <KpiCard title="Total Leads" value={leadStats?.total ?? "—"} icon={Funnel} loading={!leadStats} sub={`${leadStats?.conversionRate ?? 0}% conversion`} href="/admin/leads" />
             <KpiCard title="Active Staff" value={activeStaffCount} icon={Users} loading={!staffData} href="/admin/staff" />
           </div>

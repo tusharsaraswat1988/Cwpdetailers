@@ -39,8 +39,26 @@ export type AdminService = {
 
 export type CatalogPackage = {
   id: number; name: string; slug: string; price: string; validityDays: number;
-  features?: string[]; tag?: string; isHighlighted: boolean; cityId?: number;
+  description?: string | null;
+  features?: string[]; tag?: string; isHighlighted: boolean; showOnHomepage?: boolean;
+  cityId?: number;
   entitlements?: Array<{ id: number; serviceId: number; entitlementType: string; creditCount: number }>;
+};
+
+export type HomepagePlanCard = {
+  id: number;
+  source: "package" | "dcms" | "legacy_plan";
+  name: string;
+  price: string;
+  description?: string | null;
+  features?: string[];
+  tag?: string | null;
+  isHighlighted: boolean;
+  validityDays?: number;
+  durationMonths?: number | null;
+  includedCleanings?: number;
+  includedWashes?: number;
+  scopeLabel?: string | null;
 };
 
 export type ServiceAddon = {
@@ -98,9 +116,8 @@ export function useCatalogPackages(citySlug?: string) {
 
 export function useCatalogAddons(serviceId?: number) {
   return useQuery({
-    queryKey: ["catalog", "addons", serviceId],
+    queryKey: ["catalog", "addons", serviceId ?? "all"],
     queryFn: () => catalogFetch<ServiceAddon[]>(`/catalog/addons${serviceId ? `?serviceId=${serviceId}` : ""}`),
-    enabled: serviceId != null,
   });
 }
 
@@ -248,4 +265,31 @@ export function useCatalogPricingQuote(params: {
     queryFn: () => catalogFetch<Record<string, unknown>>(`/catalog/pricing/quote?${qs}`),
     enabled: !!params.serviceId,
   });
+}
+
+export function useHomepagePlans(citySlug?: string) {
+  return useQuery({
+    queryKey: ["catalog", "homepage-plans", citySlug],
+    queryFn: () => catalogFetch<HomepagePlanCard[]>(`/catalog/homepage-plans${citySlug ? `?citySlug=${citySlug}` : ""}`),
+  });
+}
+
+export function usePackageMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["catalog", "packages"] });
+    qc.invalidateQueries({ queryKey: ["catalog", "homepage-plans"] });
+  };
+  return {
+    create: useMutation({
+      mutationFn: (data: Record<string, unknown>) =>
+        catalogFetch<CatalogPackage>("/catalog/packages", { method: "POST", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: ({ id, ...data }: { id: number } & Record<string, unknown>) =>
+        catalogFetch<CatalogPackage>(`/catalog/packages/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+  };
 }

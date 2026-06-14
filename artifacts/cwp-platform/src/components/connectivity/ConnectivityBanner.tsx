@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X, WifiOff, ServerCrash, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 import { useConnectivity } from "@/services/ConnectivityContext";
 import type { ConnectivityState } from "@/services/connectivityService";
 
@@ -32,6 +33,7 @@ const BANNER_COPY: Record<
 };
 
 export function ConnectivityBanner({ className }: { className?: string }) {
+  const { user } = useAuth();
   const { state, refresh } = useConnectivity();
   const [dismissedState, setDismissedState] = useState<string | null>(() =>
     sessionStorage.getItem(DISMISS_KEY),
@@ -45,10 +47,11 @@ export function ConnectivityBanner({ className }: { className?: string }) {
   }, [state]);
 
   const visible = useMemo(() => {
+    if (!user) return false;
     if (state === "online") return false;
     if (state === "recovering") return true;
     return dismissedState !== state;
-  }, [state, dismissedState]);
+  }, [user, state, dismissedState]);
 
   if (!visible || state === "online") return null;
 

@@ -488,9 +488,7 @@ async function seed() {
 
   if (bookingCount === 0) {
     await db.insert(subscriptionsTable).values([
-      { customerId: arjun.id, vehicleId: v1.id, serviceId: basicWash.id, type: "daily_wash", status: "active", startDate: today, endDate: endDate90, frequencyDays: 1, price: "8999", dailyRate: "300", paidAmount: "8999", dueAmount: "0", nextServiceDate: today, branchId: varanasi.id },
-      { customerId: sunita.id, vehicleId: v3.id, serviceId: premiumWash.id, type: "monthly_wash", status: "active", startDate: today, endDate: endDate30, frequencyDays: 7, price: "2499", paidAmount: "0", dueAmount: "2499", nextServiceDate: today, branchId: varanasi.id },
-      { customerId: rohit.id, vehicleId: v4.id, serviceId: basicWash.id, type: "daily_wash", status: "active", startDate: today, endDate: endDate30, frequencyDays: 1, price: "999", dailyRate: "33.30", paidAmount: "999", dueAmount: "0", nextServiceDate: today, branchId: varanasi.id },
+      { customerId: sunita.id, vehicleId: v3.id, serviceId: premiumWash.id, type: "monthly_wash", status: "active", startDate: today, endDate: endDate30, frequencyDays: 7, price: "2499", paidAmount: "0", dueAmount: "2499", nextServiceDate: today, branchId: varanasi.id, totalServices: 4, servicesUsed: 0, servicesRemaining: 4 },
     ]);
 
     await db.insert(bookingsTable).values([

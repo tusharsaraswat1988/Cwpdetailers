@@ -7,6 +7,7 @@ import {
 import { eq, and, or, ilike, sql, desc, gte, lte } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { findCustomerByPhoneInScope } from "../lib/customerAccount";
+import { assertContactIdentityAvailable } from "../lib/contactIdentity";
 import {
   parseRequiredMobile,
   parseOptionalMobile,
@@ -473,9 +474,12 @@ router.post("/leads/:id/convert", async (req, res) => {
         result.customer = full ?? existing;
         result.customerLinked = true;
       } else {
+        const identityCheck = await assertContactIdentityAvailable(lead.phone, null);
+        if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+
         const customerValues = tenantStamp(req, {
           name: lead.name,
-          phone: lead.phone,
+          phone: identityCheck.identity.phone,
           city: lead.city,
           status: "active" as const,
         });

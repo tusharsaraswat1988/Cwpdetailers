@@ -17,6 +17,7 @@ import {
   citiesTable,
 } from "@workspace/db";
 import { eq, and, asc, desc } from "drizzle-orm";
+import { listHomepagePlans } from "../lib/catalog/homepagePlans";
 import { resolveCatalogPricing, resolveCityId } from "../lib/catalog/pricingEngine";
 import {
   grantPackageEntitlements,
@@ -178,10 +179,11 @@ router.delete("/catalog/addon-links/:id", async (req, res) => {
 // ─── Packages ────────────────────────────────────────────────────────────────
 
 router.get("/catalog/packages", async (req, res) => {
-  const { cityId, citySlug, status } = req.query as Record<string, string>;
+  const { cityId, citySlug, status, homepage } = req.query as Record<string, string>;
   const conditions = [];
   if (status) conditions.push(eq(catalogPackagesTable.status, status as any));
   else conditions.push(eq(catalogPackagesTable.status, "active"));
+  if (homepage === "true") conditions.push(eq(catalogPackagesTable.showOnHomepage, true));
   if (cityId) conditions.push(eq(catalogPackagesTable.cityId, parseInt(cityId)));
   if (citySlug) {
     const cid = await resolveCityId(citySlug);
@@ -244,9 +246,11 @@ router.get("/catalog/entitlements", async (req, res) => {
 });
 
 router.post("/catalog/entitlements/grant-package", async (req, res) => {
-  const { customerId, packageId, cityId, subscriptionId } = req.body;
+  const { customerId, packageId, cityId, subscriptionId, vehicleId, solarSiteId } = req.body;
   if (!customerId || !packageId) return res.status(400).json({ error: "customerId and packageId required" });
-  const grants = await grantPackageEntitlements(customerId, packageId, { cityId, subscriptionId });
+  const grants = await grantPackageEntitlements(customerId, packageId, {
+    cityId, subscriptionId, vehicleId, solarSiteId,
+  });
   return res.status(201).json(grants);
 });
 
@@ -302,6 +306,12 @@ router.get("/catalog/homepage", async (_req, res) => {
     .where(eq(homepageSectionsTable.isActive, true))
     .orderBy(asc(homepageSectionsTable.sortOrder));
   return res.json(sections);
+});
+
+router.get("/catalog/homepage-plans", async (req, res) => {
+  const { citySlug } = req.query as Record<string, string>;
+  const plans = await listHomepagePlans(citySlug);
+  return res.json(plans);
 });
 
 router.put("/catalog/homepage/:sectionKey", async (req, res) => {

@@ -23,7 +23,4 @@ export type WalletTransaction = {
 
 export type WalletSummary = {
   balance?: number;
-  isLowBalance?: boolean;
-  lowBalanceThreshold?: number;
-  lowBalanceThresholdDays?: number;
 };

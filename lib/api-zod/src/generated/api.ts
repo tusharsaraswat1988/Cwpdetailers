@@ -115,7 +115,24 @@ export const ListCustomersResponse = zod.object({
       totalDues: zod.number().optional(),
       branchId: zod.number().optional(),
       branchName: zod.string().optional(),
-      photoUrl: zod.string().nullable().optional(),
+      photoUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          "Customer profile photo URL (set via file upload; send null to remove)",
+        ),
+      gstin: zod
+        .string()
+        .nullish()
+        .describe("15-character GSTIN for B2B invoicing"),
+      billingName: zod
+        .string()
+        .nullish()
+        .describe("Legal billing name on invoices"),
+      referredByCustomerId: zod
+        .number()
+        .nullish()
+        .describe("Customer who referred this account"),
       createdAt: zod.coerce.date().optional(),
     }),
   ),
@@ -157,7 +174,24 @@ export const GetCustomerResponse = zod
     totalDues: zod.number().optional(),
     branchId: zod.number().optional(),
     branchName: zod.string().optional(),
-    photoUrl: zod.string().nullable().optional(),
+    photoUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Customer profile photo URL (set via file upload; send null to remove)",
+      ),
+    gstin: zod
+      .string()
+      .nullish()
+      .describe("15-character GSTIN for B2B invoicing"),
+    billingName: zod
+      .string()
+      .nullish()
+      .describe("Legal billing name on invoices"),
+    referredByCustomerId: zod
+      .number()
+      .nullish()
+      .describe("Customer who referred this account"),
     createdAt: zod.coerce.date().optional(),
   })
   .and(
@@ -205,12 +239,7 @@ export const GetCustomerResponse = zod
             solarSiteId: zod.number().optional(),
             serviceId: zod.number().optional(),
             serviceName: zod.string().optional(),
-            type: zod.enum([
-              "daily_wash",
-              "monthly_wash",
-              "solar_amc",
-              "detailing_plan",
-            ]),
+            type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
             status: zod.enum([
               "active",
               "paused",
@@ -263,7 +292,13 @@ export const UpdateCustomerBody = zod.object({
   status: zod.enum(["active", "inactive", "suspended"]).optional(),
   walletBalance: zod.number().optional(),
   branchId: zod.number().optional(),
-  photoUrl: zod.string().nullable().optional(),
+  photoUrl: zod
+    .string()
+    .nullish()
+    .describe("Set via uploaded image URL, or null to remove profile photo"),
+  gstin: zod.string().nullish(),
+  billingName: zod.string().nullish(),
+  referredByCustomerId: zod.number().nullish(),
 });
 
 export const UpdateCustomerResponse = zod.object({
@@ -278,8 +313,67 @@ export const UpdateCustomerResponse = zod.object({
   totalDues: zod.number().optional(),
   branchId: zod.number().optional(),
   branchName: zod.string().optional(),
-  photoUrl: zod.string().nullable().optional(),
+  photoUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Customer profile photo URL (set via file upload; send null to remove)",
+    ),
+  gstin: zod
+    .string()
+    .nullish()
+    .describe("15-character GSTIN for B2B invoicing"),
+  billingName: zod
+    .string()
+    .nullish()
+    .describe("Legal billing name on invoices"),
+  referredByCustomerId: zod
+    .number()
+    .nullish()
+    .describe("Customer who referred this account"),
   createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Get referral network for a customer
+ */
+export const GetCustomerNetworkParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetCustomerNetworkResponse = zod.object({
+  referrer: zod
+    .object({
+      id: zod.number().optional(),
+      name: zod.string().optional(),
+      phone: zod.string().optional(),
+      city: zod.string().nullish(),
+      status: zod.string().optional(),
+    })
+    .nullish(),
+  referrals: zod
+    .array(
+      zod.object({
+        id: zod.number().optional(),
+        name: zod.string().optional(),
+        phone: zod.string().optional(),
+        city: zod.string().nullish(),
+        status: zod.string().optional(),
+      }),
+    )
+    .optional(),
+  siblings: zod
+    .array(
+      zod.object({
+        id: zod.number().optional(),
+        name: zod.string().optional(),
+        phone: zod.string().optional(),
+        city: zod.string().nullish(),
+        status: zod.string().optional(),
+      }),
+    )
+    .optional(),
+  referralCount: zod.number().optional(),
 });
 
 /**
@@ -657,9 +751,7 @@ export const listSubscriptionsQueryOffsetDefault = 0;
 export const ListSubscriptionsQueryParams = zod.object({
   customerId: zod.coerce.number().optional(),
   status: zod.enum(["active", "expired", "cancelled", "pending"]).optional(),
-  type: zod
-    .enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"])
-    .optional(),
+  type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]).optional(),
   limit: zod.coerce.number().default(listSubscriptionsQueryLimitDefault),
   offset: zod.coerce.number().default(listSubscriptionsQueryOffsetDefault),
 });
@@ -674,12 +766,7 @@ export const ListSubscriptionsResponse = zod.object({
       solarSiteId: zod.number().optional(),
       serviceId: zod.number().optional(),
       serviceName: zod.string().optional(),
-      type: zod.enum([
-        "daily_wash",
-        "monthly_wash",
-        "solar_amc",
-        "detailing_plan",
-      ]),
+      type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
       status: zod.enum([
         "active",
         "paused",
@@ -725,7 +812,7 @@ export const CreateSubscriptionBody = zod.object({
   vehicleId: zod.number().optional(),
   solarSiteId: zod.number().optional(),
   serviceId: zod.number().optional(),
-  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
   startDate: zod.coerce.date(),
   endDate: zod.coerce.date(),
   frequencyDays: zod.number().optional(),
@@ -751,7 +838,7 @@ export const GetSubscriptionResponse = zod.object({
   solarSiteId: zod.number().optional(),
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
-  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
   status: zod.enum([
     "active",
     "paused",
@@ -822,7 +909,7 @@ export const UpdateSubscriptionResponse = zod.object({
   solarSiteId: zod.number().optional(),
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
-  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
   status: zod.enum([
     "active",
     "paused",
@@ -866,7 +953,7 @@ export const GetExpiringSoonSubscriptionsResponseItem = zod.object({
   solarSiteId: zod.number().optional(),
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
-  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
   status: zod.enum([
     "active",
     "paused",
@@ -917,7 +1004,7 @@ export const PauseSubscriptionResponse = zod.object({
   solarSiteId: zod.number().optional(),
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
-  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
   status: zod.enum([
     "active",
     "paused",
@@ -965,7 +1052,7 @@ export const ResumeSubscriptionResponse = zod.object({
   solarSiteId: zod.number().optional(),
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
-  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
   status: zod.enum([
     "active",
     "paused",
@@ -1017,7 +1104,7 @@ export const CancelSubscriptionResponse = zod.object({
   solarSiteId: zod.number().optional(),
   serviceId: zod.number().optional(),
   serviceName: zod.string().optional(),
-  type: zod.enum(["daily_wash", "monthly_wash", "solar_amc", "detailing_plan"]),
+  type: zod.enum(["monthly_wash", "solar_amc", "detailing_plan"]),
   status: zod.enum([
     "active",
     "paused",
@@ -1066,11 +1153,6 @@ export const GetSubscriptionHealthResponse = zod.object({
     .optional()
     .describe("Churn rate percentage over last 30 days"),
 });
-
-/**
- * @summary Run daily scheduler tick
- */
-export const RunDailyTickResponse = zod.object({}).passthrough();
 
 /**
  * @summary List bookings

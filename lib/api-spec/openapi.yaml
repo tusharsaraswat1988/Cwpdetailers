@@ -482,7 +482,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [daily_wash, monthly_wash, solar_amc, detailing_plan]
+            enum: [monthly_wash, solar_amc, detailing_plan]
         - name: limit
           in: query
           schema:
@@ -668,18 +668,6 @@ paths:
                     type: number
                     description: "Churn rate percentage over last 30 days"
 
-  /subscriptions/daily-tick:
-    post:
-      operationId: runDailyTick
-      tags: [subscriptions]
-      summary: Run daily scheduler tick
-      responses:
-        "200":
-          description: Tick result
-          content:
-            application/json:
-              schema:
-                type: object
 
   # BOOKINGS
   /bookings:
@@ -2123,7 +2111,7 @@ components:
           type: string
         type:
           type: string
-          enum: [daily_wash, monthly_wash, solar_amc, detailing_plan]
+          enum: [monthly_wash, solar_amc, detailing_plan]
         status:
           type: string
           enum: [active, paused, expiring, expired, cancelled, pending, missed]
@@ -2208,7 +2196,7 @@ components:
           type: integer
         type:
           type: string
-          enum: [daily_wash, monthly_wash, solar_amc, detailing_plan]
+          enum: [monthly_wash, solar_amc, detailing_plan]
         startDate:
           type: string
           format: date

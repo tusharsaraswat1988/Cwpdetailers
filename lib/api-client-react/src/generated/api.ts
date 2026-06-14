@@ -43,6 +43,7 @@ import type {
   CustomerAnalytics,
   CustomerDetail,
   CustomerListResponse,
+  CustomerNetwork,
   CustomerSummary,
   DashboardStats,
   ErrorEnvelope,
@@ -79,7 +80,6 @@ import type {
   RegisterBody,
   RescheduleBookingBody,
   RevenueAnalytics,
-  RunDailyTick200,
   Service,
   SolarSite,
   Staff,
@@ -773,6 +773,93 @@ export const useUpdateCustomer = <
 > => {
   return useMutation(getUpdateCustomerMutationOptions(options));
 };
+
+/**
+ * @summary Get referral network for a customer
+ */
+export const getGetCustomerNetworkUrl = (id: number) => {
+  return `/api/customers/${id}/network`;
+};
+
+export const getCustomerNetwork = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CustomerNetwork> => {
+  return customFetch<CustomerNetwork>(getGetCustomerNetworkUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCustomerNetworkQueryKey = (id: number) => {
+  return [`/api/customers/${id}/network`] as const;
+};
+
+export const getGetCustomerNetworkQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCustomerNetwork>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCustomerNetwork>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCustomerNetworkQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCustomerNetwork>>
+  > = ({ signal }) => getCustomerNetwork(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCustomerNetwork>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCustomerNetworkQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCustomerNetwork>>
+>;
+export type GetCustomerNetworkQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get referral network for a customer
+ */
+
+export function useGetCustomerNetwork<
+  TData = Awaited<ReturnType<typeof getCustomerNetwork>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCustomerNetwork>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCustomerNetworkQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get customer dashboard summary
@@ -2596,87 +2683,6 @@ export function useGetSubscriptionHealth<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
-
-/**
- * @summary Run daily scheduler tick
- */
-export const getRunDailyTickUrl = () => {
-  return `/api/subscriptions/daily-tick`;
-};
-
-export const runDailyTick = async (
-  options?: RequestInit,
-): Promise<RunDailyTick200> => {
-  return customFetch<RunDailyTick200>(getRunDailyTickUrl(), {
-    ...options,
-    method: "POST",
-  });
-};
-
-export const getRunDailyTickMutationOptions = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof runDailyTick>>,
-    TError,
-    void,
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof runDailyTick>>,
-  TError,
-  void,
-  TContext
-> => {
-  const mutationKey = ["runDailyTick"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof runDailyTick>>,
-    void
-  > = () => {
-    return runDailyTick(requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type RunDailyTickMutationResult = NonNullable<
-  Awaited<ReturnType<typeof runDailyTick>>
->;
-
-export type RunDailyTickMutationError = ErrorType<unknown>;
-
-/**
- * @summary Run daily scheduler tick
- */
-export const useRunDailyTick = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof runDailyTick>>,
-    TError,
-    void,
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof runDailyTick>>,
-  TError,
-  void,
-  TContext
-> => {
-  return useMutation(getRunDailyTickMutationOptions(options));
-};
 
 /**
  * @summary List bookings

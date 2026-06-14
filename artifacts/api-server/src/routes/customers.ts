@@ -10,7 +10,8 @@ import {
   applyMobileField,
   applyOptionalEmailField,
 } from "../lib/contactFields";
-import { createCustomerLoginAccount, findCustomerByPhoneInScope } from "../lib/customerAccount";
+import { assertContactIdentityAvailable } from "../lib/contactIdentity";
+import { createCustomerLoginAccount } from "../lib/customerAccount";
 import { normalizeGstin } from "../lib/gstin";
 import { resolveSupervisorForCustomer } from "../lib/supervisor/supervisorContact";
 import { isLegacyDormantCustomer, tryReactivateLegacyCustomer } from "../lib/customerReactivation";
@@ -167,17 +168,14 @@ router.post("/customers", async (req, res) => {
     const emailResult = parseOptionalEmail(email);
     if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
 
-    const existing = await findCustomerByPhoneInScope(req, phoneResult.value);
-    if (existing) {
-      return res.status(409).json({
-        error: "A customer with this phone number already exists",
-        existingCustomerId: existing.id,
-        existingCustomerName: existing.name,
-      });
-    }
+    const identityCheck = await assertContactIdentityAvailable(
+      phoneResult.value,
+      emailResult.value,
+    );
+    if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
 
     const stamp = tenantStamp(req, {
-      name, phone: phoneResult.value, email: emailResult.value, address, city,
+      name, phone: identityCheck.identity.phone, email: identityCheck.identity.email, address, city,
       branchId: branchId || null,
       status: "active" as const,
     });
@@ -294,18 +292,19 @@ router.patch("/customers/:id", async (req, res) => {
 
     const phoneField = applyMobileField(req.body, "phone", updateData);
     if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
-    if (typeof updateData.phone === "string") {
-      const dup = await findCustomerByPhoneInScope(req, updateData.phone);
-      if (dup && dup.id !== id) {
-        return res.status(409).json({
-          error: "A customer with this phone number already exists",
-          existingCustomerId: dup.id,
-          existingCustomerName: dup.name,
-        });
-      }
-    }
     const emailField = applyOptionalEmailField(req.body, "email", updateData);
     if (!emailField.ok) return res.status(400).json({ error: emailField.error });
+
+    if (updateData.phone !== undefined || updateData.email !== undefined) {
+      const identityCheck = await assertContactIdentityAvailable(
+        typeof updateData.phone === "string" ? updateData.phone : existing.phone,
+        updateData.email !== undefined ? updateData.email : existing.email,
+        { entity: "customer", id },
+      );
+      if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+      if (typeof updateData.phone === "string") updateData.phone = identityCheck.identity.phone;
+      if (updateData.email !== undefined) updateData.email = identityCheck.identity.email;
+    }
 
     if (address !== undefined) updateData.address = address;
     if (city !== undefined) updateData.city = city;
@@ -436,6 +435,39 @@ router.get("/customers/:id/network", async (req, res) => {
   }
 });
 
+router.get("/customers/:id/services", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, id)).limit(1);
+    if (!customer || !rowInScope(req, { ...customer, customerId: customer.id })) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    const { getCustomerServicesHub } = await import("../lib/customers/customerServicesHub");
+    const hub = await getCustomerServicesHub(id);
+    return res.json(hub);
+  } catch (err) {
+    req.log.error({ err }, "Customer services hub error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/customers/:id/contracts", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, id)).limit(1);
+    if (!customer || !rowInScope(req, { ...customer, customerId: customer.id })) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    const { syncCustomerContracts, listCustomerContracts } = await import("../lib/contracts/contractRegistry");
+    await syncCustomerContracts(id);
+    const contracts = await listCustomerContracts(id);
+    return res.json({ customerId: id, contracts });
+  } catch (err) {
+    req.log.error({ err }, "Customer contracts error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/customers/:id/summary", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -444,15 +476,14 @@ router.get("/customers/:id/summary", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    const [activeSubscriptions, recentBookings, recentPayments, totalSpendResult] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable)
-        .where(and(eq(subscriptionsTable.customerId, id), eq(subscriptionsTable.status, "active"))),
+    const [recentBookings, recentPayments, totalSpendResult, activeContracts] = await Promise.all([
       db.select().from(bookingsTable).where(eq(bookingsTable.customerId, id))
         .orderBy(desc(bookingsTable.createdAt)).limit(5),
       db.select().from(paymentsTable).where(eq(paymentsTable.customerId, id))
         .orderBy(desc(paymentsTable.createdAt)).limit(5),
       db.select({ total: sql<number>`sum(amount)` }).from(paymentsTable)
         .where(eq(paymentsTable.customerId, id)),
+      import("../lib/customers/customerServicesHub").then(m => m.countActiveCustomerContracts(id)),
     ]);
 
     const upcomingBookings = await db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
@@ -466,7 +497,8 @@ router.get("/customers/:id/summary", async (req, res) => {
       ));
 
     return res.json({
-      activeSubscriptions: Number(activeSubscriptions[0]?.count ?? 0),
+      activeSubscriptions: activeContracts,
+      activeContracts,
       upcomingServices: Number(upcomingBookings[0]?.count ?? 0),
       walletBalance: await getLedgerBalance(id),
       pendingDues: parseFloat(customer.totalDues),

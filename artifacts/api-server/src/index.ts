@@ -34,7 +34,7 @@ app.listen(port, "0.0.0.0", (err) => {
   bootstrapAdminFromEnv().catch(err => {
     logger.error({ err }, "Super admin bootstrap failed");
   });
-  bootstrapDailyTick();
+  bootstrapSubscriptionTick();
   bootstrapDcmsScheduler();
   bootstrapMorningRouteNotify();
   bootstrapPushEventProcessor();
@@ -49,24 +49,24 @@ function getNextMidnightIST(now: Date): Date {
   return next;
 }
 
-function bootstrapDailyTick() {
+function bootstrapSubscriptionTick() {
   runDailyTick().catch(err => {
-    logger.error({ err }, "Startup daily tick failed");
+    logger.error({ err }, "Startup subscription tick failed");
   });
-  scheduleNextTick();
-  logger.info("Daily tick scheduler bootstrapped");
+  scheduleNextSubscriptionTick();
+  logger.info("Subscription maintenance tick bootstrapped");
 }
 
-function scheduleNextTick() {
+function scheduleNextSubscriptionTick() {
   const now = new Date();
   const nextMidnight = getNextMidnightIST(now);
   const delay = nextMidnight.getTime() - now.getTime();
 
   setTimeout(() => {
     runDailyTick().catch(err => {
-      logger.error({ err }, "Scheduled daily tick failed");
+      logger.error({ err }, "Scheduled subscription tick failed");
     });
-    scheduleNextTick();
+    scheduleNextSubscriptionTick();
   }, delay);
 }
 

@@ -1,8 +1,7 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useListServices } from "@workspace/api-client-react";
-import { useCatalogPlans } from "@/features/master-data/api";
-import { useCatalogPackages, useHomepageSections } from "@/features/service-catalog/api";
+import { useHomepagePlans, useHomepageSections } from "@/features/service-catalog/api";
 import { Button } from "@/components/ui/button";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { BrandLogo } from "@/components/shared/BrandLogo";
@@ -109,8 +108,7 @@ const cities = ["Varanasi"];
 
 export default function Landing() {
   const { data: services } = useListServices({ isActive: true });
-  const { data: dbPlans } = useCatalogPlans();
-  const { data: catalogPackages } = useCatalogPackages("varanasi");
+  const { data: homepagePlans } = useHomepagePlans("varanasi");
   const { data: homepageSections } = useHomepageSections();
   const branding = useBranding();
 
@@ -125,17 +123,21 @@ export default function Landing() {
   const cmsTestimonials = (testimonialsSection?.content as { items?: typeof testimonials })?.items;
   const displayTestimonials = cmsTestimonials ?? testimonials;
 
-  const catalogPlanItems = (catalogPackages ?? []).length > 0 ? catalogPackages : dbPlans;
-
-  const displayPlans = (catalogPlanItems ?? []).length > 0
-    ? (catalogPlanItems ?? []).map(p => ({
+  const displayPlans = (homepagePlans ?? []).length > 0
+    ? (homepagePlans ?? []).map(p => ({
         name: p.name,
         price: Number(p.price).toLocaleString("en-IN"),
-        priceNote: "validityDays" in p && p.validityDays ? `/${Math.round(p.validityDays / 30) || 1} month${p.validityDays > 30 ? "s" : ""}` : (p.durationMonths ? `/${p.durationMonths === 1 ? "month" : `${p.durationMonths} months`}` : ""),
+        priceNote: p.source === "dcms"
+          ? "/month"
+          : p.validityDays
+            ? `/${Math.max(1, Math.round(p.validityDays / 30))} month${p.validityDays > 30 ? "s" : ""}`
+            : p.durationMonths
+              ? `/${p.durationMonths === 1 ? "month" : `${p.durationMonths} months`}`
+              : "",
         price2: undefined as string | undefined,
         price2Note: undefined as string | undefined,
-        desc: p.description ?? "",
-        features: (p.features as string[]) ?? [],
+        desc: p.description ?? (p.scopeLabel ? `${p.scopeLabel}` : ""),
+        features: p.features ?? [],
         tag: p.tag,
         highlight: p.isHighlighted,
       }))

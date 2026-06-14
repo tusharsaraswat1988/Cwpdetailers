@@ -12,6 +12,7 @@
   "dependencies": {
     "@swc/helpers": "^0.5.23",
     "@workspace/api-zod": "workspace:*",
+    "@workspace/customer-model": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/validation": "workspace:*",
     "argon2": "^0.43.0",

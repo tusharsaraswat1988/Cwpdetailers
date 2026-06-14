@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { bookingsTable, customersTable, subscriptionsTable, staffTable, invoicesTable, complaintsTable, paymentsTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { tenantFilters, sqlTenant } from "../middlewares/tenantScope";
+import { countActiveContractsForTenant } from "../lib/contracts/contractRegistry";
 
 const router = Router();
 
@@ -21,14 +22,18 @@ router.get("/analytics/dashboard", async (req, res) => {
     const s = req.scope;
 
     const [
-      todayRevenue, monthRevenue, totalRevenue, activeSubscriptions, totalCustomers,
+      todayRevenue, monthRevenue, totalRevenue, activeContractsCount, totalCustomers,
       newCustomersThisMonth, pendingDuesTotal, activeJobs, completedJobsToday,
       openComplaints, revenueByCategory, cityWiseStats, subscriptionBreakdown
     ] = await Promise.all([
       db.execute(sql`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM payments WHERE DATE(created_at) = CURRENT_DATE AND ${t(req, { c: "payments.company_id", b: "payments.branch_id" })}`),
       db.execute(sql`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM payments WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "payments.company_id", b: "payments.branch_id" })}`),
       db.execute(sql`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM payments WHERE status = 'completed' AND ${t(req, { c: "payments.company_id", b: "payments.branch_id" })}`),
-      db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable).where(and(eq(subscriptionsTable.status, "active"), ...tenantFilters(req, { companyCol: subscriptionsTable.companyId, branchCol: subscriptionsTable.branchId }))),
+      countActiveContractsForTenant(req).catch(async () => {
+        const [row] = await db.select({ count: sql<number>`count(*)` }).from(subscriptionsTable)
+          .where(and(eq(subscriptionsTable.status, "active"), ...tenantFilters(req, { companyCol: subscriptionsTable.companyId, branchCol: subscriptionsTable.branchId })));
+        return Number(row?.count ?? 0);
+      }),
       db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId }))),
       db.execute(sql`SELECT COUNT(*) as count FROM customers WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "customers.company_id", b: "customers.branch_id" })}`),
       db.execute(sql`SELECT COALESCE(SUM(due_amount::numeric), 0) as total FROM invoices WHERE status IN ('sent', 'overdue') AND ${t(req, { c: "invoices.company_id", b: "invoices.branch_id" })}`),
@@ -73,11 +78,16 @@ router.get("/analytics/dashboard", async (req, res) => {
     const cityRows = toRows(cityWiseStats);
     const subRows = toRows(subscriptionBreakdown);
 
+    const activeContracts = typeof activeContractsCount === "number"
+      ? activeContractsCount
+      : Number((activeContractsCount as { count?: number }[])?.[0]?.count ?? 0);
+
     return res.json({
       todayRevenue: Number(toRows(todayRevenue)[0]?.total ?? 0),
       monthRevenue: Number(toRows(monthRevenue)[0]?.total ?? 0),
       totalRevenue: Number(toRows(totalRevenue)[0]?.total ?? 0),
-      activeSubscriptions: Number(activeSubscriptions[0]?.count ?? 0),
+      activeSubscriptions: activeContracts,
+      activeContracts,
       totalCustomers: totalCustomerCount,
       newCustomersThisMonth: Number(toRows(newCustomersThisMonth)[0]?.count ?? 0),
       pendingDuesTotal: Number(toRows(pendingDuesTotal)[0]?.total ?? 0),

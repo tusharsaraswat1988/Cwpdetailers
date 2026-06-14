@@ -42,6 +42,13 @@ import {
   normalizeStaffCategory,
   resolveStaffCategory,
 } from "../lib/staffEcosystem/staffCategory";
+import {
+  parseRequiredMobile,
+  parseOptionalEmail,
+  applyMobileField,
+  applyOptionalEmailField,
+} from "../lib/contactFields";
+import { assertContactIdentityAvailable } from "../lib/contactIdentity";
 
 function applyPermanentAddress(body: Record<string, unknown>) {
   if (!body.permanentSameAsCurrent) return body;
@@ -305,8 +312,25 @@ router.patch("/staff/:id/ecosystem", async (req, res) => {
         updateData.reportingManagerId = null;
       }
     }
-    if (body.phone !== undefined) updateData.phone = body.phone;
-    if (body.email !== undefined) updateData.email = body.email;
+    if (body.phone !== undefined) {
+      const phoneField = applyMobileField(body, "phone", updateData);
+      if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
+    }
+    if (body.email !== undefined) {
+      const emailField = applyOptionalEmailField(body, "email", updateData);
+      if (!emailField.ok) return res.status(400).json({ error: emailField.error });
+    }
+
+    if (updateData.phone !== undefined || updateData.email !== undefined) {
+      const identityCheck = await assertContactIdentityAvailable(
+        typeof updateData.phone === "string" ? updateData.phone : existing.phone,
+        updateData.email !== undefined ? updateData.email : existing.email,
+        { entity: "staff", id },
+      );
+      if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+      if (typeof updateData.phone === "string") updateData.phone = identityCheck.identity.phone;
+      if (updateData.email !== undefined) updateData.email = identityCheck.identity.email;
+    }
 
     const [staff] = await db.update(staffTable).set(updateData).where(eq(staffTable.id, id)).returning();
     await recalculateStaffProfile(id);

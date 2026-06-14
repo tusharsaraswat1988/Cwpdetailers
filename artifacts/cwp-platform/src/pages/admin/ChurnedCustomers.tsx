@@ -5,6 +5,7 @@ import { UserX, Send, Check, MessageSquare, Phone, ExternalLink } from "lucide-r
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
 
 async function fetchChurned() {
   const res = await fetch("/api/churned");
@@ -67,6 +68,7 @@ export default function AdminChurnedCustomers() {
   return (
     <AdminLayout>
       <div className="p-6 max-w-6xl mx-auto">
+        <CustomerHubAdminNav />
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="font-display font-bold text-2xl">Churned Customers</h1>

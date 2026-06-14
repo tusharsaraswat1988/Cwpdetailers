@@ -34,6 +34,7 @@ export const servicePlansTable = pgTable("service_plans", {
   features: json("features").$type<string[]>().default([]),
   tag: text("tag"),
   isHighlighted: boolean("is_highlighted").notNull().default(false),
+  showOnHomepage: boolean("show_on_homepage").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),

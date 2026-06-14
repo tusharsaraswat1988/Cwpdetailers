@@ -201,28 +201,6 @@ export async function notifyBookingConfirmed(booking: {
   });
 }
 
-export async function notifyLowBalance(params: {
-  customerId: number;
-  customerName: string;
-  balance: number;
-  dailyRate: number;
-  companyId?: number | null;
-  branchId?: number | null;
-  dedupeKey?: string;
-}) {
-  return dispatchNotification({
-    template: "low_balance",
-    customerId: params.customerId,
-    vars: {
-      customerName: params.customerName,
-      balance: params.balance.toFixed(0),
-    },
-    dedupeKey: params.dedupeKey,
-    companyId: params.companyId,
-    branchId: params.branchId,
-  });
-}
-
 export async function notifyBookingCompleted(booking: {
   id: number;
   customerId: number;

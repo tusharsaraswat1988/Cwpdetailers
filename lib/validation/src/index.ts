@@ -29,6 +29,18 @@ export {
   type PlateOcrResult,
 } from "./registration";
 
+export {
+  parseContactIdentity,
+  contactIdentityLabel,
+  contactConflictMessage,
+  phonesMatch,
+  emailsMatch,
+  type ContactEntityType,
+  type ParsedContactIdentity,
+  type ContactConflict,
+  type ContactConflictField,
+} from "./contactIdentity";
+
 export function firstFieldError(
   results: Record<string, { ok: boolean; error?: string }>,
 ): string | null {

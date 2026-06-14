@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet, Play, Eye, Download } from "lucide-react";
 import { importCustomerMigration, previewCustomerMigration, migrationSampleDownloadUrl } from "@/features/customers/api";
 import { Can } from "@/components/Can";
+import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
 
 type PreviewData = {
   summary: { customers: number; errors: number; warnings: number };
@@ -72,6 +73,7 @@ export default function AdminCustomerMigration() {
   return (
     <AdminLayout>
       <div className="p-6 space-y-5 max-w-3xl">
+        <CustomerHubAdminNav />
         <PageHeader
           title="Customer migration"
           description="Import legacy customers from Excel. Use legacy_segment=legacy_contact for old phone-only contacts."

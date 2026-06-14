@@ -86,7 +86,14 @@ export interface Customer {
   totalDues?: number;
   branchId?: number;
   branchName?: string;
+  /** Customer profile photo URL (set via file upload; send null to remove) */
   photoUrl?: string | null;
+  /** 15-character GSTIN for B2B invoicing */
+  gstin?: string | null;
+  /** Legal billing name on invoices */
+  billingName?: string | null;
+  /** Customer who referred this account */
+  referredByCustomerId?: number | null;
   createdAt?: string;
 }
 
@@ -131,7 +138,6 @@ export type SubscriptionType =
   (typeof SubscriptionType)[keyof typeof SubscriptionType];
 
 export const SubscriptionType = {
-  daily_wash: "daily_wash",
   monthly_wash: "monthly_wash",
   solar_amc: "solar_amc",
   detailing_plan: "detailing_plan",
@@ -337,7 +343,26 @@ export interface UpdateCustomerBody {
   status?: UpdateCustomerBodyStatus;
   walletBalance?: number;
   branchId?: number;
+  /** Set via uploaded image URL, or null to remove profile photo */
   photoUrl?: string | null;
+  gstin?: string | null;
+  billingName?: string | null;
+  referredByCustomerId?: number | null;
+}
+
+export interface CustomerNetworkPerson {
+  id?: number;
+  name?: string;
+  phone?: string;
+  city?: string | null;
+  status?: string;
+}
+
+export interface CustomerNetwork {
+  referrer?: CustomerNetworkPerson | null;
+  referrals?: CustomerNetworkPerson[];
+  siblings?: CustomerNetworkPerson[];
+  referralCount?: number;
 }
 
 export type CreateVehicleBodyVehicleType =
@@ -435,7 +460,6 @@ export type CreateSubscriptionBodyType =
   (typeof CreateSubscriptionBodyType)[keyof typeof CreateSubscriptionBodyType];
 
 export const CreateSubscriptionBodyType = {
-  daily_wash: "daily_wash",
   monthly_wash: "monthly_wash",
   solar_amc: "solar_amc",
   detailing_plan: "detailing_plan",
@@ -1195,7 +1219,6 @@ export type ListSubscriptionsType =
   (typeof ListSubscriptionsType)[keyof typeof ListSubscriptionsType];
 
 export const ListSubscriptionsType = {
-  daily_wash: "daily_wash",
   monthly_wash: "monthly_wash",
   solar_amc: "solar_amc",
   detailing_plan: "detailing_plan",
@@ -1212,8 +1235,6 @@ export type GetSubscriptionHealth200 = {
   /** Churn rate percentage over last 30 days */
   churnRate?: number;
 };
-
-export type RunDailyTick200 = { [key: string]: unknown };
 
 export type ListBookingsParams = {
   customerId?: number;

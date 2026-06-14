@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { fetchWalletSummary, fetchWalletTransactions } from "@/lib/customer-wallet";
 import {
-  AlertCircle, ArrowDownLeft, ArrowUpRight, IndianRupee, Phone, MessageCircle, FileText,
+  ArrowDownLeft, ArrowUpRight, IndianRupee, Phone, MessageCircle, FileText,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -70,20 +70,6 @@ export default function CustomerWallet() {
           <h1 className="font-display font-bold text-2xl">Wallet</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Balance, transactions & dues</p>
         </div>
-
-        {walletSummary?.isLowBalance && (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20" data-testid="wallet-low-balance-banner">
-            <AlertCircle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-sm">Wallet balance is running low</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Your balance (₹{balance.toLocaleString("en-IN")}) is below{" "}
-                {walletSummary.lowBalanceThresholdDays} days of daily cleaning (₹{(walletSummary.lowBalanceThreshold ?? 0).toLocaleString("en-IN")}).
-                Recharge soon to avoid service interruption.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Hero balance */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-card overflow-hidden" data-testid="wallet-balance-hero">

@@ -5,7 +5,7 @@ import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, AlertCircle, ArrowRight, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Calendar, ArrowRight, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
@@ -95,20 +95,6 @@ export default function CustomerDashboard() {
   return (
     <CustomerLayout>
       <div className="space-y-5">
-        {walletSummary?.isLowBalance && (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20" data-testid="low-balance-banner">
-            <AlertCircle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-sm">Wallet balance is running low</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Your balance (₹{(walletSummary.balance ?? 0).toLocaleString("en-IN")}) is below{" "}
-                {walletSummary.lowBalanceThresholdDays} days of daily cleaning (₹{(walletSummary.lowBalanceThreshold ?? 0).toLocaleString("en-IN")}).
-                Recharge soon to avoid service interruption.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Next service hero */}
         {isLoading ? (
           <Skeleton className="h-36 w-full rounded-2xl" />

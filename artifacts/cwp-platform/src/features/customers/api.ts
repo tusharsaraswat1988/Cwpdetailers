@@ -22,6 +22,16 @@ export type CreateCustomerError = {
   error: string;
   existingCustomerId?: number;
   existingCustomerName?: string;
+  existingStaffId?: number;
+  existingStaffName?: string;
+  existingUserId?: number;
+  existingUserName?: string;
+  conflict?: {
+    field: "phone" | "email";
+    entity: "customer" | "staff" | "user";
+    entityId: number;
+    entityName: string;
+  };
 };
 
 export async function createCustomerRequest(payload: CreateCustomerPayload): Promise<{
@@ -201,4 +211,167 @@ export async function reactivateLegacyCustomer(customerId: number) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? "Reactivation failed");
   return body;
+}
+
+export type CustomerServicesHub = {
+  customerId: number;
+  profile: import("@workspace/customer-model").CustomerProfile;
+  counts: {
+    dailyCleaning: number;
+    entitlements: number;
+    legacySubscriptions: number;
+    solarSites: number;
+    activeContracts: number;
+  };
+  dailyCleaning: Array<{
+    id: number;
+    vehicleId: number;
+    vehicleLabel: string;
+    planName: string;
+    status: string;
+    startDate: string;
+    remainingCleanings: number;
+    remainingWashes: number;
+    allocatedCleanings: number;
+    allocatedWashes: number;
+    assignedStaffName: string | null;
+    renewalEligible: boolean;
+    bundledAddons: string[];
+  }>;
+  entitlements: Array<{
+    id: number;
+    entitlementType: string;
+    serviceName: string | null;
+    packageName: string | null;
+    remainingCredits: number;
+    totalCredits: number;
+    validFrom: string;
+    validUntil: string;
+    status: string;
+  }>;
+  legacySubscriptions: Array<{
+    id: number;
+    type: string;
+    status: string;
+    serviceName: string | null;
+    vehicleId: number | null;
+    solarSiteId: number | null;
+    startDate: string;
+    endDate: string;
+    servicesRemaining: number | null;
+    totalServices: number | null;
+    nextDueDate: string | null;
+  }>;
+  solarSites: Array<{
+    id: number;
+    address: string;
+    panelCount: number;
+    lastCleanedDate: string | null;
+    nextServiceDate: string | null;
+    locationLabel: string | null;
+    completedBookings: number;
+    activeAmcEntitlements: number;
+  }>;
+  recentWork: Array<{
+    id: string;
+    source: "dcms_visit" | "booking" | "entitlement";
+    workType: string;
+    assetLabel: string | null;
+    status: string;
+    occurredAt: string;
+    staffName: string | null;
+    addonLabel: string | null;
+  }>;
+  contracts: Array<{
+    id: number;
+    productLine: string;
+    sourceSystem: string;
+    sourceId: number;
+    status: string;
+    assetType: string | null;
+    assetId: number | null;
+    assetLabel: string | null;
+    validFrom: string | null;
+    validUntil: string | null;
+    summary: Record<string, unknown>;
+  }>;
+};
+
+export async function fetchCustomerServicesHub(customerId: number): Promise<CustomerServicesHub> {
+  const res = await fetch(`/api/customers/${customerId}/services`, { credentials: "include" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Failed to load services");
+  }
+  return res.json();
+}
+
+export async function grantCustomerPackage(
+  customerId: number,
+  packageId: number,
+  opts?: { vehicleId?: number; solarSiteId?: number },
+) {
+  const res = await fetch("/api/catalog/entitlements/grant-package", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerId, packageId, ...opts }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Failed to grant package");
+  }
+  return res.json();
+}
+
+export async function createCustomerSolarSite(data: {
+  customerId: number;
+  address: string;
+  panelCount: number;
+  serviceLat?: number;
+  serviceLng?: number;
+  placeId?: string;
+  locationLabel?: string;
+}) {
+  const res = await fetch("/api/solar-sites", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Failed to add solar site");
+  }
+  return res.json();
+}
+
+export async function createCustomerBooking(data: {
+  customerId: number;
+  vehicleId?: number;
+  solarSiteId?: number;
+  serviceId?: number;
+  staffId?: number;
+  scheduledDate: string;
+  scheduledTime: string;
+  serviceType: string;
+  address: string;
+  locationLat: number;
+  locationLng: number;
+  placeId?: string;
+  addonIds?: number[];
+  notes?: string;
+  citySlug?: string;
+}) {
+  const res = await fetch("/api/bookings", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Failed to create booking");
+  }
+  return res.json();
 }

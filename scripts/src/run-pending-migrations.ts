@@ -22,6 +22,10 @@ const PENDING = [
   "021_staff_category.sql",
   "022_complaints_supervisor.sql",
   "023_customer_reactivation.sql",
+  "024_remove_legacy_daily_wash.sql",
+  "025_customer_contracts.sql",
+  "026_products_homepage.sql",
+  "027_contact_identity_unique.sql",
 ];
 
 async function main() {

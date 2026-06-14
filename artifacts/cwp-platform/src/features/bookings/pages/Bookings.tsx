@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Calendar, Clock, User, ChevronLeft, ChevronRight, MapPin, Camera, Route, CheckCircle, XCircle, ArrowRight, Loader2 } from "lucide-react";
 import { Can } from "@/components/Can";
 import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shared";
+import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
 import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
 import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
 import { roleSlugForBookingService, OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
@@ -175,6 +176,7 @@ export default function AdminBookings() {
   return (
     <AdminLayout>
       <div className="p-6 space-y-5">
+        <CustomerHubAdminNav />
         <PageHeader title="Bookings" description={`${data?.total ?? 0} total bookings`} />
 
         {customerFilter && (

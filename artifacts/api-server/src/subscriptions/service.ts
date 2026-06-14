@@ -327,8 +327,8 @@ export async function cancelSubscription(subscriptionId: number, remark?: string
 }
 
 /**
- * Daily scheduler tick. Runs missed-service check, renewal reminders, and
- * marks expired subscriptions. Uses system_jobs table for idempotency.
+ * Nightly subscription maintenance: missed-service check, renewal reminders,
+ * expiring/expired status updates, entitlement refresh.
  */
 export async function runDailyTick(todayStr?: string, opts?: { force?: boolean }) {
   const today = todayStr ?? getTodayIST();
@@ -361,8 +361,7 @@ export async function runDailyTick(todayStr?: string, opts?: { force?: boolean }
     const missedCount = await markMissed();
     const reminderCount = await sendRenewalReminders();
 
-    const { generateDailyCleaningBookings, detectDueWashes } = await import("./dailyScheduler");
-    const schedulerResult = await generateDailyCleaningBookings(today);
+    const { detectDueWashes } = await import("./dueWashDetection");
     const dueWashes = await detectDueWashes(today);
 
     // Mark active subscriptions as expiring when endDate <= 7 days
@@ -387,14 +386,14 @@ export async function runDailyTick(todayStr?: string, opts?: { force?: boolean }
       .returning();
 
     await db.update(systemJobsTable)
-      .set({ status: "success", completedAt: new Date(), lastRunAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, schedulerResult, dueWashCount: dueWashes.length } })
+      .set({ status: "success", completedAt: new Date(), lastRunAt: new Date(), payload: { date: today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, dueWashCount: dueWashes.length } })
       .where(eq(systemJobsTable.id, job.id));
 
     const { refreshEntitlementStatuses } = await import("../lib/catalog/entitlementEngine");
     await refreshEntitlementStatuses();
 
-    logger.info({ today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, scheduler: schedulerResult }, "Daily tick completed");
-    return { missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, scheduler: schedulerResult, dueWashCount: dueWashes.length };
+    logger.info({ today, missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, dueWashCount: dueWashes.length }, "Subscription tick completed");
+    return { missedCount, reminderCount, expiredCount: expired.length, expiringCount: expiring.length, dueWashCount: dueWashes.length };
   } catch (err) {
     await db.update(systemJobsTable)
       .set({ status: "failed", error: String(err), completedAt: new Date(), lastRunAt: new Date() })

@@ -120,7 +120,13 @@ export default function AdminStaff() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Failed to create staff");
+        const err = new Error(body.error ?? "Failed to create staff") as Error & {
+          status?: number;
+          conflict?: { entity: string; entityId: number; entityName: string };
+        };
+        err.status = res.status;
+        if (body.conflict) err.conflict = body.conflict;
+        throw err;
       }
       return res.json();
     },
@@ -141,7 +147,10 @@ export default function AdminStaff() {
         toast({ title: "Staff member created" });
       }
     },
-    onError: (err: Error) => toast({ title: "Failed to create staff", description: err.message, variant: "destructive" }),
+    onError: (err: Error & { status?: number; conflict?: { entityName?: string } }) => {
+      const title = err.status === 409 ? "Contact already registered" : "Failed to create staff";
+      toast({ title, description: err.message, variant: "destructive" });
+    },
   });
 
   const handleCreate = () => {

@@ -2,7 +2,6 @@ import { db } from "@workspace/db";
 import {
   customersTable,
   walletTransactionsTable,
-  subscriptionsTable,
 } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
 import type { Transaction } from "../../subscriptions/service";
@@ -174,81 +173,4 @@ export async function listWalletTransactions(
     limit: lim,
     offset: off,
   };
-}
-
-/** Derive daily rate from subscription — explicit dailyRate or price/30. */
-export function resolveDailyRate(sub: {
-  dailyRate?: string | null;
-  price: string;
-}): number {
-  if (sub.dailyRate != null && parseFloat(sub.dailyRate) > 0) {
-    return parseFloat(sub.dailyRate);
-  }
-  return Math.round((parseFloat(sub.price) / 30) * 100) / 100;
-}
-
-/** Days of service remaining at current balance (Phase 4 foundation). */
-export function getLowBalanceThresholdDays(): number {
-  const raw = process.env.WALLET_LOW_BALANCE_DAYS;
-  const parsed = raw ? parseInt(raw, 10) : 7;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 7;
-}
-
-export async function getLowBalanceThresholdAmount(
-  customerId: number,
-  dailyRate: number,
-): Promise<number> {
-  return dailyRate * getLowBalanceThresholdDays();
-}
-
-export async function isLowBalance(
-  customerId: number,
-  dailyRate: number,
-  tx?: Transaction,
-): Promise<boolean> {
-  const balance = await getLedgerBalance(customerId, tx);
-  const threshold = await getLowBalanceThresholdAmount(customerId, dailyRate);
-  return balance < threshold;
-}
-
-export async function getActiveDailyWashSubscription(customerId: number, subscriptionId?: number | null) {
-  if (subscriptionId) {
-    const [sub] = await db
-      .select()
-      .from(subscriptionsTable)
-      .where(eq(subscriptionsTable.id, subscriptionId))
-      .limit(1);
-    if (sub?.type === "daily_wash" && sub.status === "active") return sub;
-    return null;
-  }
-  const [sub] = await db
-    .select()
-    .from(subscriptionsTable)
-    .where(
-      sql`${subscriptionsTable.customerId} = ${customerId} AND ${subscriptionsTable.type} = 'daily_wash' AND ${subscriptionsTable.status} = 'active'`,
-    )
-    .limit(1);
-  return sub ?? null;
-}
-
-/** Resume paused daily_wash contracts when wallet balance covers at least one day. */
-export async function tryAutoResumeDailyWash(customerId: number, balance?: number) {
-  const { resumeSubscription } = await import("../../subscriptions/service");
-  const bal = balance ?? await getLedgerBalance(customerId);
-  const paused = await db
-    .select()
-    .from(subscriptionsTable)
-    .where(
-      sql`${subscriptionsTable.customerId} = ${customerId} AND ${subscriptionsTable.type} = 'daily_wash' AND ${subscriptionsTable.status} = 'paused'`,
-    );
-
-  const resumed: number[] = [];
-  for (const sub of paused) {
-    const dailyRate = resolveDailyRate(sub);
-    if (bal >= dailyRate) {
-      await resumeSubscription(sub.id);
-      resumed.push(sub.id);
-    }
-  }
-  return resumed;
 }

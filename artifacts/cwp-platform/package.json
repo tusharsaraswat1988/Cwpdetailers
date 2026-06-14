@@ -53,6 +53,7 @@
     "@vite-pwa/assets-generator": "^1.0.2",
     "@vitejs/plugin-react": "catalog:",
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/customer-model": "workspace:*",
     "@workspace/validation": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",

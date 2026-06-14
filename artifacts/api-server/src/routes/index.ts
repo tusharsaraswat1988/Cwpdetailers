@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import authRouter from "./auth";
+import contactRouter from "./contact";
 import customersRouter from "./customers";
 import vehiclesRouter from "./vehicles";
 import solarSitesRouter from "./solar-sites";
@@ -32,6 +33,7 @@ import masterDataRouter from "./master-data";
 import serviceCatalogRouter from "./service-catalog";
 import dcmsRouter from "./dcms";
 import pushRouter from "./push";
+import operationsRouter from "./operations";
 import migrationRouter from "./migration";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes } from "../middlewares/permissions";
 
@@ -41,6 +43,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(communicationsWebhooksRouter);
 router.use(authRouter);
+router.use(contactRouter);
 
 // Resource-guarded routers. Each guard maps HTTP method → permission action
 // (GET=view, POST=create, PUT/PATCH=edit, DELETE=delete) for that resource.
@@ -75,8 +78,6 @@ router.use(
     { match: /\/renew$/, method: "POST", action: "edit" },
     { match: /\/pause$/, method: "POST", action: "edit" },
     { match: /\/resume$/, method: "POST", action: "edit" },
-    { match: /\/daily-tick$/, method: "POST", action: "edit" },
-    { match: /\/daily-schedule$/, method: "POST", action: "edit" },
   ]),
   subscriptionsRouter,
 );
@@ -122,6 +123,7 @@ router.use(guardResource("complaints"), complaintsRouter);
 router.use(guardResource("invoices"), paymentsRouter);
 router.use(guardResource("branches"), branchesRouter);
 router.use(guardResource("analytics"), analyticsRouter);
+router.use(guardResource("bookings"), operationsRouter);
 router.use(
   guardResource("notifications", [
     { match: /\/broadcast$/, method: "POST", action: "create" },

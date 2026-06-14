@@ -93,7 +93,6 @@ const LOST_REASON_LABEL: Record<string, string> = {
 };
 
 const SUBSCRIPTION_TYPES: { value: string; label: string }[] = [
-  { value: "daily_wash", label: "Daily Wash" },
   { value: "monthly_wash", label: "Monthly Wash" },
   { value: "solar_amc", label: "Solar AMC" },
   { value: "detailing_plan", label: "Detailing Plan" },

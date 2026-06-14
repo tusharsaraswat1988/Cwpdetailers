@@ -12,13 +12,14 @@ const METHOD_TO_ACTION: Record<string, string> = {
 
 /** Reserved first segment under /catalog/* — not city slugs for SEO pages. */
 const CATALOG_RESERVED_SEGMENTS = new Set([
-  "pricing", "packages", "addons", "homepage", "settings", "services",
+  "pricing", "packages", "addons", "homepage", "homepage-plans", "settings", "services",
   "entitlements", "solar-slabs", "city-availability", "city-content",
   "reminder-hooks", "self-booking", "addon-links", "package-entitlements",
 ]);
 
 const CATALOG_PUBLIC_GET_PREFIXES = [
   "/catalog/homepage",
+  "/catalog/homepage-plans",
   "/catalog/packages",
   "/catalog/addons",
   "/catalog/pricing/quote",

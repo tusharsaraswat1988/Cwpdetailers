@@ -161,18 +161,14 @@ async function enrichPlans(plans: DcmsPlan[], withAddons = true): Promise<DcmsPl
 
 
 export async function listPlans(
-
   activeOnly = false,
-
   vehicleId?: number,
-
   linkedOnly = false,
-
+  homepageOnly = false,
 ): Promise<DcmsPlanRow[]> {
-
   const conditions = [];
-
   if (activeOnly) conditions.push(eq(dcmsPlansTable.isActive, true));
+  if (homepageOnly) conditions.push(eq(dcmsPlansTable.showOnHomepage, true));
 
   if (linkedOnly) {
 
@@ -312,6 +308,8 @@ export type CreatePlanInput = {
 
   addons?: PlanAddonInput[];
 
+  showOnHomepage?: boolean;
+
   companyId?: number | null;
 
 };
@@ -339,6 +337,8 @@ async function insertSinglePlan(
     seatCategoryId: number | null;
 
     companyId?: number | null;
+
+    showOnHomepage?: boolean;
 
   },
 
@@ -369,6 +369,8 @@ async function insertSinglePlan(
     companyId: data.companyId ?? null,
 
     isActive: true,
+
+    showOnHomepage: data.showOnHomepage ?? false,
 
   }).returning();
 
@@ -534,6 +536,8 @@ export async function createPlans(
 
       companyId: data.companyId,
 
+      showOnHomepage: data.showOnHomepage,
+
     }, addons, performedBy);
 
     created.push(row);
@@ -573,6 +577,8 @@ export async function updatePlan(
     allSeatTiers: boolean;
 
     addons: PlanAddonInput[];
+
+    showOnHomepage?: boolean;
 
   }>,
 

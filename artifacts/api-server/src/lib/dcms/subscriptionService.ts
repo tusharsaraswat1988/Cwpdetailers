@@ -76,6 +76,9 @@ export async function createSubscription(
     metadata: { planId: data.planId, vehicleId: data.vehicleId },
   });
 
+  const { syncContractFromDcms } = await import("../contracts/contractRegistry");
+  await syncContractFromDcms(sub!, plan.name);
+
   return sub!;
 }
 

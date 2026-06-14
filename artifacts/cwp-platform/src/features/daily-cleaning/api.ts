@@ -44,6 +44,7 @@ export type DcmsPlan = {
   scopeVehicleLabel?: string | null;
   scopeSeatLabel?: string | null;
   addons?: DcmsPlanAddon[];
+  showOnHomepage?: boolean;
   isActive: boolean;
   hasSubscriptions?: boolean;
 };

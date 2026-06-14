@@ -3,6 +3,7 @@ import { and, sql, eq } from "drizzle-orm";
 import type { Request } from "express";
 import { tenantFilters } from "../middlewares/tenantScope";
 import { hashPassword } from "./passwords";
+import { assertContactIdentityAvailable } from "./contactIdentity";
 
 const SCOPE_COLS = {
   companyCol: customersTable.companyId,
@@ -43,6 +44,15 @@ export async function createCustomerLoginAccount(
   }
   if (customer.userId) {
     throw new Error("Login account already exists for this customer");
+  }
+
+  const identityCheck = await assertContactIdentityAvailable(
+    customer.phone,
+    customer.email,
+    { entity: "customer", id: customer.id },
+  );
+  if (!identityCheck.ok) {
+    throw new Error(identityCheck.body.error as string);
   }
 
   const [existingUser] = await db

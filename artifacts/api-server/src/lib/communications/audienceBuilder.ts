@@ -2,7 +2,7 @@ import { db } from "@workspace/db";
 import {
   customersTable, leadsTable, subscriptionsTable, vehiclesTable,
   bookingsTable, complaintsTable, servicesTable, invoicesTable,
-  commCustomerConsentsTable,
+  commCustomerConsentsTable, dcmsSubscriptionsTable,
   type AudienceFilterNode,
 } from "@workspace/db";
 import { eq, and, or, sql, gt, gte, inArray, ne, desc, isNotNull } from "drizzle-orm";
@@ -135,7 +135,7 @@ function filterToSql(filter: string, params: Record<string, unknown> = {}, scope
         sql`EXISTS (
           SELECT 1 FROM ${subscriptionsTable} s
           WHERE s.customer_id = ${customersTable.id}
-          AND s.type IN ('daily_wash', 'monthly_wash', 'detailing_plan')
+          AND s.type IN ('monthly_wash', 'detailing_plan')
           AND s.status = 'active'
         )`,
       );
@@ -144,10 +144,9 @@ function filterToSql(filter: string, params: Record<string, unknown> = {}, scope
       return and(
         ...base,
         sql`EXISTS (
-          SELECT 1 FROM ${subscriptionsTable} s
-          WHERE s.customer_id = ${customersTable.id}
-          AND s.type = 'daily_wash'
-          AND s.status = 'active'
+          SELECT 1 FROM ${dcmsSubscriptionsTable} d
+          WHERE d.customer_id = ${customersTable.id}
+          AND d.status = 'active'
         )`,
       );
 

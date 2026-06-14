@@ -8,6 +8,7 @@ import {
   parseRequiredMobile,
   parseOptionalEmail,
 } from "../lib/contactFields";
+import { assertContactIdentityAvailable } from "../lib/contactIdentity";
 
 const router = Router();
 
@@ -82,13 +83,13 @@ router.post("/auth/register", async (req, res) => {
     const normalizedPhone = phoneResult.value;
     const normalizedEmail = emailResult.value;
 
-    const existing = await db.select().from(usersTable).where(eq(usersTable.phone, normalizedPhone)).limit(1);
-    if (existing.length > 0) return res.status(400).json({ error: "Phone already registered" });
+    const identityCheck = await assertContactIdentityAvailable(normalizedPhone, normalizedEmail);
+    if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
 
     const passwordHash = await hashPassword(password);
 
     const [user] = await db.insert(usersTable).values({
-      name, phone: normalizedPhone, email: normalizedEmail,
+      name, phone: identityCheck.identity.phone, email: identityCheck.identity.email,
       passwordHash,
       role: "customer",
       branchId: branchId || null,
@@ -99,7 +100,7 @@ router.post("/auth/register", async (req, res) => {
 
     const [customer] = await db.insert(customersTable).values({
       userId: user.id,
-      name, phone: normalizedPhone, email: normalizedEmail,
+      name, phone: identityCheck.identity.phone, email: identityCheck.identity.email,
       address: address || null,
       city: city || "Varanasi",
       branchId: branchId || null,

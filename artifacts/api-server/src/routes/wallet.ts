@@ -8,11 +8,6 @@ import {
   listWalletTransactions,
   getLedgerBalance,
   WalletError,
-  isLowBalance,
-  getLowBalanceThresholdDays,
-  resolveDailyRate,
-  getActiveDailyWashSubscription,
-  tryAutoResumeDailyWash,
 } from "../lib/wallet/service";
 
 const router = Router();
@@ -32,19 +27,10 @@ router.get("/customers/:id/wallet", async (req, res) => {
     if (!customer) return res.status(404).json({ error: "Customer not found" });
 
     const balance = await getLedgerBalance(id);
-    const dailySub = await getActiveDailyWashSubscription(id);
-    const dailyRate = dailySub ? resolveDailyRate(dailySub) : null;
-    const lowBalanceThresholdDays = getLowBalanceThresholdDays();
-    const lowBalanceThreshold = dailyRate != null ? dailyRate * lowBalanceThresholdDays : null;
-    const lowBalance = dailyRate != null ? await isLowBalance(id, dailyRate) : false;
 
     return res.json({
       customerId: id,
       balance,
-      lowBalanceThresholdDays,
-      lowBalanceThreshold,
-      dailyRate,
-      isLowBalance: lowBalance,
     });
   } catch (err) {
     req.log.error({ err }, "Get wallet error");
@@ -108,7 +94,6 @@ router.post("/customers/:id/wallet/credit", async (req, res) => {
     });
 
     const balance = await getLedgerBalance(id);
-    const resumedSubscriptions = await tryAutoResumeDailyWash(id, balance);
     return res.status(201).json({
       transaction: {
         ...entry,
@@ -116,7 +101,6 @@ router.post("/customers/:id/wallet/credit", async (req, res) => {
         balanceAfter: parseFloat(entry.balanceAfter),
       },
       balance,
-      resumedSubscriptions,
     });
   } catch (err) {
     if (err instanceof WalletError) {

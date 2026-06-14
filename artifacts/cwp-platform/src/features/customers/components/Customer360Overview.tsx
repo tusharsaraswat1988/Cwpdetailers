@@ -2,7 +2,7 @@ import { useGetCustomerSummary, getGetCustomerSummaryQueryKey } from "@workspace
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, IndianRupee, Wallet, Car, AlertCircle } from "lucide-react";
+import { Calendar, IndianRupee, Wallet, Car, AlertCircle, Plus } from "lucide-react";
 import { Link } from "wouter";
 import { Customer360BillingPanels } from "./Customer360BillingPanels";
 
@@ -34,7 +34,7 @@ export function Customer360Overview({ customerId, basePath, customer }: Props) {
   const kpis = [
     { label: "Wallet balance", value: `₹${(summary?.walletBalance ?? 0).toLocaleString("en-IN")}`, icon: Wallet },
     { label: "Pending dues", value: `₹${(summary?.pendingDues ?? 0).toLocaleString("en-IN")}`, icon: IndianRupee },
-    { label: "Active subscriptions", value: String(summary?.activeSubscriptions ?? 0), icon: Car },
+    { label: "Active plans", value: String((summary as { activeContracts?: number })?.activeContracts ?? summary?.activeSubscriptions ?? 0), icon: Car },
     { label: "Services this month", value: String(summary?.totalServicesThisMonth ?? 0), icon: Calendar },
   ];
 
@@ -122,6 +122,12 @@ export function Customer360Overview({ customerId, basePath, customer }: Props) {
           {(customer?.historicalWashCount ?? 0) > 0 && (
             <span className="text-muted-foreground">· {customer?.historicalWashCount} legacy washes</span>
           )}
+          <Link href={`${basePath}/${customerId}?tab=services&action=add`} className="inline-flex items-center gap-1 text-primary hover:underline">
+            <Plus size={14} /> Add service
+          </Link>
+          <Link href={`${basePath}/${customerId}?tab=services`} className="inline-flex items-center gap-1 text-primary hover:underline">
+            <Car size={14} /> All services & plans
+          </Link>
           <Link href={`${basePath}/${customerId}?tab=support`} className="inline-flex items-center gap-1 text-primary hover:underline ml-auto">
             <AlertCircle size={14} /> View support tickets
           </Link>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { fetchLegacyContacts, reactivateLegacyCustomer } from "@/features/customers/api";
+import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
 
 export default function AdminLegacyContacts() {
   const qc = useQueryClient();
@@ -36,6 +37,7 @@ export default function AdminLegacyContacts() {
   return (
     <AdminLayout>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <CustomerHubAdminNav />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display font-bold text-2xl">Legacy Contacts</h1>

@@ -45,7 +45,7 @@ const PIPELINE: { status: LeadStatus; label: string; color: string; borderColor:
 ];
 const SOURCE_LABEL: Record<string, string> = { whatsapp: "WhatsApp", instagram: "Instagram", facebook: "Facebook", website: "Website", call: "Call", google: "Google", walk_in: "Walk-in", referral: "Referral" };
 const SUBSCRIPTION_TYPES: { value: string; label: string }[] = [
-  { value: "daily_wash", label: "Daily Wash" }, { value: "monthly_wash", label: "Monthly Wash" }, { value: "solar_amc", label: "Solar AMC" }, { value: "detailing_plan", label: "Detailing Plan" },
+  { value: "monthly_wash", label: "Monthly Wash" }, { value: "solar_amc", label: "Solar AMC" }, { value: "detailing_plan", label: "Detailing Plan" },
 ];
 
 async function fetchLeads(params: Record<string, string> = {}): Promise<{ data: Lead[]; total: number }> {

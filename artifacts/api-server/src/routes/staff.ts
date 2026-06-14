@@ -27,6 +27,7 @@ import {
   parseStaffLocation,
   recordStaffLocation,
 } from "../lib/staffLocation/locationService";
+import { assertContactIdentityAvailable } from "../lib/contactIdentity";
 
 const router = Router();
 
@@ -176,11 +177,17 @@ router.post("/staff", async (req, res) => {
     const emailResult = parseOptionalEmail(email);
     if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
 
+    const identityCheck = await assertContactIdentityAvailable(
+      phoneResult.value,
+      emailResult.value,
+    );
+    if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+
     const guardianPhoneResult = parseOptionalMobile(guardianPhone);
     if (!guardianPhoneResult.ok) return res.status(400).json({ error: guardianPhoneResult.error });
 
     const values = tenantStamp(req, {
-      name, phone: phoneResult.value, email: emailResult.value, role: resolvedRole,
+      name, phone: identityCheck.identity.phone, email: identityCheck.identity.email, role: resolvedRole,
       staffCategory,
       branchId: parseInt(branchId),
       franchiseeId: franchiseeId ? parseInt(franchiseeId) : undefined,
@@ -239,6 +246,15 @@ async function createStaffLoginAccount(
   }
   if (staffMember.userId) {
     throw new Error("Account already exists");
+  }
+
+  const identityCheck = await assertContactIdentityAvailable(
+    staffMember.phone,
+    staffMember.email,
+    { entity: "staff", id: staffMember.id },
+  );
+  if (!identityCheck.ok) {
+    throw new Error(identityCheck.body.error as string);
   }
 
   const existing = await db.select().from(usersTable).where(eq(usersTable.phone, staffMember.phone)).limit(1);
@@ -318,7 +334,8 @@ router.get("/staff/:id", async (req, res) => {
 router.patch("/staff/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    if (!(await loadStaffInScope(req, id))) return res.status(404).json({ error: "Staff not found" });
+    const existingStaff = await loadStaffInScope(req, id);
+    if (!existingStaff) return res.status(404).json({ error: "Staff not found" });
     const allowed = [
       "name", "phone", "email", "role", "branchId", "franchiseeId", "monthlySalary",
       "joiningDate", "localAddress", "permanentAddress", "guardianName", "guardianPhone",
@@ -338,6 +355,18 @@ router.patch("/staff/:id", async (req, res) => {
     if (!emailField.ok) return res.status(400).json({ error: emailField.error });
     const guardianField = applyOptionalMobileField(req.body, "guardianPhone", updateData);
     if (!guardianField.ok) return res.status(400).json({ error: guardianField.error });
+
+    if (updateData.phone !== undefined || updateData.email !== undefined) {
+      const identityCheck = await assertContactIdentityAvailable(
+        typeof updateData.phone === "string" ? updateData.phone : existingStaff.phone,
+        updateData.email !== undefined ? updateData.email : existingStaff.email,
+        { entity: "staff", id },
+      );
+      if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+      if (typeof updateData.phone === "string") updateData.phone = identityCheck.identity.phone;
+      if (updateData.email !== undefined) updateData.email = identityCheck.identity.email;
+    }
+
     const [staff] = await db.update(staffTable).set(updateData).where(eq(staffTable.id, id)).returning();
     return res.json(staff);
   } catch (err) {

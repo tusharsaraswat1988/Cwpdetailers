@@ -11,6 +11,7 @@ import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shar
 import { CustomerAvatar } from "@/components/shared/CustomerAvatar";
 import { QuickCreateCustomerForm } from "../components/QuickCreateCustomerForm";
 import { CustomerOnboardingWizard } from "../components/CustomerOnboardingWizard";
+import { CustomerHubAdminNav } from "../components/CustomerHubAdminNav";
 
 const statusColor: Record<string, string> = {
   active: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
@@ -80,6 +81,7 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
   return (
     <Layout>
       <div className="p-6 space-y-5">
+        {basePath.startsWith("/admin") && <CustomerHubAdminNav />}
         <PageHeader
           title="Customers"
           description={`${data?.total ?? 0} total customers`}

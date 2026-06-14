@@ -6,6 +6,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchReactivatedCustomers } from "@/features/customers/api";
+import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
 
 export default function AdminReactivatedCustomers() {
   const [days, setDays] = useState<string>("all");
@@ -22,6 +23,7 @@ export default function AdminReactivatedCustomers() {
   return (
     <AdminLayout>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <CustomerHubAdminNav />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display font-bold text-2xl">Reactivated Customers</h1>

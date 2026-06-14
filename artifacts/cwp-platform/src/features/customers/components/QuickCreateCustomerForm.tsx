@@ -81,16 +81,20 @@ export function QuickCreateCustomerForm({
       });
 
       if (!result.ok) {
-        if (result.status === 409 && result.body.existingCustomerId) {
-          const existing = {
-            id: result.body.existingCustomerId,
-            name: result.body.existingCustomerName,
-          };
-          setDuplicateExisting(existing);
-          onDuplicate?.(existing);
+        if (result.status === 409) {
+          const existing = result.body.existingCustomerId
+            ? {
+              id: result.body.existingCustomerId,
+              name: result.body.existingCustomerName,
+            }
+            : null;
+          if (existing) {
+            setDuplicateExisting(existing);
+            onDuplicate?.(existing);
+          }
           toast({
-            title: "Customer already exists",
-            description: `${result.body.existingCustomerName ?? "This phone"} is already registered. Open their profile instead.`,
+            title: "Contact already registered",
+            description: result.body.error ?? "This mobile number or email is already in use.",
             variant: "destructive",
           });
           return;

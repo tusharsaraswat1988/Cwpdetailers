@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, IndianRupee, Wallet, Car, Plus, Pencil, User, LayoutDashboard, MessageSquare, LifeBuoy } from "lucide-react";
+import { ArrowLeft, IndianRupee, Wallet, Car, Plus, Pencil, User, LayoutDashboard, MessageSquare, LifeBuoy, Layers } from "lucide-react";
 import { Link } from "wouter";
 import CommunicationTimeline from "@/features/communications/components/CommunicationTimeline";
 import CommunicationPreferences from "@/features/communications/components/CommunicationPreferences";
@@ -41,6 +41,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Customer360Overview } from "@/features/customers/components/Customer360Overview";
 import { CustomerReferralPanel } from "@/features/customers/components/CustomerReferralPanel";
 import { CustomerComplaintsPanel } from "@/features/customers/components/CustomerComplaintsPanel";
+import { CustomerServicesTab } from "@/features/customers/components/CustomerServicesTab";
+import { CustomerPersonaBadges } from "@/features/customers/components/CustomerPersonaBadges";
+import { fetchCustomerServicesHub } from "@/features/customers/api";
 
 type WalletTx = {
   id: number;
@@ -172,11 +175,17 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
     { query: { queryKey: getListVehiclesQueryKey({ customerId: String(id) } as any), enabled: id > 0 } },
   );
 
+  const { data: servicesHub } = useQuery({
+    queryKey: ["customer", id, "services-hub"],
+    queryFn: () => fetchCustomerServicesHub(id),
+    enabled: id > 0,
+    staleTime: 60_000,
+  });
+
   const assignStaffMutation = useUpdateVehicle({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListVehiclesQueryKey({ customerId: String(id) } as any) });
-        qc.invalidateQueries({ queryKey: ["daily-ops"] });
         toast({ title: "Staff assignment updated" });
       },
       onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
@@ -193,10 +202,10 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
       },
       onError: (err: any) => {
         const data = err?.response?.data;
-        if (data?.existingCustomerId) {
+        if (data?.error) {
           toast({
-            title: "Phone already in use",
-            description: `${data.existingCustomerName ?? "Another customer"} has this number.`,
+            title: "Contact already in use",
+            description: data.error,
             variant: "destructive",
           });
           return;
@@ -333,7 +342,8 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
               <div>
                 <h1 className="font-display font-bold text-2xl">{customer.name}</h1>
                 <p className="text-muted-foreground text-sm">{customer.phone} · {customer.city ?? "—"}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Customer 360 hub</p>
+                <CustomerPersonaBadges profile={servicesHub?.profile} className="mt-2" />
+                <p className="text-xs text-muted-foreground mt-1">Customer 360 hub</p>
               </div>
             </div>
             <Can resource="customers" action="edit">
@@ -348,6 +358,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
           <Tabs value={activeTab} onValueChange={handleTabChange} data-testid="customer-360-tabs">
             <TabsList className="flex flex-wrap h-auto gap-1">
               <TabsTrigger value="overview" data-testid="tab-overview"><LayoutDashboard size={14} className="mr-1.5" />Overview</TabsTrigger>
+              <TabsTrigger value="services" data-testid="tab-services"><Layers size={14} className="mr-1.5" />Services & Plans</TabsTrigger>
               <TabsTrigger value="profile" data-testid="tab-profile"><User size={14} className="mr-1.5" />Profile</TabsTrigger>
               <TabsTrigger value="wallet" data-testid="tab-wallet"><Wallet size={14} className="mr-1.5" />Wallet</TabsTrigger>
               <TabsTrigger value="vehicles" data-testid="tab-vehicles"><Car size={14} className="mr-1.5" />Vehicles</TabsTrigger>
@@ -361,6 +372,10 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                 basePath={basePath}
                 customer={customer as typeof customer & CustomerTier3Fields}
               />
+            </TabsContent>
+
+            <TabsContent value="services" className="mt-4">
+              <CustomerServicesTab customerId={id} basePath={basePath} />
             </TabsContent>
 
             <TabsContent value="profile" className="mt-4 space-y-4">
@@ -485,11 +500,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                 <IndianRupee size={20} />
                 {(wallet?.balance ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </p>
-            )}
-            {wallet?.isLowBalance && (
-              <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20">
-                Low balance (below {wallet.lowBalanceThresholdDays} days)
-              </Badge>
             )}
 
             <div className="grid sm:grid-cols-3 gap-3 pt-2 border-t border-border">
