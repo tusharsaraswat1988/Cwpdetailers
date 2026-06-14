@@ -126,7 +126,7 @@ async function createOneTimeContract(
 
   const scheduledDate = body.scheduledDate ?? body.startDate ?? getTodayIST();
   const amount = computeDiscountedAmount(
-    body.estimatedAmount ?? parseFloat(svc.basePrice) || 0,
+    body.estimatedAmount ?? (parseFloat(svc.basePrice) || 0),
     body.discountType,
     body.discountValue,
   );
@@ -255,7 +255,7 @@ async function createRecurringSolarAmcContract(
     .reduce((sum, i) => sum + i.creditCount, 0) || primary.creditCount;
 
   const price = computeDiscountedAmount(
-    body.estimatedAmount ?? parseFloat(pkg.price) || 0,
+    body.estimatedAmount ?? (parseFloat(pkg.price) || 0),
     body.discountType,
     body.discountValue,
   );
