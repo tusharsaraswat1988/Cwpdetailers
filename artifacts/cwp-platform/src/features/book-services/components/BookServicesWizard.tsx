@@ -16,7 +16,7 @@ import {
   validateStep,
   canProceedToStep,
 } from "../types";
-import { createServiceContract, type ServiceContractResult } from "../api";
+import { createServiceContract, createContractBilling, type ServiceContractResult, type ContractBillingResult } from "../api";
 import { CustomerSelect } from "./CustomerSelect";
 import { LocationSelect } from "./LocationSelect";
 import { AssetSelect } from "./AssetSelect";
@@ -42,6 +42,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [contractResult, setContractResult] = useState<ServiceContractResult | null>(null);
+  const [billingResult, setBillingResult] = useState<ContractBillingResult | null>(null);
 
   const catalogServiceId = draft.service?.kind === "service"
     ? draft.service.catalogServiceId ?? draft.service.id
@@ -138,11 +139,15 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     setCreateError(null);
     try {
       const result = await createServiceContract(draft, addonList);
+      const billing = await createContractBilling(result.registryId, draft.billingAction);
       setContractResult(result);
+      setBillingResult(billing);
       if (draft.customer?.id) {
         qc.invalidateQueries({ queryKey: ["customer", draft.customer.id, "services-hub"] });
         qc.invalidateQueries({ queryKey: ["customer", draft.customer.id, "contracts"] });
       }
+      qc.invalidateQueries({ queryKey: ["quotations"] });
+      qc.invalidateQueries({ queryKey: ["/api/invoices"] });
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : "Failed to create contract");
     } finally {
@@ -157,6 +162,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     });
     setStepIndex(0);
     setContractResult(null);
+    setBillingResult(null);
     setCreateError(null);
     setStepError(null);
   }, [initialCustomer]);
@@ -166,6 +172,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       <ContractCreatedStep
         draft={draft}
         result={contractResult}
+        billing={billingResult}
         onBookAnother={resetWizard}
       />
     );
@@ -231,6 +238,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
             creating={creating}
             createError={createError}
             onCreate={handleCreateContract}
+            onBillingActionChange={action => patchDraft({ billingAction: action })}
           />
         );
       default:
@@ -321,7 +329,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
         )}
         {isReview && (
           <p className="text-sm text-muted-foreground text-right flex-1">
-            Use the button above to create the active plan.
+            Creates contract, then {draft.billingAction === "invoice" ? "invoice" : "quotation"}.
           </p>
         )}
       </div>

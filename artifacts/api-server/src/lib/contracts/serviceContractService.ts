@@ -215,6 +215,21 @@ async function createRecurringDcmsContract(
     ))
     .limit(1);
 
+  if (registry?.id && body.paymentTerms) {
+    const [existing] = await db.select().from(customerContractsTable)
+      .where(eq(customerContractsTable.id, registry.id)).limit(1);
+    if (existing) {
+      await db.update(customerContractsTable).set({
+        summaryJson: {
+          ...(existing.summaryJson as Record<string, unknown>),
+          paymentTerms: body.paymentTerms,
+          partialAdvancePercent: body.partialAdvancePercent,
+        },
+        updatedAt: new Date(),
+      }).where(eq(customerContractsTable.id, registry.id));
+    }
+  }
+
   return {
     contractType: "contract_recurring",
     registryId: registry?.id ?? 0,
@@ -354,6 +369,23 @@ async function createCreditsPackageContract(
     ))
     .limit(1);
 
+  if (registry?.id && body.paymentTerms) {
+    const [existing] = await db.select().from(customerContractsTable)
+      .where(eq(customerContractsTable.id, registry.id)).limit(1);
+    if (existing) {
+      await db.update(customerContractsTable).set({
+        summaryJson: {
+          ...(existing.summaryJson as Record<string, unknown>),
+          paymentTerms: body.paymentTerms,
+          partialAdvancePercent: body.partialAdvancePercent,
+          discountType: body.discountType,
+          discountValue: body.discountValue,
+        },
+        updatedAt: new Date(),
+      }).where(eq(customerContractsTable.id, registry.id));
+    }
+  }
+
   return {
     contractType: "contract_credits",
     registryId: registry?.id ?? 0,
@@ -377,6 +409,9 @@ export async function createServiceContract(
   }
   if (!body.selectionKind || !body.selectionId) {
     throw new Error("selectionKind and selectionId are required");
+  }
+  if (!body.paymentTerms || !["full_advance", "partial_advance", "after_service"].includes(body.paymentTerms)) {
+    throw new Error("paymentTerms is required (full_advance, partial_advance, or after_service)");
   }
 
   await assertCustomerLocation(body.customerId, body.serviceLocationId);

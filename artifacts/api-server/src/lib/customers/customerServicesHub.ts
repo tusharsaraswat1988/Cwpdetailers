@@ -110,6 +110,13 @@ export type CustomerServicesHub = {
     assetLabel: string | null;
     validFrom: string | null;
     validUntil: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    serviceName: string;
+    serviceLocationId: number | null;
+    serviceLocationLabel: string | null;
+    linkedAssetId: number | null;
+    linkedAssetLabel: string | null;
     summary: Record<string, unknown>;
   }>;
 };

@@ -34,6 +34,7 @@ import {
   MapPin,
   Receipt,
   CalendarCheck,
+  ClipboardCheck,
 } from "lucide-react";
 
 export type AdminNavPermission = { resource: string; action: string };
@@ -148,6 +149,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         perm: { resource: "bookings", action: "view" },
       },
       {
+        id: "assign-services",
+        href: "/admin/assign-services",
+        label: "Assign Services",
+        icon: ClipboardCheck,
+        perm: { resource: "bookings", action: "edit" },
+      },
+      {
         id: "services",
         href: "/admin/services",
         label: "Services",
@@ -232,6 +240,10 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
   if (item.id === "book-services") {
     const path = location.split("?")[0]!;
     return path === "/admin/book-services";
+  }
+  if (item.id === "assign-services") {
+    const path = location.split("?")[0]!;
+    return path === "/admin/assign-services";
   }
   if (item.id === "assets") {
     const path = location.split("?")[0]!;

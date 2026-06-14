@@ -38,6 +38,8 @@ import migrationRouter from "./migration";
 import serviceLocationsRouter from "./service-locations";
 import assetsRouter from "./assets";
 import serviceContractsRouter from "./service-contracts";
+import assignmentsRouter from "./assignments";
+import serviceExecutionsRouter from "./service-executions";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -92,6 +94,22 @@ router.use(
     { match: /\/service-contracts\/\d+\/status$/, method: "PATCH", action: "edit" },
   ]),
   serviceContractsRouter,
+);
+router.use(
+  guardResource("bookings", [
+    { match: /\/assignments\/\d+\/assign$/, method: "POST", action: "edit" },
+  ]),
+  assignmentsRouter,
+);
+router.use(
+  guardResource("bookings", [
+    { match: /\/service-executions\/\d+\/start$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/complete$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/miss$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/cancel$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/reschedule$/, method: "POST", action: "edit" },
+  ]),
+  serviceExecutionsRouter,
 );
 router.use(
   guardResource("bookings", [

@@ -293,9 +293,45 @@ export type CustomerServicesHub = {
     assetLabel: string | null;
     validFrom: string | null;
     validUntil: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    serviceName: string;
+    serviceLocationId: number | null;
+    serviceLocationLabel: string | null;
+    linkedAssetId: number | null;
+    linkedAssetLabel: string | null;
     summary: Record<string, unknown>;
   }>;
 };
+
+export type CustomerBillingSummary = {
+  customerId: number;
+  outstandingDue: number;
+  walletBalance: number;
+  lastInvoice: {
+    id: number;
+    invoiceNumber: string;
+    totalAmount: number;
+    balanceDue: number;
+    status: string;
+    issuedAt: string | null;
+  } | null;
+  lastPayment: {
+    id: number;
+    amount: number;
+    method: string;
+    receivedAt: string | null;
+  } | null;
+};
+
+export async function fetchCustomerBillingSummary(customerId: number): Promise<CustomerBillingSummary> {
+  const res = await fetch(`/api/customers/${customerId}/billing-summary`, { credentials: "include" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Failed to load billing summary");
+  }
+  return res.json();
+}
 
 export async function fetchCustomerServicesHub(customerId: number): Promise<CustomerServicesHub> {
   const res = await fetch(`/api/customers/${customerId}/services`, { credentials: "include" });

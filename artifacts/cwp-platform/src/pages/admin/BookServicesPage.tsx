@@ -33,7 +33,7 @@ export default function BookServicesPage() {
             <h1 className="font-display text-2xl font-bold tracking-tight">Book Services</h1>
           </div>
           <p className="text-muted-foreground text-sm">
-            Walk through customer, location, asset, and service details, then create an active plan. Billing and assignment come in later sprints.
+            Walk through customer, location, asset, and service details, then create a contract with quotation or invoice.
           </p>
         </div>
 
@@ -41,7 +41,7 @@ export default function BookServicesPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">New service booking</CardTitle>
             <CardDescription>
-              Follow each step in order, then create the service contract on the review step.
+              Follow each step in order. The review step creates the contract, billing document, and pending assignment queue entry.
             </CardDescription>
           </CardHeader>
           <CardContent>

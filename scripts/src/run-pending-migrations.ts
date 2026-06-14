@@ -30,6 +30,9 @@ const PENDING = [
   "029_service_locations.sql",
   "030_assets.sql",
   "031_service_contracts_sprint4b.sql",
+  "032_sprint4c_billing_integration.sql",
+  "033_sprint6_service_assignments.sql",
+  "034_sprint7_service_executions.sql",
 ];
 
 async function main() {

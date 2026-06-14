@@ -18,7 +18,7 @@ export function PaymentTermsStep({ paymentTerms, partialAdvancePercent, onChange
       <div>
         <Label>How will the customer pay?</Label>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Choose payment timing for this job. This is recorded in your draft only for now.
+          Choose payment timing for this sale. Required for every contract.
         </p>
       </div>
       <div className="grid gap-2">

@@ -16,10 +16,11 @@ import { tenantFilters } from "../../middlewares/tenantScope";
 import { getTodayIST } from "../../subscriptions/service";
 import { detectDueWashes } from "../../subscriptions/dueWashDetection";
 import { listSubscriptionsWithOutstandingVisits } from "../dcms/missedVisitService";
+import { listExecutionsForTimeline } from "../executions/executionService";
 
 export type OperationsTimelineItem = {
   id: string;
-  channel: "booking" | "dcms_visit" | "dcms_due" | "due_wash";
+  channel: "booking" | "dcms_visit" | "dcms_due" | "due_wash" | "execution";
   customerId: number;
   customerName: string | null;
   assetLabel: string | null;
@@ -28,6 +29,7 @@ export type OperationsTimelineItem = {
   scheduledAt: string;
   staffName: string | null;
   staffId: number | null;
+  executionId?: number;
 };
 
 export type OperationsTimeline = {
@@ -39,6 +41,7 @@ export type OperationsTimeline = {
     dcmsVisitsCompleted: number;
     dcmsDueCount: number;
     dueWashCount: number;
+    executionCount: number;
     delayedCount: number;
   };
   items: OperationsTimelineItem[];
@@ -69,7 +72,7 @@ export async function getOperationsTimeline(req: Request, date: string): Promise
     ? and(eq(bookingsTable.scheduledDate, date), ...bookingFilters)
     : eq(bookingsTable.scheduledDate, date);
 
-  const [bookings, visits, outstandingDcms, dueWashes] = await Promise.all([
+  const [bookings, visits, outstandingDcms, dueWashes, executionItems] = await Promise.all([
     db.select({
       booking: bookingsTable,
       customerName: customersTable.name,
@@ -106,6 +109,7 @@ export async function getOperationsTimeline(req: Request, date: string): Promise
 
     isToday ? listSubscriptionsWithOutstandingVisits() : Promise.resolve([]),
     isToday ? detectDueWashes(date) : Promise.resolve([]),
+    listExecutionsForTimeline(req, date),
   ]);
 
   const bookingItems: OperationsTimelineItem[] = bookings.map(row => ({
@@ -164,7 +168,21 @@ export async function getOperationsTimeline(req: Request, date: string): Promise
     }))
     : [];
 
-  const items = [...bookingItems, ...visitItems, ...dcmsDueItems, ...dueWashItems]
+  const executionTimelineItems: OperationsTimelineItem[] = executionItems.map(e => ({
+    id: e.id,
+    channel: "execution" as const,
+    customerId: e.customerId,
+    customerName: e.customerName,
+    assetLabel: e.assetLabel,
+    workType: e.workType,
+    status: e.status,
+    scheduledAt: e.scheduledAt,
+    staffName: e.staffName,
+    staffId: e.staffId,
+    executionId: e.executionId,
+  }));
+
+  const items = [...executionTimelineItems, ...bookingItems, ...visitItems, ...dcmsDueItems, ...dueWashItems]
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 
   const delayedCount = bookingItems.filter(b => {
@@ -181,6 +199,7 @@ export async function getOperationsTimeline(req: Request, date: string): Promise
       dcmsVisitsCompleted: visitItems.filter(v => v.status === "completed").length,
       dcmsDueCount: dcmsDueItems.length,
       dueWashCount: dueWashItems.length,
+      executionCount: executionTimelineItems.length,
       delayedCount,
     },
     items,

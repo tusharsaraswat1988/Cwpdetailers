@@ -1,5 +1,5 @@
 import {
-  pgTable, serial, integer, date, timestamp, pgEnum, jsonb, uniqueIndex, index,
+  pgTable, serial, integer, date, timestamp, pgEnum, jsonb, text, uniqueIndex, index,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";

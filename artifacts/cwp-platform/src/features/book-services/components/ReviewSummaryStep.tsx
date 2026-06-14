@@ -1,11 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { useCatalogAddons } from "@/features/service-catalog/api";
 import { ASSET_TYPE_LABELS } from "@/features/assets/api";
+import { cn } from "@/lib/utils";
 import {
   type BookServicesDraft,
+  type BillingActionChoice,
   computeDraftTotals,
   paymentTermsLabel,
+  billingActionLabel,
 } from "../types";
 import { resolveFulfillmentHint, fulfillmentLabel } from "../api";
 
@@ -14,9 +18,18 @@ type Props = {
   creating?: boolean;
   createError?: string | null;
   onCreate?: () => void;
+  onBillingActionChange?: (action: BillingActionChoice) => void;
 };
 
-export function ReviewSummaryStep({ draft, creating, createError, onCreate }: Props) {
+const BILLING_OPTIONS: BillingActionChoice[] = ["quotation", "invoice"];
+
+export function ReviewSummaryStep({
+  draft,
+  creating,
+  createError,
+  onCreate,
+  onBillingActionChange,
+}: Props) {
   const catalogServiceId = draft.service?.kind === "service"
     ? draft.service.catalogServiceId ?? draft.service.id
     : undefined;
@@ -36,9 +49,9 @@ export function ReviewSummaryStep({ draft, creating, createError, onCreate }: Pr
   return (
     <div className="space-y-4" data-testid="book-step-review">
       <div>
-        <h2 className="font-display font-semibold text-lg">Review and create plan</h2>
+        <h2 className="font-display font-semibold text-lg">Review and complete sale</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Confirm the details below, then create the active plan. No invoice or assignment is created at this step.
+          Creates the service contract first, then generates your chosen billing document. GST is calculated from service configuration — not hardcoded.
         </p>
       </div>
 
@@ -84,32 +97,44 @@ export function ReviewSummaryStep({ draft, creating, createError, onCreate }: Pr
           )}
           <SummaryRow label="Plan type" value={fulfillmentLabel(fulfillment.mode)} />
           <SummaryRow label="Discount" value={discountLabel} />
-          <SummaryRow
-            label="Payment terms"
-            value={paymentTermsLabel(draft.paymentTerms)}
-          />
+          <SummaryRow label="Payment terms" value={paymentTermsLabel(draft.paymentTerms)} />
           {draft.paymentTerms === "partial_advance" && (
             <SummaryRow label="Advance" value={`${draft.partialAdvancePercent}% before service`} />
           )}
 
           <div className="border-t border-border pt-3 space-y-1">
             <div className="flex justify-between text-muted-foreground">
-              <span>Subtotal</span>
-              <span>₹{totals.subtotal.toLocaleString("en-IN")}</span>
-            </div>
-            {totals.discountAmount > 0 && (
-              <div className="flex justify-between text-muted-foreground">
-                <span>Discount</span>
-                <span>− ₹{totals.discountAmount.toLocaleString("en-IN")}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-semibold text-base pt-1">
-              <span>Estimated total</span>
+              <span>Estimated subtotal (pre-GST split)</span>
               <span>₹{totals.estimatedTotal.toLocaleString("en-IN")}</span>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Final GST breakdown appears after contract and billing document creation.
+            </p>
           </div>
         </CardContent>
       </Card>
+
+      <div className="space-y-2">
+        <Label>Billing document</Label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {BILLING_OPTIONS.map(opt => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onBillingActionChange?.(opt)}
+              data-testid={`book-billing-${opt}`}
+              className={cn(
+                "text-left border rounded-lg px-4 py-3 text-sm transition-colors",
+                draft.billingAction === opt
+                  ? "border-primary bg-primary/5 font-medium"
+                  : "border-border hover:border-primary/40",
+              )}
+            >
+              {billingActionLabel(opt)}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {createError && (
         <p className="text-sm text-destructive" data-testid="book-create-error">{createError}</p>
@@ -123,12 +148,16 @@ export function ReviewSummaryStep({ draft, creating, createError, onCreate }: Pr
           data-testid="book-create-contract"
           className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 w-full sm:w-auto"
         >
-          {creating ? "Creating…" : "Create Service Contract"}
+          {creating
+            ? "Creating…"
+            : draft.billingAction === "invoice"
+              ? "Create Contract & Invoice"
+              : "Create Contract & Quotation"}
         </button>
       )}
 
       <Badge variant="outline" className="text-xs">
-        Creates plan registry entry — no invoice or payment
+        Contract → billing → pending assignment (no staff dispatch in this sprint)
       </Badge>
     </div>
   );

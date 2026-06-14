@@ -9,7 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus } from "lucide-react";
+import { Plus, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Link } from "wouter";
 
 type AssignmentRow = {
   assignment: { id: number; subscriptionId: number; staffId: number; routeOrder: number; assignedAt: string };
@@ -54,6 +56,17 @@ export default function DcmsAssignmentsPage() {
     <AdminLayout>
       <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto">
         <DcmsAdminNav />
+        <Alert variant="destructive" className="border-amber-500/50 bg-amber-500/10 text-foreground">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Legacy assignment path — deprecated</AlertTitle>
+          <AlertDescription>
+            DCMS subscription assignment is superseded by the unified queue at{" "}
+            <Link href="/admin/assign-services" className="font-medium underline underline-offset-2">
+              Assign Services
+            </Link>
+            . This page remains for backward compatibility until Sprint 7 migration completes.
+          </AlertDescription>
+        </Alert>
         <div className="flex justify-between items-center">
           <h2 className="font-display font-bold text-xl">Staff Assignments</h2>
           <Dialog open={open} onOpenChange={setOpen}>

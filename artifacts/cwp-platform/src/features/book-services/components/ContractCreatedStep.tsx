@@ -1,3 +1,5 @@
+import { Link } from "wouter";
+import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,31 +11,39 @@ import {
 } from "../types";
 import {
   type ServiceContractResult,
+  type ContractBillingResult,
   fulfillmentLabel,
 } from "../api";
 
 type Props = {
   draft: BookServicesDraft;
   result: ServiceContractResult;
+  billing?: ContractBillingResult | null;
   onBookAnother: () => void;
 };
 
-export function ContractCreatedStep({ draft, result, onBookAnother }: Props) {
+function formatMoney(n: number) {
+  return `₹${n.toLocaleString("en-IN")}`;
+}
+
+export function ContractCreatedStep({ draft, result, billing, onBookAnother }: Props) {
+  const gst = billing?.gstSummary;
+
   return (
     <div className="space-y-4" data-testid="book-contract-created">
       <div className="flex items-start gap-3">
         <CheckCircle2 className="h-8 w-8 text-green-600 shrink-0" />
         <div>
-          <h2 className="font-display font-semibold text-lg">Active plan created</h2>
+          <h2 className="font-display font-semibold text-lg">Sale recorded</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            The service contract is registered. Billing and assignment will be handled in later steps.
+            Service contract and billing document created. Assignment is queued as pending — staff dispatch comes in Sprint 6.
           </p>
         </div>
       </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Contract summary</CardTitle>
+          <CardTitle className="text-base">Contract & billing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <Row label="Customer" value={draft.customer ? `${draft.customer.name}` : "—"} />
@@ -44,13 +54,75 @@ export function ContractCreatedStep({ draft, result, onBookAnother }: Props) {
           />
           <Row label="Service" value={draft.service?.name ?? result.label} />
           <Row label="Type" value={fulfillmentLabel(result.contractType)} />
-          <Row label="Registry ID" value={`#${result.registryId}`} />
+          <Row label="Contract ID" value={`#${result.registryId}`} />
           {result.bookingId && <Row label="Job reference" value={`#${result.bookingId}`} />}
           <Row label="Payment terms" value={paymentTermsLabel(draft.paymentTerms)} />
+
+          {billing?.quotationId && (
+            <Row
+              label="Quotation"
+              value={
+                <Link href="/admin/billing?tab=quotations" className="text-primary hover:underline">
+                  {billing.quotationNumber ?? `#${billing.quotationId}`}
+                </Link>
+              }
+            />
+          )}
+          {billing?.invoiceId && (
+            <Row
+              label="Invoice"
+              value={
+                <Link href="/admin/billing?tab=invoices" className="text-primary hover:underline">
+                  {billing.invoiceNumber ?? `#${billing.invoiceId}`}
+                </Link>
+              }
+            />
+          )}
+          {billing?.pendingAssignmentId && (
+            <Row label="Assignment" value="Pending (Sprint 6)" />
+          )}
+
+          {gst && (
+            <div className="border-t border-border pt-3 space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">GST summary</p>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Taxable value</span>
+                <span>{formatMoney(gst.subtotal)}</span>
+              </div>
+              {gst.cgstAmount > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>CGST</span>
+                  <span>{formatMoney(gst.cgstAmount)}</span>
+                </div>
+              )}
+              {gst.sgstAmount > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>SGST</span>
+                  <span>{formatMoney(gst.sgstAmount)}</span>
+                </div>
+              )}
+              {gst.igstAmount > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>IGST</span>
+                  <span>{formatMoney(gst.igstAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold pt-1">
+                <span>Total</span>
+                <span>{formatMoney(gst.totalAmount)}</span>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Badge variant="outline">{gst.isCorporate ? "B2B (GSTIN)" : "B2C Retail"}</Badge>
+                {gst.isInterState && <Badge variant="outline">Inter-state</Badge>}
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2 pt-2">
             <Badge>{result.status}</Badge>
-            <Badge variant="outline">No invoice yet</Badge>
-            <Badge variant="outline">No assignment yet</Badge>
+            {billing?.quotationId && <Badge variant="secondary">Quotation sent</Badge>}
+            {billing?.invoiceId && <Badge variant="secondary">Invoiced</Badge>}
+            <Badge variant="outline">Pending assignment</Badge>
           </div>
         </CardContent>
       </Card>
@@ -62,7 +134,7 @@ export function ContractCreatedStep({ draft, result, onBookAnother }: Props) {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: string | ReactNode }) {
   return (
     <div className="flex justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>

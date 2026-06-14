@@ -16,6 +16,8 @@ export type SelectedBookService = {
 
 export type PaymentTermsChoice = "full_advance" | "partial_advance" | "after_service";
 
+export type BillingActionChoice = "quotation" | "invoice";
+
 export type BookServicesDraft = {
   customer: CustomerSearchValue | null;
   location: CustomerServiceLocationRow | null;
@@ -26,6 +28,7 @@ export type BookServicesDraft = {
   discountValue: string;
   paymentTerms: PaymentTermsChoice;
   partialAdvancePercent: string;
+  billingAction: BillingActionChoice;
 };
 
 export const EMPTY_BOOK_SERVICES_DRAFT: BookServicesDraft = {
@@ -38,6 +41,7 @@ export const EMPTY_BOOK_SERVICES_DRAFT: BookServicesDraft = {
   discountValue: "",
   paymentTerms: "after_service",
   partialAdvancePercent: "50",
+  billingAction: "quotation",
 };
 
 export const WIZARD_STEPS = [
@@ -61,6 +65,14 @@ export function paymentTermsLabel(terms: PaymentTermsChoice): string {
     case "partial_advance": return "Partial advance, balance after service";
     case "after_service": return "Payment after service completion";
     default: return terms;
+  }
+}
+
+export function billingActionLabel(action: BillingActionChoice): string {
+  switch (action) {
+    case "quotation": return "Create quotation (await approval)";
+    case "invoice": return "Create invoice directly";
+    default: return action;
   }
 }
 

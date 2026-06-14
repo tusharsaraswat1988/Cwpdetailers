@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth";
+import { tenantStamp } from "../middlewares/tenantScope";
 import { isBookServicesContractsEnabled } from "../lib/contracts/featureFlag";
+import { isBookServicesBillingEnabled } from "../lib/billing/featureFlag";
 import {
   createServiceContract,
   getServiceContract,
@@ -8,6 +10,11 @@ import {
   listCustomerContracts,
   type CreateServiceContractBody,
 } from "../lib/contracts/serviceContractService";
+import {
+  createQuotationForContract,
+  createInvoiceForContract,
+  previewContractBilling,
+} from "../lib/billing/contractBillingService";
 
 const router = Router();
 
@@ -39,6 +46,56 @@ router.get("/service-contracts/:id", requireAuth, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Get service contract error");
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/service-contracts/:id/billing-preview", requireAuth, async (req, res) => {
+  try {
+    if (!isBookServicesBillingEnabled()) {
+      return res.status(503).json({ error: "Book Services billing is disabled" });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid contract id" });
+    const preview = await previewContractBilling(id);
+    return res.json(preview);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Billing preview failed";
+    req.log.error({ err }, "Contract billing preview error");
+    return res.status(400).json({ error: message });
+  }
+});
+
+router.post("/service-contracts/:id/quotation", requireAuth, async (req, res) => {
+  try {
+    if (!isBookServicesBillingEnabled()) {
+      return res.status(503).json({ error: "Book Services billing is disabled" });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid contract id" });
+    const stamped = tenantStamp(req, {});
+    const result = await createQuotationForContract(id, stamped);
+    return res.status(201).json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Quotation creation failed";
+    req.log.error({ err }, "Create contract quotation error");
+    return res.status(400).json({ error: message });
+  }
+});
+
+router.post("/service-contracts/:id/invoice", requireAuth, async (req, res) => {
+  try {
+    if (!isBookServicesBillingEnabled()) {
+      return res.status(503).json({ error: "Book Services billing is disabled" });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid contract id" });
+    const stamped = tenantStamp(req, {});
+    const result = await createInvoiceForContract(id, stamped);
+    return res.status(201).json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Invoice creation failed";
+    req.log.error({ err }, "Create contract invoice error");
+    return res.status(400).json({ error: message });
   }
 });
 

@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, IndianRupee, Wallet, Car, AlertCircle, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
-import { Customer360BillingPanels } from "./Customer360BillingPanels";
+import { BillingSummaryPanel } from "./BillingSummaryPanel";
 
 type Props = {
   customerId: number;
@@ -126,13 +126,13 @@ export function Customer360Overview({ customerId, basePath, customer }: Props) {
             <CalendarCheck size={14} /> Book Service
           </Link>
           <Link href={`${basePath}/${customerId}?tab=services`} className="inline-flex items-center gap-1 text-primary hover:underline">
-            <Car size={14} /> All services & plans
+            <Car size={14} /> Active Services
           </Link>
           <Link href={`${basePath}/${customerId}?tab=wallet`} className="inline-flex items-center gap-1 text-primary hover:underline">
-            <Wallet size={14} /> Wallet
+            <Wallet size={14} /> Wallet Summary
           </Link>
           <Link href={`${basePath}/${customerId}?tab=billing`} className="inline-flex items-center gap-1 text-primary hover:underline">
-            <IndianRupee size={14} /> Billing & invoices
+            <IndianRupee size={14} /> Billing Summary
           </Link>
           {basePath.startsWith("/admin") && (
             <Link href={`/admin/bookings?customerId=${customerId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
@@ -145,7 +145,7 @@ export function Customer360Overview({ customerId, basePath, customer }: Props) {
         </CardContent>
       </Card>
 
-      <Customer360BillingPanels customerId={customerId} basePath={basePath} />
+      <BillingSummaryPanel customerId={customerId} />
     </div>
   );
 }

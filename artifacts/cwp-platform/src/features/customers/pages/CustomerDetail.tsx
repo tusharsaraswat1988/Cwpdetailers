@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode, type ComponentType } from "react";
 import { useRoute } from "wouter";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useGetCustomer,
   getGetCustomerQueryKey,
@@ -8,7 +8,6 @@ import {
   useUpdateCustomer,
   useListBranches,
   getListBranchesQueryKey,
-  getGetCustomerSummaryQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, IndianRupee, Wallet, Pencil, User, LayoutDashboard, MessageSquare, LifeBuoy, Layers, FileText, MapPin, Boxes } from "lucide-react";
+import { ArrowLeft, Pencil, User, LayoutDashboard, MessageSquare, LifeBuoy, Layers, FileText, MapPin, Boxes, Wallet } from "lucide-react";
 import { Link } from "wouter";
 import CommunicationTimeline from "@/features/communications/components/CommunicationTimeline";
 import CommunicationPreferences from "@/features/communications/components/CommunicationPreferences";
@@ -31,23 +30,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Customer360Overview } from "@/features/customers/components/Customer360Overview";
 import { CustomerReferralPanel } from "@/features/customers/components/CustomerReferralPanel";
 import { CustomerComplaintsPanel } from "@/features/customers/components/CustomerComplaintsPanel";
-import { CustomerServicesTab } from "@/features/customers/components/CustomerServicesTab";
+import { ActiveServicesSummary } from "@/features/customers/components/ActiveServicesSummary";
 import { CustomerPersonaBadges } from "@/features/customers/components/CustomerPersonaBadges";
-import { Customer360BillingPanels } from "@/features/customers/components/Customer360BillingPanels";
-import { CustomerServiceLocationsPanel } from "@/features/customers/components/CustomerServiceLocationsPanel";
-import { CustomerLinkedAssetsPanel } from "@/features/customers/components/CustomerLinkedAssetsPanel";
+import { BillingSummaryPanel } from "@/features/customers/components/BillingSummaryPanel";
+import { WalletSummaryPanel } from "@/features/customers/components/WalletSummaryPanel";
+import { LinkedLocationsSummary } from "@/features/customers/components/LinkedLocationsSummary";
+import { LinkedAssetsSummary } from "@/features/customers/components/LinkedAssetsSummary";
 import { fetchCustomerServicesHub } from "@/features/customers/api";
-
-type WalletTx = {
-  id: number;
-  type: "credit" | "debit";
-  amount: number;
-  balanceAfter: number;
-  reference?: string | null;
-  paymentMode?: string | null;
-  notes?: string | null;
-  createdAt: string;
-};
 
 type EditForm = {
   name: string;
@@ -72,40 +61,11 @@ export type CustomerDetailPortalConfig = {
   routePattern: string;
 };
 
-async function fetchWallet(id: number) {
-  const res = await fetch(`/api/customers/${id}/wallet`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to load wallet");
-  return res.json();
-}
-
-async function fetchWalletTransactions(id: number) {
-  const res = await fetch(`/api/customers/${id}/wallet/transactions?limit=20`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to load transactions");
-  return res.json() as Promise<{ data: WalletTx[]; total: number }>;
-}
-
-async function creditWallet(id: number, body: { amount: number; paymentMode: string; notes?: string }) {
-  const res = await fetch(`/api/customers/${id}/wallet/credit`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? "Credit failed");
-  }
-  return res.json();
-}
-
 export default function CustomerDetailPage({ Layout, basePath, routePattern }: CustomerDetailPortalConfig) {
   const [, params] = useRoute(routePattern);
   const id = parseInt(String((params as Record<string, string | undefined>)?.id ?? "0"), 10);
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [amount, setAmount] = useState("");
-  const [paymentMode, setPaymentMode] = useState("upi");
-  const [notes, setNotes] = useState("");
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<EditForm>({
     name: "", phone: "", email: "", city: "", address: "", status: "active", branchId: "", gstin: "", billingName: "",
@@ -120,7 +80,8 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
 
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
-    if (tab) setActiveTab(tab);
+    if (tab === "active-services") setActiveTab("services");
+    else if (tab) setActiveTab(tab);
   }, []);
 
   const handleTabChange = (tab: string) => {
@@ -146,18 +107,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
       billingName: tier3.billingName ?? "",
     });
   }, [customer]);
-
-  const { data: wallet, isLoading: walletLoading } = useQuery({
-    queryKey: ["wallet", id],
-    queryFn: () => fetchWallet(id),
-    enabled: id > 0,
-  });
-
-  const { data: txData, isLoading: txLoading } = useQuery({
-    queryKey: ["wallet-transactions", id],
-    queryFn: () => fetchWalletTransactions(id),
-    enabled: id > 0,
-  });
 
   const { data: servicesHub } = useQuery({
     queryKey: ["customer", id, "services-hub"],
@@ -187,26 +136,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
         toast({ title: "Update failed", description: data?.error ?? err.message, variant: "destructive" });
       },
     },
-  });
-
-  const creditMutation = useMutation({
-    mutationFn: () => creditWallet(id, {
-      amount: parseFloat(amount),
-      paymentMode,
-      notes: notes || undefined,
-    }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["wallet", id] });
-      qc.invalidateQueries({ queryKey: ["wallet-transactions", id] });
-      qc.invalidateQueries({ queryKey: ["customer-360-invoices", id] });
-      qc.invalidateQueries({ queryKey: getGetCustomerSummaryQueryKey(id) });
-      qc.invalidateQueries({ queryKey: getGetCustomerQueryKey(id) });
-      qc.invalidateQueries({ queryKey: getListCustomersQueryKey() });
-      setAmount("");
-      setNotes("");
-      toast({ title: "Wallet credited successfully" });
-    },
-    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
   const handleSaveProfile = () => {
@@ -295,12 +224,12 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
           <Tabs value={activeTab} onValueChange={handleTabChange} data-testid="customer-360-tabs">
             <TabsList className="flex flex-wrap h-auto gap-1">
               <TabsTrigger value="overview" data-testid="tab-overview"><LayoutDashboard size={14} className="mr-1.5" />Overview</TabsTrigger>
-              <TabsTrigger value="services" data-testid="tab-services"><Layers size={14} className="mr-1.5" />Services & Plans</TabsTrigger>
+              <TabsTrigger value="services" data-testid="tab-services"><Layers size={14} className="mr-1.5" />Active Services</TabsTrigger>
               <TabsTrigger value="profile" data-testid="tab-profile"><User size={14} className="mr-1.5" />Profile</TabsTrigger>
-              <TabsTrigger value="wallet" data-testid="tab-wallet"><Wallet size={14} className="mr-1.5" />Wallet</TabsTrigger>
-              <TabsTrigger value="billing" data-testid="tab-billing"><FileText size={14} className="mr-1.5" />Billing</TabsTrigger>
-              <TabsTrigger value="assets" data-testid="tab-assets"><Boxes size={14} className="mr-1.5" />Assets</TabsTrigger>
-              <TabsTrigger value="locations" data-testid="tab-locations"><MapPin size={14} className="mr-1.5" />Locations</TabsTrigger>
+              <TabsTrigger value="wallet" data-testid="tab-wallet"><Wallet size={14} className="mr-1.5" />Wallet Summary</TabsTrigger>
+              <TabsTrigger value="billing" data-testid="tab-billing"><FileText size={14} className="mr-1.5" />Billing Summary</TabsTrigger>
+              <TabsTrigger value="assets" data-testid="tab-assets"><Boxes size={14} className="mr-1.5" />Linked Assets</TabsTrigger>
+              <TabsTrigger value="locations" data-testid="tab-locations"><MapPin size={14} className="mr-1.5" />Linked Locations</TabsTrigger>
               <TabsTrigger value="communications" data-testid="tab-communications"><MessageSquare size={14} className="mr-1.5" />Communications</TabsTrigger>
               <TabsTrigger value="support" data-testid="tab-support"><LifeBuoy size={14} className="mr-1.5" />Support</TabsTrigger>
             </TabsList>
@@ -314,7 +243,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
             </TabsContent>
 
             <TabsContent value="services" className="mt-4">
-              <CustomerServicesTab customerId={id} basePath={basePath} />
+              <ActiveServicesSummary customerId={id} basePath={basePath} />
             </TabsContent>
 
             <TabsContent value="profile" className="mt-4 space-y-4">
@@ -424,124 +353,16 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
               <CustomerReferralPanel customerId={id} basePath={basePath} />
             </TabsContent>
 
-            <TabsContent value="wallet" className="mt-4 space-y-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Wallet size={16} className="text-primary" /> Wallet
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {walletLoading ? (
-              <Skeleton className="h-8 w-32" />
-            ) : (
-              <p className="text-2xl font-bold text-primary flex items-center gap-1">
-                <IndianRupee size={20} />
-                {(wallet?.balance ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-              </p>
-            )}
-
-            <div className="grid sm:grid-cols-3 gap-3 pt-2 border-t border-border">
-              <div>
-                <Label htmlFor="credit-amount">Amount (₹)</Label>
-                <Input
-                  id="credit-amount"
-                  type="number"
-                  min="1"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="mt-1"
-                  data-testid="input-wallet-credit-amount"
-                />
-              </div>
-              <div>
-                <Label>Payment mode</Label>
-                <Select value={paymentMode} onValueChange={setPaymentMode}>
-                  <SelectTrigger className="mt-1" data-testid="select-wallet-payment-mode">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="upi">UPI</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="credit-notes">Remarks</Label>
-                <Input
-                  id="credit-notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="mt-1"
-                  placeholder="Optional"
-                  data-testid="input-wallet-credit-notes"
-                />
-              </div>
-            </div>
-            <Button
-              onClick={() => creditMutation.mutate()}
-              disabled={creditMutation.isPending || !amount || parseFloat(amount) <= 0}
-              className="bg-primary text-secondary hover:bg-primary/90"
-              data-testid="btn-wallet-credit"
-            >
-              {creditMutation.isPending ? "Adding..." : "Add wallet credit"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Transaction ledger</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {txLoading ? (
-              <Skeleton className="h-24 w-full" />
-            ) : (txData?.data ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">No transactions yet</p>
-            ) : (
-              <div className="space-y-2">
-                {(txData?.data ?? []).map((tx) => (
-                  <div
-                    key={tx.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-border"
-                    data-testid={`wallet-tx-${tx.id}`}
-                  >
-                    <div>
-                      <Badge variant="outline" className={`text-xs capitalize ${tx.type === "credit" ? "text-green-500 border-green-500/30" : "text-red-400 border-red-500/30"}`}>
-                        {tx.type}
-                      </Badge>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {tx.reference?.replace(/_/g, " ") ?? "—"}
-                        {tx.paymentMode ? ` · ${tx.paymentMode}` : ""}
-                      </p>
-                      {tx.notes && <p className="text-xs text-muted-foreground">{tx.notes}</p>}
-                    </div>
-                    <div className="text-right">
-                      <p className={`font-semibold ${tx.type === "credit" ? "text-green-500" : "text-red-400"}`}>
-                        {tx.type === "credit" ? "+" : "-"}₹{tx.amount.toLocaleString("en-IN")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Bal ₹{tx.balanceAfter.toLocaleString("en-IN")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(tx.createdAt).toLocaleDateString("en-IN")}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <TabsContent value="wallet" className="mt-4">
+              <WalletSummaryPanel customerId={id} />
             </TabsContent>
 
             <TabsContent value="billing" className="mt-4">
-              <Customer360BillingPanels customerId={id} basePath={basePath} />
+              <BillingSummaryPanel customerId={id} />
             </TabsContent>
 
             <TabsContent value="assets" className="mt-4">
-              <CustomerLinkedAssetsPanel customerId={id} />
+              <LinkedAssetsSummary customerId={id} />
             </TabsContent>
 
             <TabsContent value="communications" className="mt-4 space-y-4">
@@ -569,7 +390,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
             </TabsContent>
 
             <TabsContent value="locations" className="mt-4">
-              <CustomerServiceLocationsPanel customerId={id} readOnly />
+              <LinkedLocationsSummary customerId={id} readOnly />
             </TabsContent>
           </Tabs>
         )}

@@ -44,6 +44,8 @@ import {
 
 import { getTermsForCategories } from "./invoiceBillingSettings";
 
+import { getDefaultGstRate } from "../catalog/pricingEngine";
+
 
 
 export type TenantFields = {
@@ -73,6 +75,16 @@ export type CreateInvoiceInput = {
   bookingId?: number | null;
 
   quotationId?: number | null;
+
+  contractRegistryId?: number | null;
+
+  serviceLocationId?: number | null;
+
+  assetId?: number | null;
+
+  serviceId?: number | null;
+
+  paymentTerms?: string | null;
 
   dueDate?: string | null;
 
@@ -316,7 +328,9 @@ export async function findInvoiceByBookingId(bookingId: number, tx?: Transaction
 
 
 
-function normalizeItems(items: InvoiceItem[]): InvoiceItem[] {
+async function normalizeItems(items: InvoiceItem[]): Promise<InvoiceItem[]> {
+
+  const defaultRate = await getDefaultGstRate();
 
   return items.map(item => ({
 
@@ -326,7 +340,7 @@ function normalizeItems(items: InvoiceItem[]): InvoiceItem[] {
 
     unit: item.unit ?? "UNT",
 
-    gstRate: item.gstRate ?? 18,
+    gstRate: item.gstRate ?? defaultRate,
 
   }));
 
@@ -360,7 +374,7 @@ export async function createInvoice(input: CreateInvoiceInput, tx?: Transaction)
 
 
 
-  const normalizedItems = normalizeItems(input.items);
+  const normalizedItems = await normalizeItems(input.items);
 
   const categories = [...new Set(normalizedItems.map(i => i.serviceCategory).filter(Boolean))] as string[];
 
@@ -487,6 +501,16 @@ export async function createInvoice(input: CreateInvoiceInput, tx?: Transaction)
     bookingId: input.bookingId ?? null,
 
     quotationId: input.quotationId ?? null,
+
+    contractRegistryId: input.contractRegistryId ?? null,
+
+    serviceLocationId: input.serviceLocationId ?? null,
+
+    assetId: input.assetId ?? null,
+
+    serviceId: input.serviceId ?? null,
+
+    paymentTerms: input.paymentTerms ?? null,
 
     items: gst.items,
 
@@ -1092,6 +1116,16 @@ export async function createInvoiceFromQuotation(
 
     bookingId?: number | null;
 
+    contractRegistryId?: number | null;
+
+    serviceLocationId?: number | null;
+
+    assetId?: number | null;
+
+    serviceId?: number | null;
+
+    paymentTerms?: string | null;
+
     items: InvoiceItem[];
 
     subtotal: string;
@@ -1117,6 +1151,16 @@ export async function createInvoiceFromQuotation(
     bookingId: quotation.bookingId ?? null,
 
     quotationId: quotation.id,
+
+    contractRegistryId: quotation.contractRegistryId ?? null,
+
+    serviceLocationId: quotation.serviceLocationId ?? null,
+
+    assetId: quotation.assetId ?? null,
+
+    serviceId: quotation.serviceId ?? null,
+
+    paymentTerms: quotation.paymentTerms ?? null,
 
     items: quotation.items,
 

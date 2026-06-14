@@ -10,6 +10,7 @@ import { roleSlugForBookingService, staffOperationalRoleError } from "../lib/sta
 import { notifyBookingConfirmed, notifyBookingCompleted } from "../lib/notifications/dispatcher";
 import { captureBookingTransitionLocation } from "../lib/staffLocation/bookingLocation";
 import { handleLocationError } from "../lib/staffLocation/locationService";
+import { applyLegacyAssignmentDeprecation } from "../lib/assignments/legacyAssignmentDeprecation";
 
 const router = Router();
 
@@ -297,6 +298,17 @@ router.post("/bookings", async (req, res) => {
     const { tryReactivateLegacyCustomer } = await import("../lib/customerReactivation");
     const reactivation = await tryReactivateLegacyCustomer(customerId, "booking", { type: "booking", id: booking.id });
 
+    if (initialStatus !== "cancelled") {
+      const { bridgeLegacyBookingToContractAndQueue } = await import("../lib/assignments/enqueueAdapters");
+      let serviceName: string | null = null;
+      if (serviceId) {
+        const [svc] = await db.select({ name: servicesTable.name }).from(servicesTable)
+          .where(eq(servicesTable.id, serviceId)).limit(1);
+        serviceName = svc?.name ?? null;
+      }
+      await bridgeLegacyBookingToContractAndQueue(booking, serviceName);
+    }
+
     return res.status(201).json({ ...booking, reactivated: reactivation.reactivated });
   } catch (err) {
     req.log.error({ err }, "Create booking error");
@@ -547,6 +559,8 @@ router.post("/bookings/:id/proof", async (req, res) => {
 });
 
 router.post("/bookings/:id/assign", async (req, res) => {
+  /** @deprecated Use POST /api/assignments/:pendingId/assign after pending_service_assignments enqueue. */
+  applyLegacyAssignmentDeprecation(res);
   try {
     const id = parseInt(req.params.id);
     const { staffId, reason } = req.body;

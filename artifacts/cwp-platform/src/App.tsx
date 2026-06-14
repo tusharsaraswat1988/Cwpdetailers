@@ -35,6 +35,7 @@ import ServiceLocationDetail from "@/pages/admin/ServiceLocationDetail";
 import AssetsPage from "@/pages/admin/AssetsPage";
 import AssetDetail from "@/pages/admin/AssetDetail";
 import BookServicesPage from "@/pages/admin/BookServicesPage";
+import AssignServicesPage from "@/pages/admin/AssignServicesPage";
 import ProductsAndPlans from "@/pages/admin/ProductsAndPlans";
 import AdminMasterData from "@/pages/admin/MasterData";
 import AdminAnalytics from "@/pages/admin/Analytics";
@@ -190,6 +191,7 @@ function Router() {
       <Route path="/admin/settings/invoice-billing" component={() => <ProtectedRoute component={InvoiceBillingSettingsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={["admin", "superadmin", "manager"]} permission={{ resource: "complaints", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/book-services" component={() => <ProtectedRoute component={BookServicesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/assign-services" component={() => <ProtectedRoute component={AssignServicesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "edit" }} loginPath="/admin/login" />} />
       <Route path="/admin/assets/:id" component={() => <ProtectedRoute component={AssetDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/assets" component={() => <ProtectedRoute component={AssetsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/service-locations/:id" component={() => <ProtectedRoute component={ServiceLocationDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />

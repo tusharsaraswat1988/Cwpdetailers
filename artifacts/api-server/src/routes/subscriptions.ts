@@ -116,6 +116,9 @@ router.post("/subscriptions", async (req, res) => {
     const { syncContractFromSubscription } = await import("../lib/contracts/contractRegistry");
     await syncContractFromSubscription(sub);
 
+    const { enqueuePendingFromSubscription } = await import("../lib/assignments/enqueueAdapters");
+    await enqueuePendingFromSubscription(sub.id);
+
     return res.status(201).json({ ...sub, reactivated: reactivation.reactivated });
   } catch (err) {
     req.log.error({ err }, "Create subscription error");

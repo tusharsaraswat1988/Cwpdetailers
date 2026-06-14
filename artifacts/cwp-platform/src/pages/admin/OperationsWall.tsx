@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 
 type TimelineItem = {
   id: string;
-  channel: "booking" | "dcms_visit" | "dcms_due" | "due_wash";
+  channel: "booking" | "dcms_visit" | "dcms_due" | "due_wash" | "execution";
   customerId: number;
   customerName: string | null;
   assetLabel: string | null;
@@ -19,6 +19,18 @@ type TimelineItem = {
   status: string;
   scheduledAt: string;
   staffName: string | null;
+  executionId?: number;
+};
+
+type ServiceUpdatesSummary = {
+  date: string;
+  pending: number;
+  assigned: number;
+  scheduled: number;
+  started: number;
+  completed: number;
+  missed: number;
+  cancelled: number;
 };
 
 type TimelineResponse = {
@@ -30,8 +42,10 @@ type TimelineResponse = {
     dcmsVisitsCompleted: number;
     dcmsDueCount: number;
     dueWashCount: number;
+    executionCount: number;
     delayedCount: number;
   };
+  summary?: ServiceUpdatesSummary;
   items: TimelineItem[];
 };
 
@@ -55,16 +69,20 @@ const CHANNEL_LABEL: Record<TimelineItem["channel"], string> = {
   dcms_visit: "DCMS visit",
   dcms_due: "DCMS due",
   due_wash: "Due wash",
+  execution: "Execution",
 };
 
 function channelClass(channel: TimelineItem["channel"]) {
+  if (channel === "execution") return "text-emerald-300 border-emerald-500/30";
   if (channel === "dcms_visit" || channel === "dcms_due") return "text-sky-300 border-sky-500/30";
   if (channel === "due_wash") return "text-amber-300 border-amber-500/30";
   return "text-primary border-primary/30";
 }
 
 function liveItems(items: TimelineItem[]) {
-  const activeStatuses = new Set(["scheduled", "confirmed", "en_route", "in_progress", "pending", "overdue"]);
+  const activeStatuses = new Set([
+    "scheduled", "started", "confirmed", "en_route", "in_progress", "pending", "overdue",
+  ]);
   return items.filter(i => activeStatuses.has(i.status));
 }
 
@@ -84,6 +102,7 @@ export default function OperationsWall() {
   });
 
   const stats = timeline?.stats;
+  const summary = timeline?.summary;
   const allItems = timeline?.items ?? [];
   const bookings = allItems.filter(i => i.channel === "booking");
   const scheduled = bookings.filter(b => b.status === "scheduled" || b.status === "confirmed");
@@ -113,11 +132,14 @@ export default function OperationsWall() {
           <div>
             <h1 className="font-display font-bold text-3xl tracking-tight">Service Updates</h1>
             <p className="text-white/40 text-sm mt-0.5">
-              Unified timeline · {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              Read-only ops view · aggregates assignments &amp; executions · {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3 text-sm text-white/50">
+          <Link href="/admin/assign-services" className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 rounded-lg text-primary transition-colors text-xs">
+            Assign Services
+          </Link>
           <Wifi size={14} className="text-green-400" />
           <span>Last updated {lastRefresh}</span>
           <span className="text-white/20">·</span>
@@ -128,8 +150,35 @@ export default function OperationsWall() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          {[
+            { label: "Pending", count: summary.pending, href: "/admin/assign-services" },
+            { label: "Assigned", count: summary.assigned, href: "/admin/assign-services" },
+            { label: "Scheduled", count: summary.scheduled },
+            { label: "Started", count: summary.started },
+            { label: "Completed", count: summary.completed },
+            { label: "Missed", count: summary.missed },
+            { label: "Cancelled", count: summary.cancelled },
+          ].map(({ label, count, href }) => (
+            href ? (
+              <Link key={label} href={href} className="rounded-xl border border-white/10 bg-white/5 p-3 hover:bg-white/10 transition-colors">
+                <p className="font-display font-bold text-2xl tabular-nums">{count}</p>
+                <p className="text-xs text-white/50 mt-1">{label}</p>
+              </Link>
+            ) : (
+              <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="font-display font-bold text-2xl tabular-nums">{count}</p>
+                <p className="text-xs text-white/50 mt-1">{label}</p>
+              </div>
+            )
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
         {[
+          { label: "Executions", count: stats?.executionCount ?? 0, color: "bg-emerald-500/20 border-emerald-500/30 text-emerald-300", icon: Activity },
           { label: "Bookings", count: stats?.bookingsTotal ?? 0, color: "bg-sky-500/20 border-sky-500/30 text-sky-300", icon: Calendar },
           { label: "DCMS visits", count: stats?.dcmsVisitsTotal ?? 0, color: "bg-indigo-500/20 border-indigo-500/30 text-indigo-300", icon: Sparkles },
           { label: "DCMS due", count: stats?.dcmsDueCount ?? 0, color: "bg-violet-500/20 border-violet-500/30 text-violet-300", icon: Clock },

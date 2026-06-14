@@ -10,6 +10,8 @@ import {
   solarSitesTable,
   catalogPackagesTable,
   servicesTable,
+  serviceLocationsTable,
+  assetsTable,
   type DcmsSubscription,
   type Subscription,
   type CustomerEntitlement,
@@ -35,8 +37,36 @@ export type RegistryContractRow = {
   status: string;
   validFrom: string | null;
   validUntil: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  serviceName: string;
+  serviceLocationId: number | null;
+  serviceLocationLabel: string | null;
+  linkedAssetId: number | null;
+  linkedAssetLabel: string | null;
   summary: Record<string, unknown>;
 };
+
+const PRODUCT_LINE_LABELS: Record<string, string> = {
+  daily_cleaning: "Daily cleaning plan",
+  wash_package: "Wash package",
+  monthly_wash: "Monthly wash plan",
+  solar_amc: "Solar AMC",
+  detailing_plan: "Detailing plan",
+  one_time_service: "One-time service",
+};
+
+function resolveContractServiceName(
+  productLine: string,
+  summary: Record<string, unknown>,
+  serviceNameFromDb: string | null,
+): string {
+  if (typeof summary.serviceName === "string" && summary.serviceName.trim()) return summary.serviceName;
+  if (typeof summary.planName === "string" && summary.planName.trim()) return summary.planName;
+  if (typeof summary.packageName === "string" && summary.packageName.trim()) return summary.packageName;
+  if (serviceNameFromDb) return serviceNameFromDb;
+  return PRODUCT_LINE_LABELS[productLine] ?? productLine.replace(/_/g, " ");
+}
 
 function mapDcmsStatus(status: string): typeof customerContractsTable.$inferInsert["status"] {
   if (status === "paused") return "paused";
@@ -344,6 +374,9 @@ export async function listCustomerContracts(customerId: number): Promise<Registr
     contract: customerContractsTable,
     vehicleNumber: vehiclesTable.registrationNumber,
     solarAddress: solarSitesTable.address,
+    serviceLocationLabel: serviceLocationsTable.label,
+    linkedAssetLabel: assetsTable.label,
+    serviceNameFromDb: servicesTable.name,
   })
     .from(customerContractsTable)
     .leftJoin(vehiclesTable, and(
@@ -354,27 +387,44 @@ export async function listCustomerContracts(customerId: number): Promise<Registr
       eq(customerContractsTable.assetType, "solar_site"),
       eq(customerContractsTable.assetId, solarSitesTable.id),
     ))
+    .leftJoin(serviceLocationsTable, eq(customerContractsTable.serviceLocationId, serviceLocationsTable.id))
+    .leftJoin(assetsTable, eq(customerContractsTable.registryAssetId, assetsTable.id))
+    .leftJoin(servicesTable, eq(customerContractsTable.serviceId, servicesTable.id))
     .where(eq(customerContractsTable.customerId, customerId))
     .orderBy(desc(customerContractsTable.updatedAt));
 
-  return rows.map(r => ({
-    id: r.contract.id,
-    customerId: r.contract.customerId,
-    assetType: r.contract.assetType,
-    assetId: r.contract.assetId,
-    assetLabel: r.contract.assetType === "vehicle"
+  return rows.map(r => {
+    const summary = (r.contract.summaryJson ?? {}) as Record<string, unknown>;
+    const validFrom = r.contract.validFrom ? String(r.contract.validFrom) : null;
+    const validUntil = r.contract.validUntil ? String(r.contract.validUntil) : null;
+    const legacyAssetLabel = r.contract.assetType === "vehicle"
       ? r.vehicleNumber ?? null
       : r.contract.assetType === "solar_site"
         ? r.solarAddress ?? null
-        : null,
-    productLine: r.contract.productLine,
-    sourceSystem: r.contract.sourceSystem,
-    sourceId: r.contract.sourceId,
-    status: r.contract.status,
-    validFrom: r.contract.validFrom ? String(r.contract.validFrom) : null,
-    validUntil: r.contract.validUntil ? String(r.contract.validUntil) : null,
-    summary: (r.contract.summaryJson ?? {}) as Record<string, unknown>,
-  }));
+        : null;
+
+    return {
+      id: r.contract.id,
+      customerId: r.contract.customerId,
+      assetType: r.contract.assetType,
+      assetId: r.contract.assetId,
+      assetLabel: legacyAssetLabel,
+      productLine: r.contract.productLine,
+      sourceSystem: r.contract.sourceSystem,
+      sourceId: r.contract.sourceId,
+      status: r.contract.status,
+      validFrom,
+      validUntil,
+      startDate: validFrom,
+      endDate: validUntil,
+      serviceName: resolveContractServiceName(r.contract.productLine, summary, r.serviceNameFromDb),
+      serviceLocationId: r.contract.serviceLocationId ?? null,
+      serviceLocationLabel: r.serviceLocationLabel ?? null,
+      linkedAssetId: r.contract.registryAssetId ?? null,
+      linkedAssetLabel: r.linkedAssetLabel ?? legacyAssetLabel,
+      summary,
+    };
+  });
 }
 
 export function activeContractFilter(): SQL {

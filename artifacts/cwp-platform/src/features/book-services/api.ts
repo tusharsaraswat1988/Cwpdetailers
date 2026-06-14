@@ -15,6 +15,28 @@ export type ServiceContractResult = {
   validUntil: string | null;
 };
 
+export type GstSummary = {
+  subtotal: number;
+  gstAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  totalAmount: number;
+  isCorporate: boolean;
+  isInterState: boolean;
+};
+
+export type ContractBillingResult = {
+  contractRegistryId: number;
+  quotationId?: number;
+  quotationNumber?: string;
+  invoiceId?: number;
+  invoiceNumber?: string;
+  pendingAssignmentId: number;
+  paymentTerms: string;
+  gstSummary: GstSummary;
+};
+
 /** Client-side fulfillment hint (server resolves authoritatively). */
 export function resolveFulfillmentHint(draft: BookServicesDraft): { mode: FulfillmentMode; label: string } {
   const service = draft.service;
@@ -104,4 +126,25 @@ export async function createServiceContract(
 
 export async function getServiceContract(registryId: number) {
   return contractFetch<Record<string, unknown>>(`/service-contracts/${registryId}`);
+}
+
+export async function createContractQuotation(registryId: number): Promise<ContractBillingResult> {
+  return contractFetch<ContractBillingResult>(`/service-contracts/${registryId}/quotation`, {
+    method: "POST",
+  });
+}
+
+export async function createContractInvoice(registryId: number): Promise<ContractBillingResult> {
+  return contractFetch<ContractBillingResult>(`/service-contracts/${registryId}/invoice`, {
+    method: "POST",
+  });
+}
+
+export async function createContractBilling(
+  registryId: number,
+  action: import("./types").BillingActionChoice,
+): Promise<ContractBillingResult> {
+  return action === "invoice"
+    ? createContractInvoice(registryId)
+    : createContractQuotation(registryId);
 }

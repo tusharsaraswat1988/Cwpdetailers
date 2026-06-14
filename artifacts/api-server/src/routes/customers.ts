@@ -459,6 +459,22 @@ router.get("/customers/:id/services", async (req, res) => {
   }
 });
 
+router.get("/customers/:id/billing-summary", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, id)).limit(1);
+    if (!customer || !rowInScope(req, { ...customer, customerId: customer.id })) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    const { getCustomerBillingSummary } = await import("../lib/customers/customerBillingSummary");
+    const summary = await getCustomerBillingSummary(id);
+    return res.json(summary);
+  } catch (err) {
+    req.log.error({ err }, "Customer billing summary error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/customers/:id/contracts", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

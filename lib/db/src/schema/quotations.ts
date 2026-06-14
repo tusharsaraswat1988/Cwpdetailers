@@ -1,9 +1,11 @@
 import { pgTable, serial, integer, text, numeric, date, timestamp, pgEnum, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { InvoiceItem } from "./invoices";
 
 export const quotationStatusEnum = pgEnum("quotation_status", ["draft", "sent", "accepted", "rejected", "converted"]);
 
+/** @deprecated use InvoiceItem — quotations store GST-aware line items. */
 export type QuotationItem = {
   description: string;
   quantity: number;
@@ -17,9 +19,17 @@ export const quotationsTable = pgTable("quotations", {
   customerId: integer("customer_id").notNull(),
   leadId: integer("lead_id"),
   bookingId: integer("booking_id"),
-  items: json("items").$type<QuotationItem[]>().notNull().default([]),
+  contractRegistryId: integer("contract_registry_id"),
+  serviceLocationId: integer("service_location_id"),
+  assetId: integer("asset_id"),
+  serviceId: integer("service_id"),
+  paymentTerms: text("payment_terms"),
+  items: json("items").$type<InvoiceItem[]>().notNull().default([]),
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   gstAmount: numeric("gst_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  cgstAmount: numeric("cgst_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  sgstAmount: numeric("sgst_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  igstAmount: numeric("igst_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   discount: numeric("discount", { precision: 10, scale: 2 }).notNull().default("0"),
   totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
   status: quotationStatusEnum("status").notNull().default("draft"),

@@ -84,6 +84,9 @@ export async function createSubscription(
   const { syncContractFromDcms } = await import("../contracts/contractRegistry");
   await syncContractFromDcms(sub!, plan.name);
 
+  const { enqueuePendingFromDcmsSubscription } = await import("../assignments/enqueueAdapters");
+  await enqueuePendingFromDcmsSubscription(sub!.id);
+
   if (!data.skipBilling) {
     const { createInvoiceForDcmsPlan } = await import("../billing/invoiceService");
     await createInvoiceForDcmsPlan(
@@ -198,6 +201,7 @@ export async function assignStaff(
   assignedBy: number,
   routeOrder?: number,
 ) {
+  /** @deprecated Direct DCMS subscription assignment. Use pending_service_assignments + service_assignments (Sprint 6). */
   const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
   if (!staff) throw new Error("Staff not found");
   const roleErr = await staffOperationalRoleError(staff, OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
@@ -309,6 +313,11 @@ export async function renewSubscription(subscriptionId: number, performedBy: num
       branchId: detail.subscription.branchId,
     },
   );
+
+  const { syncContractFromDcms } = await import("../contracts/contractRegistry");
+  await syncContractFromDcms(updated!, plan.name);
+  const { enqueuePendingFromDcmsSubscription } = await import("../assignments/enqueueAdapters");
+  await enqueuePendingFromDcmsSubscription(subscriptionId);
 
   return updated!;
 }

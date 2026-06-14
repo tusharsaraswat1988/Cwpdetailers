@@ -59,6 +59,8 @@ export async function grantEntitlement(input: EntitlementGrantInput, tx?: Transa
   await syncContractFromEntitlement(ent, {
     contractType: input.entitlementType === "solar_visit" ? undefined : "contract_credits",
   });
+  const { enqueuePendingFromEntitlement } = await import("../assignments/enqueueAdapters");
+  await enqueuePendingFromEntitlement(ent.id);
   return ent;
 }
 
@@ -105,6 +107,8 @@ export async function grantEntitlementWithBalance(
   logger.info({ entitlementId: ent.id, customerId: input.customerId, total, used, remaining }, "Entitlement granted with balance");
   const { syncContractFromEntitlement } = await import("../contracts/contractRegistry");
   await syncContractFromEntitlement(ent);
+  const { enqueuePendingFromEntitlement } = await import("../assignments/enqueueAdapters");
+  await enqueuePendingFromEntitlement(ent.id);
   return ent;
 }
 

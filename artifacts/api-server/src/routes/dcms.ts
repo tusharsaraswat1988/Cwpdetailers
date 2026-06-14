@@ -14,6 +14,7 @@ import { searchVehicleByRegistration, searchVehicleFromOcrText } from "../lib/dc
 import { recognizePlateFromOcrText, shouldAutoSelectFromOcrConfidence } from "../lib/dcms/plateOcrEngine";
 import { searchCustomers, searchVehicles, searchStaff, searchSubscriptions } from "../lib/dcms/entitySearch";
 import { getStaffDailyRoute } from "../lib/dcms/dailyRouteService";
+import { applyLegacyAssignmentDeprecation } from "../lib/assignments/legacyAssignmentDeprecation";
 import { listSubscriptionsWithOutstandingVisits, runMissedVisitScheduler } from "../lib/dcms/missedVisitService";
 import {
   adminPauseSubscription, adminResumeSubscription, customerRequestPause,
@@ -323,6 +324,8 @@ router.get(
   requireAuth,
   requirePermission("daily_cleaning", "view"),
   async (req, res) => {
+    /** @deprecated Use GET /api/assignments/pending and /api/assignments/assigned */
+    applyLegacyAssignmentDeprecation(res);
     try {
       const staffId = req.query.staffId ? Number(req.query.staffId) : undefined;
       const assignments = await listStaffAssignments(staffId);
@@ -338,6 +341,8 @@ router.post(
   requireAuth,
   requirePermission("daily_cleaning", "manage_assignments"),
   async (req, res) => {
+    /** @deprecated Use POST /api/assignments/:pendingId/assign via pending_service_assignments queue */
+    applyLegacyAssignmentDeprecation(res);
     try {
       const { subscriptionId, staffId, routeOrder } = req.body;
       if (!subscriptionId || !staffId) {
@@ -473,6 +478,8 @@ router.get(
   requireAuth,
   requirePermission("daily_cleaning", "complete_visits"),
   async (req, res) => {
+    /** @deprecated Staff execution list will move to Sprint 7 service_executions domain */
+    applyLegacyAssignmentDeprecation(res);
     try {
       const staffId = req.user!.staffId;
       if (!staffId) return res.status(403).json({ error: "Staff account required" });
