@@ -412,7 +412,7 @@ export function AddCustomerServiceWizard({
                   customerId={customerId}
                 />
                 <div>
-                  <Label>DCMS plan</Label>
+                  <Label>Daily cleaning plan</Label>
                   <Select value={planId || "none"} onValueChange={v => setPlanId(v === "none" ? "" : v)} disabled={!vehicleId}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Select plan" /></SelectTrigger>
                     <SelectContent>
@@ -649,8 +649,7 @@ function SolarSiteFields({
       </Select>
       {sites.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          No solar sites linked to this customer. Create one in{" "}
-          <Link href="/admin/assets" className="text-primary hover:underline">Assets</Link> first.
+          No solar sites linked to this customer. Add one from the customer profile first.
         </p>
       )}
     </div>

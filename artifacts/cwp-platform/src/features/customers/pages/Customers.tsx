@@ -2,22 +2,22 @@ import { useState, type ReactNode, type ComponentType } from "react";
 import { useListCustomers, getListCustomersQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Users, UserPlus } from "lucide-react";
+import { Plus, Upload, Users } from "lucide-react";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
 import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shared";
 import { CustomerAvatar } from "@/components/shared/CustomerAvatar";
 import { QuickCreateCustomerForm } from "../components/QuickCreateCustomerForm";
-import { CustomerOnboardingWizard } from "../components/CustomerOnboardingWizard";
+import { PageActionHeader } from "@/components/layout/PageActionHeader";
 import { CustomerHubAdminNav } from "../components/CustomerHubAdminNav";
-
-const statusColor: Record<string, string> = {
-  active: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
-  inactive: "bg-muted text-muted-foreground border-border",
-  suspended: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-};
+import {
+  apiToFounderStatus,
+  founderStatusBadgeClass,
+  FOUNDER_STATUS_LABELS,
+  type ApiCustomerStatus,
+} from "@/lib/customerStatus";
 
 type Row = {
   id: number;
@@ -28,9 +28,10 @@ type Row = {
   photoUrl?: string | null;
   gstin?: string | null;
   referredByCustomerId?: number | null;
-  status: "active" | "inactive" | "suspended";
+  status: ApiCustomerStatus;
   walletBalance: string | number;
   totalDues: string | number;
+  reactivatedAt?: string | null;
 };
 
 export type CustomersPortalConfig = {
@@ -42,7 +43,6 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const [wizardOpen, setWizardOpen] = useState(false);
 
   const { data, isLoading } = useListCustomers(
     { search: search || undefined },
@@ -62,6 +62,7 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
             <div className="flex gap-1 mt-0.5 flex-wrap">
               {c.gstin && <Badge variant="outline" className="text-[10px] h-4 px-1 border-primary/30 text-primary">B2B</Badge>}
               {c.referredByCustomerId && <Badge variant="outline" className="text-[10px] h-4 px-1">Referred</Badge>}
+              {c.reactivatedAt && <Badge variant="outline" className="text-[10px] h-4 px-1 border-green-500/30 text-green-600">Reactivated</Badge>}
             </div>
           </div>
         </div>
@@ -71,7 +72,14 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
     { key: "city", header: "City", cell: c => <span className="text-muted-foreground">{c.city ?? "—"}</span> },
     {
       key: "status", header: "Status",
-      cell: c => <Badge variant="outline" className={`text-xs capitalize ${statusColor[c.status]}`}>{c.status}</Badge>,
+      cell: c => {
+        const founderStatus = apiToFounderStatus(c.status);
+        return (
+          <Badge variant="outline" className={`text-xs ${founderStatusBadgeClass(founderStatus)}`}>
+            {FOUNDER_STATUS_LABELS[founderStatus]}
+          </Badge>
+        );
+      },
     },
     { key: "wallet", header: "Wallet", align: "right", cell: c => <span className="text-primary font-medium">₹{Number(c.walletBalance).toLocaleString("en-IN")}</span> },
     { key: "dues", header: "Dues", align: "right", cell: c => Number(c.totalDues) > 0 ? <span className="text-red-600 dark:text-red-400 font-medium">₹{Number(c.totalDues).toLocaleString("en-IN")}</span> : <span className="text-muted-foreground">—</span> },
@@ -82,45 +90,46 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
     <Layout>
       <div className="p-6 space-y-5">
         {basePath.startsWith("/admin") && <CustomerHubAdminNav />}
-        <PageHeader
-          title="Customers"
-          description={`${data?.total ?? 0} total customers`}
-          actions={
-            <Can resource="customers" action="create">
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => setWizardOpen(true)} data-testid="btn-onboard-customer">
-                  <UserPlus size={15} className="mr-1.5" />Onboard
+        {basePath.startsWith("/admin") ? (
+          <PageActionHeader
+            title="Customer Profile"
+            description={`${data?.total ?? 0} customers — search, open a profile, book services, and collect payment`}
+            primaryAction={{
+              label: "New Customer",
+              onClick: () => setOpen(true),
+              testId: "customer-profile-primary-cta",
+            }}
+            secondaryActions={
+              <Can resource="customers" action="create">
+                <Button variant="outline" asChild data-testid="btn-import-customers">
+                  <Link href="/admin/customers/migration">
+                    <Upload size={15} className="mr-1.5" />Import Existing Customers
+                  </Link>
                 </Button>
-                <Dialog open={open} onOpenChange={setOpen}>
-                  <DialogTrigger asChild>
-                    <Button data-testid="btn-add-customer" className="bg-primary text-secondary hover:bg-primary/90">
-                      <Plus size={15} className="mr-1.5" />Add Customer
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>New Customer</DialogTitle></DialogHeader>
-                    <QuickCreateCustomerForm
-                      customerBasePath={basePath}
-                      onCreated={() => {
-                        invalidate();
-                        setOpen(false);
-                      }}
-                    />
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </Can>
-          }
-        />
-
-        <CustomerOnboardingWizard
-          open={wizardOpen}
-          onOpenChange={v => {
-            setWizardOpen(v);
-            if (!v) invalidate();
-          }}
-          basePath={basePath}
-        />
+              </Can>
+            }
+          />
+        ) : (
+          <PageHeader
+            title="Customers"
+            description={`${data?.total ?? 0} total customers`}
+            actions={null}
+          />
+        )}
+        <Can resource="customers" action="create">
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>New Customer</DialogTitle></DialogHeader>
+              <QuickCreateCustomerForm
+                customerBasePath={basePath}
+                onCreated={() => {
+                  invalidate();
+                  setOpen(false);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </Can>
 
         <FilterBar
           search={search}
@@ -134,16 +143,15 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
           isLoading={isLoading}
           rowKey={r => r.id}
           emptyTitle="No customers found"
-          emptyDescription="Try adjusting your search or add a new customer."
+          emptyDescription="Try adjusting your search or create a new customer."
           emptyAction={
             <Can resource="customers" action="create">
               <Button onClick={() => setOpen(true)} className="bg-primary text-secondary hover:bg-primary/90">
-                <Plus size={14} className="mr-1.5" /> Add Customer
+                <Plus size={14} className="mr-1.5" /> New Customer
               </Button>
             </Can>
           }
         />
-        <p className="text-muted-foreground text-xs"><Users size={11} className="inline mr-1" />Powered by shared DataTable / Can primitives.</p>
       </div>
     </Layout>
   );

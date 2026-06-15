@@ -26,15 +26,13 @@ import {
   BellRing,
   Upload,
   Contact,
-  UserCheck,
-  UserX,
-  ClipboardList,
   Package,
-  Layers,
   MapPin,
   Receipt,
   CalendarCheck,
   ClipboardCheck,
+  Archive,
+  Home,
 } from "lucide-react";
 
 export type AdminNavPermission = { resource: string; action: string };
@@ -53,22 +51,26 @@ export type AdminNavGroup = {
   icon: LucideIcon;
   perm: AdminNavPermission | null;
   children: AdminNavItem[];
+  /** Shown when expanded — e.g. legacy warning */
+  description?: string;
 };
 
 export type AdminNavEntry = AdminNavItem | AdminNavGroup;
 
 export const CUSTOMER_HUB_GROUP_ID = "customer-hub";
+export const LEGACY_GROUP_ID = "legacy-module";
+export const MIGRATION_GROUP_ID = "migration-tools";
 
 export function isAdminNavGroup(entry: AdminNavEntry): entry is AdminNavGroup {
   return "children" in entry;
 }
 
-/** Customer-facing operations only — catalog/plan setup lives under Services. */
+/** In-page hub tabs on customer-related screens (not sidebar). */
 export const CUSTOMER_HUB_CHILDREN: AdminNavItem[] = [
   {
     id: "directory",
     href: "/admin/customers",
-    label: "Customer 360",
+    label: "Customer Profile",
     icon: Users,
     perm: { resource: "customers", action: "view" },
   },
@@ -79,106 +81,52 @@ export const CUSTOMER_HUB_CHILDREN: AdminNavItem[] = [
     icon: Calendar,
     perm: { resource: "bookings", action: "view" },
   },
-  {
-    id: "legacy_contacts",
-    href: "/admin/customers/legacy-contacts",
-    label: "Legacy Contacts",
-    icon: Contact,
-    perm: { resource: "customers", action: "view" },
-  },
-  {
-    id: "reactivated",
-    href: "/admin/customers/reactivated",
-    label: "Reactivated",
-    icon: UserCheck,
-    perm: { resource: "customers", action: "view" },
-  },
-  {
-    id: "import",
-    href: "/admin/customers/migration",
-    label: "Import",
-    icon: Upload,
-    perm: { resource: "customers", action: "create" },
-  },
-  {
-    id: "churned",
-    href: "/admin/churned",
-    label: "Churned",
-    icon: UserX,
-    perm: { resource: "churned", action: "view" },
-  },
 ];
 
 export type AdminNavSection = {
   label: string;
   entries: AdminNavEntry[];
+  /** Sidebar section starts collapsed (Legacy, Admin). */
+  defaultCollapsed?: boolean;
+  variant?: "default" | "legacy" | "admin";
 };
 
 export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   {
-    label: "Operations",
+    label: "Dashboard",
     entries: [
       { id: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: null },
-      { id: "leads", href: "/admin/leads", label: "Leads & CRM", icon: Funnel, perm: { resource: "leads", action: "view" } },
+    ],
+  },
+  {
+    label: "Customers",
+    entries: [
       {
-        id: CUSTOMER_HUB_GROUP_ID,
-        label: "Customers",
-        icon: ClipboardList,
-        perm: null,
-        children: CUSTOMER_HUB_CHILDREN,
-      },
-      {
-        id: "service-locations",
-        href: "/admin/service-locations",
-        label: "Service Locations",
-        icon: MapPin,
+        id: "customer-profile",
+        href: "/admin/customers",
+        label: "Customer Profile",
+        icon: Users,
         perm: { resource: "customers", action: "view" },
       },
-      {
-        id: "assets",
-        href: "/admin/assets",
-        label: "Assets",
-        icon: Layers,
-        perm: { resource: "customers", action: "view" },
-      },
+    ],
+  },
+  {
+    label: "Operations",
+    entries: [
       {
         id: "book-services",
         href: "/admin/book-services",
-        label: "Book Services",
+        label: "Book Service",
         icon: CalendarCheck,
         perm: { resource: "bookings", action: "view" },
       },
       {
         id: "assign-services",
         href: "/admin/assign-services",
-        label: "Assign Services",
+        label: "Assign Service",
         icon: ClipboardCheck,
         perm: { resource: "bookings", action: "edit" },
       },
-      {
-        id: "services",
-        href: "/admin/services",
-        label: "Services",
-        icon: Package,
-        perm: { resource: "services", action: "view" },
-      },
-      {
-        id: "dcms_ops",
-        href: "/admin/daily-cleaning",
-        label: "DCMS Operations",
-        icon: Sparkles,
-        perm: { resource: "daily_cleaning", action: "view" },
-      },
-      { id: "staff", href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
-      {
-        id: "billing",
-        href: "/admin/billing",
-        label: "Billing & Finance",
-        icon: FileText,
-        perm: { resource: "invoices", action: "view" },
-      },
-      { id: "dues", href: "/admin/dues", label: "Dues & Collections", icon: AlertCircle, perm: { resource: "invoices", action: "view" } },
-      { id: "complaints", href: "/admin/complaints", label: "Complaints", icon: AlertCircle, perm: { resource: "complaints", action: "view" } },
       {
         id: "service-updates",
         href: "/admin/service-updates",
@@ -186,56 +134,138 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         icon: Monitor,
         perm: null,
       },
+      { id: "leads", href: "/admin/leads", label: "Leads & CRM", icon: Funnel, perm: { resource: "leads", action: "view" } },
     ],
   },
   {
-    label: "Network",
+    label: "Master Setup",
+    entries: [
+      {
+        id: "services",
+        href: "/admin/services",
+        label: "Service Catalog",
+        icon: Package,
+        perm: { resource: "services", action: "view" },
+      },
+      { id: "staff", href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
+    ],
+  },
+  {
+    label: "Marketing",
+    defaultCollapsed: true,
+    variant: "admin",
+    entries: [
+      {
+        id: "homepage-cms",
+        href: "/admin/services?tab=homepage",
+        label: "Homepage CMS",
+        icon: Home,
+        perm: { resource: "services", action: "view" },
+      },
+    ],
+  },
+  {
+    label: "Finance",
+    entries: [
+      {
+        id: "billing",
+        href: "/admin/billing",
+        label: "Billing & Finance",
+        icon: FileText,
+        perm: { resource: "invoices", action: "view" },
+      },
+    ],
+  },
+  {
+    label: "Support",
+    entries: [
+      { id: "complaints", href: "/admin/complaints", label: "Complaints", icon: AlertCircle, perm: { resource: "complaints", action: "view" } },
+    ],
+  },
+  {
+    label: "Legacy",
+    defaultCollapsed: true,
+    variant: "legacy",
+    entries: [
+      {
+        id: LEGACY_GROUP_ID,
+        label: "Legacy Module",
+        icon: Archive,
+        perm: null,
+        description: "Old Daily Cleaning system. Use Book Service for new work.",
+        children: [
+          {
+            id: "dcms_ops",
+            href: "/admin/daily-cleaning",
+            label: "Legacy Daily Cleaning",
+            icon: Sparkles,
+            perm: { resource: "daily_cleaning", action: "view" },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Migration Tools",
+    defaultCollapsed: true,
+    variant: "admin",
+    entries: [
+      {
+        id: MIGRATION_GROUP_ID,
+        label: "Migration Tools",
+        icon: Upload,
+        perm: { resource: "customers", action: "create" },
+        description: "One-time imports and legacy contact lists — not daily operations.",
+        children: [
+          {
+            id: "import",
+            href: "/admin/customers/migration",
+            label: "Import Existing Customers",
+            icon: Upload,
+            perm: { resource: "customers", action: "create" },
+          },
+          {
+            id: "legacy_contacts",
+            href: "/admin/customers/legacy-contacts",
+            label: "Legacy Contacts",
+            icon: Contact,
+            perm: { resource: "customers", action: "view" },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Admin",
+    defaultCollapsed: true,
+    variant: "admin",
     entries: [
       { id: "franchisees", href: "/admin/franchisees", label: "Franchisees", icon: Building2, perm: { resource: "franchisees", action: "view" } },
-      { id: "staff-approval", href: "/admin/staff-approval", label: "Staff Verification", icon: ShieldCheck, perm: { resource: "staff", action: "approve" } },
+      { id: "staff-approval", href: "/admin/staff-approval", label: "Verify Staff", icon: ShieldCheck, perm: { resource: "staff", action: "approve" } },
       { id: "credentials", href: "/admin/credentials", label: "Credentials", icon: Key, perm: { resource: "staff", action: "approve" } },
-    ],
-  },
-  {
-    label: "Config",
-    entries: [
       { id: "branches", href: "/admin/branches", label: "Branches", icon: GitBranch, perm: { resource: "branches", action: "view" } },
       { id: "masters", href: "/admin/masters", label: "Master Data", icon: Database, perm: { resource: "masters", action: "view" } },
       { id: "analytics", href: "/admin/analytics", label: "Analytics", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
       { id: "communications", href: "/admin/communications", label: "Communication Center", icon: Radio, perm: { resource: "communications", action: "view" } },
       { id: "notifications", href: "/admin/notifications", label: "Notifications", icon: Bell, perm: { resource: "notifications", action: "view" } },
       { id: "push-logs", href: "/admin/push-logs", label: "Push Delivery Log", icon: BellRing, perm: { resource: "notifications", action: "view" } },
-    ],
-  },
-  {
-    label: "Settings",
-    entries: [
       { id: "brand", href: "/admin/settings/brand", label: "Brand Identity", icon: Palette, perm: { resource: "settings", action: "view" } },
       { id: "invoice_billing", href: "/admin/settings/invoice-billing", label: "Invoice & GST", icon: Receipt, perm: { resource: "invoices", action: "view" } },
       { id: "business", href: "/admin/settings/business", label: "Business Info", icon: Info, perm: { resource: "settings", action: "view" } },
       { id: "seo", href: "/admin/settings/seo", label: "SEO Management", icon: Search, perm: { resource: "settings", action: "view" } },
       { id: "system", href: "/admin/settings/system", label: "System Status", icon: Activity, perm: { resource: "settings", action: "view" } },
-    ],
-  },
-  {
-    label: "Legal & Compliance",
-    entries: [
       { id: "legal", href: "/admin/legal", label: "Legal Pages CMS", icon: Scale, perm: { resource: "settings", action: "view" } },
       { id: "compliance", href: "/admin/compliance", label: "Compliance Settings", icon: ShieldCheck, perm: { resource: "settings", action: "view" } },
-    ],
-  },
-  {
-    label: "Views",
-    entries: [
       { id: "founder", href: "/admin/founder", label: "Founder Dashboard", icon: Crown, perm: null },
     ],
   },
 ];
 
 export function isAdminNavItemActive(location: string, item: AdminNavItem): boolean {
-  if (item.id === "directory") {
+  if (item.id === "directory" || item.id === "customer-profile") {
     if (location === "/admin/customers") return true;
-    return /^\/admin\/customers\/\d+/.test(location);
+    if (/^\/admin\/customers\/\d+/.test(location)) return true;
+    return false;
   }
   if (item.id === "book-services") {
     const path = location.split("?")[0]!;
@@ -253,13 +283,16 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
     const path = location.split("?")[0]!;
     return path === "/admin/service-locations" || /^\/admin\/service-locations\/\d+/.test(path);
   }
+  if (item.id === "homepage-cms") {
+    return location.includes("tab=homepage");
+  }
   if (item.id === "services") {
     const path = location.split("?")[0]!;
     return path === "/admin/services" || path === "/admin/products" || path === "/admin/catalog";
   }
   if (item.id === "billing") {
     const path = location.split("?")[0]!;
-    return path === "/admin/billing" || path === "/admin/invoices";
+    return path === "/admin/billing" || path === "/admin/invoices" || path === "/admin/dues";
   }
   if (item.id === "service-updates") {
     const path = location.split("?")[0]!;
@@ -267,6 +300,15 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
   }
   if (item.id === "dcms_ops") {
     return location.startsWith("/admin/daily-cleaning");
+  }
+  if (item.id === "legacy_contacts") {
+    return location.startsWith("/admin/customers/legacy-contacts");
+  }
+  if (item.id === "import") {
+    return location.startsWith("/admin/customers/migration");
+  }
+  if (item.id === "reactivated") {
+    return location.startsWith("/admin/customers/reactivated");
   }
   if (item.href.includes("?")) {
     const [path, query] = item.href.split("?");
@@ -277,6 +319,12 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
 
 export function isAdminNavGroupActive(location: string, group: AdminNavGroup): boolean {
   return group.children.some(child => isAdminNavItemActive(location, child));
+}
+
+export function isAdminNavSectionActive(location: string, section: AdminNavSection): boolean {
+  return section.entries.some(entry =>
+    isAdminNavGroup(entry) ? isAdminNavGroupActive(location, entry) : isAdminNavItemActive(location, entry),
+  );
 }
 
 export function filterAdminNavSections(

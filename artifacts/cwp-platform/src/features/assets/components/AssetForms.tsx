@@ -62,7 +62,7 @@ export function VehicleForm({
         </div>
       )}
       <div>
-        <Label>Service location *</Label>
+        <Label>Service address *</Label>
         <Select value={values.serviceLocationId || "none"} onValueChange={v => set({ serviceLocationId: v === "none" ? "" : v })}>
           <SelectTrigger className="mt-1" data-testid="vehicle-service-location"><SelectValue placeholder="Select location" /></SelectTrigger>
           <SelectContent>
@@ -138,7 +138,7 @@ export function SolarSiteForm({ values, onChange, serviceLocations }: SolarFormP
   return (
     <div className="space-y-4">
       <div>
-        <Label>Service location *</Label>
+        <Label>Service address *</Label>
         <Select value={values.serviceLocationId || "none"} onValueChange={v => set({ serviceLocationId: v === "none" ? "" : v })}>
           <SelectTrigger className="mt-1" data-testid="solar-service-location"><SelectValue placeholder="Select location" /></SelectTrigger>
           <SelectContent>

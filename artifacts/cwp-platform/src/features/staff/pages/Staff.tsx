@@ -12,7 +12,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Star, UserCog } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
 import { PageHeader, EmptyState } from "@/components/shared";
@@ -215,13 +214,13 @@ export default function AdminStaff() {
       <div className="p-6 space-y-5">
         <PageHeader
           title="Staff"
-          description={filterDescription}
+          description={`Manage your field team · ${filterDescription}`}
           actions={
             <Can resource="staff" action="create">
               <Dialog open={open} onOpenChange={setOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="btn-add-staff">
-                    <Plus size={15} className="mr-1.5" />Add Staff
+                  <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="staff-primary-cta">
+                    <Plus size={15} className="mr-1.5" />Add staff member
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
@@ -270,7 +269,7 @@ export default function AdminStaff() {
                       </p>
                     </div>
                     <div>
-                      <Label>Staff Category</Label>
+                      <Label>Role type</Label>
                       <Select
                         value={form.staffCategory}
                         onValueChange={v => setForm(f => ({
@@ -304,7 +303,7 @@ export default function AdminStaff() {
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Roles control DCMS, booking, and field assignments. Add more roles on the staff profile later.
+                            Roles control daily cleaning, booking, and field assignments. Add more roles on the staff profile later.
                           </p>
                         </div>
                         <div>
@@ -379,7 +378,7 @@ export default function AdminStaff() {
               return (
               <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/30 transition-colors" data-testid={`staff-card-${s.id}`}>
                 <div className={`px-4 py-2.5 border-b text-xs font-semibold tracking-wide uppercase ${staffCategoryHeaderStyles(category)}`}>
-                  Staff Category · {staffCategoryLabel(category)}
+                  Staff role · {staffCategoryLabel(category)}
                 </div>
                 <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
@@ -412,23 +411,31 @@ export default function AdminStaff() {
                 {!s.userId && (
                   <p className="text-xs text-amber-600 mb-2">No portal login — open profile to create</p>
                 )}
+                <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+                  <div className="rounded-lg bg-muted/50 px-3 py-2">
+                    <p className="text-muted-foreground">Jobs this month</p>
+                    <p className="font-bold text-base text-foreground mt-0.5">{s.jobsCompletedThisMonth ?? 0}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 px-3 py-2">
+                    <p className="text-muted-foreground">Rating</p>
+                    <p className="font-bold text-base text-foreground mt-0.5 flex items-center gap-1">
+                      <Star size={12} className="text-primary" fill="currentColor" />
+                      {Number(s.rating ?? 0).toFixed(1)}
+                    </p>
+                  </div>
+                </div>
                 <div className="space-y-1.5 text-xs text-muted-foreground mb-3">
                   <p>{s.phone}</p>
                   <p>{s.branchName}</p>
-                  <div className="pt-1">
-                    <div className="flex justify-between mb-1">
-                      <span>Profile</span>
-                      <span>{(s as { profileCompletionPercent?: number }).profileCompletionPercent ?? 0}%</span>
-                    </div>
-                    <Progress value={(s as { profileCompletionPercent?: number }).profileCompletionPercent ?? 0} className="h-1.5" />
-                  </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="flex items-center gap-1">
-                      <Star size={11} className="text-primary" fill="currentColor" />
-                      {Number(s.rating ?? 0).toFixed(1)} rating
-                    </span>
-                    <span>{s.jobsCompletedThisMonth ?? 0} jobs this month</span>
-                  </div>
+                  {(s.operationalRoles?.length ?? 0) > 0 && (
+                    <p>
+                      <span className="text-muted-foreground">Skills: </span>
+                      {s.operationalRoles!.map(r => r.roleName).join(", ")}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground/80 pt-1">
+                    Profile {((s as { profileCompletionPercent?: number }).profileCompletionPercent ?? 0)}% complete
+                  </p>
                 </div>
                 <Link href={`/admin/staff/${s.id}`} className="text-primary hover:underline text-xs font-medium" data-testid={`btn-view-staff-${s.id}`}>View Details →</Link>
                 </div>

@@ -13,6 +13,7 @@ export type AssetListRow = {
   serviceLocationId?: number | null;
   serviceLocationLabel?: string | null;
   customerId?: number | null;
+  customerName?: string | null;
   createdAt: string;
   updatedAt: string;
 };

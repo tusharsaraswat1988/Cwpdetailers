@@ -1,11 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MapPin, Plus } from "lucide-react";
 import { listServiceLocations, SERVICE_LOCATION_TYPE_LABELS, type CustomerServiceLocationRow } from "@/features/service-locations/api";
 import { cn } from "@/lib/utils";
+import { InlineServiceAddressForm } from "./InlineServiceAddressForm";
 
 type Props = {
   customerId: number | null;
@@ -14,19 +16,25 @@ type Props = {
 };
 
 export function LocationSelect({ customerId, value, onChange }: Props) {
-  const { data, isLoading } = useQuery({
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["book-services", "locations", customerId],
     queryFn: () => listServiceLocations({ customerId: customerId!, limit: 50 }),
     enabled: customerId != null && customerId > 0,
   });
 
-  const locations = (data?.data ?? []) as CustomerServiceLocationRow[];
+  const addresses = (data?.data ?? []) as CustomerServiceLocationRow[];
 
   useEffect(() => {
-    if (!customerId || value || locations.length === 0) return;
-    const defaultLoc = locations.find(l => l.isDefault) ?? locations[0];
+    if (!customerId || value || addresses.length === 0) return;
+    const defaultLoc = addresses.find(l => l.isDefault) ?? addresses[0];
     if (defaultLoc) onChange(defaultLoc);
-  }, [customerId, locations, value, onChange]);
+  }, [customerId, addresses, value, onChange]);
+
+  useEffect(() => {
+    setShowAddForm(false);
+  }, [customerId]);
 
   if (!customerId) {
     return <p className="text-sm text-muted-foreground">Select a customer first.</p>;
@@ -34,24 +42,53 @@ export function LocationSelect({ customerId, value, onChange }: Props) {
 
   if (isLoading) return <Skeleton className="h-24 w-full" />;
 
-  if (locations.length === 0) {
+  if (addresses.length === 0 && !showAddForm) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No service locations linked to this customer. Add locations in the Service Locations module first.
-      </p>
+      <div className="space-y-3" data-testid="book-step-location">
+        <div>
+          <Label>Service address</Label>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Where should we go for this job? Add an address to continue — you stay in this booking.
+          </p>
+        </div>
+        <Button type="button" variant="outline" onClick={() => setShowAddForm(true)} data-testid="btn-add-service-address-inline">
+          <Plus size={14} className="mr-1.5" /> Add service address
+        </Button>
+      </div>
+    );
+  }
+
+  if (showAddForm) {
+    return (
+      <div className="space-y-3" data-testid="book-step-location">
+        <InlineServiceAddressForm
+          customerId={customerId}
+          onCreated={loc => {
+            setShowAddForm(false);
+            onChange(loc);
+            void refetch();
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-3" data-testid="book-step-location">
-      <div>
-        <Label>Where will the work happen?</Label>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Choose the site for this job. Your primary location is pre-selected when available.
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <Label>Service address</Label>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Where should we go for this job? The primary address is pre-selected when available.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs h-8" onClick={() => setShowAddForm(true)}>
+          <Plus size={12} className="mr-1" /> Add address
+        </Button>
       </div>
       <div className="grid gap-2">
-        {locations.map(loc => {
+        {addresses.map(loc => {
           const selected = value?.id === loc.id;
           return (
             <button

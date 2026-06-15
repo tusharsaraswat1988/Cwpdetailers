@@ -53,7 +53,7 @@ export function ActiveServicesSummary({ customerId, basePath }: Props) {
         <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2">
             <ClipboardList size={16} className="text-primary" />
-            Active Services
+            Active plans
           </CardTitle>
           {bookServicesPath && (
             <Link href={bookServicesPath}>
@@ -65,11 +65,11 @@ export function ActiveServicesSummary({ customerId, basePath }: Props) {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-4">
-            {activeCount} active contract{activeCount === 1 ? "" : "s"} from the service registry. Read-only — manage sales via Book Services.
+            {activeCount} active plan{activeCount === 1 ? "" : "s"} for this customer. Use Book Service to sell more.
           </p>
 
           {contracts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No service contracts yet.</p>
+            <p className="text-sm text-muted-foreground">No active services yet.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse min-w-[640px]" data-testid="active-services-table">
@@ -79,8 +79,8 @@ export function ActiveServicesSummary({ customerId, basePath }: Props) {
                     <th className="py-2 pr-3 font-medium">Status</th>
                     <th className="py-2 pr-3 font-medium">Start</th>
                     <th className="py-2 pr-3 font-medium">End</th>
-                    <th className="py-2 pr-3 font-medium">Location</th>
-                    <th className="py-2 font-medium">Asset</th>
+                    <th className="py-2 pr-3 font-medium">Service address</th>
+                    <th className="py-2 font-medium">Vehicle</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -88,7 +88,7 @@ export function ActiveServicesSummary({ customerId, basePath }: Props) {
                     <tr key={c.id} className="border-b border-border/60" data-testid={`active-service-row-${c.id}`}>
                       <td className="py-3 pr-3 align-top">
                         <p className="font-medium">{c.serviceName}</p>
-                        <p className="text-xs text-muted-foreground">Contract #{c.id}</p>
+                        <p className="text-xs text-muted-foreground">Service #{c.id}</p>
                       </td>
                       <td className="py-3 pr-3 align-top">
                         <Badge variant="outline" className={`text-xs capitalize ${statusBadgeClass(c.status)}`}>
@@ -98,43 +98,23 @@ export function ActiveServicesSummary({ customerId, basePath }: Props) {
                       <td className="py-3 pr-3 align-top whitespace-nowrap">{formatDate(c.startDate ?? c.validFrom)}</td>
                       <td className="py-3 pr-3 align-top whitespace-nowrap">{formatDate(c.endDate ?? c.validUntil)}</td>
                       <td className="py-3 pr-3 align-top">
-                        {c.serviceLocationId && c.serviceLocationLabel ? (
-                          isAdmin ? (
-                            <Link
-                              href={`/admin/service-locations/${c.serviceLocationId}`}
-                              className="inline-flex items-center gap-1 text-primary hover:underline"
-                            >
-                              <MapPin size={12} />
-                              {c.serviceLocationLabel}
-                            </Link>
-                          ) : (
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin size={12} className="text-muted-foreground" />
-                              {c.serviceLocationLabel}
-                            </span>
-                          )
+                        {c.serviceLocationLabel ? (
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin size={12} className="text-muted-foreground" />
+                            {c.serviceLocationLabel}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="py-3 align-top">
-                        {c.linkedAssetId && c.linkedAssetLabel ? (
-                          isAdmin ? (
-                            <Link
-                              href={`/admin/assets/${c.linkedAssetId}`}
-                              className="inline-flex items-center gap-1 text-primary hover:underline"
-                            >
-                              <Boxes size={12} />
-                              {c.linkedAssetLabel}
-                            </Link>
-                          ) : (
-                            <span className="inline-flex items-center gap-1">
-                              <Boxes size={12} className="text-muted-foreground" />
-                              {c.linkedAssetLabel}
-                            </span>
-                          )
+                        {c.linkedAssetLabel ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Boxes size={12} className="text-muted-foreground" />
+                            {c.linkedAssetLabel}
+                          </span>
                         ) : (
-                          <span className="text-muted-foreground">{c.linkedAssetLabel ?? "—"}</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                     </tr>

@@ -62,13 +62,17 @@ router.get("/billing/health", async (req, res) => {
 
 router.get("/billing/dues", async (req, res) => {
   try {
-    const { limit = "50", offset = "0" } = req.query as Record<string, string>;
+    const { limit = "50", offset = "0", customerId } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
-    const invWhere = and(
+    const invWhereParts = [
       ...tenantFilters(req, INVOICE_SCOPE),
       sql`${invoicesTable.balanceDue} > 0`,
-    );
+    ];
+    if (customerId) {
+      invWhereParts.push(eq(invoicesTable.customerId, parseInt(customerId)));
+    }
+    const invWhere = and(...invWhereParts);
 
     const rows = await db.select({
       customerId: invoicesTable.customerId,

@@ -1,17 +1,30 @@
 import { useGetRevenueAnalytics, getGetRevenueAnalyticsQueryKey, useGetCustomerAnalytics, getGetCustomerAnalyticsQueryKey, useGetStaffLeaderboard, getGetStaffLeaderboardQueryKey, useGetOutstandingDues, getGetOutstandingDuesQueryKey } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from "recharts";
-import { Star, TrendingUp, AlertCircle, Trophy } from "lucide-react";
+import { Star, TrendingUp, AlertCircle, Trophy, CalendarX } from "lucide-react";
+import { Link } from "wouter";
 
 const COLORS = ["hsl(180,100%,40%)", "hsl(220,70%,60%)", "hsl(40,100%,50%)", "hsl(0,84%,60%)", "hsl(270,60%,60%)"];
+
+async function fetchCancelledPlans() {
+  const res = await fetch("/api/churned", { credentials: "include" });
+  if (!res.ok) return [];
+  return res.json() as Promise<Array<{ id: number; customerName: string; planName?: string; cancelledAt?: string }>>;
+}
 
 export default function AdminAnalytics() {
   const { data: revenue, isLoading: revLoading } = useGetRevenueAnalytics({ period: "month" }, { query: { queryKey: getGetRevenueAnalyticsQueryKey({ period: "month" }) } });
   const { data: customers, isLoading: custLoading } = useGetCustomerAnalytics({ query: { queryKey: getGetCustomerAnalyticsQueryKey() } });
   const { data: leaderboard } = useGetStaffLeaderboard({}, { query: { queryKey: getGetStaffLeaderboardQueryKey({}) } });
   const { data: dues } = useGetOutstandingDues({}, { query: { queryKey: getGetOutstandingDuesQueryKey({}) } });
+  const { data: cancelledPlans = [], isLoading: plansLoading } = useQuery({
+    queryKey: ["analytics", "cancelled-plans"],
+    queryFn: fetchCancelledPlans,
+  });
 
   return (
     <AdminLayout>
@@ -168,6 +181,41 @@ export default function AdminAnalytics() {
             </CardContent>
           </Card>
         </div>
+
+        <Card id="cancelled-plans">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CalendarX size={15} className="text-amber-600" />
+              <CardTitle className="text-sm font-semibold">Cancelled &amp; Expired Plans</CardTitle>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/churned">Full report</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Service plans that stopped — daily cleaning cancelled, solar AMC expired, wash packages not renewed.
+              This is <strong className="text-foreground">plan status</strong>, not customer status.
+            </p>
+            {plansLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : cancelledPlans.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No cancelled or expired plans in this period.</p>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-amber-600">{cancelledPlans.length}</p>
+                <div className="space-y-2">
+                  {cancelledPlans.slice(0, 5).map((row: { id: number; customerName?: string; planName?: string }) => (
+                    <div key={row.id} className="flex justify-between text-sm border border-border rounded-lg px-3 py-2">
+                      <span className="font-medium">{row.customerName ?? "Customer"}</span>
+                      <span className="text-muted-foreground text-xs">{row.planName ?? "Plan ended"}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </AdminLayout>
   );

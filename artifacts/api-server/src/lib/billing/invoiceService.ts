@@ -24,7 +24,7 @@ import {
 
 } from "@workspace/db";
 
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, gt, asc } from "drizzle-orm";
 
 import type { Transaction } from "../../subscriptions/service";
 
@@ -45,6 +45,8 @@ import {
 import { getTermsForCategories } from "./invoiceBillingSettings";
 
 import { getDefaultGstRate } from "../catalog/pricingEngine";
+
+import { creditWallet, debitWallet, getLedgerBalance } from "../wallet/service";
 
 
 
@@ -736,11 +738,15 @@ export async function recordPayment(
 
     invoiceId?: number | null;
 
+    useWallet?: boolean;
+
     transactionId?: string | null;
 
     notes?: string | null;
 
     receivedByStaffId?: number | null;
+
+    createdBy?: number | null;
 
   } & TenantFields,
 
@@ -748,61 +754,237 @@ export async function recordPayment(
 
 ) {
 
-  const ctx = tx ?? db;
+  const run = async (ctx: Transaction) => {
 
-  let invoiceRow: Invoice | null = null;
+    let invoiceRow: Invoice | null = null;
 
-  if (params.invoiceId) {
+    if (params.invoiceId) {
 
-    const [inv] = await ctx.select().from(invoicesTable).where(eq(invoicesTable.id, params.invoiceId)).limit(1);
+      const [inv] = await ctx.select().from(invoicesTable).where(eq(invoicesTable.id, params.invoiceId)).limit(1);
 
-    invoiceRow = inv ?? null;
+      invoiceRow = inv ?? null;
 
-  }
+    } else {
 
+      const [openInv] = await ctx
 
+        .select()
 
-  const [payment] = await ctx.insert(paymentsTable).values({
+        .from(invoicesTable)
 
-    customerId: params.customerId,
+        .where(
 
-    invoiceId: params.invoiceId ?? null,
+          and(
 
-    amount: params.amount.toString(),
+            eq(invoicesTable.customerId, params.customerId),
 
-    method: params.method as typeof paymentsTable.$inferInsert["method"],
+            gt(invoicesTable.balanceDue, "0"),
 
-    transactionId: params.transactionId ?? null,
+          ),
 
-    notes: params.notes ?? null,
+        )
 
-    receivedByStaffId: params.receivedByStaffId ?? null,
+        .orderBy(asc(invoicesTable.createdAt))
 
-    receivedAt: new Date(),
+        .limit(1);
 
-    status: "completed",
+      invoiceRow = openInv ?? null;
 
-    companyId: params.companyId ?? null,
-
-    branchId: params.branchId ?? null,
-
-  }).returning();
+    }
 
 
 
-  if (invoiceRow) {
+    let walletApplied = 0;
 
-    await applyPaymentToInvoice(invoiceRow, params.amount, tx);
-
-  } else {
-
-    await syncCustomerTotalDues(params.customerId, tx);
-
-  }
+    let walletTxId: number | undefined;
 
 
 
-  return payment;
+    if (params.useWallet && invoiceRow) {
+
+      const balanceDue = parseFloat(invoiceRow.balanceDue);
+
+      if (balanceDue > 0) {
+
+        const walletBalance = await getLedgerBalance(params.customerId, ctx);
+
+        walletApplied = Math.min(walletBalance, balanceDue);
+
+        if (walletApplied > 0) {
+
+          const entry = await debitWallet({
+
+            customerId: params.customerId,
+
+            amount: walletApplied,
+
+            reference: "invoice_payment",
+
+            referenceId: invoiceRow.id,
+
+            notes: params.notes ?? `Wallet applied to invoice ${invoiceRow.invoiceNumber}`,
+
+            createdBy: params.createdBy ?? null,
+
+            companyId: params.companyId ?? invoiceRow.companyId,
+
+          }, ctx);
+
+          walletTxId = entry.id;
+
+        }
+
+      }
+
+    }
+
+
+
+    const externalAmount = Math.max(0, params.amount);
+
+    const totalToApply = walletApplied + externalAmount;
+
+
+
+    if (totalToApply <= 0) {
+
+      throw new Error("Payment amount must be greater than zero");
+
+    }
+
+
+
+    const paymentRows: (typeof paymentsTable.$inferSelect)[] = [];
+
+
+
+    if (walletApplied > 0) {
+
+      const [walletPayment] = await ctx.insert(paymentsTable).values({
+
+        customerId: params.customerId,
+
+        invoiceId: params.invoiceId ?? null,
+
+        amount: walletApplied.toString(),
+
+        method: "wallet",
+
+        transactionId: walletTxId ? `wallet-tx-${walletTxId}` : null,
+
+        notes: `Wallet offset${params.notes ? `: ${params.notes}` : ""}`,
+
+        receivedByStaffId: params.receivedByStaffId ?? null,
+
+        receivedAt: new Date(),
+
+        status: "completed",
+
+        companyId: params.companyId ?? null,
+
+        branchId: params.branchId ?? null,
+
+      }).returning();
+
+      paymentRows.push(walletPayment);
+
+    }
+
+
+
+    if (externalAmount > 0) {
+
+      const [extPayment] = await ctx.insert(paymentsTable).values({
+
+        customerId: params.customerId,
+
+        invoiceId: params.invoiceId ?? null,
+
+        amount: externalAmount.toString(),
+
+        method: params.method as typeof paymentsTable.$inferInsert["method"],
+
+        transactionId: params.transactionId ?? null,
+
+        notes: params.notes ?? null,
+
+        receivedByStaffId: params.receivedByStaffId ?? null,
+
+        receivedAt: new Date(),
+
+        status: "completed",
+
+        companyId: params.companyId ?? null,
+
+        branchId: params.branchId ?? null,
+
+      }).returning();
+
+      paymentRows.push(extPayment);
+
+    }
+
+
+
+    if (invoiceRow) {
+
+      const balanceDue = parseFloat(invoiceRow.balanceDue);
+
+      const appliedToInvoice = Math.min(totalToApply, balanceDue);
+
+      const overpayment = Math.max(0, totalToApply - balanceDue);
+
+
+
+      if (appliedToInvoice > 0) {
+
+        await applyPaymentToInvoice(invoiceRow, appliedToInvoice, ctx);
+
+      }
+
+
+
+      if (overpayment > 0) {
+
+        const refPaymentId = paymentRows[paymentRows.length - 1]?.id;
+
+        await creditWallet({
+
+          customerId: params.customerId,
+
+          amount: overpayment,
+
+          paymentMode: "adjustment",
+
+          reference: "overpayment",
+
+          referenceId: refPaymentId,
+
+          notes: `Overpayment credit from invoice ${invoiceRow.invoiceNumber}`,
+
+          createdBy: params.createdBy ?? null,
+
+          companyId: params.companyId ?? invoiceRow.companyId,
+
+        }, ctx);
+
+      }
+
+    } else {
+
+      await syncCustomerTotalDues(params.customerId, ctx);
+
+    }
+
+
+
+    return paymentRows[paymentRows.length - 1]!;
+
+  };
+
+
+
+  return tx ? run(tx) : db.transaction(run);
 
 }
 

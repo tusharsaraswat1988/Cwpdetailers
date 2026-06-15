@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
+import { useGetCustomer, getGetCustomerQueryKey } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { CustomerBookingDataBanner, CustomerProfileBackLink } from "@/components/layout/CustomerBookingDataContext";
+import { PageActionHeader } from "@/components/layout/PageActionHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Plus, Search, Users } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import {
   createServiceLocation,
   listServiceLocations,
@@ -21,6 +24,14 @@ import {
   serviceLocationFormToPayload,
 } from "@/features/service-locations/components/ServiceLocationForm";
 
+function locationCardTitle(loc: ServiceLocation) {
+  if (loc.primaryCustomerName) return loc.primaryCustomerName;
+  const count = loc.linkedCustomerCount ?? 0;
+  if (count > 1) return `${count} customers`;
+  if (count === 1) return "1 customer";
+  return "No customer linked";
+}
+
 export default function ServiceLocationsPage() {
   const { toast } = useToast();
   const [location] = useLocation();
@@ -30,6 +41,10 @@ export default function ServiceLocationsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_SERVICE_LOCATION_FORM);
   const [creating, setCreating] = useState(false);
+
+  const { data: filterCustomer } = useGetCustomer(filterCustomerId ?? 0, {
+    query: { queryKey: getGetCustomerQueryKey(filterCustomerId ?? 0), enabled: Boolean(filterCustomerId) },
+  });
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["service-locations", search, filterCustomerId],
@@ -44,20 +59,23 @@ export default function ServiceLocationsPage() {
 
   const handleCreate = async () => {
     if (!form.label.trim()) {
-      toast({ title: "Site label is required", variant: "destructive" });
+      toast({ title: "Address label is required", variant: "destructive" });
       return;
     }
     setCreating(true);
     try {
-      const created = await createServiceLocation(serviceLocationFormToPayload(form));
-      toast({ title: "Service location created" });
+      await createServiceLocation(serviceLocationFormToPayload(form));
+      toast({ title: "Service address added" });
       setCreateOpen(false);
       setForm(EMPTY_SERVICE_LOCATION_FORM);
       await refetch();
-      window.location.href = `/admin/service-locations/${created.id}`;
+      const customerId = filterCustomerId;
+      if (customerId) {
+        window.location.href = `/admin/customers/${customerId}?tab=profile`;
+      }
     } catch (err) {
       toast({
-        title: "Failed to create location",
+        title: "Failed to add service address",
         description: err instanceof Error ? err.message : "Error",
         variant: "destructive",
       });
@@ -69,49 +87,55 @@ export default function ServiceLocationsPage() {
   return (
     <AdminLayout>
       <div className="p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="font-display font-bold text-2xl">Service Locations</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              {filterCustomerId
-                ? `Locations linked to customer #${filterCustomerId}`
-                : "Site masters where work is performed — linked to customers"}
-            </p>
-            {filterCustomerId && (
-              <Link href="/admin/service-locations" className="text-xs text-primary hover:underline mt-1 inline-block">
-                Clear customer filter
-              </Link>
-            )}
-          </div>
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="btn-add-service-location">
-                <Plus size={15} className="mr-1.5" />Add location
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>New service location</DialogTitle>
-              </DialogHeader>
-              <ServiceLocationForm values={form} onChange={setForm} idPrefix="create-location" />
-              <Button
-                onClick={handleCreate}
-                disabled={creating}
-                className="w-full bg-primary text-secondary hover:bg-primary/90"
-                data-testid="btn-submit-service-location"
-              >
-                {creating ? "Creating..." : "Create location"}
-              </Button>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <PageActionHeader
+          title={filterCustomer && filterCustomerId ? `Service addresses — ${filterCustomer.name}` : "Service addresses"}
+          description={
+            filterCustomer && filterCustomerId
+              ? "Customer-owned booking data — where services are delivered."
+              : "Admin view only. Open from Customer Profile → Booking setup."
+          }
+          primaryAction={{
+            label: filterCustomerId ? "Add address" : "Open Customer Profile",
+            onClick: filterCustomerId ? () => setCreateOpen(true) : undefined,
+            href: filterCustomerId ? undefined : "/admin/customers",
+            testId: "locations-primary-cta",
+          }}
+          secondaryActions={
+            filterCustomerId ? (
+              <CustomerProfileBackLink customerId={filterCustomerId} customerName={filterCustomer?.name} />
+            ) : undefined
+          }
+        />
+
+        <CustomerBookingDataBanner
+          entityLabel="Service addresses"
+          customerId={filterCustomerId}
+          customerName={filterCustomer?.name}
+        />
+
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>New service address</DialogTitle>
+            </DialogHeader>
+            <ServiceLocationForm values={form} onChange={setForm} idPrefix="create-location" />
+            <Button
+              onClick={handleCreate}
+              disabled={creating}
+              className="w-full bg-primary text-secondary hover:bg-primary/90"
+              data-testid="btn-submit-service-location"
+            >
+              {creating ? "Creating..." : "Save"}
+            </Button>
+          </DialogContent>
+        </Dialog>
 
         <div className="relative max-w-md">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search label, address, city..."
+            placeholder="Search customer, address, city..."
             className="pl-9"
             data-testid="input-service-locations-search"
           />
@@ -121,16 +145,14 @@ export default function ServiceLocationsPage() {
           {isLoading
             ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-44 w-full rounded-xl" />)
             : locations.map(loc => (
-              <Link key={loc.id} href={`/admin/service-locations/${loc.id}`}>
-                <div
-                  className="bg-card border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors cursor-pointer h-full"
-                  data-testid={`service-location-card-${loc.id}`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <MapPin size={18} className="text-primary" />
-                    </div>
-                    <div className="flex flex-wrap gap-1 justify-end">
+              <div
+                key={loc.id}
+                className="bg-card border border-border rounded-2xl p-5 h-full"
+                data-testid={`service-location-card-${loc.id}`}
+              >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="font-semibold text-base leading-snug">{locationCardTitle(loc)}</h3>
+                    <div className="flex flex-wrap gap-1 justify-end shrink-0">
                       {loc.isAutoCreated && (
                         <Badge variant="outline" className="text-xs">Auto</Badge>
                       )}
@@ -139,23 +161,18 @@ export default function ServiceLocationsPage() {
                       </Badge>
                     </div>
                   </div>
-                  <h3 className="font-semibold text-base">{loc.label}</h3>
+                  <p className="text-sm font-medium text-foreground/90">{loc.label}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {SERVICE_LOCATION_TYPE_LABELS[loc.locationType]}
                     {loc.city ? ` · ${loc.city}` : ""}
                   </p>
                   {loc.address && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{loc.address}</p>}
-                  <div className="flex items-center gap-1.5 mt-4 pt-4 border-t border-border text-xs text-muted-foreground">
-                    <Users size={11} />
-                    <span>{loc.linkedCustomerCount ?? 0} linked customers</span>
-                  </div>
                 </div>
-              </Link>
             ))}
         </div>
 
         {!isLoading && locations.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-12">No service locations found.</p>
+          <p className="text-sm text-muted-foreground text-center py-12">No service addresses found.</p>
         )}
       </div>
     </AdminLayout>

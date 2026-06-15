@@ -2,7 +2,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { useCatalogAddons } from "@/features/service-catalog/api";
-import { ASSET_TYPE_LABELS } from "@/features/assets/api";
 import { cn } from "@/lib/utils";
 import {
   type BookServicesDraft,
@@ -51,7 +50,7 @@ export function ReviewSummaryStep({
       <div>
         <h2 className="font-display font-semibold text-lg">Review and complete sale</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Creates the service contract first, then generates your chosen billing document. GST is calculated from service configuration — not hardcoded.
+          Confirms the sale and creates your chosen bill. GST is calculated from the service catalog.
         </p>
       </div>
 
@@ -62,7 +61,7 @@ export function ReviewSummaryStep({
         <CardContent className="space-y-4 text-sm">
           <SummaryRow label="Customer" value={draft.customer ? `${draft.customer.name} · ${draft.customer.phone}` : "—"} />
           <SummaryRow
-            label="Service location"
+            label="Service address"
             value={draft.location
               ? `${draft.location.label}${draft.location.isDefault ? " (Primary)" : ""}${draft.location.city ? ` · ${draft.location.city}` : ""}`
               : "—"}
@@ -71,9 +70,9 @@ export function ReviewSummaryStep({
             <p className="text-xs text-muted-foreground -mt-2 pl-0">{draft.location.address}</p>
           )}
           <SummaryRow
-            label="Asset"
+            label="Vehicle / solar site"
             value={draft.asset
-              ? `${draft.asset.label} (${ASSET_TYPE_LABELS[draft.asset.assetType]})`
+              ? `${draft.asset.label} (${draft.asset.assetType === "vehicle" ? "Vehicle" : "Solar site"})`
               : "—"}
           />
           <SummaryRow
@@ -95,7 +94,7 @@ export function ReviewSummaryStep({
               </ul>
             </div>
           )}
-          <SummaryRow label="Plan type" value={fulfillmentLabel(fulfillment.mode)} />
+          <SummaryRow label="Sale type" value={fulfillmentLabel(fulfillment.mode)} />
           <SummaryRow label="Discount" value={discountLabel} />
           <SummaryRow label="Payment terms" value={paymentTermsLabel(draft.paymentTerms)} />
           {draft.paymentTerms === "partial_advance" && (
@@ -108,7 +107,7 @@ export function ReviewSummaryStep({
               <span>₹{totals.estimatedTotal.toLocaleString("en-IN")}</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Final GST breakdown appears after contract and billing document creation.
+              Final GST breakdown appears after the booking and invoice are created.
             </p>
           </div>
         </CardContent>
@@ -145,19 +144,19 @@ export function ReviewSummaryStep({
           type="button"
           onClick={onCreate}
           disabled={creating}
-          data-testid="book-create-contract"
+          data-testid="book-create-booking"
           className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 w-full sm:w-auto"
         >
           {creating
             ? "Creating…"
             : draft.billingAction === "invoice"
-              ? "Create Contract & Invoice"
-              : "Create Contract & Quotation"}
+              ? "Create Service Booking & Invoice"
+              : "Create Service Booking & Quotation"}
         </button>
       )}
 
       <Badge variant="outline" className="text-xs">
-        Contract → billing → pending assignment (no staff dispatch in this sprint)
+        Booking → invoice → Assign Service queue
       </Badge>
     </div>
   );

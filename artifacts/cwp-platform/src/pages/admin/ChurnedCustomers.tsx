@@ -69,10 +69,17 @@ export default function AdminChurnedCustomers() {
     <AdminLayout>
       <div className="p-6 max-w-6xl mx-auto">
         <CustomerHubAdminNav />
+        <div className="mb-4">
+          <Link href="/admin/analytics#cancelled-plans" className="text-sm text-primary hover:underline">
+            ← Back to Analytics
+          </Link>
+        </div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="font-display font-bold text-2xl">Churned Customers</h1>
-            <p className="text-muted-foreground text-sm mt-1">Cancelled subscriptions — select to send bulk re-engagement messages</p>
+            <h1 className="font-display font-bold text-2xl">Cancelled &amp; Expired Plans</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Plans and subscriptions that ended — not customer status. Reach out to win back service revenue.
+            </p>
           </div>
           {selected.length > 0 && (
             <Button onClick={() => setShowCompose(true)} className="bg-primary text-secondary">
@@ -85,7 +92,7 @@ export default function AdminChurnedCustomers() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="bg-card border border-border rounded-xl p-4">
             <p className="font-bold text-2xl text-red-400">{churned.length}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Total Churned</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Plans ended</p>
           </div>
           {Object.entries(byCity).slice(0, 3).map(([city, count]) => (
             <div key={city} className="bg-card border border-border rounded-xl p-4">

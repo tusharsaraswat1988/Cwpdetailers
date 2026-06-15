@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useListStaff } from "@workspace/api-client-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { CompletionRing } from "@/components/shared/CompletionRing";
 import {
   Calendar, CheckCircle2, Clock, AlertTriangle,
-  Users, Activity, Wifi, Sparkles,
+  Users, Activity, Wifi, Sparkles, ChevronDown, ClipboardCheck,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 type TimelineItem = {
   id: string;
@@ -66,10 +69,10 @@ const REFRESH_MS = 30000;
 
 const CHANNEL_LABEL: Record<TimelineItem["channel"], string> = {
   booking: "Booking",
-  dcms_visit: "DCMS visit",
-  dcms_due: "DCMS due",
+  dcms_visit: "Daily wash visit",
+  dcms_due: "Wash due",
   due_wash: "Due wash",
-  execution: "Execution",
+  execution: "Service Visit",
 };
 
 function channelClass(channel: TimelineItem["channel"]) {
@@ -87,6 +90,7 @@ function liveItems(items: TimelineItem[]) {
 }
 
 export default function OperationsWall() {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const { data: timeline, dataUpdatedAt } = useQuery({
     queryKey: ["ops-wall-timeline"],
     queryFn: fetchOperationsTimeline,
@@ -105,9 +109,8 @@ export default function OperationsWall() {
   const summary = timeline?.summary;
   const allItems = timeline?.items ?? [];
   const bookings = allItems.filter(i => i.channel === "booking");
-  const scheduled = bookings.filter(b => b.status === "scheduled" || b.status === "confirmed");
   const enRoute = bookings.filter(b => b.status === "en_route");
-  const inProgress = bookings.filter(b => b.status === "in_progress");
+  const inProgressBookings = bookings.filter(b => b.status === "in_progress");
   const completed = bookings.filter(b => b.status === "completed");
   const delayed = stats?.delayedCount ?? 0;
   const dcmsDue = allItems.filter(i => i.channel === "dcms_due");
@@ -119,56 +122,63 @@ export default function OperationsWall() {
   const totalWork = allItems.length;
   const completedWork = completed.length + dcmsVisits.filter(v => v.status === "completed").length;
 
+  const inProgressCount = summary
+    ? (summary.scheduled ?? 0) + (summary.started ?? 0)
+    : inProgressBookings.length + enRoute.length;
+
   const lastRefresh = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
     : "—";
 
   const now = new Date();
 
+  const primaryStatuses = summary ? [
+    { label: "Pending", count: summary.pending, href: "/admin/assign-services" },
+    { label: "Assigned", count: summary.assigned, href: "/admin/assign-services" },
+    { label: "In Progress", count: inProgressCount },
+    { label: "Completed", count: summary.completed },
+    { label: "Missed", count: summary.missed },
+  ] : [];
+
   return (
     <div className="min-h-screen bg-secondary text-white p-6 space-y-6" data-testid="operations-wall">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="font-display font-bold text-3xl tracking-tight">Service Updates</h1>
-            <p className="text-white/40 text-sm mt-0.5">
-              Read-only ops view · aggregates assignments &amp; executions · {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-            </p>
-          </div>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div>
+          <h1 className="font-display font-bold text-3xl tracking-tight">Service Updates</h1>
+          <p className="text-white/40 text-sm mt-0.5">
+            Live view of today&apos;s services · {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </p>
         </div>
-        <div className="flex items-center gap-3 text-sm text-white/50">
-          <Link href="/admin/assign-services" className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 rounded-lg text-primary transition-colors text-xs">
-            Assign Services
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/admin/assign-services">
+            <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="service-updates-primary-cta">
+              <ClipboardCheck size={16} className="mr-2" />
+              Assign staff to pending jobs
+            </Button>
           </Link>
-          <Wifi size={14} className="text-green-400" />
-          <span>Last updated {lastRefresh}</span>
-          <span className="text-white/20">·</span>
-          <span>Auto-refresh {REFRESH_MS / 1000}s</span>
-          <Link href="/admin/dashboard" className="ml-4 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white/70 hover:text-white transition-colors text-xs">
-            ← Back to Admin
+          <div className="flex items-center gap-2 text-sm text-white/50">
+            <Wifi size={14} className="text-green-400" />
+            <span>Updated {lastRefresh}</span>
+            <span className="text-white/20">·</span>
+            <span>{REFRESH_MS / 1000}s refresh</span>
+          </div>
+          <Link href="/admin/dashboard" className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white/70 hover:text-white transition-colors text-xs">
+            ← Dashboard
           </Link>
         </div>
       </div>
 
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-          {[
-            { label: "Pending", count: summary.pending, href: "/admin/assign-services" },
-            { label: "Assigned", count: summary.assigned, href: "/admin/assign-services" },
-            { label: "Scheduled", count: summary.scheduled },
-            { label: "Started", count: summary.started },
-            { label: "Completed", count: summary.completed },
-            { label: "Missed", count: summary.missed },
-            { label: "Cancelled", count: summary.cancelled },
-          ].map(({ label, count, href }) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {primaryStatuses.map(({ label, count, href }) => (
             href ? (
-              <Link key={label} href={href} className="rounded-xl border border-white/10 bg-white/5 p-3 hover:bg-white/10 transition-colors">
-                <p className="font-display font-bold text-2xl tabular-nums">{count}</p>
-                <p className="text-xs text-white/50 mt-1">{label}</p>
+              <Link key={label} href={href} className="rounded-xl border border-primary/20 bg-primary/10 p-4 hover:bg-primary/15 transition-colors">
+                <p className="font-display font-bold text-3xl tabular-nums">{count}</p>
+                <p className="text-xs text-white/60 mt-1">{label}</p>
               </Link>
             ) : (
-              <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="font-display font-bold text-2xl tabular-nums">{count}</p>
+              <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="font-display font-bold text-3xl tabular-nums">{count}</p>
                 <p className="text-xs text-white/50 mt-1">{label}</p>
               </div>
             )
@@ -176,31 +186,46 @@ export default function OperationsWall() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
-        {[
-          { label: "Executions", count: stats?.executionCount ?? 0, color: "bg-emerald-500/20 border-emerald-500/30 text-emerald-300", icon: Activity },
-          { label: "Bookings", count: stats?.bookingsTotal ?? 0, color: "bg-sky-500/20 border-sky-500/30 text-sky-300", icon: Calendar },
-          { label: "DCMS visits", count: stats?.dcmsVisitsTotal ?? 0, color: "bg-indigo-500/20 border-indigo-500/30 text-indigo-300", icon: Sparkles },
-          { label: "DCMS due", count: stats?.dcmsDueCount ?? 0, color: "bg-violet-500/20 border-violet-500/30 text-violet-300", icon: Clock },
-          { label: "In progress", count: inProgress.length + enRoute.length, color: "bg-primary/20 border-primary/30 text-primary", icon: Activity },
-          { label: "Completed", count: completedWork, color: "bg-green-500/20 border-green-500/30 text-green-300", icon: CheckCircle2 },
-          { label: "Delayed", count: delayed, color: delayed > 0 ? "bg-red-500/20 border-red-500/30 text-red-300" : "bg-white/5 border-white/10 text-white/50", icon: AlertTriangle },
-        ].map(({ label, count, color, icon: Icon }) => (
-          <div key={label} className={`rounded-xl border p-4 ${color}`} data-testid={`wall-stat-${label.toLowerCase().replace(/\s+/g, "-")}`}>
-            <Icon size={18} className="mb-2" />
-            <p className="font-display font-bold text-4xl tabular-nums">{count}</p>
-            <p className="text-xs mt-1 opacity-80">{label}</p>
+      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <CollapsibleTrigger className="flex items-center gap-2 text-sm text-white/50 hover:text-white/80 transition-colors">
+          <ChevronDown size={16} className={`transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+          Advanced operational metrics
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 pt-4">
+          {summary && (
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">Scheduled: {summary.scheduled}</span>
+              <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">Started: {summary.started}</span>
+              <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">Cancelled: {summary.cancelled}</span>
+            </div>
+          )}
+          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+            {[
+              { label: "Service Visits", count: stats?.executionCount ?? 0, color: "bg-emerald-500/20 border-emerald-500/30 text-emerald-300", icon: Activity },
+              { label: "Bookings", count: stats?.bookingsTotal ?? 0, color: "bg-sky-500/20 border-sky-500/30 text-sky-300", icon: Calendar },
+              { label: "Daily wash visits", count: stats?.dcmsVisitsTotal ?? 0, color: "bg-indigo-500/20 border-indigo-500/30 text-indigo-300", icon: Sparkles },
+              { label: "Wash due", count: stats?.dcmsDueCount ?? 0, color: "bg-violet-500/20 border-violet-500/30 text-violet-300", icon: Clock },
+              { label: "In progress (bookings)", count: inProgressBookings.length + enRoute.length, color: "bg-primary/20 border-primary/30 text-primary", icon: Activity },
+              { label: "Completed today", count: completedWork, color: "bg-green-500/20 border-green-500/30 text-green-300", icon: CheckCircle2 },
+              { label: "Delayed", count: delayed, color: delayed > 0 ? "bg-red-500/20 border-red-500/30 text-red-300" : "bg-white/5 border-white/10 text-white/50", icon: AlertTriangle },
+            ].map(({ label, count, color, icon: Icon }) => (
+              <div key={label} className={`rounded-xl border p-3 ${color}`} data-testid={`wall-stat-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+                <Icon size={16} className="mb-1" />
+                <p className="font-display font-bold text-2xl tabular-nums">{count}</p>
+                <p className="text-[10px] mt-0.5 opacity-80">{label}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {totalWork > 0 && (
         <div className="flex items-center gap-4 bg-white/5 rounded-xl p-4 border border-white/10">
           <CompletionRing value={completedWork} max={totalWork} size={72} />
           <div>
-            <p className="font-display font-bold text-2xl">{completedWork}/{totalWork} work items today</p>
+            <p className="font-display font-bold text-2xl">{completedWork}/{totalWork} services today</p>
             <p className="text-white/40 text-sm">
-              {bookings.length} bookings · {dcmsVisits.length} DCMS visits · {dcmsDue.length} DCMS due · {stats?.dueWashCount ?? 0} legacy due washes
+              {bookings.length} bookings · {dcmsVisits.length} daily washes · {dcmsDue.length} wash due
             </p>
           </div>
         </div>
@@ -209,7 +234,7 @@ export default function OperationsWall() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-3">
           <h2 className="font-display font-bold text-lg text-white/80 flex items-center gap-2">
-            <Activity size={16} className="text-primary" /> Unified timeline
+            <Activity size={16} className="text-primary" /> Today&apos;s timeline
           </h2>
           <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
             {liveItems(allItems).slice(0, 25).map(item => (
@@ -231,7 +256,7 @@ export default function OperationsWall() {
               </div>
             ))}
             {allItems.length === 0 && (
-              <div className="text-center py-8 text-white/30 text-sm">No work scheduled for today</div>
+              <div className="text-center py-8 text-white/30 text-sm">No services scheduled for today</div>
             )}
           </div>
         </div>
@@ -255,6 +280,9 @@ export default function OperationsWall() {
                 </p>
               )}
             </div>
+            {openComplaints.length > 0 && (
+              <Link href="/admin/complaints" className="text-xs text-primary hover:underline mt-2 inline-block">Resolve complaints →</Link>
+            )}
           </div>
 
           <div>

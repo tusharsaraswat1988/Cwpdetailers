@@ -159,9 +159,9 @@ export function useDcmsDashboard() {
 
 export function useDcmsPlans(vehicleId?: number) {
   const params = new URLSearchParams();
+  params.set("active", "true");
   if (vehicleId) {
     params.set("vehicleId", String(vehicleId));
-    params.set("linked", "true");
   }
   const qs = params.toString() ? `?${params}` : "";
   return useQuery({

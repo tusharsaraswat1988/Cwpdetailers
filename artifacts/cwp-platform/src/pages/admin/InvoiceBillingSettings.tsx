@@ -276,7 +276,7 @@ export default function InvoiceBillingSettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Terms & conditions</CardTitle>
-            <CardDescription>One term per line. Service-specific terms (DCMS, package, solar) are added automatically on invoices.</CardDescription>
+            <CardDescription>One term per line. Service-specific terms (daily cleaning, package, solar) are added automatically on invoices.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Textarea

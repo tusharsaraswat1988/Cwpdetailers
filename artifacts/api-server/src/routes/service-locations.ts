@@ -102,7 +102,11 @@ router.get("/service-locations", async (req, res) => {
         .where(and(...conditions));
 
       return res.json({
-        data: rows,
+        data: rows.map(row => ({
+          ...row,
+          primaryCustomerName: customer.name,
+          linkedCustomerCount: 1,
+        })),
         total: Number(countRow?.count ?? 0),
         limit: lim,
         offset: off,
@@ -141,8 +145,30 @@ router.get("/service-locations", async (req, res) => {
       : [];
     const countMap = new Map(linkCounts.map(r => [r.serviceLocationId, Number(r.count)]));
 
+    const primaryCustomers = ids.length
+      ? await db
+        .select({
+          serviceLocationId: customerLocationLinksTable.serviceLocationId,
+          customerName: customersTable.name,
+        })
+        .from(customerLocationLinksTable)
+        .innerJoin(customersTable, eq(customerLocationLinksTable.customerId, customersTable.id))
+        .where(inArray(customerLocationLinksTable.serviceLocationId, ids))
+        .orderBy(desc(customerLocationLinksTable.isDefault), desc(customerLocationLinksTable.id))
+      : [];
+    const primaryNameMap = new Map<number, string>();
+    for (const row of primaryCustomers) {
+      if (!primaryNameMap.has(row.serviceLocationId)) {
+        primaryNameMap.set(row.serviceLocationId, row.customerName);
+      }
+    }
+
     return res.json({
-      data: data.map(row => ({ ...row, linkedCustomerCount: countMap.get(row.id) ?? 0 })),
+      data: data.map(row => ({
+        ...row,
+        linkedCustomerCount: countMap.get(row.id) ?? 0,
+        primaryCustomerName: primaryNameMap.get(row.id) ?? null,
+      })),
       total: Number(countResult[0]?.count ?? 0),
       limit: lim,
       offset: off,

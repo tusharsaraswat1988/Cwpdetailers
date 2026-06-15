@@ -46,8 +46,8 @@ export const EMPTY_BOOK_SERVICES_DRAFT: BookServicesDraft = {
 
 export const WIZARD_STEPS = [
   { id: "customer", label: "Customer", short: "1" },
-  { id: "location", label: "Service Location", short: "2" },
-  { id: "asset", label: "Asset", short: "3" },
+  { id: "location", label: "Service Address", short: "2" },
+  { id: "asset", label: "Vehicle / Solar Site", short: "3" },
   { id: "service", label: "Service", short: "4" },
   { id: "addons", label: "Add-ons", short: "5" },
   { id: "discount", label: "Discount", short: "6" },
@@ -105,9 +105,9 @@ export function validateStep(step: WizardStepId, draft: BookServicesDraft): stri
     case "customer":
       return draft.customer ? null : "Select a customer to continue.";
     case "location":
-      return draft.location ? null : "Select a service location to continue.";
+      return draft.location ? null : "Select a service address to continue.";
     case "asset":
-      return draft.asset ? null : "Select an asset at this location to continue.";
+      return draft.asset ? null : "Select a vehicle or solar site to continue.";
     case "service":
       return draft.service ? null : "Select a service, plan, or package to continue.";
     case "addons":

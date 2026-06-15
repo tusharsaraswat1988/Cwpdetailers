@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { invoicesTable, paymentsTable, customersTable } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { invoicesTable, paymentsTable, customersTable, serviceLocationsTable, assetsTable } from "@workspace/db";
+import { eq, and, sql, desc, gt } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import {
   createInvoice as createInvoiceRecord,
@@ -17,6 +17,8 @@ import {
   type InvoiceBillingSettingsPatch,
 } from "../lib/billing/invoiceBillingSettings";
 import { renderInvoicePdf } from "../lib/billing/invoicePdfGenerator";
+import { computeInvoiceGst } from "../lib/billing/invoiceGstEngine";
+import type { InvoiceItem } from "@workspace/db";
 
 const router = Router();
 
@@ -59,14 +61,50 @@ router.put("/invoices/billing-settings", async (req, res) => {
   }
 });
 
+router.post("/invoices/gst-preview", async (req, res) => {
+  try {
+    const { items, discount = 0, gstInclusive = true, isInterState = false } = req.body as {
+      items?: InvoiceItem[];
+      discount?: number;
+      gstInclusive?: boolean;
+      isInterState?: boolean;
+    };
+    if (!items?.length) return res.status(400).json({ error: "items required" });
+    const gst = computeInvoiceGst({
+      items,
+      invoiceDiscount: discount,
+      gstInclusive: gstInclusive !== false,
+      isInterState: !!isInterState,
+    });
+    return res.json({
+      subtotal: gst.subtotal,
+      gstAmount: gst.gstAmount,
+      cgstAmount: gst.cgstAmount,
+      sgstAmount: gst.sgstAmount,
+      igstAmount: gst.igstAmount,
+      totalAmount: gst.totalAmount,
+    });
+  } catch (err) {
+    req.log.error({ err }, "GST preview error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/invoices", async (req, res) => {
   try {
-    const { customerId, status, limit = "50", offset = "0" } = req.query as Record<string, string>;
+    const {
+      customerId, status, documentType, hasBalance,
+      limit = "50", offset = "0",
+    } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
     const conditions = [...tenantFilters(req, INVOICE_SCOPE)];
     if (customerId) conditions.push(eq(invoicesTable.customerId, parseInt(customerId)));
     if (status) conditions.push(eq(invoicesTable.status, status as (typeof invoicesTable.status)["_"]["data"]));
+    if (documentType) {
+      conditions.push(eq(invoicesTable.documentType, documentType as (typeof invoicesTable.documentType)["_"]["data"]));
+    }
+    if (hasBalance === "true") conditions.push(gt(invoicesTable.balanceDue, "0"));
     const where = conditions.length ? and(...conditions) : undefined;
 
     const [data, countResult] = await Promise.all([
@@ -77,6 +115,13 @@ router.get("/invoices", async (req, res) => {
         referenceInvoiceNumber: invoicesTable.referenceInvoiceNumber,
         customerId: invoicesTable.customerId, customerName: customersTable.name,
         subscriptionId: invoicesTable.subscriptionId, bookingId: invoicesTable.bookingId,
+        quotationId: invoicesTable.quotationId,
+        contractRegistryId: invoicesTable.contractRegistryId,
+        serviceLocationId: invoicesTable.serviceLocationId,
+        assetId: invoicesTable.assetId,
+        serviceLocationLabel: serviceLocationsTable.label,
+        assetLabel: assetsTable.label,
+        paymentTerms: invoicesTable.paymentTerms,
         items: invoicesTable.items, subtotal: invoicesTable.subtotal,
         tax: invoicesTable.tax, gstAmount: invoicesTable.gstAmount,
         cgstAmount: invoicesTable.cgstAmount, sgstAmount: invoicesTable.sgstAmount,
@@ -92,6 +137,8 @@ router.get("/invoices", async (req, res) => {
         paidAt: invoicesTable.paidAt, createdAt: invoicesTable.createdAt,
       }).from(invoicesTable)
         .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+        .leftJoin(serviceLocationsTable, eq(invoicesTable.serviceLocationId, serviceLocationsTable.id))
+        .leftJoin(assetsTable, eq(invoicesTable.assetId, assetsTable.id))
         .where(where).orderBy(desc(invoicesTable.createdAt)).limit(lim).offset(off),
       db.select({ count: sql<number>`count(*)` }).from(invoicesTable).where(where),
     ]);
@@ -266,8 +313,8 @@ router.get("/payments", async (req, res) => {
 
 router.post("/payments", async (req, res) => {
   try {
-    const { customerId, invoiceId, amount, method, transactionId, notes, receivedByStaffId } = req.body;
-    if (!customerId || !amount || !method) return res.status(400).json({ error: "customerId, amount, method are required" });
+    const { customerId, invoiceId, amount, method, transactionId, notes, receivedByStaffId, useWallet } = req.body;
+    if (!customerId || amount == null || !method) return res.status(400).json({ error: "customerId, amount, method are required" });
 
     const customerRow = await loadIfInScope(req,
       () => db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1).then(r => r[0]),
@@ -283,15 +330,23 @@ router.post("/payments", async (req, res) => {
       invoiceRow = inv;
     }
 
+    const parsedAmount = parseFloat(amount.toString());
+    if (parsedAmount < 0) return res.status(400).json({ error: "amount must be non-negative" });
+    if (parsedAmount === 0 && !useWallet) {
+      return res.status(400).json({ error: "amount must be greater than zero when not using wallet" });
+    }
+
     const stamped = tenantStamp(req, {});
     const payment = await recordPayment({
       customerId,
       invoiceId,
-      amount: parseFloat(amount.toString()),
+      amount: parsedAmount,
       method,
+      useWallet: !!useWallet,
       transactionId,
       notes,
       receivedByStaffId,
+      createdBy: req.user?.id ?? null,
       companyId: stamped.companyId,
       branchId: stamped.branchId,
     });
@@ -299,7 +354,8 @@ router.post("/payments", async (req, res) => {
     return res.status(201).json(payment);
   } catch (err) {
     req.log.error({ err }, "Record payment error");
-    return res.status(500).json({ error: "Internal server error" });
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return res.status(err instanceof Error && message !== "Internal server error" ? 400 : 500).json({ error: message });
   }
 });
 

@@ -75,7 +75,7 @@ export function ServiceLocationForm({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label>Location type</Label>
+          <Label>Site type</Label>
           <Select value={values.locationType} onValueChange={v => set({ locationType: v as ServiceLocationType })}>
             <SelectTrigger className="mt-1" data-testid={`${idPrefix}-type`}>
               <SelectValue />

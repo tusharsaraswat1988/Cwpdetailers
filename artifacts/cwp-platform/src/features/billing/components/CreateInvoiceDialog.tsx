@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   useGetCustomer,
   useListBookings,
-  useListInvoices,
   useListSubscriptions,
 } from "@workspace/api-client-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,7 +32,6 @@ type LineItem = {
 };
 
 type InvoiceSource = "package" | "solar_amc" | "dcms_plan" | "service" | "booking" | "custom";
-type DocumentType = "tax_invoice" | "credit_note";
 
 type Props = {
   open: boolean;
@@ -68,26 +66,31 @@ function isSolarAmcPackage(pkg: CatalogPackage) {
   return pkg.slug?.includes("solar-amc") ?? pkg.name.toLowerCase().includes("solar amc");
 }
 
-function computePreview(items: LineItem[], discount: number) {
-  let subtotal = 0;
-  let gst = 0;
-  let total = 0;
-  for (const item of items) {
-    if (item.isComplimentary) continue;
-    const gross = item.quantity * item.unitPrice;
-    const net = Math.max(0, gross);
-    const taxable = net / 1.18;
-    const lineGst = net - taxable;
-    subtotal += taxable;
-    gst += lineGst;
-    total += net;
-  }
-  const netAfterDisc = Math.max(0, total - discount);
-  const ratio = total > 0 ? netAfterDisc / total : 1;
+async function fetchGstPreview(items: LineItem[], discount: number) {
+  const res = await fetch("/api/invoices/gst-preview", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      items: items.filter(i => i.description.trim()).map(i => ({
+        description: i.description.trim(),
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        total: i.isComplimentary ? 0 : i.total,
+        sac: i.sac || DEFAULT_SAC,
+        isComplimentary: i.isComplimentary,
+        serviceCategory: i.serviceCategory,
+      })),
+      discount,
+      gstInclusive: true,
+    }),
+  });
+  if (!res.ok) throw new Error("GST preview failed");
+  const data = await res.json();
   return {
-    subtotal: Math.round(subtotal * ratio * 100) / 100,
-    gst: Math.round(gst * ratio * 100) / 100,
-    total: Math.round(netAfterDisc),
+    subtotal: data.subtotal as number,
+    gst: data.gstAmount as number,
+    total: data.totalAmount as number,
   };
 }
 
@@ -112,9 +115,6 @@ export function CreateInvoiceDialog({
   onCreated,
 }: Props) {
   const [customer, setCustomer] = useState<CustomerSearchValue | null>(null);
-  const [documentType, setDocumentType] = useState<DocumentType>("tax_invoice");
-  const [referenceInvoiceId, setReferenceInvoiceId] = useState("");
-  const [creditReason, setCreditReason] = useState("");
   const [source, setSource] = useState<InvoiceSource>("package");
   const [productId, setProductId] = useState("");
   const [bookingId, setBookingId] = useState("");
@@ -135,6 +135,7 @@ export function CreateInvoiceDialog({
   const [items, setItems] = useState<LineItem[]>([emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gstPreview, setGstPreview] = useState({ subtotal: 0, gst: 0, total: 0 });
 
   const customerId = customer?.id ?? 0;
 
@@ -153,10 +154,6 @@ export function CreateInvoiceDialog({
     { customerId: String(customerId), limit: "20" } as any,
     { query: { enabled: open && customerId > 0 } },
   );
-  const { data: customerInvoices } = useListInvoices(
-    { customerId: String(customerId), limit: "30" } as any,
-    { query: { enabled: open && customerId > 0 && documentType === "credit_note" } },
-  );
 
   const washPackages = useMemo(() => (packages ?? []).filter(p => !isSolarAmcPackage(p)), [packages]);
   const solarPackages = useMemo(() => (packages ?? []).filter(p => isSolarAmcPackage(p)), [packages]);
@@ -171,10 +168,6 @@ export function CreateInvoiceDialog({
   const legacySubscriptions = useMemo(
     () => (subscriptions?.data ?? []).filter(s => s.status === "active" || s.status === "expiring"),
     [subscriptions],
-  );
-  const referenceInvoices = useMemo(
-    () => (customerInvoices?.data ?? []).filter((inv: { documentType?: string }) => (inv as any).documentType !== "credit_note"),
-    [customerInvoices],
   );
 
   useEffect(() => {
@@ -203,9 +196,6 @@ export function CreateInvoiceDialog({
 
   const resetForm = () => {
     if (!initialCustomerId) setCustomer(null);
-    setDocumentType("tax_invoice");
-    setReferenceInvoiceId("");
-    setCreditReason("");
     setSource("package");
     setProductId("");
     setBookingId("");
@@ -276,8 +266,21 @@ export function CreateInvoiceDialog({
   };
 
   const disc = parseFloat(discount || "0");
-  const { subtotal, gst, total } = computePreview(items, disc);
   const hasValidLines = items.some(i => i.description.trim() && (i.isComplimentary || i.total > 0));
+
+  useEffect(() => {
+    if (!open || !hasValidLines) {
+      setGstPreview({ subtotal: 0, gst: 0, total: 0 });
+      return;
+    }
+    let cancelled = false;
+    fetchGstPreview(items, disc)
+      .then(p => { if (!cancelled) setGstPreview(p); })
+      .catch(() => { if (!cancelled) setGstPreview({ subtotal: 0, gst: 0, total: 0 }); });
+    return () => { cancelled = true; };
+  }, [open, items, disc, hasValidLines]);
+
+  const { subtotal, gst, total } = gstPreview;
 
   const handleSubmit = async () => {
     if (!customer) {
@@ -286,10 +289,6 @@ export function CreateInvoiceDialog({
     }
     if (!hasValidLines) {
       setError("Add at least one line item with description (paid or complimentary)");
-      return;
-    }
-    if (documentType === "credit_note" && !referenceInvoiceId) {
-      setError("Select the original invoice for this credit note");
       return;
     }
 
@@ -302,9 +301,7 @@ export function CreateInvoiceDialog({
 
       await createInvoiceRequest({
         customerId: customer.id,
-        documentType,
-        referenceInvoiceId: referenceInvoiceId ? parseInt(referenceInvoiceId, 10) : undefined,
-        creditReason: documentType === "credit_note" ? creditReason || "Credit note issued" : undefined,
+        documentType: "tax_invoice",
         subscriptionId: subscriptionId ? parseInt(subscriptionId, 10) : undefined,
         bookingId: bookingId ? parseInt(bookingId, 10) : undefined,
         discount: disc,
@@ -353,50 +350,10 @@ export function CreateInvoiceDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{documentType === "credit_note" ? "Create Credit Note" : "Create Tax Invoice"}</DialogTitle>
+          <DialogTitle>Create Tax Invoice</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div>
-              <Label>Document type</Label>
-              <Select value={documentType} onValueChange={v => setDocumentType(v as DocumentType)}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tax_invoice">Tax Invoice</SelectItem>
-                  <SelectItem value="credit_note">Credit Note (GST)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {documentType === "credit_note" && (
-              <div>
-                <Label>Against invoice *</Label>
-                {!customer ? (
-                  <p className="text-sm text-muted-foreground mt-1">Select customer first</p>
-                ) : (
-                  <Select value={referenceInvoiceId || "none"} onValueChange={v => setReferenceInvoiceId(v === "none" ? "" : v)}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Original invoice" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none" disabled>Select invoice</SelectItem>
-                      {referenceInvoices.map((inv: { id?: number; invoiceNumber?: string; totalAmount?: string }) => (
-                        <SelectItem key={inv.id} value={String(inv.id)}>
-                          {inv.invoiceNumber} · ₹{Number(inv.totalAmount).toLocaleString("en-IN")}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            )}
-          </div>
-
-          {documentType === "credit_note" && (
-            <div>
-              <Label>Reason for credit</Label>
-              <Input value={creditReason} onChange={e => setCreditReason(e.target.value)} placeholder="e.g. Service adjustment / billing correction" className="mt-1" />
-            </div>
-          )}
-
           <div>
             <Label>Customer</Label>
             <CustomerSearchSelect
@@ -406,7 +363,6 @@ export function CreateInvoiceDialog({
                 setBookingId("");
                 setSubscriptionId("");
                 setProductId("");
-                setReferenceInvoiceId("");
               }}
               testId="invoice-create-customer"
             />
@@ -448,7 +404,7 @@ export function CreateInvoiceDialog({
             </div>
           )}
 
-          {documentType === "tax_invoice" && (
+          {(
             <div>
               <Label>Bill for</Label>
               <Select value={source} onValueChange={v => { setSource(v as InvoiceSource); setProductId(""); setBookingId(""); setItems([emptyLine()]); }}>
@@ -465,7 +421,7 @@ export function CreateInvoiceDialog({
             </div>
           )}
 
-          {documentType === "tax_invoice" && source === "package" && (
+          {source === "package" && (
             <div>
               <Label>Package</Label>
               {packagesLoading ? <Skeleton className="h-10 mt-1" /> : (
@@ -482,7 +438,7 @@ export function CreateInvoiceDialog({
             </div>
           )}
 
-          {documentType === "tax_invoice" && source === "solar_amc" && (
+          {source === "solar_amc" && (
             <div>
               <Label>Solar AMC</Label>
               {packagesLoading ? <Skeleton className="h-10 mt-1" /> : (
@@ -499,9 +455,9 @@ export function CreateInvoiceDialog({
             </div>
           )}
 
-          {documentType === "tax_invoice" && source === "dcms_plan" && (
+          {source === "dcms_plan" && (
             <div>
-              <Label>DCMS plan</Label>
+              <Label>Daily cleaning plan</Label>
               {plansLoading ? <Skeleton className="h-10 mt-1" /> : (
                 <Select value={productId || "none"} onValueChange={v => setProductId(v === "none" ? "" : v)}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -516,7 +472,7 @@ export function CreateInvoiceDialog({
             </div>
           )}
 
-          {documentType === "tax_invoice" && source === "service" && (
+          {source === "service" && (
             <div>
               <Label>Service</Label>
               {servicesLoading ? <Skeleton className="h-10 mt-1" /> : (
@@ -533,7 +489,7 @@ export function CreateInvoiceDialog({
             </div>
           )}
 
-          {documentType === "tax_invoice" && source === "booking" && customer && (
+          {source === "booking" && customer && (
             <div>
               <Label>Completed booking</Label>
               {bookingsLoading ? <Skeleton className="h-10 mt-1" /> : billableBookings.length === 0 ? (
@@ -554,7 +510,7 @@ export function CreateInvoiceDialog({
             </div>
           )}
 
-          {sourceLoading && documentType === "tax_invoice" && source !== "custom" && source !== "booking" && (
+          {sourceLoading && source !== "custom" && source !== "booking" && (
             <Skeleton className="h-16" />
           )}
 
@@ -567,7 +523,7 @@ export function CreateInvoiceDialog({
                     value={item.description}
                     onChange={e => updateItem(idx, { description: e.target.value })}
                     placeholder="Service name *"
-                    disabled={documentType === "tax_invoice" && source !== "custom" && !!productId}
+                    disabled={source !== "custom" && !!productId}
                   />
                   <Input
                     value={item.subtitle}
@@ -582,11 +538,11 @@ export function CreateInvoiceDialog({
                   </div>
                   <div className="col-span-2">
                     <Label className="text-xs">Qty</Label>
-                    <Input type="number" min={1} value={item.quantity} onChange={e => updateItem(idx, { quantity: parseFloat(e.target.value || "1") })} className="h-8 text-sm" disabled={documentType === "tax_invoice" && source !== "custom" && !!productId} />
+                    <Input type="number" min={1} value={item.quantity} onChange={e => updateItem(idx, { quantity: parseFloat(e.target.value || "1") })} className="h-8 text-sm" disabled={source !== "custom" && !!productId} />
                   </div>
                   <div className="col-span-3">
                     <Label className="text-xs">Rate (₹)</Label>
-                    <Input type="number" min={0} value={item.unitPrice} onChange={e => updateItem(idx, { unitPrice: parseFloat(e.target.value || "0") })} className="h-8 text-sm" disabled={documentType === "tax_invoice" && source !== "custom" && !!productId && !item.isComplimentary} />
+                    <Input type="number" min={0} value={item.unitPrice} onChange={e => updateItem(idx, { unitPrice: parseFloat(e.target.value || "0") })} className="h-8 text-sm" disabled={source !== "custom" && !!productId && !item.isComplimentary} />
                   </div>
                   <div className="col-span-2 text-sm font-medium pb-1">
                     {item.isComplimentary ? "Free" : `₹${item.total.toLocaleString("en-IN")}`}
@@ -600,14 +556,14 @@ export function CreateInvoiceDialog({
                     <Label htmlFor={`compl-${idx}`} className="text-xs cursor-pointer">Free</Label>
                   </div>
                 </div>
-                {(source === "custom" || documentType === "credit_note") && items.length > 1 && (
+                {source === "custom" && items.length > 1 && (
                   <Button type="button" variant="ghost" size="sm" onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}>
                     <Trash2 size={14} className="mr-1" /> Remove
                   </Button>
                 )}
               </div>
             ))}
-            {(source === "custom" || documentType === "credit_note") && (
+            {source === "custom" && (
               <Button type="button" variant="outline" size="sm" onClick={() => setItems(prev => [...prev, emptyLine()])}>
                 <Plus size={14} className="mr-1" /> Add line
               </Button>
@@ -635,7 +591,7 @@ export function CreateInvoiceDialog({
             <Textarea value={termsText} onChange={e => setTermsText(e.target.value)} placeholder="Leave blank to use default + service-specific terms" className="mt-1 min-h-[80px]" />
           </div>
 
-          {customer && legacySubscriptions.length > 0 && documentType === "tax_invoice" && (
+          {customer && legacySubscriptions.length > 0 && (
             <div>
               <Label>Link legacy subscription (optional)</Label>
               {subsLoading ? <Skeleton className="h-10 mt-1" /> : (
@@ -654,7 +610,7 @@ export function CreateInvoiceDialog({
 
           <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm space-y-1">
             <div className="flex justify-between"><span className="text-muted-foreground">Taxable value</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">GST (18% incl.)</span><span>₹{gst.toLocaleString("en-IN")}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">GST (catalog rate)</span><span>₹{gst.toLocaleString("en-IN")}</span></div>
             <div className="flex justify-between font-semibold border-t border-border pt-2 mt-2">
               <span>Total</span><span>₹{total.toLocaleString("en-IN")}</span>
             </div>
@@ -663,7 +619,7 @@ export function CreateInvoiceDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <Button onClick={handleSubmit} disabled={submitting || !customer || !hasValidLines} className="w-full">
-            {submitting ? "Creating..." : documentType === "credit_note" ? "Issue credit note" : "Create tax invoice"}
+            {submitting ? "Creating..." : "Create tax invoice"}
           </Button>
         </div>
       </DialogContent>

@@ -69,7 +69,7 @@ export function WalletSummaryPanel({ customerId }: Props) {
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Wallet holds money adjustments only. Wash credits and visit balances live on service contracts — not here.
+            Wallet holds money adjustments only. Washes left on packages and visit balances on plans are shown on the customer profile — not here.
           </p>
         </CardContent>
       </Card>

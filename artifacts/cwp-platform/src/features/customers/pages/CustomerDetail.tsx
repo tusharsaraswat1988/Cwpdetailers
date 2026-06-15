@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Pencil, User, LayoutDashboard, MessageSquare, LifeBuoy, Layers, FileText, MapPin, Boxes, Wallet } from "lucide-react";
+import { ArrowLeft, Pencil, User, LayoutDashboard, MessageSquare, FileText } from "lucide-react";
 import { Link } from "wouter";
 import CommunicationTimeline from "@/features/communications/components/CommunicationTimeline";
 import CommunicationPreferences from "@/features/communications/components/CommunicationPreferences";
@@ -28,15 +28,17 @@ import { EmailInput } from "@/components/ui/email-input";
 import { submitEmail, submitMobile } from "@/lib/contactForm";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Customer360Overview } from "@/features/customers/components/Customer360Overview";
-import { CustomerReferralPanel } from "@/features/customers/components/CustomerReferralPanel";
-import { CustomerComplaintsPanel } from "@/features/customers/components/CustomerComplaintsPanel";
-import { ActiveServicesSummary } from "@/features/customers/components/ActiveServicesSummary";
-import { CustomerPersonaBadges } from "@/features/customers/components/CustomerPersonaBadges";
 import { BillingSummaryPanel } from "@/features/customers/components/BillingSummaryPanel";
-import { WalletSummaryPanel } from "@/features/customers/components/WalletSummaryPanel";
-import { LinkedLocationsSummary } from "@/features/customers/components/LinkedLocationsSummary";
-import { LinkedAssetsSummary } from "@/features/customers/components/LinkedAssetsSummary";
+import { CustomerReferralPanel } from "@/features/customers/components/CustomerReferralPanel";
+import { CustomerPersonaBadges } from "@/features/customers/components/CustomerPersonaBadges";
+import { ArchiveCustomerButton } from "@/features/customers/components/ArchiveCustomerButton";
 import { fetchCustomerServicesHub } from "@/features/customers/api";
+import {
+  apiToFounderStatus,
+  founderToApiStatus,
+  FOUNDER_STATUS_LABELS,
+  type FounderCustomerStatus,
+} from "@/lib/customerStatus";
 
 type EditForm = {
   name: string;
@@ -44,7 +46,7 @@ type EditForm = {
   email: string;
   city: string;
   address: string;
-  status: "active" | "inactive" | "suspended";
+  status: FounderCustomerStatus;
   branchId: string;
   gstin: string;
   billingName: string;
@@ -80,8 +82,14 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
 
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
-    if (tab === "active-services") setActiveTab("services");
-    else if (tab) setActiveTab(tab);
+    const legacyToOverview = new Set(["services", "wallet", "assets", "locations", "support", "active-services"]);
+    if (tab === "active-services" || (tab && legacyToOverview.has(tab))) {
+      setActiveTab("overview");
+    } else if (tab === "profile" || tab === "communications" || tab === "bills" || tab === "billing") {
+      setActiveTab(tab === "billing" ? "bills" : tab);
+    } else if (tab) {
+      setActiveTab("overview");
+    }
   }, []);
 
   const handleTabChange = (tab: string) => {
@@ -101,7 +109,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
       email: customer.email ?? "",
       city: customer.city ?? "",
       address: customer.address ?? "",
-      status: customer.status ?? "active",
+      status: apiToFounderStatus(customer.status ?? "active"),
       branchId: customer.branchId ? String(customer.branchId) : "",
       gstin: tier3.gstin ?? "",
       billingName: tier3.billingName ?? "",
@@ -157,7 +165,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
         email: emailResult.value,
         city: editForm.city || undefined,
         address: editForm.address || undefined,
-        status: editForm.status,
+        status: founderToApiStatus(editForm.status),
         branchId: editForm.branchId ? parseInt(editForm.branchId, 10) : undefined,
         gstin: editForm.gstin.trim() || null,
         billingName: editForm.billingName.trim() || null,
@@ -171,7 +179,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
     <Layout>
       <div className="p-6 space-y-6 max-w-5xl">
         <Link href={basePath} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-          <ArrowLeft size={14} /> Back to customers
+          <ArrowLeft size={14} /> Back to customer profiles
         </Link>
 
         {isLoading ? (
@@ -209,29 +217,39 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                 <h1 className="font-display font-bold text-2xl">{customer.name}</h1>
                 <p className="text-muted-foreground text-sm">{customer.phone} · {customer.city ?? "—"}</p>
                 <CustomerPersonaBadges profile={servicesHub?.profile} className="mt-2" />
-                <p className="text-xs text-muted-foreground mt-1">Customer 360 hub</p>
               </div>
             </div>
-            <Can resource="customers" action="edit">
-              <Button variant="outline" size="sm" onClick={() => { setEditing(v => !v); if (!editing) setActiveTab("profile"); }} data-testid="btn-edit-customer">
-                <Pencil size={14} className="mr-1.5" />{editing ? "Cancel" : "Edit profile"}
-              </Button>
-            </Can>
+            <div className="flex flex-wrap gap-2">
+              {basePath.startsWith("/admin") && (
+                <Link href={`/admin/book-services?customerId=${id}`}>
+                  <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="customer-profile-primary-cta">
+                    Book Service
+                  </Button>
+                </Link>
+              )}
+              <Can resource="customers" action="edit">
+                <Button variant="outline" size="sm" onClick={() => { setEditing(v => !v); if (!editing) setActiveTab("profile"); }} data-testid="btn-edit-customer">
+                  <Pencil size={14} className="mr-1.5" />{editing ? "Cancel" : "Edit profile"}
+                </Button>
+              </Can>
+              <Can resource="customers" action="edit">
+                <ArchiveCustomerButton
+                  customerId={id}
+                  customerName={customer.name}
+                  status={customer.status ?? "active"}
+                />
+              </Can>
+            </div>
           </div>
         ) : null}
 
         {customer && (
-          <Tabs value={activeTab} onValueChange={handleTabChange} data-testid="customer-360-tabs">
+          <Tabs value={activeTab} onValueChange={handleTabChange} data-testid="customer-profile-tabs">
             <TabsList className="flex flex-wrap h-auto gap-1">
               <TabsTrigger value="overview" data-testid="tab-overview"><LayoutDashboard size={14} className="mr-1.5" />Overview</TabsTrigger>
-              <TabsTrigger value="services" data-testid="tab-services"><Layers size={14} className="mr-1.5" />Active Services</TabsTrigger>
               <TabsTrigger value="profile" data-testid="tab-profile"><User size={14} className="mr-1.5" />Profile</TabsTrigger>
-              <TabsTrigger value="wallet" data-testid="tab-wallet"><Wallet size={14} className="mr-1.5" />Wallet Summary</TabsTrigger>
-              <TabsTrigger value="billing" data-testid="tab-billing"><FileText size={14} className="mr-1.5" />Billing Summary</TabsTrigger>
-              <TabsTrigger value="assets" data-testid="tab-assets"><Boxes size={14} className="mr-1.5" />Linked Assets</TabsTrigger>
-              <TabsTrigger value="locations" data-testid="tab-locations"><MapPin size={14} className="mr-1.5" />Linked Locations</TabsTrigger>
+              <TabsTrigger value="bills" data-testid="tab-bills"><FileText size={14} className="mr-1.5" />Bills</TabsTrigger>
               <TabsTrigger value="communications" data-testid="tab-communications"><MessageSquare size={14} className="mr-1.5" />Communications</TabsTrigger>
-              <TabsTrigger value="support" data-testid="tab-support"><LifeBuoy size={14} className="mr-1.5" />Support</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="mt-4">
@@ -240,10 +258,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                 basePath={basePath}
                 customer={customer as typeof customer & CustomerTier3Fields}
               />
-            </TabsContent>
-
-            <TabsContent value="services" className="mt-4">
-              <ActiveServicesSummary customerId={id} basePath={basePath} />
             </TabsContent>
 
             <TabsContent value="profile" className="mt-4 space-y-4">
@@ -283,14 +297,14 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                       </div>
                       <div>
                         <Label>Status</Label>
-                        <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v as EditForm["status"] }))}>
+                        <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v as FounderCustomerStatus }))}>
                           <SelectTrigger className="mt-1" data-testid="select-edit-customer-status">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="inactive">Inactive</SelectItem>
-                            <SelectItem value="suspended">Suspended</SelectItem>
+                            <SelectItem value="active">{FOUNDER_STATUS_LABELS.active}</SelectItem>
+                            <SelectItem value="inactive">{FOUNDER_STATUS_LABELS.inactive}</SelectItem>
+                            <SelectItem value="archived">{FOUNDER_STATUS_LABELS.archived}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -340,7 +354,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                     <p><span className="text-muted-foreground">Address:</span> {customer.address ?? "—"}</p>
                     <p><span className="text-muted-foreground">City:</span> {customer.city ?? "—"}</p>
                     <p><span className="text-muted-foreground">Branch:</span> {(customer as { branchName?: string }).branchName ?? "—"}</p>
-                    <p><span className="text-muted-foreground">Status:</span> <span className="capitalize">{customer.status}</span></p>
+                    <p><span className="text-muted-foreground">Status:</span> {FOUNDER_STATUS_LABELS[apiToFounderStatus(customer.status ?? "active")]}</p>
                     {(customer as typeof customer & CustomerTier3Fields).billingName && (
                       <p><span className="text-muted-foreground">Billing name:</span> {(customer as typeof customer & CustomerTier3Fields).billingName}</p>
                     )}
@@ -353,16 +367,8 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
               <CustomerReferralPanel customerId={id} basePath={basePath} />
             </TabsContent>
 
-            <TabsContent value="wallet" className="mt-4">
-              <WalletSummaryPanel customerId={id} />
-            </TabsContent>
-
-            <TabsContent value="billing" className="mt-4">
+            <TabsContent value="bills" className="mt-4">
               <BillingSummaryPanel customerId={id} />
-            </TabsContent>
-
-            <TabsContent value="assets" className="mt-4">
-              <LinkedAssetsSummary customerId={id} />
             </TabsContent>
 
             <TabsContent value="communications" className="mt-4 space-y-4">
@@ -383,14 +389,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
             <CommunicationTimeline customerId={id} />
           </CardContent>
         </Card>
-            </TabsContent>
-
-            <TabsContent value="support" className="mt-4">
-              <CustomerComplaintsPanel customerId={id} complaintsAdminPath="/admin/complaints" />
-            </TabsContent>
-
-            <TabsContent value="locations" className="mt-4">
-              <LinkedLocationsSummary customerId={id} readOnly />
             </TabsContent>
           </Tabs>
         )}

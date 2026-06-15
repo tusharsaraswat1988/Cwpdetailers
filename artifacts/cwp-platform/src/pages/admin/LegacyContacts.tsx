@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { fetchLegacyContacts, reactivateLegacyCustomer } from "@/features/customers/api";
-import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
 
 export default function AdminLegacyContacts() {
   const qc = useQueryClient();
@@ -37,18 +36,22 @@ export default function AdminLegacyContacts() {
   return (
     <AdminLayout>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
-        <CustomerHubAdminNav />
+        <div className="mb-2">
+          <Link href="/admin/customers/migration" className="text-sm text-primary hover:underline">
+            ← Migration Tools
+          </Link>
+        </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display font-bold text-2xl">Legacy Contacts</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Old customers imported from phone contacts — dormant segment for re-engagement campaigns
+              Imported phone-only contacts from migration — not active customers. Use for win-back campaigns only.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
               <Link href="/admin/customers/migration">
-                <Upload size={14} className="mr-1.5" />Import contacts
+                <Upload size={14} className="mr-1.5" />Import Existing Customers
               </Link>
             </Button>
             <Button asChild className="bg-primary text-secondary">

@@ -218,6 +218,11 @@ export const staffEcosystemApi = {
       method: "POST",
       body: JSON.stringify({ password }),
     }),
+  resetPassword: (id: number, password: string) =>
+    api<{ message: string; userId: number; phone: string }>(`/api/staff/${id}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
 };
 
 export const STAFF_ECOSYSTEM_QUERY_KEY = "staff-ecosystem";

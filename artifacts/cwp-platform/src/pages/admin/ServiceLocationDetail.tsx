@@ -23,6 +23,7 @@ import {
   serviceLocationFormToPayload,
   serviceLocationToFormValues,
 } from "@/features/service-locations/components/ServiceLocationForm";
+import { CustomerProfileBackLink } from "@/components/layout/CustomerBookingDataContext";
 import { CustomerSearchSelect, type CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
 
 export default function ServiceLocationDetail() {
@@ -63,7 +64,7 @@ export default function ServiceLocationDetail() {
     setSaving(true);
     try {
       await updateServiceLocation(id, serviceLocationFormToPayload(form));
-      toast({ title: "Location updated" });
+      toast({ title: "Service address updated" });
       setEditing(false);
       await refetch();
       qc.invalidateQueries({ queryKey: ["service-locations"] });
@@ -124,14 +125,21 @@ export default function ServiceLocationDetail() {
     }
   };
 
+  const primaryCustomerId = location?.customerLinks?.find(l => l.isDefault)?.customerId
+    ?? location?.customerLinks?.[0]?.customerId;
+
   if (!Number.isFinite(id) || id <= 0) return null;
 
   return (
     <AdminLayout>
       <div className="p-6 space-y-6 max-w-3xl">
-        <Link href="/admin/service-locations" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-          <ArrowLeft size={14} /> Back to Service Locations
-        </Link>
+        {primaryCustomerId ? (
+          <CustomerProfileBackLink customerId={primaryCustomerId} label="Back to customer profile" />
+        ) : (
+          <Link href="/admin/customers" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+            <ArrowLeft size={14} /> Back to Customer Profile
+          </Link>
+        )}
 
         {isLoading ? (
           <Skeleton className="h-32 w-full" />
@@ -264,7 +272,7 @@ export default function ServiceLocationDetail() {
             </Card>
           </>
         ) : (
-          <p className="text-muted-foreground">Service location not found.</p>
+          <p className="text-muted-foreground">Service address not found.</p>
         )}
       </div>
     </AdminLayout>

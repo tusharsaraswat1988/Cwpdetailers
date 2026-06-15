@@ -120,7 +120,7 @@ export default function FounderDashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             <KpiCard title="Today's Revenue" value={fmt(stats?.todayRevenue ?? 0)} icon={IndianRupee} color="text-primary" loading={isLoading} trend="up" />
             <KpiCard title="This Month" value={fmt(stats?.monthRevenue ?? 0)} icon={TrendingUp} color="text-primary" loading={isLoading} trend="up" />
-            <KpiCard title="Collections Due" value={fmt(stats?.pendingDuesTotal ?? 0)} icon={AlertCircle} color={(stats?.pendingDuesTotal ?? 0) > 50000 ? "text-destructive" : "text-amber-600"} loading={isLoading} sub="Outstanding invoices" href="/admin/dues" />
+            <KpiCard title="Collections Due" value={fmt(stats?.pendingDuesTotal ?? 0)} icon={AlertCircle} color={(stats?.pendingDuesTotal ?? 0) > 50000 ? "text-destructive" : "text-amber-600"} loading={isLoading} sub="Outstanding invoices" href="/admin/billing?tab=dues" />
           </div>
         </div>
 

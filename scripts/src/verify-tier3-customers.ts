@@ -21,7 +21,7 @@ const checks: Check[] = [
   { name: "GSTIN validator", pass: fileHas("artifacts/api-server/src/lib/gstin.ts", "normalizeGstin") },
   { name: "Inbound auto-lead", pass: fileHas("artifacts/api-server/src/lib/inboundContact.ts", "resolveOrCreateInboundContact") },
   { name: "Customer network API", pass: fileHas("artifacts/api-server/src/routes/customers.ts", "/customers/:id/network") },
-  { name: "Customer 360 tabs UI", pass: fileHas("artifacts/cwp-platform/src/features/customers/pages/CustomerDetail.tsx", "customer-360-tabs") },
+  { name: "Customer Profile tabs UI", pass: fileHas("artifacts/cwp-platform/src/features/customers/pages/CustomerDetail.tsx", "customer-profile-tabs") },
   { name: "Referral panel", pass: fileHas("artifacts/cwp-platform/src/features/customers/components/CustomerReferralPanel.tsx", "customer-referral-panel") },
   { name: "Complaints panel", pass: fileHas("artifacts/cwp-platform/src/features/customers/components/CustomerComplaintsPanel.tsx", "customer-complaints-panel") },
   { name: "Churned view customer link", pass: fileHas("artifacts/cwp-platform/src/pages/admin/ChurnedCustomers.tsx", "View customer") },

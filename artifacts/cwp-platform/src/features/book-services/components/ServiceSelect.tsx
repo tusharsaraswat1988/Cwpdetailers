@@ -56,6 +56,10 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
 
     if (!isSolar) {
       for (const p of packages ?? []) {
+        const ents = p.entitlements ?? [];
+        const isWash = ents.some(e => e.entitlementType === "wash_credit")
+          && !ents.some(e => e.entitlementType === "cleaning_credit" || e.entitlementType === "solar_visit");
+        if (!isWash) continue;
         out.push({
           kind: "package",
           id: p.id,
@@ -74,6 +78,18 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
           description: plan.description ?? `${plan.includedCleanings} visits included`,
         });
       }
+    } else {
+      for (const p of packages ?? []) {
+        const ents = p.entitlements ?? [];
+        if (!ents.some(e => e.entitlementType === "solar_visit")) continue;
+        out.push({
+          kind: "package",
+          id: p.id,
+          name: p.name,
+          price: parseFloat(p.price) || 0,
+          description: p.description ?? undefined,
+        });
+      }
     }
 
     return out;
@@ -82,7 +98,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
   const isLoading = servicesLoading || packagesLoading || plansLoading;
 
   if (!asset) {
-    return <p className="text-sm text-muted-foreground">Select an asset first.</p>;
+    return <p className="text-sm text-muted-foreground">Select a vehicle or solar site first.</p>;
   }
 
   if (isLoading) return <Skeleton className="h-32 w-full" />;
@@ -90,7 +106,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
   if (options.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No services available for this asset type. Configure services in the Services module.
+        No services available for this vehicle or site. Check the Service Catalog is set up for your branch.
       </p>
     );
   }
@@ -106,7 +122,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
       <div>
         <Label>What service are you booking?</Label>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Options are loaded from your Services catalog — one-time jobs, packages, and plans.
+          Car wash, packages, daily cleaning plans, and solar — prices from HQ catalog.
         </p>
       </div>
       <div className="grid gap-2 max-h-80 overflow-y-auto pr-1">

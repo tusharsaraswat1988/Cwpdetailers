@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,21 +14,37 @@ import {
   useAdminServices, useServiceMutations, type AdminService,
 } from "@/features/service-catalog/api";
 import { useToast } from "@/hooks/use-toast";
+import { useCatalogGovernance } from "@/lib/catalogGovernance";
 import { ServiceAddonsSection } from "@/features/service-catalog/components/ServiceAddonsSection";
 import { Plus, Pencil, Trash2, Wrench, IndianRupee, Clock, Puzzle } from "lucide-react";
 
-const PRICING_MODELS = [
-  { value: "fixed", label: "Fixed Price" },
-  { value: "vehicle_matrix", label: "Vehicle Matrix (by category/seats)" },
-  { value: "solar_slab", label: "Solar Slab (per panel)" },
-] as const;
+type RevenueLine = "car_wash" | "solar";
+
+type Props = {
+  revenueLine: RevenueLine;
+};
+
+function resolveCategoryId(
+  categories: Array<{ id: number; slug: string }> | undefined,
+  revenueLine: RevenueLine,
+): number | undefined {
+  const slug = revenueLine === "solar" ? "solar-cleaning" : "doorstep-car-wash";
+  return categories?.find(c => c.slug === slug)?.id ?? categories?.[0]?.id;
+}
+
+function matchesRevenueLine(svc: AdminService, revenueLine: RevenueLine): boolean {
+  const cat = (svc.category ?? "").toLowerCase();
+  const slug = (svc.categorySlug ?? "").toLowerCase();
+  if (revenueLine === "solar") {
+    return cat.includes("solar") || slug.includes("solar");
+  }
+  return !cat.includes("solar") && !slug.includes("solar") && cat !== "subscription";
+}
 
 const emptyForm = () => ({
   name: "",
   description: "",
   shortDescription: "",
-  serviceCategoryId: "",
-  pricingModel: "fixed" as AdminService["pricingModel"],
   basePrice: "",
   gstRate: "18",
   pricingType: "inclusive" as AdminService["pricingType"],
@@ -44,8 +60,6 @@ function serviceToForm(s: AdminService) {
     name: s.name,
     description: s.description ?? "",
     shortDescription: s.shortDescription ?? "",
-    serviceCategoryId: s.serviceCategoryId ? String(s.serviceCategoryId) : "",
-    pricingModel: s.pricingModel ?? "fixed",
     basePrice: String(s.basePrice ?? ""),
     gstRate: String(s.gstRate ?? "18"),
     pricingType: s.pricingType ?? "inclusive",
@@ -57,12 +71,9 @@ function serviceToForm(s: AdminService) {
   };
 }
 
-function pricingModelLabel(model?: string) {
-  return PRICING_MODELS.find(m => m.value === model)?.label ?? model ?? "Fixed";
-}
-
-export function ServicesTab() {
+export function ServicesTab({ revenueLine }: Props) {
   const { toast } = useToast();
+  const { hqEditor, availabilityOnly } = useCatalogGovernance();
   const { data: services, isLoading } = useAdminServices();
   const { data: categories } = useServiceCategories();
   const { create, update, remove } = useServiceMutations();
@@ -70,6 +81,14 @@ export function ServicesTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminService | null>(null);
   const [form, setForm] = useState(emptyForm());
+
+  const filtered = useMemo(
+    () => (services ?? []).filter(s => matchesRevenueLine(s, revenueLine)),
+    [services, revenueLine],
+  );
+
+  const defaultCategoryId = resolveCategoryId(categories, revenueLine);
+  const defaultPricingModel = revenueLine === "solar" ? "solar_slab" as const : "vehicle_matrix" as const;
 
   const openCreate = () => {
     setEditing(null);
@@ -87,8 +106,8 @@ export function ServicesTab() {
     name: form.name.trim(),
     description: form.description.trim() || undefined,
     shortDescription: form.shortDescription.trim() || undefined,
-    serviceCategoryId: form.serviceCategoryId ? parseInt(form.serviceCategoryId) : undefined,
-    pricingModel: form.pricingModel,
+    serviceCategoryId: editing?.serviceCategoryId ?? defaultCategoryId,
+    pricingModel: editing?.pricingModel ?? defaultPricingModel,
     basePrice: parseFloat(form.basePrice),
     gstRate: parseFloat(form.gstRate) || 18,
     pricingType: form.pricingType,
@@ -100,28 +119,34 @@ export function ServicesTab() {
   });
 
   const handleSave = () => {
-    if (!form.name.trim() || !form.basePrice) {
-      toast({ title: "Name and base price are required", variant: "destructive" });
+    if (!editing && availabilityOnly) {
+      toast({ title: "Contact HQ to add new products", variant: "destructive" });
       return;
     }
-    if (!form.serviceCategoryId) {
-      toast({ title: "Select a service category", variant: "destructive" });
+    if (!availabilityOnly && (!form.name.trim() || !form.basePrice)) {
+      toast({ title: "Name and price are required", variant: "destructive" });
+      return;
+    }
+    if (!defaultCategoryId && !editing?.serviceCategoryId && !availabilityOnly) {
+      toast({ title: "Catalog not configured — contact HQ", variant: "destructive" });
       return;
     }
 
-    const payload = buildPayload();
     if (editing) {
-      update.mutate({ id: editing.id, ...payload }, {
-        onSuccess: () => {
-          toast({ title: "Service updated" });
+      update.mutate(
+        availabilityOnly
+          ? { id: editing.id, isActive: form.isActive, status: form.status }
+          : { id: editing.id, ...buildPayload() },
+        {
+          onSuccess: () => toast({ title: availabilityOnly ? "Availability updated" : "Service updated" }),
+          onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
         },
-        onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-      });
+      );
     } else {
-      create.mutate(payload, {
+      create.mutate(buildPayload(), {
         onSuccess: (created) => {
           setEditing(created as AdminService);
-          toast({ title: "Service created — add addons below if needed" });
+          toast({ title: "Service created — add optional extras below if needed" });
         },
         onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
       });
@@ -129,14 +154,21 @@ export function ServicesTab() {
   };
 
   const handleDelete = (svc: AdminService) => {
-    if (!confirm(`Archive "${svc.name}"? It will be hidden from booking.`)) return;
+    if (!confirm(`Hide "${svc.name}" from booking?`)) return;
     remove.mutate(svc.id, {
-      onSuccess: () => toast({ title: "Service archived" }),
+      onSuccess: () => toast({ title: "Service hidden" }),
       onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
     });
   };
 
   const isSaving = create.isPending || update.isPending;
+  const priceHint = revenueLine === "solar"
+    ? availabilityOnly
+      ? "Price set by HQ."
+      : "Display or minimum price — final amount quoted at booking."
+    : availabilityOnly
+      ? "Price set by HQ."
+      : "List price — may vary by car type when booking.";
 
   return (
     <Card>
@@ -144,23 +176,27 @@ export function ServicesTab() {
         <div>
           <CardTitle>Services</CardTitle>
           <CardDescription>
-            Manage bookable services — category, pricing, GST, and per-service addons
+            {revenueLine === "solar"
+              ? "One-time solar cleaning product"
+              : "One-time wash and detailing services customers can book"}
           </CardDescription>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus size={14} className="mr-1" />Add Service
-        </Button>
+        {hqEditor && (
+          <Button size="sm" onClick={openCreate}>
+            <Plus size={14} className="mr-1" />Add service
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
           </div>
-        ) : (services ?? []).length === 0 ? (
+        ) : filtered.length === 0 ? (
           <p className="text-muted-foreground text-sm text-center py-8">No services yet. Add your first service.</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {(services ?? []).map(svc => (
+            {filtered.map(svc => (
               <div
                 key={svc.id}
                 className={`border rounded-xl p-4 space-y-3 ${!svc.isActive ? "opacity-60" : ""}`}
@@ -173,13 +209,15 @@ export function ServicesTab() {
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(svc)}>
                       <Pencil size={13} />
                     </Button>
-                    <Button
-                      variant="ghost" size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDelete(svc)}
-                    >
-                      <Trash2 size={13} />
-                    </Button>
+                    {hqEditor && (
+                      <Button
+                        variant="ghost" size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDelete(svc)}
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -191,16 +229,10 @@ export function ServicesTab() {
                 </div>
 
                 <div className="flex flex-wrap gap-1">
-                  <Badge variant="outline" className="text-xs">
-                    {svc.categoryName ?? svc.category?.replace(/_/g, " ")}
-                  </Badge>
-                  <Badge variant="secondary" className="text-xs">
-                    {pricingModelLabel(svc.pricingModel)}
-                  </Badge>
                   {!svc.isActive && <Badge variant="destructive" className="text-xs">Inactive</Badge>}
                   {(svc.addonCount ?? 0) > 0 && (
                     <Badge variant="outline" className="text-xs gap-0.5">
-                      <Puzzle size={10} />{svc.addonCount} addon{svc.addonCount !== 1 ? "s" : ""}
+                      <Puzzle size={10} />{svc.addonCount} extra{svc.addonCount !== 1 ? "s" : ""}
                     </Badge>
                   )}
                 </div>
@@ -227,52 +259,28 @@ export function ServicesTab() {
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Service" : "New Service"}</DialogTitle>
+            <DialogTitle>
+              {availabilityOnly ? "Service availability" : editing ? "Edit service" : "New service"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
+            {availabilityOnly && editing && (
+              <p className="text-sm text-muted-foreground rounded-lg border p-3 bg-muted/30">
+                Prices and product details are set by HQ. You can turn this service on or off for your branch.
+              </p>
+            )}
             <div>
-              <Label>Service Name *</Label>
-              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" />
+              <Label>Service name *</Label>
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" disabled={availabilityOnly} />
             </div>
 
-            <div>
-              <Label>Category *</Label>
-              <Select value={form.serviceCategoryId} onValueChange={v => setForm(f => ({ ...f, serviceCategoryId: v }))}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select category" /></SelectTrigger>
-                <SelectContent>
-                  {(categories ?? []).map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Pricing Model</Label>
-              <Select value={form.pricingModel} onValueChange={v => setForm(f => ({ ...f, pricingModel: v as AdminService["pricingModel"] }))}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PRICING_MODELS.map(m => (
-                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.pricingModel === "vehicle_matrix" && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Price comes from Master Data → vehicle matrix. Base price is fallback only.
-                </p>
-              )}
-              {form.pricingModel === "solar_slab" && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Configure panel slabs in the Solar Slabs tab.
-                </p>
-              )}
-            </div>
-
+            {!availabilityOnly && (
+            <>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Base Price (₹) *</Label>
+                <Label>Price (₹) *</Label>
                 <Input type="number" value={form.basePrice} onChange={e => setForm(f => ({ ...f, basePrice: e.target.value }))} className="mt-1" />
+                <p className="text-xs text-muted-foreground mt-1">{priceHint}</p>
               </div>
               <div>
                 <Label>Duration (min)</Label>
@@ -282,11 +290,11 @@ export function ServicesTab() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>GST Rate (%)</Label>
+                <Label>GST rate (%)</Label>
                 <Input type="number" value={form.gstRate} onChange={e => setForm(f => ({ ...f, gstRate: e.target.value }))} className="mt-1" />
               </div>
               <div>
-                <Label>GST Mode</Label>
+                <Label>GST mode</Label>
                 <Select value={form.pricingType} onValueChange={v => setForm(f => ({ ...f, pricingType: v as AdminService["pricingType"] }))}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -298,12 +306,12 @@ export function ServicesTab() {
             </div>
 
             <div>
-              <Label>Short Description</Label>
+              <Label>Short description</Label>
               <Input value={form.shortDescription} onChange={e => setForm(f => ({ ...f, shortDescription: e.target.value }))} className="mt-1" placeholder="Shown on cards" />
             </div>
 
             <div>
-              <Label>Full Description</Label>
+              <Label>Full description</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="mt-1" rows={3} />
             </div>
 
@@ -311,22 +319,24 @@ export function ServicesTab() {
               <Label>Image URL</Label>
               <Input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} className="mt-1" placeholder="https://..." />
             </div>
+            </>
+            )}
 
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
                 <p className="text-sm font-medium">Active</p>
-                <p className="text-xs text-muted-foreground">Show in booking & website</p>
+                <p className="text-xs text-muted-foreground">Available for booking</p>
               </div>
               <Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
 
-            {editing && (
+            {editing && hqEditor && (
               <ServiceAddonsSection serviceId={editing.id} serviceName={editing.name} />
             )}
 
             <div className="flex gap-2">
               <Button onClick={handleSave} disabled={isSaving} className="flex-1">
-                {isSaving ? "Saving..." : editing ? "Update Service" : "Create Service"}
+                {isSaving ? "Saving..." : availabilityOnly ? "Save availability" : editing ? "Update service" : "Create service"}
               </Button>
               {editing && (
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>Done</Button>

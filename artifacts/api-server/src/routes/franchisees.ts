@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
 import { db } from "@workspace/db";
-import { franchiseesTable, branchesTable, usersTable, staffTable } from "@workspace/db";
+import { franchiseesTable, branchesTable, usersTable, staffTable, sessionsTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
 import { hashPassword } from "../lib/passwords";
@@ -211,6 +211,34 @@ router.post("/franchisees/:id/create-account", async (req, res) => {
     return res.json({ message: "Account created", userId: user.id, phone: user.phone });
   } catch (err) {
     req.log.error({ err }, "Create franchisee account error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/franchisees/:id/reset-password", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const franchisee = await loadFranchiseeInScope(req, id);
+    if (!franchisee) return res.status(404).json({ error: "Franchisee not found" });
+
+    const { password } = req.body;
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+    if (!franchisee.userId) {
+      return res.status(400).json({ error: "No login account exists — use Create Login instead" });
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, franchisee.userId)).limit(1);
+    if (!user) return res.status(404).json({ error: "Login account not found" });
+
+    const passwordHash = await hashPassword(password);
+    await db.update(usersTable).set({ passwordHash, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+    await db.update(sessionsTable).set({ revokedAt: new Date() }).where(eq(sessionsTable.userId, user.id));
+
+    return res.json({ message: "Password reset", userId: user.id, phone: user.phone });
+  } catch (err) {
+    req.log.error({ err }, "Reset franchisee password error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

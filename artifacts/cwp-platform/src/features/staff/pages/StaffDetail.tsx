@@ -324,7 +324,7 @@ export default function StaffDetail() {
             <Card>
               <CardHeader><CardTitle className="text-base">Employment & Operations</CardTitle></CardHeader>
               <CardContent className="grid sm:grid-cols-2 gap-4">
-                <Field label="Staff Category">
+                <Field label="Role type">
                   <Select value={staffCategory} onValueChange={handleCategoryChange}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>

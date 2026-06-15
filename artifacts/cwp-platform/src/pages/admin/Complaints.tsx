@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useListComplaints, getListComplaintsQueryKey, useUpdateComplaint } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { PageActionHeader } from "@/components/layout/PageActionHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,18 +59,22 @@ export default function AdminComplaints() {
     },
   });
 
+  const openCount = (data?.data ?? []).filter((c: ComplaintRow) => c.status === "open" || c.status === "in_progress").length;
+
   return (
     <AdminLayout>
       <div className="p-6 space-y-5">
-        <div>
-          <h1 className="font-display font-bold text-2xl">Complaints</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            {data?.total ?? 0} total complaints
-            {customerFilter ? ` · filtered to customer #${customerFilter}` : ""}
-          </p>
-        </div>
+        <PageActionHeader
+          title="Complaints"
+          description={`${data?.total ?? 0} total · ${openCount} need attention${customerFilter ? ` · customer #${customerFilter}` : ""}`}
+          primaryAction={{
+            label: openCount > 0 ? "Review open complaints" : "All caught up",
+            href: openCount > 0 ? "#complaints-list" : "/admin/dashboard",
+            testId: "complaints-primary-cta",
+          }}
+        />
 
-        <div className="space-y-3">
+        <div id="complaints-list" className="space-y-3">
           {isLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />) :
             (data?.data ?? []).map((c: ComplaintRow) => (
               <div key={c.id} className="bg-card border border-border rounded-xl p-5" data-testid={`complaint-${c.id}`}>

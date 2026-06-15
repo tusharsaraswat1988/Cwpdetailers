@@ -50,7 +50,7 @@ export function BillingSummaryPanel({ customerId }: Props) {
               <Wallet size={14} className="text-primary" /> Wallet balance
             </p>
             <p className="text-xl font-bold">{formatMoney(data?.walletBalance ?? 0)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Money balance only — not service credits</p>
+            <p className="text-xs text-muted-foreground mt-1">Money balance only — not washes left on packages</p>
           </CardContent>
         </Card>
       </div>

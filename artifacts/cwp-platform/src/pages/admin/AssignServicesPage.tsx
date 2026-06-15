@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { PageActionHeader } from "@/components/layout/PageActionHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import {
   type AssignmentFilters,
   type PendingAssignment,
 } from "@/features/assign-services/api";
+import { formatAssignmentLocation } from "@/features/assign-services/formatLocation";
 import { listServiceLocations } from "@/features/service-locations/api";
 
 function formatDate(iso: string): string {
@@ -72,10 +74,11 @@ export default function AssignServicesPage() {
     queryFn: fetchStaffForAssignment,
   });
 
-  const { data: locations = [] } = useQuery({
+  const { data: locationsResponse } = useQuery({
     queryKey: ["service-locations", "assign-filter"],
-    queryFn: () => listServiceLocations(),
+    queryFn: () => listServiceLocations({ limit: 100 }),
   });
+  const locations = locationsResponse?.data ?? [];
 
   const selectedPending = pending.find(p => p.id === selectedPendingId) ?? null;
 
@@ -98,20 +101,25 @@ export default function AssignServicesPage() {
   return (
     <AdminLayout>
       <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
-        <div>
-          <div className="flex items-center gap-2 text-primary mb-1">
-            <ClipboardCheck size={22} />
-            <h1 className="font-display text-2xl font-bold tracking-tight">Assign Services</h1>
-          </div>
-          <p className="text-muted-foreground text-sm">
-            Unified pending queue from all service types. Select staff and assign manually — execution starts in a later sprint.
-          </p>
-        </div>
+        <PageActionHeader
+          title="Assign Service"
+          description="Assign staff to booked jobs that still need a team member."
+          primaryAction={{
+            label: pending.length > 0 ? "Assign selected job" : "View jobs needing staff",
+            onClick: () => {
+              if (pending.length > 0 && !selectedPendingId) {
+                setSelectedPendingId(pending[0]!.id);
+                setTab("pending");
+              }
+            },
+            testId: "assign-service-primary-cta",
+          }}
+        />
 
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Filters</CardTitle>
-            <CardDescription>Filter the queue by service type, location, staff, or date.</CardDescription>
+            <CardDescription>Filter by service type, service address, staff, or date.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="space-y-1">
@@ -131,7 +139,7 @@ export default function AssignServicesPage() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>Location</Label>
+              <Label>Service address</Label>
               <Select
                 value={filters.serviceLocationId ? String(filters.serviceLocationId) : "all"}
                 onValueChange={v => setFilters(f => ({
@@ -139,9 +147,9 @@ export default function AssignServicesPage() {
                   serviceLocationId: v === "all" ? undefined : parseInt(v, 10),
                 }))}
               >
-                <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="All addresses" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All locations</SelectItem>
+                  <SelectItem value="all">All service addresses</SelectItem>
                   {locations.map(loc => (
                     <SelectItem key={loc.id} value={String(loc.id)}>{loc.label}</SelectItem>
                   ))}
@@ -187,22 +195,22 @@ export default function AssignServicesPage() {
 
         <Tabs value={tab} onValueChange={v => setTab(v as "pending" | "assigned")}>
           <TabsList>
-            <TabsTrigger value="pending">Pending Queue ({pending.length})</TabsTrigger>
-            <TabsTrigger value="assigned">Assigned Queue</TabsTrigger>
+            <TabsTrigger value="pending">Needs staff ({pending.length})</TabsTrigger>
+            <TabsTrigger value="assigned">Staff assigned</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending" className="mt-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Pending Assignments</CardTitle>
-                  <CardDescription>Work awaiting staff assignment from the unified queue.</CardDescription>
+                  <CardTitle className="text-base">Jobs needing staff</CardTitle>
+                  <CardDescription>Booked work waiting for a staff member to be assigned.</CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
                   {pendingLoading ? (
                     <Skeleton className="h-48 w-full" />
                   ) : pending.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-8 text-center">No pending assignments.</p>
+                    <p className="text-sm text-muted-foreground py-8 text-center">No jobs waiting for staff.</p>
                   ) : (
                     <table className="w-full text-sm">
                       <thead>
@@ -210,8 +218,8 @@ export default function AssignServicesPage() {
                           <th className="py-2 pr-2">ID</th>
                           <th className="py-2 pr-2">Service</th>
                           <th className="py-2 pr-2">Customer</th>
-                          <th className="py-2 pr-2">Location</th>
-                          <th className="py-2 pr-2">Asset</th>
+                          <th className="py-2 pr-2">Service address</th>
+                          <th className="py-2 pr-2">Vehicle</th>
                           <th className="py-2 pr-2">Created</th>
                           <th className="py-2">Priority</th>
                         </tr>
@@ -229,8 +237,10 @@ export default function AssignServicesPage() {
                               <div className="text-xs text-muted-foreground">{formatServiceType(row.serviceType)}</div>
                             </td>
                             <td className="py-2 pr-2">{row.customerName}</td>
-                            <td className="py-2 pr-2">
-                              {row.serviceLocationLabel ?? <span className="text-destructive text-xs">Missing</span>}
+                            <td className="py-2 pr-2 text-sm">
+                              {row.serviceLocationLabel
+                                ? formatAssignmentLocation(row)
+                                : <span className="text-destructive text-xs">Missing</span>}
                             </td>
                             <td className="py-2 pr-2">{row.assetLabel ?? "—"}</td>
                             <td className="py-2 pr-2 whitespace-nowrap">{formatDate(row.createdAt)}</td>
@@ -249,23 +259,25 @@ export default function AssignServicesPage() {
                     <UserCheck className="h-4 w-4" />
                     Assignment Panel
                   </CardTitle>
-                  <CardDescription>Select staff and assign the highlighted pending item.</CardDescription>
+                  <CardDescription>Select staff and assign the highlighted job.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {!selectedPending ? (
-                    <p className="text-sm text-muted-foreground">Select a row from the pending queue.</p>
+                    <p className="text-sm text-muted-foreground">Select a job from the list.</p>
                   ) : (
                     <>
                       <div className="rounded-md border p-3 space-y-2 text-sm">
-                        <div><span className="text-muted-foreground">Assignment ID:</span> #{selectedPending.id}</div>
+                        <div><span className="text-muted-foreground">Job #</span> {selectedPending.id}</div>
                         <div><span className="text-muted-foreground">Service:</span> {selectedPending.serviceName}</div>
                         <div><span className="text-muted-foreground">Customer:</span> {selectedPending.customerName}</div>
                         <div className="flex items-start gap-1">
                           <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-                          <span>{selectedPending.serviceLocationLabel ?? "No location — cannot assign"}</span>
+                          <span>{selectedPending.serviceLocationLabel
+                            ? formatAssignmentLocation(selectedPending)
+                            : "No service address — cannot assign"}</span>
                         </div>
                         {selectedPending.assetLabel && (
-                          <div><span className="text-muted-foreground">Asset:</span> {selectedPending.assetLabel}</div>
+                          <div><span className="text-muted-foreground">Vehicle:</span> {selectedPending.assetLabel}</div>
                         )}
                       </div>
                       <div className="space-y-2">
@@ -316,7 +328,7 @@ export default function AssignServicesPage() {
                         <th className="py-2 pr-2">Staff</th>
                         <th className="py-2 pr-2">Assigned</th>
                         <th className="py-2 pr-2">Service</th>
-                        <th className="py-2">Location</th>
+                        <th className="py-2">Service address</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -329,7 +341,7 @@ export default function AssignServicesPage() {
                             <div className="font-medium">{row.serviceName}</div>
                             <div className="text-xs text-muted-foreground">{row.customerName}</div>
                           </td>
-                          <td className="py-2">{row.serviceLocationLabel ?? "—"}</td>
+                          <td className="py-2 text-sm">{row.serviceLocationLabel ? formatAssignmentLocation(row) : "—"}</td>
                         </tr>
                       ))}
                     </tbody>

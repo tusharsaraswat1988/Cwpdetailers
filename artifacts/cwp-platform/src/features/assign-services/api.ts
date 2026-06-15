@@ -9,6 +9,8 @@ export type PendingAssignment = {
   customerName: string;
   serviceLocationId: number | null;
   serviceLocationLabel: string | null;
+  serviceLocationType: string | null;
+  serviceLocationCity: string | null;
   assetId: number | null;
   assetLabel: string | null;
   serviceId: number | null;
@@ -26,6 +28,8 @@ export type AssignedService = {
   customerName: string;
   serviceLocationId: number | null;
   serviceLocationLabel: string | null;
+  serviceLocationType: string | null;
+  serviceLocationCity: string | null;
   assetId: number | null;
   assetLabel: string | null;
   assignedStaffId: number;

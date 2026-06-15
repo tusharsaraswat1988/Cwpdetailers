@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import {
   creditWallet,
+  debitWallet,
   listWalletTransactions,
   getLedgerBalance,
   WalletError,
@@ -124,6 +125,60 @@ router.post("/customers/:id/wallet/credit", async (req, res) => {
       return res.status(400).json({ error: err.message, code: err.code });
     }
     req.log.error({ err }, "Wallet credit error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/customers/:id/wallet/debit", async (req, res) => {
+  try {
+    if (!isAdminRole(req)) {
+      return res.status(403).json({ error: "Only admin can debit wallet" });
+    }
+
+    const id = parseInt(req.params.id);
+    const { amount, reason, notes } = req.body as {
+      amount?: number;
+      reason?: string;
+      notes?: string;
+    };
+
+    if (!amount || amount <= 0) return res.status(400).json({ error: "Positive amount is required" });
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ error: "reason is required for wallet debits" });
+    }
+
+    const customer = await loadIfInScope(
+      req,
+      () => db.select().from(customersTable).where(eq(customersTable.id, id)).limit(1).then((r) => r[0]),
+      (r) => ({ ...r, customerId: r.id }),
+    );
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+    const debitNotes = notes?.trim() ? `${reason.trim()}: ${notes.trim()}` : reason.trim();
+
+    const entry = await debitWallet({
+      customerId: id,
+      amount,
+      reference: "manual_adjustment",
+      notes: debitNotes,
+      createdBy: req.user?.id ?? null,
+      companyId: customer.companyId,
+    });
+
+    const balance = await getLedgerBalance(id);
+    return res.status(201).json({
+      transaction: {
+        ...entry,
+        amount: parseFloat(entry.amount),
+        balanceAfter: parseFloat(entry.balanceAfter),
+      },
+      balance,
+    });
+  } catch (err) {
+    if (err instanceof WalletError) {
+      return res.status(400).json({ error: err.message, code: err.code });
+    }
+    req.log.error({ err }, "Wallet debit error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

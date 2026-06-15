@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUpdateCustomer } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,8 @@ type Props = {
 
 export function BookServicesWizard({ initialCustomer = null }: Props) {
   const qc = useQueryClient();
-  const [stepIndex, setStepIndex] = useState(0);
+  const reactivateCustomer = useUpdateCustomer();
+  const [stepIndex, setStepIndex] = useState(() => (initialCustomer ? 1 : 0));
   const [draft, setDraft] = useState<BookServicesDraft>(() => ({
     ...EMPTY_BOOK_SERVICES_DRAFT,
     customer: initialCustomer,
@@ -57,6 +59,13 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     setDraft(prev => ({ ...prev, ...patch }));
     setStepError(null);
   }, []);
+
+  useEffect(() => {
+    if (initialCustomer) {
+      setDraft(prev => ({ ...prev, customer: initialCustomer }));
+      setStepIndex(prev => (prev === 0 ? 1 : prev));
+    }
+  }, [initialCustomer?.id, initialCustomer?.name, initialCustomer?.phone]);
 
   const handleCustomerChange = useCallback((customer: CustomerSearchValue | null) => {
     setDraft(prev => ({
@@ -138,6 +147,18 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     setCreating(true);
     setCreateError(null);
     try {
+      if (draft.customer?.id) {
+        const res = await fetch(`/api/customers/${draft.customer.id}`, { credentials: "include" });
+        if (res.ok) {
+          const row = await res.json() as { status?: string };
+          if (row.status === "inactive") {
+            await reactivateCustomer.mutateAsync({
+              id: draft.customer.id,
+              data: { status: "active" } as { status: "active" },
+            });
+          }
+        }
+      }
       const result = await createServiceContract(draft, addonList);
       const billing = await createContractBilling(result.registryId, draft.billingAction);
       setContractResult(result);
@@ -149,7 +170,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       qc.invalidateQueries({ queryKey: ["quotations"] });
       qc.invalidateQueries({ queryKey: ["/api/invoices"] });
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : "Failed to create contract");
+      setCreateError(e instanceof Error ? e.message : "Failed to complete booking");
     } finally {
       setCreating(false);
     }
@@ -329,7 +350,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
         )}
         {isReview && (
           <p className="text-sm text-muted-foreground text-right flex-1">
-            Creates contract, then {draft.billingAction === "invoice" ? "invoice" : "quotation"}.
+            Confirms the booking and creates {draft.billingAction === "invoice" ? "an invoice" : "a quotation"}.
           </p>
         )}
       </div>

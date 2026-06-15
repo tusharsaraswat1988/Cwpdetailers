@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
 import { db } from "@workspace/db";
-import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable, staffRoleMasterTable, staffLocationLogsTable } from "@workspace/db";
+import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable, staffRoleMasterTable, staffLocationLogsTable, sessionsTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
 import { hashPassword } from "../lib/passwords";
@@ -285,6 +285,21 @@ async function createStaffLoginAccount(
   return { userId: user.id, phone: user.phone };
 }
 
+async function loadStaffLoginUser(staffMember: typeof staffTable.$inferSelect) {
+  if (staffMember.userId) {
+    const [byId] = await db.select().from(usersTable).where(eq(usersTable.id, staffMember.userId)).limit(1);
+    if (byId) return byId;
+  }
+  const [byStaffId] = await db.select().from(usersTable).where(eq(usersTable.staffId, staffMember.id)).limit(1);
+  if (byStaffId) return byStaffId;
+  const [byPhone] = await db.select().from(usersTable).where(eq(usersTable.phone, staffMember.phone)).limit(1);
+  return byPhone ?? null;
+}
+
+async function relinkStaffUserId(staffId: number, userId: number) {
+  await db.update(staffTable).set({ userId, updatedAt: new Date() }).where(eq(staffTable.id, staffId));
+}
+
 router.get("/staff/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -404,7 +419,15 @@ router.post("/staff/:id/create-account", async (req, res) => {
 
     const { password } = req.body;
     if (!password) return res.status(400).json({ error: "password is required" });
-    if (staffMember.userId) return res.status(400).json({ error: "Account already exists" });
+    if (staffMember.userId) {
+      const existingLogin = await loadStaffLoginUser(staffMember);
+      if (existingLogin) {
+        return res.status(400).json({ error: "Account already exists" });
+      }
+      const [cleared] = await db.update(staffTable).set({ userId: null, updatedAt: new Date() })
+        .where(eq(staffTable.id, id)).returning();
+      if (cleared) staffMember = cleared;
+    }
     if (staffMember.verificationStatus === "rejected" || staffMember.verificationStatus === "suspended") {
       return res.status(400).json({ error: "Staff must be verified before creating an account" });
     }
@@ -425,6 +448,55 @@ router.post("/staff/:id/create-account", async (req, res) => {
       return res.status(400).json({ error: err.message });
     }
     req.log.error({ err }, "Create staff account error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/staff/:id/reset-password", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    let staffMember = await loadStaffInScope(req, id);
+    if (!staffMember) return res.status(404).json({ error: "Staff not found" });
+
+    const { password } = req.body;
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    let user = await loadStaffLoginUser(staffMember);
+    if (!user) {
+      const [cleared] = await db.update(staffTable).set({ userId: null, updatedAt: new Date() })
+        .where(eq(staffTable.id, staffMember.id)).returning();
+      if (cleared) staffMember = cleared;
+      const result = await createStaffLoginAccount(staffMember, password);
+      return res.json({ message: "Login account created", repaired: true, ...result });
+    }
+
+    if (staffMember.userId !== user.id) {
+      await relinkStaffUserId(staffMember.id, user.id);
+    }
+
+    const wasRepaired = staffMember.userId !== user.id;
+    const passwordHash = await hashPassword(password);
+    await db.update(usersTable).set({
+      passwordHash,
+      staffId: staffMember.id,
+      role: "staff",
+      updatedAt: new Date(),
+    }).where(eq(usersTable.id, user.id));
+    await db.update(sessionsTable).set({ revokedAt: new Date() }).where(eq(sessionsTable.userId, user.id));
+
+    return res.json({
+      message: wasRepaired ? "Login account repaired and password set" : "Password reset",
+      userId: user.id,
+      phone: user.phone,
+      repaired: wasRepaired,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("already exists")) {
+      return res.status(400).json({ error: err.message });
+    }
+    req.log.error({ err }, "Reset staff password error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -76,7 +76,7 @@ export function LocationPicker({ value, onChange, savedLocations, onSaveNew, req
       <div className="flex items-center gap-2">
         <MapPin size={14} className="text-primary shrink-0" />
         <Label className="font-semibold text-sm">
-          Service Location {required && <span className="text-destructive">*</span>}
+          Service address {required && <span className="text-destructive">*</span>}
         </Label>
       </div>
 

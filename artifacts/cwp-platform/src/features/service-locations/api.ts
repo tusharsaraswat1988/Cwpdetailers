@@ -18,6 +18,7 @@ export type ServiceLocation = {
   createdAt: string;
   updatedAt: string;
   linkedCustomerCount?: number;
+  primaryCustomerName?: string | null;
 };
 
 export type CustomerLocationLink = {

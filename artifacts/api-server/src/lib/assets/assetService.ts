@@ -448,6 +448,7 @@ export async function listAssetsForQuery(params: {
       serviceLocationId: locationAssetLinksTable.serviceLocationId,
       serviceLocationLabel: serviceLocationsTable.label,
       customerId: customerAssetLinksTable.customerId,
+      customerName: customersTable.name,
     })
     .from(assetsTable)
     .leftJoin(locationAssetLinksTable, and(
@@ -459,20 +460,19 @@ export async function listAssetsForQuery(params: {
       eq(customerAssetLinksTable.assetId, assetsTable.id),
       activeLinkPredicate(),
       inArray(customerAssetLinksTable.linkType, ["commercial", "operational"]),
-    ));
+    ))
+    .leftJoin(customersTable, eq(customerAssetLinksTable.customerId, customersTable.id));
 
-  const rows = params.customerId || params.serviceLocationId
-    ? await baseQuery.where(where).orderBy(desc(assetsTable.updatedAt)).limit(params.limit).offset(params.offset)
-    : await db.select().from(assetsTable).orderBy(desc(assetsTable.updatedAt)).limit(params.limit).offset(params.offset);
+  const rows = await (where ? baseQuery.where(where) : baseQuery)
+    .orderBy(desc(assetsTable.updatedAt))
+    .limit(params.limit)
+    .offset(params.offset);
 
-  const countSource = params.customerId || params.serviceLocationId
-    ? db.select({ count: sql<number>`count(distinct ${assetsTable.id})` }).from(assetsTable)
-      .leftJoin(customerAssetLinksTable, eq(customerAssetLinksTable.assetId, assetsTable.id))
-      .leftJoin(locationAssetLinksTable, eq(locationAssetLinksTable.assetId, assetsTable.id))
-      .where(where)
-    : db.select({ count: sql<number>`count(*)` }).from(assetsTable);
+  const countQuery = db.select({ count: sql<number>`count(distinct ${assetsTable.id})` }).from(assetsTable)
+    .leftJoin(customerAssetLinksTable, eq(customerAssetLinksTable.assetId, assetsTable.id))
+    .leftJoin(locationAssetLinksTable, eq(locationAssetLinksTable.assetId, assetsTable.id));
 
-  const [countRow] = await countSource;
+  const [countRow] = await (where ? countQuery.where(where) : countQuery);
   return { data: rows, total: Number(countRow?.count ?? 0) };
 }
 

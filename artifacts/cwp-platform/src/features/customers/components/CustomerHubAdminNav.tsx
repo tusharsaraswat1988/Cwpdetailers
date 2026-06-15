@@ -1,13 +1,13 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { ClipboardList } from "lucide-react";
+import { Users } from "lucide-react";
 import {
   CUSTOMER_HUB_CHILDREN,
   isAdminNavItemActive,
 } from "@/components/layout/adminNavConfig";
 import { useAuth } from "@/lib/auth";
 
-/** In-page tabs for the unified Customers & Services hub. */
+/** In-page tabs for customer-related admin screens. */
 export function CustomerHubAdminNav() {
   const [location] = useLocation();
   const { hasPermission } = useAuth();
@@ -21,8 +21,8 @@ export function CustomerHubAdminNav() {
   return (
     <div className="flex flex-wrap gap-2 border-b border-border pb-3 mb-4">
       <div className="flex items-center gap-2 mr-2">
-        <ClipboardList className="h-5 w-5 text-primary" />
-        <span className="font-display font-bold text-lg">Customers</span>
+        <Users className="h-5 w-5 text-primary" />
+        <span className="font-display font-bold text-lg">Customer Overview</span>
       </div>
       {items.map(item => {
         const Icon = item.icon;

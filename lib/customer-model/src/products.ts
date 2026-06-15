@@ -61,7 +61,7 @@ export const SERVICE_PRODUCTS = {
     id: "wash_package",
     productLine: "wash_package" as ProductLineId,
     label: "Car wash package",
-    description: "Prepaid wash credits",
+    description: "Prepaid wash packages",
     icon: "package",
     flow: "grant_package" as ServiceProductFlow,
     requiresAsset: "vehicle" as ServiceAssetRequirement,
@@ -112,8 +112,8 @@ export const HUB_SECTIONS: Record<HubSectionId, {
   always?: boolean;
 }> = {
   contracts: { id: "contracts", label: "Contract registry", always: true },
-  dailyCleaning: { id: "dailyCleaning", label: "Daily car cleaning (DCMS)", productLines: ["daily_cleaning"] },
-  entitlements: { id: "entitlements", label: "Wash packages & credits", productLines: ["wash_package"] },
+  dailyCleaning: { id: "dailyCleaning", label: "Daily car cleaning", productLines: ["daily_cleaning"] },
+  entitlements: { id: "entitlements", label: "Wash packages", productLines: ["wash_package"] },
   legacySubscriptions: {
     id: "legacySubscriptions",
     label: "Service contracts",

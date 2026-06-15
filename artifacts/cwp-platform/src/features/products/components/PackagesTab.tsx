@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useCatalogPackages, usePackageMutations, type CatalogPackage } from "@/features/service-catalog/api";
 import { HomepagePlanToggle } from "./HomepagePlanToggle";
 import { useToast } from "@/hooks/use-toast";
+import { useCatalogGovernance } from "@/lib/catalogGovernance";
 import { Plus, Pencil } from "lucide-react";
 
 type PackageForm = {
@@ -47,9 +48,46 @@ function packageToForm(pkg: CatalogPackage): PackageForm {
   };
 }
 
-export function PackagesTab() {
+export type PackageFilter = "wash" | "solar_6" | "solar_12";
+
+function filterPackages(list: CatalogPackage[], filter?: PackageFilter): CatalogPackage[] {
+  if (!filter) return list;
+  return list.filter(pkg => {
+    const ents = pkg.entitlements ?? [];
+    const hasSolar = ents.some(e => e.entitlementType === "solar_visit");
+    const hasWash = ents.some(e => e.entitlementType === "wash_credit");
+    const hasCleaning = ents.some(e => e.entitlementType === "cleaning_credit");
+    if (filter === "wash") {
+      return hasWash && !hasSolar && !hasCleaning;
+    }
+    if (!hasSolar) return false;
+    const name = pkg.name.toLowerCase();
+    const slug = pkg.slug.toLowerCase();
+    if (filter === "solar_6") {
+      return name.includes("6") || slug.includes("6-month") || slug.includes("6mo") || (pkg.validityDays >= 150 && pkg.validityDays <= 210);
+    }
+    return name.includes("12") || slug.includes("12-month") || slug.includes("12mo") || pkg.validityDays >= 300;
+  });
+}
+
+function inclusionLabel(type: string, count: number): string {
+  if (type === "wash_credit") return `${count} wash${count === 1 ? "" : "es"} included`;
+  if (type === "solar_visit") return `${count} visit${count === 1 ? "" : "s"} included`;
+  return `${count} included`;
+}
+
+type Props = {
+  packageFilter?: PackageFilter;
+};
+
+export function PackagesTab({ packageFilter }: Props = {}) {
   const { toast } = useToast();
+  const { hqEditor } = useCatalogGovernance();
   const { data: packages, isLoading } = useCatalogPackages();
+  const filtered = useMemo(
+    () => filterPackages(packages ?? [], packageFilter),
+    [packages, packageFilter],
+  );
   const { create, update } = usePackageMutations();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogPackage | null>(null);
@@ -104,17 +142,23 @@ export function PackagesTab() {
 
   const isSaving = create.isPending || update.isPending;
 
+  const showHeader = !packageFilter || packageFilter === "wash";
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="font-display font-bold text-lg">Wash & AMC packages</h2>
-          <p className="text-sm text-muted-foreground">Prepaid credits sold to customers. Toggle homepage visibility per card.</p>
+      {showHeader && (
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="font-display font-bold text-lg">Wash packages</h2>
+            <p className="text-sm text-muted-foreground">Prepaid multi-wash deals — 4-wash, 8-wash, 12-wash packages.{!hqEditor ? " Prices set by HQ." : ""}</p>
+          </div>
+          {hqEditor && (
+            <Button size="sm" onClick={openCreate}>
+              <Plus size={14} className="mr-1" /> New package
+            </Button>
+          )}
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus size={14} className="mr-1" /> New package
-        </Button>
-      </div>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
@@ -147,11 +191,11 @@ export function PackagesTab() {
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading packages…</p>
-      ) : !(packages ?? []).length ? (
+      ) : !filtered.length ? (
         <p className="text-sm text-muted-foreground">No packages yet.</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {(packages ?? []).map(pkg => (
+          {filtered.map(pkg => (
             <Card key={pkg.id} className={pkg.isHighlighted ? "ring-2 ring-primary/30" : ""}>
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start gap-2">
@@ -165,22 +209,26 @@ export function PackagesTab() {
                 <div className="flex flex-wrap gap-1">
                   {(pkg.entitlements ?? []).map(e => (
                     <Badge key={e.id} variant="outline" className="text-xs">
-                      {e.creditCount}× {e.entitlementType.replace(/_/g, " ")}
+                      {inclusionLabel(e.entitlementType, e.creditCount)}
                     </Badge>
                   ))}
                 </div>
-                <HomepagePlanToggle
-                  checked={pkg.showOnHomepage ?? false}
-                  disabled={update.isPending}
-                  onChange={v => toggleField(pkg, "showOnHomepage", v)}
-                  className="pt-2 border-t border-border"
-                />
+                {hqEditor && (
+                  <HomepagePlanToggle
+                    checked={pkg.showOnHomepage ?? false}
+                    disabled={update.isPending}
+                    onChange={v => toggleField(pkg, "showOnHomepage", v)}
+                    className="pt-2 border-t border-border"
+                  />
+                )}
               </CardContent>
-              <CardFooter className="pt-0">
-                <Button size="sm" variant="outline" className="w-full" onClick={() => openEdit(pkg)}>
-                  <Pencil size={14} className="mr-1" /> Edit
-                </Button>
-              </CardFooter>
+              {hqEditor && (
+                <CardFooter className="pt-0">
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => openEdit(pkg)}>
+                    <Pencil size={14} className="mr-1" /> Edit
+                  </Button>
+                </CardFooter>
+              )}
             </Card>
           ))}
         </div>

@@ -144,7 +144,7 @@ export default function AdminSubscriptions() {
             <h1 className="font-display font-bold text-2xl">Legacy contracts</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
               {data?.total ?? 0} monthly wash &amp; solar AMC contracts — daily cleaning runs in{" "}
-              <Link href="/admin/daily-cleaning/subscriptions" className="text-primary hover:underline">DCMS Operations</Link>
+              <Link href="/admin/daily-cleaning/subscriptions" className="text-primary hover:underline">Legacy Daily Cleaning</Link>
             </p>
           </div>
           <div className="flex items-center gap-3">

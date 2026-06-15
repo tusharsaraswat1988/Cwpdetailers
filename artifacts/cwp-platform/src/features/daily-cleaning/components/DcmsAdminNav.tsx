@@ -5,7 +5,7 @@ import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHub
 
 const tabs = [
   { href: "/admin/daily-cleaning", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/admin/services?tab=dcms-plans", label: "Plans", icon: Package },
+  { href: "/admin/services?tab=daily-cleaning", label: "Plans", icon: Package },
   { href: "/admin/daily-cleaning/subscriptions", label: "Subscriptions", icon: CreditCard },
   { href: "/admin/daily-cleaning/visits", label: "Visits", icon: ClipboardList },
   { href: "/admin/daily-cleaning/washes", label: "Wash History", icon: Droplets },
@@ -21,13 +21,13 @@ export function DcmsAdminNav() {
       <div className="flex flex-wrap gap-2 border-b border-border pb-3">
       <div className="flex items-center gap-2 mr-4">
         <Sparkles className="h-5 w-5 text-primary" />
-        <span className="font-display font-bold text-lg">Daily Cleaning</span>
+        <span className="font-display font-bold text-lg">Daily Cleaning (Legacy)</span>
       </div>
       {tabs.map(({ href, label, icon: Icon, exact, deprecated }) => {
         const active = exact
           ? location === href
-          : href.includes("dcms-plans")
-            ? location.includes("tab=dcms-plans") || location.startsWith("/admin/daily-cleaning/plans")
+          : href.includes("daily-cleaning")
+            ? location.includes("tab=daily-cleaning") || location.startsWith("/admin/daily-cleaning/plans")
             : location.startsWith(href.split("?")[0]!);
         return (
           <Link

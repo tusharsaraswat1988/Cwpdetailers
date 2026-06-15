@@ -22,6 +22,7 @@ import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
 import { VehicleReferencePhotoEditor } from "@/components/shared/VehicleReferencePhotoEditor";
 import { vehiclePhotosFromRecord } from "@/components/shared/VehicleReferencePhotos";
 import { roleSlugForVehicleAssignment } from "@/lib/staff-ecosystem/roles";
+import { CustomerProfileBackLink } from "@/components/layout/CustomerBookingDataContext";
 import { CustomerSearchSelect, type CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
 
 export default function AssetDetail() {
@@ -117,9 +118,13 @@ export default function AssetDetail() {
   return (
     <AdminLayout>
       <div className="p-6 space-y-6 max-w-3xl">
-        <Link href="/admin/assets" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-          <ArrowLeft size={14} /> Back to Assets
-        </Link>
+        {activeCustomerId ? (
+          <CustomerProfileBackLink customerId={activeCustomerId} label="Back to customer profile" />
+        ) : (
+          <Link href="/admin/customers" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+            <ArrowLeft size={14} /> Back to Customer Profile
+          </Link>
+        )}
 
         {isLoading ? (
           <Skeleton className="h-32 w-full" />
@@ -161,7 +166,7 @@ export default function AssetDetail() {
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2"><MapPin size={16} className="text-primary" /> Location placement history</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2"><MapPin size={16} className="text-primary" /> Service address history</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {(asset.locationLinks ?? []).map(link => (
@@ -222,7 +227,7 @@ export default function AssetDetail() {
             </Card>
           </>
         ) : (
-          <p className="text-muted-foreground">Asset not found.</p>
+          <p className="text-muted-foreground">Vehicle or solar site not found.</p>
         )}
       </div>
     </AdminLayout>

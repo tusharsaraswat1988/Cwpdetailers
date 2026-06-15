@@ -60,7 +60,7 @@ export default function DcmsAssignmentsPage() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Legacy assignment path — deprecated</AlertTitle>
           <AlertDescription>
-            DCMS subscription assignment is superseded by the unified queue at{" "}
+            Daily cleaning subscription assignment is superseded by the unified queue at{" "}
             <Link href="/admin/assign-services" className="font-medium underline underline-offset-2">
               Assign Services
             </Link>

@@ -60,8 +60,8 @@ export function resolveFulfillmentHint(draft: BookServicesDraft): { mode: Fulfil
 export function fulfillmentLabel(mode: FulfillmentMode): string {
   switch (mode) {
     case "one_time": return "One-time job";
-    case "contract_recurring": return "Plan with schedule";
-    case "contract_credits": return "Prepaid package";
+    case "contract_recurring": return "Monthly plan";
+    case "contract_credits": return "Wash package";
     default: return mode;
   }
 }

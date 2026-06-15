@@ -193,15 +193,18 @@ export async function listPlans(
 
 
   if (vehicleId) {
+    const enriched = await enrichPlans(plans);
+    const active = enriched.filter(p => p.isActive);
 
     const vehicle = await getVehiclePlanContext(vehicleId);
+    if (!vehicle) {
+      // Vehicle missing model/category linkage — offer the same sellable plans as catalog.
+      return active;
+    }
 
-    if (!vehicle) return [];
-
-    const enriched = await enrichPlans(plans);
-
-    return enriched.filter(p => planMatchesVehicle(p, vehicle, p.seatCount));
-
+    const matched = active.filter(p => planMatchesVehicle(p, vehicle, p.seatCount));
+    // Prefer vehicle-matched pricing; fall back so daily cleaning is never hidden in Book Service.
+    return matched.length > 0 ? matched : active;
   }
 
 

@@ -33,6 +33,8 @@ export type PendingAssignmentView = {
   customerName: string;
   serviceLocationId: number | null;
   serviceLocationLabel: string | null;
+  serviceLocationType: string | null;
+  serviceLocationCity: string | null;
   assetId: number | null;
   assetLabel: string | null;
   serviceId: number | null;
@@ -50,6 +52,8 @@ export type AssignedServiceView = {
   customerName: string;
   serviceLocationId: number | null;
   serviceLocationLabel: string | null;
+  serviceLocationType: string | null;
+  serviceLocationCity: string | null;
   assetId: number | null;
   assetLabel: string | null;
   assignedStaffId: number;
@@ -156,6 +160,8 @@ export async function listPendingAssignments(
     pending: pendingServiceAssignmentsTable,
     customerName: customersTable.name,
     locationLabel: serviceLocationsTable.label,
+    locationType: serviceLocationsTable.locationType,
+    locationCity: serviceLocationsTable.city,
     assetLabel: assetsTable.label,
     productLine: customerContractsTable.productLine,
   })
@@ -181,6 +187,8 @@ export async function listPendingAssignments(
     customerName: r.customerName,
     serviceLocationId: r.pending.serviceLocationId,
     serviceLocationLabel: r.locationLabel,
+    serviceLocationType: r.locationType ?? null,
+    serviceLocationCity: r.locationCity ?? null,
     assetId: r.pending.assetId,
     assetLabel: r.assetLabel,
     serviceId: r.pending.serviceId,
@@ -285,10 +293,16 @@ export async function assignPendingService(
     branchId: pending.branchId,
   });
 
-  const [location] = await db.select({ label: serviceLocationsTable.label })
-    .from(serviceLocationsTable)
-    .where(eq(serviceLocationsTable.id, pending.serviceLocationId))
-    .limit(1);
+  const [location] = pending.serviceLocationId
+    ? await db.select({
+      label: serviceLocationsTable.label,
+      locationType: serviceLocationsTable.locationType,
+      city: serviceLocationsTable.city,
+    })
+      .from(serviceLocationsTable)
+      .where(eq(serviceLocationsTable.id, pending.serviceLocationId))
+      .limit(1)
+    : [undefined];
 
   const [asset] = pending.assetId
     ? await db.select({ label: assetsTable.label }).from(assetsTable)
@@ -306,6 +320,8 @@ export async function assignPendingService(
     customerName: customer?.name ?? "Customer",
     serviceLocationId: pending.serviceLocationId,
     serviceLocationLabel: location?.label ?? null,
+    serviceLocationType: location?.locationType ?? null,
+    serviceLocationCity: location?.city ?? null,
     assetId: pending.assetId,
     assetLabel: asset?.label ?? null,
     assignedStaffId: staffId,
@@ -353,6 +369,8 @@ export async function listAssignedServices(
     customerName: customersTable.name,
     staffName: staffTable.name,
     locationLabel: serviceLocationsTable.label,
+    locationType: serviceLocationsTable.locationType,
+    locationCity: serviceLocationsTable.city,
     assetLabel: assetsTable.label,
   })
     .from(serviceAssignmentsTable)
@@ -371,6 +389,8 @@ export async function listAssignedServices(
     customerName: r.customerName,
     serviceLocationId: r.assignment.serviceLocationId,
     serviceLocationLabel: r.locationLabel,
+    serviceLocationType: r.locationType ?? null,
+    serviceLocationCity: r.locationCity ?? null,
     assetId: r.assignment.assetId,
     assetLabel: r.assetLabel,
     assignedStaffId: r.assignment.assignedStaffId,

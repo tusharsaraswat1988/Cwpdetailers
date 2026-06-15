@@ -128,6 +128,7 @@ router.use(
     { match: /\/verify$/, method: "POST", action: "approve" },
     { match: /\/reject$/, method: "POST", action: "approve" },
     { match: /\/create-account$/, method: "POST", action: "approve" },
+    { match: /\/reset-password$/, method: "POST", action: "approve" },
     { match: /\/attendance$/, method: "POST", action: "edit" },
     { match: /\/verification-status$/, method: "POST", action: "approve" },
     { match: /\/ecosystem$/, method: "PATCH", action: "edit" },
@@ -173,6 +174,7 @@ router.use(guardResource("invoices"), billingRouter);
 router.use(
   guardResource("franchisees", [
     { match: /\/create-account$/, method: "POST", action: "approve" },
+    { match: /\/reset-password$/, method: "POST", action: "approve" },
   ]),
   franchiseesRouter,
 );

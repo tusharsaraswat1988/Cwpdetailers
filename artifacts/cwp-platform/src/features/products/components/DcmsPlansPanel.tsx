@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { useCatalogGovernance } from "@/lib/catalogGovernance";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -74,6 +75,7 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
   const { data: catalogAddons } = useCatalogAddons();
   const { create, update, remove } = useDcmsPlanMutations();
   const { toast } = useToast();
+  const { hqEditor } = useCatalogGovernance();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DcmsPlan | null>(null);
   const [form, setForm] = useState<PlanForm>(emptyForm());
@@ -282,19 +284,21 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
     <div className="space-y-4">
       <div className="flex justify-between items-center gap-3">
         <div>
-          <h2 className="font-display font-bold text-lg">DCMS daily cleaning plans</h2>
+          <h2 className="font-display font-bold text-lg">Daily cleaning plans</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Per-vehicle subscription templates. Bundle catalog add-ons; toggle homepage visibility on each card.
+            Monthly plans per vehicle — price, daily cleans, washes, and weekly offs.{!hqEditor ? " Prices set by HQ." : ""}
           </p>
           {embedded && (
             <Link href="/admin/daily-cleaning" className="text-xs text-primary hover:underline mt-1 inline-block">
-              DCMS operations (visits, assignments) →
+              Legacy daily cleaning operations (visits, routes) →
             </Link>
           )}
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-1" /> Create plan
-        </Button>
+        {hqEditor && (
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-1" /> Create plan
+          </Button>
+        )}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -355,10 +359,10 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
               </div>
             </div>
 
-            <div><Label>Name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><Label>Base price (₹)</Label><Input value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} /></div>
-            <div><Label>Included cleanings</Label><Input type="number" value={form.includedCleanings} onChange={e => setForm(f => ({ ...f, includedCleanings: e.target.value }))} /></div>
-            <div><Label>Included washes</Label><Input type="number" value={form.includedWashes} onChange={e => setForm(f => ({ ...f, includedWashes: e.target.value }))} /></div>
+            <div><Label>Plan name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>Price per month (₹)</Label><Input value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} /></div>
+            <div><Label>Daily cleans included</Label><Input type="number" value={form.includedCleanings} onChange={e => setForm(f => ({ ...f, includedCleanings: e.target.value }))} /></div>
+            <div><Label>Washes included</Label><Input type="number" value={form.includedWashes} onChange={e => setForm(f => ({ ...f, includedWashes: e.target.value }))} /></div>
             <div><Label>Weekly offs</Label><Input type="number" value={form.weeklyOffs} onChange={e => setForm(f => ({ ...f, weeklyOffs: e.target.value }))} /></div>
 
             <HomepagePlanToggle
@@ -411,7 +415,7 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
           <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
         </div>
       ) : !plans?.length ? (
-        <p className="text-sm text-muted-foreground">No DCMS plans yet.</p>
+        <p className="text-sm text-muted-foreground">No daily cleaning plans yet.</p>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {plans.map(plan => (
@@ -441,18 +445,22 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
                 />
               </CardContent>
               <CardFooter className="gap-2 pt-0">
-                <Button size="sm" variant="outline" className="flex-1" onClick={() => openEdit(plan)}>
-                  <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-destructive hover:text-destructive"
-                  disabled={plan.hasSubscriptions || remove.isPending}
-                  onClick={() => void handleDelete(plan)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                </Button>
+                {hqEditor && (
+                  <>
+                    <Button size="sm" variant="outline" className="flex-1" onClick={() => openEdit(plan)}>
+                      <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      disabled={plan.hasSubscriptions || remove.isPending}
+                      onClick={() => void handleDelete(plan)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                    </Button>
+                  </>
+                )}
               </CardFooter>
             </Card>
           ))}

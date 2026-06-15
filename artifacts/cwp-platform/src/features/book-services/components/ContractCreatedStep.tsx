@@ -36,25 +36,25 @@ export function ContractCreatedStep({ draft, result, billing, onBookAnother }: P
         <div>
           <h2 className="font-display font-semibold text-lg">Sale recorded</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Service contract and billing document created. Assignment is queued as pending — staff dispatch comes in Sprint 6.
+            Booking saved, bill created, and job added to Assign Service for your team.
           </p>
         </div>
       </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Contract & billing</CardTitle>
+          <CardTitle className="text-base">Booking &amp; billing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <Row label="Customer" value={draft.customer ? `${draft.customer.name}` : "—"} />
-          <Row label="Location" value={draft.location?.label ?? "—"} />
+          <Row label="Service address" value={draft.location?.label ?? "—"} />
           <Row
-            label="Asset"
+            label={draft.asset?.assetType === "solar_site" ? "Solar site" : "Vehicle"}
             value={draft.asset ? `${draft.asset.label} (${ASSET_TYPE_LABELS[draft.asset.assetType]})` : "—"}
           />
           <Row label="Service" value={draft.service?.name ?? result.label} />
           <Row label="Type" value={fulfillmentLabel(result.contractType)} />
-          <Row label="Contract ID" value={`#${result.registryId}`} />
+          <Row label="Booking ref" value={`#${result.registryId}`} />
           {result.bookingId && <Row label="Job reference" value={`#${result.bookingId}`} />}
           <Row label="Payment terms" value={paymentTermsLabel(draft.paymentTerms)} />
 
