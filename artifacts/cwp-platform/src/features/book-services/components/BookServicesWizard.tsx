@@ -181,23 +181,12 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       ...EMPTY_BOOK_SERVICES_DRAFT,
       customer: initialCustomer,
     });
-    setStepIndex(0);
+    setStepIndex(initialCustomer ? 1 : 0);
     setContractResult(null);
     setBillingResult(null);
     setCreateError(null);
     setStepError(null);
   }, [initialCustomer]);
-
-  if (contractResult) {
-    return (
-      <ContractCreatedStep
-        draft={draft}
-        result={contractResult}
-        billing={billingResult}
-        onBookAnother={resetWizard}
-      />
-    );
-  }
 
   const stepContent = useMemo(() => {
     switch (currentStep.id) {
@@ -277,6 +266,17 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     createError,
     handleCreateContract,
   ]);
+
+  if (contractResult) {
+    return (
+      <ContractCreatedStep
+        draft={draft}
+        result={contractResult}
+        billing={billingResult}
+        onBookAnother={resetWizard}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6" data-testid="book-services-wizard">
