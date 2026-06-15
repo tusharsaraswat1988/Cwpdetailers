@@ -4,6 +4,9 @@ import { Redirect } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import StaffAppShell from "@/components/layout/StaffAppShell";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
+import { StaffPushPrompt } from "@/components/staff/StaffPushPrompt";
+import { StaffProfileCompletionBanner } from "@/features/staff/components/StaffProfileCompletionBanner";
+import { StaffVerificationBanner } from "@/features/staff/components/StaffVerificationBanner";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { ActiveJobHero } from "@/components/staff/ActiveJobHero";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
@@ -21,6 +24,12 @@ export default function StaffDashboard() {
   const { data: myContext } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-context"],
     queryFn: staffEcosystemApi.getMyContext,
+    enabled: Boolean(user?.staffId),
+  });
+
+  const { data: myProfile } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-profile"],
+    queryFn: staffEcosystemApi.getMyProfile,
     enabled: Boolean(user?.staffId),
   });
 
@@ -54,6 +63,20 @@ export default function StaffDashboard() {
   return (
     <StaffAppShell>
       <div className="space-y-5 pb-2">
+        <StaffPushPrompt />
+
+        <div className="rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground" data-testid="staff-jobs-how-it-works">
+          <span className="font-medium text-foreground">Jobs kaise aati hain: </span>
+          Admin assign karte hi aapko vibration + notification milti hai. App har 30 sec mein Today list refresh karti hai — nayi job khud dikhegi.
+        </div>
+
+        {myProfile?.profileCompletion && (
+          <StaffProfileCompletionBanner completion={myProfile.profileCompletion} compact />
+        )}
+        {myProfile && (
+          <StaffVerificationBanner status={myProfile.verificationStatus} notes={myProfile.verificationNotes} />
+        )}
+
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <p className="font-display font-bold text-xl">
             Good {new Date().getHours() < 12 ? "morning" : "afternoon"}, {user?.name?.split(" ")[0]}

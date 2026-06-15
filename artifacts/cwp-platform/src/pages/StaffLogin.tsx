@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useLogin } from "@workspace/api-client-react";
 import type { AuthResponse } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
@@ -10,11 +10,11 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { useToast } from "@/hooks/use-toast";
 import { submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { useBranding } from "@/lib/branding";
 import { Loader2 } from "lucide-react";
-import { Link } from "wouter";
 
-export default function Login() {
+export default function StaffLogin() {
   const [, setLocation] = useLocation();
   const { login } = useAuth();
   const branding = useBranding();
@@ -26,20 +26,18 @@ export default function Login() {
   const loginMutation = useLogin({
     mutation: {
       onSuccess: (data: AuthResponse) => {
-        const userRole = data.user.role;
-        if (userRole !== "customer" && userRole !== "staff") {
+        if (data.user.role !== "staff") {
           toast({
             title: "Access denied",
-            description: "This sign-in is for customers and staff only.",
+            description: "This portal is for field staff only. Use the customer login or admin portal.",
             variant: "destructive",
           });
           return;
         }
         login(data.user, data.token);
-        if (userRole === "staff") setLocation("/staff/dashboard");
-        else if (userRole === "customer") setLocation("/customer/dashboard");
+        setLocation("/staff/dashboard");
       },
-      onError: (err: any) => {
+      onError: (err: { response?: { data?: { error?: string } } }) => {
         toast({
           title: "Login failed",
           description: err?.response?.data?.error ?? "Invalid phone number or password.",
@@ -61,20 +59,27 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-secondary flex items-center justify-center p-4 sm:p-6" data-testid="login-page">
+    <div className="min-h-[100dvh] bg-secondary flex items-center justify-center p-4 sm:p-6" data-testid="staff-login-page">
       <div className="w-full max-w-md">
         <div className="text-center mb-8 sm:mb-10">
           <div className="inline-flex items-center justify-center mb-4">
             <BrandLogo variant="login" lazy={false} />
           </div>
-          <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">Welcome back</h1>
-          <p className="text-white/50 mt-1 text-sm sm:text-base">Sign in to {branding.companyName}</p>
+          <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">{branding.brandName} Staff</h1>
+          <p className="text-white/50 mt-1 text-sm sm:text-base">Field team sign-in</p>
         </div>
+
+        <PwaInstallBanner
+          portalKey="staff"
+          title={`Install ${branding.brandName} Staff app`}
+          description="Home screen par add karein — jobs aur alerts turant milein."
+          className="mx-0 mb-6 border-white/15 bg-white/5 shadow-none [&_p]:text-white/90 [&_.text-muted-foreground]:text-white/55 [&_strong]:text-white"
+        />
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <PhoneInput
-            id="phone"
-            data-testid="input-phone"
+            id="staff-phone"
+            data-testid="input-staff-phone"
             label="Phone Number"
             value={phone}
             onChange={setPhone}
@@ -83,10 +88,10 @@ export default function Login() {
             className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary [&+p]:text-white/40"
           />
           <div>
-            <Label htmlFor="password" className="text-white/70 text-sm">Password</Label>
+            <Label htmlFor="staff-password" className="text-white/70 text-sm">Password</Label>
             <Input
-              id="password"
-              data-testid="input-password"
+              id="staff-password"
+              data-testid="input-staff-password"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -96,7 +101,7 @@ export default function Login() {
           </div>
           <Button
             type="submit"
-            data-testid="btn-submit-login"
+            data-testid="btn-submit-staff-login"
             disabled={loginMutation.isPending}
             className="w-full bg-primary text-secondary hover:bg-primary/90 font-semibold py-2.5 mt-2"
           >
@@ -105,27 +110,13 @@ export default function Login() {
         </form>
 
         <div className="mt-6 text-center space-y-2">
-          <p className="text-white/30 text-xs px-2">Use your registered phone and password — your portal opens automatically.</p>
-          <p className="text-white/40 text-sm">
-            Field staff?{" "}
-            <Link href="/staff/login" className="text-primary hover:underline">Staff login</Link>
+          <p className="text-white/30 text-xs px-2">
+            Credentials are created by admin after profile verification.
           </p>
           <p className="text-white/40 text-sm">
-            New customer?{" "}
-            <Link href="/register" className="text-primary hover:underline">Create account</Link>
+            Customer?{" "}
+            <Link href="/login" className="text-primary hover:underline">Customer login</Link>
           </p>
-        </div>
-
-        <div className="mt-8 pt-6 border-t border-white/5 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
-          {[
-            { href: "/privacy-policy", label: "Privacy Policy" },
-            { href: "/terms-and-conditions", label: "Terms" },
-            { href: "/contact-us", label: "Contact" },
-          ].map(link => (
-            <Link key={link.href} href={link.href} className="text-white/20 hover:text-white/40 text-xs transition-colors">
-              {link.label}
-            </Link>
-          ))}
         </div>
       </div>
     </div>

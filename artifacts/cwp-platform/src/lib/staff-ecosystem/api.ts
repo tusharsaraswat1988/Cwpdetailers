@@ -157,8 +157,12 @@ export type TeamComplaint = {
   priority: string;
   type: string;
   relatedStaffId: number | null;
+  resolution?: string | null;
+  resolvedAt?: string | null;
   createdAt: string;
 };
+
+export type StaffMeProfile = Omit<StaffEcosystemProfile, "notes"> & { notes: never[] };
 
 export type StaffDashboardStats = {
   totalStaff: number;
@@ -210,7 +214,16 @@ export const staffEcosystemApi = {
   getMyOperationalRoles: () =>
     api<{ slugs: string[]; roles: StaffRoleAssignment[] }>("/api/staff/me/operational-roles"),
   getMyContext: () => api<StaffMeContext>("/api/staff/me/context"),
+  getMyProfile: () => api<StaffMeProfile>("/api/staff/me/ecosystem"),
+  patchMyProfile: (data: Record<string, unknown>) =>
+    api<StaffMeProfile>("/api/staff/me/ecosystem", { method: "PATCH", body: JSON.stringify(data) }),
+  uploadMyDocument: (data: Record<string, unknown>) =>
+    api<StaffDocument>("/api/staff/me/documents", { method: "POST", body: JSON.stringify(data) }),
+  replaceMyDocument: (docId: number, data: Record<string, unknown>) =>
+    api<StaffDocument>(`/api/staff/me/documents/${docId}/replace`, { method: "POST", body: JSON.stringify(data) }),
   getMyTeamComplaints: () => api<TeamComplaint[]>("/api/staff/me/team-complaints"),
+  updateTeamComplaint: (id: number, data: { status?: string; resolution?: string }) =>
+    api<TeamComplaint>(`/api/staff/me/team-complaints/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   getCustomerSupervisorContact: () =>
     api<{ supervisor: SupervisorContact | null }>("/api/customers/me/supervisor-contact"),
   createLogin: (id: number, password: string) =>
@@ -223,6 +236,11 @@ export const staffEcosystemApi = {
       method: "POST",
       body: JSON.stringify({ password }),
     }),
+  sendTestJobAlert: (id: number) =>
+    api<{ ok: boolean; sent: number; inApp?: boolean; pushConfigured?: boolean; skipped?: boolean; message: string; hints?: string[] }>(
+      `/api/staff/${id}/test-job-alert`,
+      { method: "POST" },
+    ),
 };
 
 export const STAFF_ECOSYSTEM_QUERY_KEY = "staff-ecosystem";

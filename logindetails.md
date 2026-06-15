@@ -33,7 +33,9 @@ Same phone customer aur staff dono ke liye use nahi ho sakta.
 
 | Portal | URL | Allowed roles (phone ke basis pe) |
 |--------|-----|-----------------------------------|
-| Customer / Staff | `/login` | customer, staff, franchisee |
+| Customer | `/login` | customer |
+| Staff (field app) | `/staff/login` | staff |
+| Customer / Staff (legacy) | `/login` | customer, staff |
 | Admin | `/admin/login` | admin, superadmin, manager |
 | Register | `/register` | naya customer account (phone + apna password) |
 
@@ -53,8 +55,8 @@ Command: `pnpm --filter @workspace/scripts run seed`
 | **9001001001** | customer | Arjun Sharma | customer123 | `/login` |
 | **9001001002** | customer | Sunita Patel | customer123 | `/login` |
 | **9001001005** | customer | Rohit Agarwal | customer123 | `/login` |
-| **9011001001** | staff | Ravi Kumar | staff123 | `/login` |
-| **9011001002** | staff | Suresh Yadav | staff123 | `/login` |
+| **9011001001** | staff | Ravi Kumar | staff123 | `/staff/login` |
+| **9011001002** | staff | Suresh Yadav | staff123 | `/staff/login` |
 
 **Email (reference only — login phone se hota hai):**
 
@@ -99,8 +101,8 @@ Command: `pnpm --filter @workspace/scripts run seed`
 9001001001  →  customer  →  customer123   →  /login  (Arjun Sharma)
 9001001002  →  customer  →  customer123   →  /login  (Sunita Patel)
 9001001005  →  customer  →  customer123   →  /login  (Rohit Agarwal)
-9011001001  →  staff     →  staff123      →  /login  (Ravi Kumar)
-9011001002  →  staff     →  staff123      →  /login  (Suresh Yadav)
+9011001001  →  staff     →  staff123      →  /staff/login  (Ravi Kumar)
+9011001002  →  staff     →  staff123      →  /staff/login  (Suresh Yadav)
 ```
 
 Legacy (purani DB):

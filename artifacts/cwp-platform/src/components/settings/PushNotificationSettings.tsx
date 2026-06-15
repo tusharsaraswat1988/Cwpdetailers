@@ -16,7 +16,7 @@ import {
   type PushStatus,
 } from "@/lib/pushNotifications";
 
-export function PushNotificationSettings() {
+export function PushNotificationSettings({ variant = "default" }: { variant?: "default" | "staff" }) {
   const { toast } = useToast();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +47,7 @@ export function PushNotificationSettings() {
           toast({ title: "Could not enable notifications", description: result.error, variant: "destructive" });
           return;
         }
-        toast({ title: "Notifications enabled" });
+        toast({ title: variant === "staff" ? "Job alerts enabled" : "Notifications enabled" });
       } else {
         await unsubscribeFromPush();
         toast({ title: "Notifications disabled" });
@@ -83,7 +83,9 @@ export function PushNotificationSettings() {
             <div>
               <p className="font-medium">Push Notifications</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Browser alerts for visits, routes, and account updates
+                {variant === "staff"
+                  ? "Vibration + popup when admin assigns a new job to you"
+                  : "Browser alerts for visits, routes, and account updates"}
               </p>
             </div>
           </div>
@@ -115,9 +117,20 @@ export function PushNotificationSettings() {
             )}
 
             {!status?.pushConfigured && (
-              <p className="text-xs text-muted-foreground">
-                Server push is not configured yet (VAPID keys required).
-              </p>
+              <div className="text-xs text-muted-foreground space-y-1 rounded-lg border border-dashed p-3">
+                <p>Server push is not configured yet (VAPID keys required).</p>
+                {variant === "staff" ? (
+                  <p>
+                    Dev setup: run{" "}
+                    <code className="text-[11px] bg-muted px-1 py-0.5 rounded">
+                      pnpm --filter @workspace/scripts run setup:vapid
+                    </code>{" "}
+                    then restart the API server. In-app job popups still work while the app is open.
+                  </p>
+                ) : (
+                  <p>Ask your administrator to configure VAPID keys on the server.</p>
+                )}
+              </div>
             )}
 
             <div className="text-xs space-y-1 pt-1 border-t">

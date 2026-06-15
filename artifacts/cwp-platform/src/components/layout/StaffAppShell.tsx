@@ -11,6 +11,7 @@ import { useBrandingPortal } from "@/lib/branding";
 import { Zap, Calendar, IndianRupee, User, Sparkles, Users } from "lucide-react";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
+import { StaffJobAlertLayer } from "@/components/staff/StaffJobAlertLayer";
 
 type StaffNavDef = BottomNavItem & { requiresRole?: string; requiresCategory?: "supervisor" | "cleaning_staff" };
 
@@ -76,7 +77,7 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
           </div>
         ),
         title: pageTitle,
-        subtitle: user?.name,
+        subtitle: user?.name ? `${user.name}${myContext?.staffCategory === "supervisor" ? " · Supervisor" : ""}` : undefined,
         trailing: <SyncStatusIndicator compact />,
       }}
       bottomNav={staffNavItems}
@@ -86,7 +87,9 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
         title={`Install ${branding.brandName} Staff`}
         description="Add the staff app to your home screen for one-tap access to today's jobs and earnings."
       />
-      <LocationGate>{children}</LocationGate>
+      <LocationGate>
+        <StaffJobAlertLayer>{children}</StaffJobAlertLayer>
+      </LocationGate>
     </AppShell>
   );
 }

@@ -23,16 +23,35 @@ self.addEventListener("push", (event: PushEvent) => {
     payload = { body: event.data.text() };
   }
 
+  const pushData = payload.data ?? {};
   const title = payload.title ?? "CWP Detailers";
   const options: NotificationOptions = {
     body: payload.body ?? "",
     icon: "/pwa/icon-192.png",
     badge: "/pwa/icon-192.png",
     tag: payload.tag ?? "cwp-push",
-    data: { url: payload.url ?? "/", ...payload.data },
+    data: { url: payload.url ?? "/", ...pushData },
+    vibrate: [120, 60, 120, 60, 280],
+    requireInteraction: Boolean(pushData.jobAlert ?? payload.tag?.startsWith("staff-job")),
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(clients => {
+        for (const client of clients) {
+          client.postMessage({
+            type: "CWP_STAFF_PUSH",
+            title,
+            body: payload.body ?? "",
+            url: payload.url ?? "/",
+            tag: payload.tag,
+            vibrate: true,
+          });
+        }
+      }),
+    ]),
+  );
 });
 
 self.addEventListener("notificationclick", (event: NotificationEvent) => {

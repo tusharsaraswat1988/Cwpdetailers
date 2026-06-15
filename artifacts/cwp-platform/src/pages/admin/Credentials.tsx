@@ -1,7 +1,7 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Key, UserCog, Building2, CheckCircle, Lock, RefreshCw } from "lucide-react";
+import { Key, UserCog, Building2, CheckCircle, Lock, RefreshCw, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -44,6 +44,16 @@ async function resetStaffPassword(id: number, password: string) {
   });
   if (!res.ok) throw new Error(await parseApiError(res));
   return res.json();
+}
+async function sendStaffTestJobAlert(id: number) {
+  const res = await fetch(`/api/staff/${id}/test-job-alert`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { message?: string; error?: string }).message ?? (body as { error?: string }).error ?? `Request failed (${res.status})`);
+  return body as { ok: boolean; message: string; sent?: number; inApp?: boolean; hints?: string[] };
 }
 async function createFranchiseeAccount(id: number, password: string) {
   const res = await fetch(`/api/franchisees/${id}/create-account`, {
@@ -99,6 +109,17 @@ export default function AdminCredentials() {
     },
     onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
+  const staffTestAlertMut = useMutation({
+    mutationFn: (id: number) => sendStaffTestJobAlert(id),
+    onSuccess: (data) => {
+      const hint = data.hints?.length ? ` ${data.hints[0]}` : "";
+      toast({
+        title: (data as { sent?: number; inApp?: boolean }).sent ? "Test alert sent" : "In-app alert saved",
+        description: `${data.message}${hint}`,
+      });
+    },
+    onError: (err: Error) => toast({ title: "Test alert failed", description: err.message, variant: "destructive" }),
+  });
   const franchiseeCreateMut = useMutation({
     mutationFn: ({ id, password }: { id: number; password: string }) => createFranchiseeAccount(id, password),
     onSuccess: (data) => {
@@ -122,7 +143,7 @@ export default function AdminCredentials() {
     ? (staff as any[]).filter(s => s.verificationStatus === "verified")
     : franchisees;
 
-  const isPending = staffCreateMut.isPending || staffResetMut.isPending
+  const isPending = staffCreateMut.isPending || staffResetMut.isPending || staffTestAlertMut.isPending
     || franchiseeCreateMut.isPending || franchiseeResetMut.isPending;
 
   const openModal = (item: any, mode: ModalMode) => {
@@ -161,6 +182,7 @@ export default function AdminCredentials() {
                 <li>Staff must be <strong>verified</strong> before getting a login account</li>
                 <li>Franchisee accounts use their registered phone as username</li>
                 <li>Use <strong>Reset Password</strong> when someone forgets their login</li>
+                <li><strong>Test job alert</strong> sends a sample vibration + notification to staff with an active login (no real job)</li>
                 <li>Share credentials securely with the person directly</li>
               </ul>
             </div>
@@ -212,6 +234,16 @@ export default function AdminCredentials() {
                         <Button size="sm" variant="outline" onClick={() => openModal(item, "reset")}>
                           <RefreshCw size={12} className="mr-1.5" />Reset Password
                         </Button>
+                        {tab === "staff" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={staffTestAlertMut.isPending}
+                            onClick={() => staffTestAlertMut.mutate(item.id)}
+                          >
+                            <Bell size={12} className="mr-1.5" />Test Alert
+                          </Button>
+                        )}
                       </>
                     ) : (
                       <Button size="sm" className="bg-primary text-secondary" onClick={() => openModal(item, "create")}>

@@ -164,6 +164,8 @@ router.get("/staff/me/team-complaints", async (req, res) => {
       priority: complaintsTable.priority,
       type: complaintsTable.type,
       relatedStaffId: complaintsTable.relatedStaffId,
+      resolution: complaintsTable.resolution,
+      resolvedAt: complaintsTable.resolvedAt,
       createdAt: complaintsTable.createdAt,
     }).from(complaintsTable)
       .where(eq(complaintsTable.assignedSupervisorId, staffId))
@@ -173,6 +175,258 @@ router.get("/staff/me/team-complaints", async (req, res) => {
     return res.json(rows);
   } catch (err) {
     req.log.error({ err }, "Staff team complaints error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+const STAFF_SELF_PATCH_FIELDS = [
+  "profilePhotoUrl", "alternatePhone", "dateOfBirth", "gender",
+  "emergencyContactName", "emergencyContactPhone",
+  "currentHouseNumber", "currentStreet", "currentArea", "currentLandmark",
+  "currentCity", "currentState", "currentPincode",
+  "permanentHouseNumber", "permanentStreet", "permanentArea", "permanentLandmark",
+  "permanentCity", "permanentState", "permanentPincode", "permanentSameAsCurrent",
+] as const;
+
+function maskBankAccount(account?: string | null) {
+  if (!account) return null;
+  if (account.length <= 4) return account;
+  return `••••${account.slice(-4)}`;
+}
+
+async function buildEcosystemBundle(id: number, opts: { includeNotes?: boolean; maskBank?: boolean } = {}) {
+  const [staffRow] = await db.select().from(staffTable).where(eq(staffTable.id, id)).limit(1);
+  if (!staffRow) return null;
+
+  const [branch] = await db.select().from(branchesTable).where(eq(branchesTable.id, staffRow.branchId)).limit(1);
+  const partner = staffRow.franchiseeId
+    ? (await db.select().from(franchiseesTable).where(eq(franchiseesTable.id, staffRow.franchiseeId)).limit(1))[0]
+    : null;
+  const manager = staffRow.reportingManagerId
+    ? (await db.select({
+      id: staffTable.id,
+      name: staffTable.name,
+      phone: staffTable.phone,
+      email: staffTable.email,
+      employeeCode: staffTable.employeeCode,
+    }).from(staffTable).where(eq(staffTable.id, staffRow.reportingManagerId)).limit(1))[0]
+    : null;
+
+  const roleRows = await db.select({
+    roleId: staffRoleAssignmentsTable.roleId,
+    roleName: staffRoleMasterTable.name,
+    roleSlug: staffRoleMasterTable.slug,
+    skillLevel: staffRoleAssignmentsTable.skillLevel,
+  }).from(staffRoleAssignmentsTable)
+    .innerJoin(staffRoleMasterTable, eq(staffRoleAssignmentsTable.roleId, staffRoleMasterTable.id))
+    .where(eq(staffRoleAssignmentsTable.staffId, id));
+
+  const documents = await db.select().from(staffDocumentsTable)
+    .where(and(eq(staffDocumentsTable.staffId, id), eq(staffDocumentsTable.isCurrent, true)))
+    .orderBy(desc(staffDocumentsTable.uploadedAt));
+
+  const today = new Date().toISOString().slice(0, 10);
+  const docsWithExpiry = documents.map(d => ({
+    ...d,
+    isExpired: d.expiryDate ? d.expiryDate < today : false,
+  }));
+
+  const notes = opts.includeNotes
+    ? await db.select().from(staffNotesTable)
+      .where(eq(staffNotesTable.staffId, id))
+      .orderBy(desc(staffNotesTable.createdAt))
+    : [];
+
+  const performance = await buildStaffPerformanceProfile(id);
+  const breakdown = computeProfileCompletion(staffRow, documents);
+  const assignable = isStaffAssignable(staffRow);
+
+  const bankAccountNumber = opts.maskBank
+    ? maskBankAccount(staffRow.bankAccountNumber)
+    : staffRow.bankAccountNumber;
+
+  return {
+    ...staffRow,
+    bankAccountNumber,
+    branchName: branch?.name,
+    partnerName: partner?.name ?? null,
+    reportingManagerName: manager?.name ?? null,
+    reportingManagerPhone: manager?.phone ?? null,
+    reportingManagerEmail: manager?.email ?? null,
+    roles: roleRows,
+    documents: docsWithExpiry,
+    notes,
+    performance,
+    profileCompletion: breakdown,
+    assignable,
+  };
+}
+
+router.get("/staff/me/ecosystem", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+    const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
+    if (!staff) return res.status(404).json({ error: "Staff profile not found" });
+
+    const bundle = await buildEcosystemBundle(staffId, { includeNotes: false, maskBank: true });
+    if (!bundle) return res.status(404).json({ error: "Staff profile not found" });
+    return res.json(bundle);
+  } catch (err) {
+    req.log.error({ err }, "Staff me ecosystem error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/staff/me/ecosystem", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+    const [existing] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
+    if (!existing) return res.status(404).json({ error: "Staff profile not found" });
+
+    const body = applyPermanentAddress(req.body as Record<string, unknown>);
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+    for (const key of STAFF_SELF_PATCH_FIELDS) {
+      if (body[key] !== undefined) updateData[key] = body[key];
+    }
+
+    if (Object.keys(updateData).length <= 1) {
+      return res.status(400).json({ error: "No editable fields provided" });
+    }
+
+    await db.update(staffTable).set(updateData).where(eq(staffTable.id, staffId));
+    await recalculateStaffProfile(staffId);
+
+    const bundle = await buildEcosystemBundle(staffId, { includeNotes: false, maskBank: true });
+    return res.json(bundle);
+  } catch (err) {
+    req.log.error({ err }, "Staff me ecosystem patch error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/staff/me/documents", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+    const { documentType, documentNumber, fileUrl, contentType, fileSizeBytes, expiryDate, title, description } = req.body;
+    if (!documentType || !fileUrl) return res.status(400).json({ error: "documentType and fileUrl required" });
+    if (contentType && !ALLOWED_MIME.includes(contentType)) {
+      return res.status(400).json({ error: "Invalid file type" });
+    }
+
+    if (documentType !== "other") {
+      await db.update(staffDocumentsTable).set({ isCurrent: false, updatedAt: new Date() })
+        .where(and(
+          eq(staffDocumentsTable.staffId, staffId),
+          eq(staffDocumentsTable.documentType, documentType),
+          eq(staffDocumentsTable.isCurrent, true),
+        ));
+    }
+
+    const [doc] = await db.insert(staffDocumentsTable).values({
+      staffId,
+      documentType,
+      documentNumber,
+      fileUrl,
+      contentType,
+      fileSizeBytes,
+      expiryDate: expiryDate || null,
+      title,
+      description,
+      uploadedByUserId: req.user?.id ?? null,
+      isCurrent: true,
+    }).returning();
+
+    await recalculateStaffProfile(staffId);
+    return res.status(201).json(doc);
+  } catch (err) {
+    req.log.error({ err }, "Staff me document upload error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/staff/me/documents/:docId/replace", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+    const docId = parseInt(req.params.docId);
+    const [existing] = await db.select().from(staffDocumentsTable)
+      .where(and(eq(staffDocumentsTable.id, docId), eq(staffDocumentsTable.staffId, staffId))).limit(1);
+    if (!existing) return res.status(404).json({ error: "Document not found" });
+
+    const { fileUrl, contentType, fileSizeBytes, documentNumber, expiryDate } = req.body;
+    if (!fileUrl) return res.status(400).json({ error: "fileUrl required" });
+
+    await db.update(staffDocumentsTable).set({ isCurrent: false, updatedAt: new Date() })
+      .where(eq(staffDocumentsTable.id, docId));
+
+    const [doc] = await db.insert(staffDocumentsTable).values({
+      staffId,
+      documentType: existing.documentType,
+      documentNumber: documentNumber ?? existing.documentNumber,
+      title: existing.title,
+      description: existing.description,
+      fileUrl,
+      contentType,
+      fileSizeBytes,
+      expiryDate: expiryDate ?? existing.expiryDate,
+      uploadedByUserId: req.user?.id ?? null,
+      isCurrent: true,
+      replacedByDocumentId: docId,
+    }).returning();
+
+    await recalculateStaffProfile(staffId);
+    return res.json(doc);
+  } catch (err) {
+    req.log.error({ err }, "Staff me document replace error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/staff/me/team-complaints/:id", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+    const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
+    if (!staff || staff.staffCategory !== "supervisor") {
+      return res.status(403).json({ error: "Supervisor account required" });
+    }
+
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(complaintsTable).where(eq(complaintsTable.id, id)).limit(1);
+    if (!existing || existing.assignedSupervisorId !== staffId) {
+      return res.status(404).json({ error: "Complaint not found" });
+    }
+
+    const { status, resolution } = req.body as { status?: string; resolution?: string };
+    const allowedStatuses = ["open", "in_progress", "resolved"];
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (status !== undefined) {
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+      updateData.status = status;
+      if (status === "resolved") updateData.resolvedAt = new Date();
+    }
+    if (resolution !== undefined) updateData.resolution = resolution;
+
+    if (Object.keys(updateData).length <= 1) {
+      return res.status(400).json({ error: "status or resolution required" });
+    }
+
+    const [complaint] = await db.update(complaintsTable).set(updateData).where(eq(complaintsTable.id, id)).returning();
+    return res.json(complaint);
+  } catch (err) {
+    req.log.error({ err }, "Staff team complaint update error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

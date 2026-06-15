@@ -129,6 +129,7 @@ router.use(
     { match: /\/reject$/, method: "POST", action: "approve" },
     { match: /\/create-account$/, method: "POST", action: "approve" },
     { match: /\/reset-password$/, method: "POST", action: "approve" },
+    { match: /\/test-job-alert$/, method: "POST", action: "approve" },
     { match: /\/attendance$/, method: "POST", action: "edit" },
     { match: /\/verification-status$/, method: "POST", action: "approve" },
     { match: /\/ecosystem$/, method: "PATCH", action: "edit" },
@@ -147,6 +148,9 @@ router.use(
     { match: /\/documents$/, method: "POST", action: "edit" },
     { match: /\/documents\/\d+\/replace$/, method: "POST", action: "edit" },
     { match: /\/notes$/, method: "POST", action: "edit" },
+    { match: /\/me\/ecosystem$/, method: "PATCH", action: "view" },
+    { match: /\/me\/documents/, method: "POST", action: "view" },
+    { match: /\/me\/team-complaints\/\d+$/, method: "PATCH", action: "view" },
   ]),
   staffEcosystemRouter,
 );

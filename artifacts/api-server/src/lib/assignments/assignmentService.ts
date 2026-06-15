@@ -22,6 +22,7 @@ import type { Request } from "express";
 import { tenantFilters, rowInScope } from "../../middlewares/tenantScope";
 import { listCustomerContracts } from "../contracts/contractRegistry";
 import { createScheduledExecutionForAssignment } from "../executions/executionService";
+import { notifyStaffJobAssigned } from "../push/staffJobNotify";
 import { getTodayIST } from "../../subscriptions/service";
 
 export type AssignmentPriority = "normal" | "high";
@@ -311,6 +312,14 @@ export async function assignPendingService(
 
   const [customer] = await db.select({ name: customersTable.name }).from(customersTable)
     .where(eq(customersTable.id, pending.customerId)).limit(1);
+
+  void notifyStaffJobAssigned({
+    staffId,
+    customerName: customer?.name,
+    serviceName,
+    scheduledDate: getTodayIST(),
+    executionId: assignment!.id,
+  });
 
   return {
     id: assignment!.id,

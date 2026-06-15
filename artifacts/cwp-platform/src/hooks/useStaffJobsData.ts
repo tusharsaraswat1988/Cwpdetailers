@@ -32,6 +32,9 @@ export function useStaffJobsData() {
         query: {
           queryKey: getGetTodayBookingsQueryKey({ staffId: staffId ?? 0 }),
           enabled: staffId != null,
+          refetchInterval: 30_000,
+          refetchIntervalInBackground: true,
+          refetchOnWindowFocus: true,
         },
       },
     );
@@ -42,6 +45,8 @@ export function useStaffJobsData() {
       query: {
         queryKey: getListBookingsQueryKey({ staffId: staffId ?? 0, limit: 100 }),
         enabled: staffId != null,
+        refetchInterval: 60_000,
+        refetchOnWindowFocus: true,
       },
     },
   );

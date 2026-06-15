@@ -24,6 +24,8 @@
     "seed:catalog": "tsx ./src/seed-catalog-migration.ts",
     "verify:catalog": "tsx ./src/verify-catalog.ts",
     "backfill:tenant": "tsx ./src/backfill-tenant-fields.ts",
+    "test:staff-alert": "tsx ./src/test-staff-job-alert.ts",
+    "setup:vapid": "tsx ./src/setup-vapid-keys.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

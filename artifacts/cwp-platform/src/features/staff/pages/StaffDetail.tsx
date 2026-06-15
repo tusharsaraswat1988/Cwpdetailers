@@ -23,7 +23,7 @@ import {
   type StaffEcosystemProfile, type StaffDocument,
 } from "@/lib/staff-ecosystem/api";
 import {
-  ArrowLeft, CheckCircle2, Circle, Download, Eye, Printer, Upload, User, Star, Briefcase, Key, MapPin,
+  ArrowLeft, CheckCircle2, Circle, Download, Eye, Printer, Upload, User, Star, Briefcase, Key, MapPin, Bell,
 } from "lucide-react";
 import { StaffLocationHistory } from "@/features/staff/components/StaffLocationHistory";
 
@@ -162,9 +162,23 @@ export default function StaffDetail() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, id] });
       setLoginOpen(false);
-      toast({ title: "Portal login created", description: `Phone: ${data.phone} — staff can sign in at /login` });
+      toast({ title: "Portal login created", description: `Phone: ${data.phone} — staff can sign in at /staff/login` });
     },
     onError: (e: Error) => toast({ title: "Login creation failed", description: e.message, variant: "destructive" }),
+  });
+
+  const testAlertMutation = useMutation({
+    mutationFn: () => staffEcosystemApi.sendTestJobAlert(id),
+    onSuccess: (data) => {
+      const hint = data.hints?.length ? ` ${data.hints[0]}` : "";
+      toast({
+        title: data.sent > 0 ? "Test alert sent" : data.inApp ? "In-app alert saved" : "Test alert sent",
+        description: `${data.message}${hint}`,
+        variant: data.ok ? "default" : "destructive",
+      });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Test alert failed", description: e.message, variant: "destructive" }),
   });
 
   const uploadDoc = async (documentType: string, file: File, extra?: Record<string, unknown>) => {
@@ -270,6 +284,18 @@ export default function StaffDetail() {
             {!profile.userId && (
               <Button size="sm" variant="outline" onClick={() => { setLoginPassword("staff123"); setLoginOpen(true); }}>
                 <Key size={14} className="mr-1.5" />Create Portal Login
+              </Button>
+            )}
+            {profile.userId && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={testAlertMutation.isPending}
+                onClick={() => testAlertMutation.mutate()}
+                data-testid="btn-staff-test-job-alert"
+              >
+                <Bell size={14} className="mr-1.5" />
+                {testAlertMutation.isPending ? "Sending…" : "Send test job alert"}
               </Button>
             )}
             <div className="w-full md:w-64"><ProfileCompletionBar p={profile.profileCompletion} /></div>

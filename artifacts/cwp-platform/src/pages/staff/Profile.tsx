@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import {
   useGetStaffAttendance,
@@ -12,15 +12,22 @@ import { useAuth } from "@/lib/auth";
 import { useAccountScope } from "@/lib/account-scope";
 import StaffAppShell from "@/components/layout/StaffAppShell";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
+import { StaffProfileCompletionBanner } from "@/features/staff/components/StaffProfileCompletionBanner";
+import { StaffVerificationBanner, StaffVerificationBadge } from "@/features/staff/components/StaffVerificationBanner";
+import { StaffOperationalRoles } from "@/features/staff/components/StaffOperationalRoles";
+import { StaffMyDocuments } from "@/features/staff/components/StaffMyDocuments";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Loader2, MapPin } from "lucide-react";
+import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Loader2, MapPin, Save } from "lucide-react";
 import { todayIso } from "@/lib/staff-jobs";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 import { markAttendanceWithLocation } from "@/lib/location";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
+import { resolveMediaUrl } from "@/lib/media-url";
 import { Link } from "wouter";
 
 const statusColors: Record<string, string> = {
@@ -32,12 +39,7 @@ const statusColors: Record<string, string> = {
 
 function initials(name?: string | null) {
   if (!name) return "?";
-  return name
-    .split(" ")
-    .map(p => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  return name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
 }
 
 export default function StaffProfile() {
@@ -47,6 +49,21 @@ export default function StaffProfile() {
   const { staffId, isLoading: scopeLoading, missingStaffLink } = useAccountScope();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [addressOpen, setAddressOpen] = useState(false);
+  const [emergencyName, setEmergencyName] = useState("");
+  const [emergencyPhone, setEmergencyPhone] = useState("");
+
+  const { data: profile, isLoading: loadingProfile } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-profile"],
+    queryFn: staffEcosystemApi.getMyProfile,
+    enabled: staffId != null,
+  });
+
+  const { data: myContext } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-context"],
+    queryFn: staffEcosystemApi.getMyContext,
+    enabled: staffId != null,
+  });
 
   const { data: attendance, isLoading: loadingAttendance } = useGetStaffAttendance(
     staffId ?? 0,
@@ -88,11 +105,23 @@ export default function StaffProfile() {
       toast({ title: "Check-in failed", description: err.message, variant: "destructive" }),
   });
 
-  const { data: myContext } = useQuery({
-    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-context"],
-    queryFn: staffEcosystemApi.getMyContext,
-    enabled: staffId != null,
+  const saveEmergencyMutation = useMutation({
+    mutationFn: (payload: { emergencyContactName: string; emergencyContactPhone: string }) =>
+      staffEcosystemApi.patchMyProfile(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-profile"] });
+      toast({ title: "Emergency contact saved" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
+
+  useEffect(() => {
+    if (profile) {
+      setEmergencyName(profile.emergencyContactName ?? "");
+      setEmergencyPhone(profile.emergencyContactPhone ?? "");
+    }
+  }, [profile?.emergencyContactName, profile?.emergencyContactPhone]);
 
   const roleLabel = myContext?.staffCategory === "supervisor" ? "Supervisor" : "Cleaning Staff";
   const todayStr = todayIso();
@@ -100,6 +129,7 @@ export default function StaffProfile() {
   const todayMarked = Boolean(todayRecord);
   const presentDays = (attendance ?? []).filter(a => a.status === "present").length;
   const myRank = staffId != null ? (leaderboard ?? []).findIndex(s => s.staffId === staffId) + 1 : 0;
+  const isSupervisor = myContext?.staffCategory === "supervisor";
 
   if (scopeLoading || missingStaffLink || staffId == null) {
     return (
@@ -109,22 +139,52 @@ export default function StaffProfile() {
     );
   }
 
+  const avatarUrl = profile?.profilePhotoUrl ? resolveMediaUrl(profile.profilePhotoUrl) : null;
+
   return (
     <StaffAppShell>
       <div className="space-y-5 pb-4">
+        {loadingProfile ? (
+          <Skeleton className="h-24 w-full rounded-2xl" />
+        ) : profile ? (
+          <>
+            {profile.profileCompletion && profile.profileCompletion.percent < 100 && (
+              <StaffProfileCompletionBanner completion={profile.profileCompletion} />
+            )}
+            <StaffVerificationBanner status={profile.verificationStatus} notes={profile.verificationNotes} />
+          </>
+        ) : null}
+
         <div className="flex items-center gap-4">
-          <div
-            className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center font-display font-bold text-xl text-primary shrink-0"
-            data-testid="profile-avatar"
-          >
-            {initials(user?.name)}
-          </div>
-          <div className="min-w-0">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={user?.name ?? "Staff"}
+              className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-border"
+              data-testid="profile-avatar-photo"
+            />
+          ) : (
+            <div
+              className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center font-display font-bold text-xl text-primary shrink-0"
+              data-testid="profile-avatar"
+            >
+              {initials(user?.name)}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
             <h1 className="font-display font-bold text-xl truncate">{user?.name}</h1>
-            <p className="text-sm text-muted-foreground">{roleLabel}</p>
-            {user?.phone && <p className="text-xs text-muted-foreground mt-0.5">{user.phone}</p>}
+            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+              <p className="text-sm text-muted-foreground">{roleLabel}</p>
+              {profile && <StaffVerificationBadge status={profile.verificationStatus} />}
+            </div>
+            {profile?.employeeCode && (
+              <p className="text-xs text-muted-foreground mt-0.5">{profile.employeeCode}</p>
+            )}
+            {user?.phone && <p className="text-xs text-muted-foreground">{user.phone}</p>}
           </div>
         </div>
+
+        {profile && !isSupervisor && <StaffOperationalRoles roles={profile.roles} />}
 
         {myContext?.staffCategory === "cleaning_staff" && (
           <SupervisorContactCard
@@ -134,134 +194,218 @@ export default function StaffProfile() {
           />
         )}
 
-        {myContext?.staffCategory === "supervisor" && (
+        {isSupervisor && (
           <Link href="/staff/team" className="block rounded-2xl border border-primary/30 bg-primary/5 p-4 text-sm font-medium text-primary hover:bg-primary/10">
             View my team & customer complaints →
           </Link>
         )}
 
-        {myContext?.staffCategory !== "supervisor" && (
-        <section
-          className="rounded-2xl border border-border bg-card p-4 space-y-3"
-          data-testid="profile-attendance-today"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Today&apos;s attendance</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {todayMarked
-                  ? `Marked ${todayRecord?.status?.replace(/_/g, " ")}${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
-                  : "GPS check-in required — same as field partner apps"}
-              </p>
-            </div>
-            {todayMarked ? (
-              <div className="flex items-center gap-1.5 text-green-600 text-sm font-medium">
-                <CheckCircle size={16} />
-                Done
+        {profile && !isSupervisor && (
+          <section className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <p className="text-sm font-semibold">Employment (read-only)</p>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <p className="text-muted-foreground">Branch</p>
+                <p className="font-medium mt-0.5">{profile.branchName ?? "—"}</p>
               </div>
-            ) : (
+              <div>
+                <p className="text-muted-foreground">Joined</p>
+                <p className="font-medium mt-0.5">{profile.joiningDate ?? "—"}</p>
+              </div>
+              {profile.partnerName && (
+                <div className="col-span-2">
+                  <p className="text-muted-foreground">Partner</p>
+                  <p className="font-medium mt-0.5">{profile.partnerName}</p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {profile && !isSupervisor && (
+          <section className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <p className="text-sm font-semibold">Emergency contact</p>
+            <div className="grid gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Name</Label>
+                <Input
+                  className="mt-1 h-9 text-sm"
+                  value={emergencyName}
+                  onChange={e => setEmergencyName(e.target.value)}
+                  placeholder="Contact name"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Phone</Label>
+                <Input
+                  className="mt-1 h-9 text-sm"
+                  value={emergencyPhone}
+                  onChange={e => setEmergencyPhone(e.target.value)}
+                  placeholder="10-digit mobile"
+                />
+              </div>
               <Button
-                className="h-12 px-5 font-semibold bg-primary text-secondary hover:bg-primary/90 shrink-0"
-                disabled={markMutation.isPending}
-                data-testid="btn-mark-present"
+                size="sm"
+                className="w-fit h-9"
+                disabled={saveEmergencyMutation.isPending}
                 onClick={() =>
-                  markMutation.mutate({
-                    date: todayStr,
-                    status: "present",
-                    checkInTime: new Date().toTimeString().slice(0, 5),
+                  saveEmergencyMutation.mutate({
+                    emergencyContactName: emergencyName.trim(),
+                    emergencyContactPhone: emergencyPhone.trim(),
                   })
                 }
               >
-                {markMutation.isPending ? (
-                  <Loader2 size={16} className="mr-2 animate-spin" />
-                ) : (
-                  <MapPin size={16} className="mr-2" />
-                )}
-                {markMutation.isPending ? "Getting GPS…" : "Check in with GPS"}
+                {saveEmergencyMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : <Save size={14} className="mr-1" />}
+                Save contact
               </Button>
-            )}
-          </div>
-        </section>
+            </div>
+          </section>
         )}
 
-        {myContext?.staffCategory !== "supervisor" && (
-        <div className="grid grid-cols-2 gap-3" data-testid="profile-stats">
-          {[
-            { label: "Jobs this month", value: perf?.jobsCompleted, icon: Calendar },
-            { label: "Rating", value: perf?.averageRating?.toFixed(1), icon: Star, suffix: "/5" },
-            { label: "Present days", value: presentDays, icon: CheckCircle },
-            { label: "Rank", value: myRank > 0 ? `#${myRank}` : "—", icon: Trophy },
-          ].map(({ label, value, icon: Icon, suffix }) => (
-            <div key={label} className="rounded-xl border border-border bg-card p-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Icon size={13} className="text-primary" />
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</span>
+        {!isSupervisor && (
+          <section className="rounded-2xl border border-border overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+              onClick={() => setAddressOpen(v => !v)}
+            >
+              <span className="text-sm font-semibold">My address</span>
+              {addressOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
+            {addressOpen && profile && (
+              <div className="px-4 pb-4 text-xs space-y-1 border-t border-border pt-3 text-muted-foreground">
+                <p>{profile.currentHouseNumber} {profile.currentStreet}</p>
+                <p>{profile.currentArea}{profile.currentLandmark ? `, ${profile.currentLandmark}` : ""}</p>
+                <p>{profile.currentCity}, {profile.currentState} — {profile.currentPincode}</p>
+                {!profile.addressComplete && (
+                  <p className="text-amber-600 pt-2">Address incomplete — ask admin to update your profile.</p>
+                )}
               </div>
-              {loadingPerf && label !== "Present days" ? (
-                <Skeleton className="h-7 w-12" />
-              ) : (
-                <p className="font-display font-bold text-xl text-primary">
-                  {value ?? 0}
-                  {suffix ?? ""}
+            )}
+          </section>
+        )}
+
+        {profile && !isSupervisor && <StaffMyDocuments profile={profile} />}
+
+        {!isSupervisor && (
+          <section className="rounded-2xl border border-border bg-card p-4 space-y-3" data-testid="profile-attendance-today">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Today&apos;s attendance</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {todayMarked
+                    ? `Marked ${todayRecord?.status?.replace(/_/g, " ")}${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
+                    : "GPS check-in required before starting field work"}
                 </p>
-              )}
-            </div>
-          ))}
-        </div>
-        )}
-
-        {myContext?.staffCategory !== "supervisor" && (
-        <section className="rounded-2xl border border-border overflow-hidden">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
-            onClick={() => setCalendarOpen(v => !v)}
-            data-testid="profile-calendar-toggle"
-          >
-            <div className="flex items-center gap-2">
-              <Calendar size={16} className="text-primary" />
-              <span className="text-sm font-semibold">Monthly attendance</span>
-            </div>
-            {calendarOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-          </button>
-
-          {calendarOpen && (
-            <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-              <input
-                type="month"
-                value={month}
-                onChange={e => setMonth(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card"
-                data-testid="input-month"
-              />
-              {loadingAttendance ? (
-                <div className="grid grid-cols-4 gap-2">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <Skeleton key={i} className="h-14 rounded-lg" />
-                  ))}
+              </div>
+              {todayMarked ? (
+                <div className="flex items-center gap-1.5 text-green-600 text-sm font-medium">
+                  <CheckCircle size={16} />
+                  Done
                 </div>
-              ) : (attendance ?? []).length === 0 ? (
-                <p className="text-center text-sm text-muted-foreground py-6">No records this month</p>
               ) : (
-                <div className="grid grid-cols-4 gap-2">
-                  {(attendance ?? []).map(a => (
-                    <div
-                      key={a.id}
-                      className={`rounded-lg border p-2 text-center ${statusColors[a.status] ?? "border-border"}`}
-                      data-testid={`attendance-${a.date}`}
-                    >
-                      <p className="font-bold text-sm">{a.date?.split("-")[2]}</p>
-                      <p className="text-[10px] capitalize mt-0.5">{a.status?.replace(/_/g, " ")}</p>
-                    </div>
-                  ))}
-                </div>
+                <Button
+                  className="h-12 px-5 font-semibold bg-primary text-secondary hover:bg-primary/90 shrink-0"
+                  disabled={markMutation.isPending}
+                  data-testid="btn-mark-present"
+                  onClick={() =>
+                    markMutation.mutate({
+                      date: todayStr,
+                      status: "present",
+                      checkInTime: new Date().toTimeString().slice(0, 5),
+                    })
+                  }
+                >
+                  {markMutation.isPending ? (
+                    <Loader2 size={16} className="mr-2 animate-spin" />
+                  ) : (
+                    <MapPin size={16} className="mr-2" />
+                  )}
+                  {markMutation.isPending ? "Getting GPS…" : "Check in with GPS"}
+                </Button>
               )}
             </div>
-          )}
-        </section>
+          </section>
         )}
 
-        <PushNotificationSettings />
+        {!isSupervisor && (
+          <div className="grid grid-cols-2 gap-3" data-testid="profile-stats">
+            {[
+              { label: "Jobs this month", value: perf?.jobsCompleted ?? profile?.performance?.completedJobs, icon: Calendar },
+              { label: "Rating", value: (perf?.averageRating ?? profile?.performance?.averageRating)?.toFixed(1), icon: Star, suffix: "/5" },
+              { label: "Present days", value: presentDays, icon: CheckCircle },
+              { label: "Rank", value: myRank > 0 ? `#${myRank}` : "—", icon: Trophy },
+            ].map(({ label, value, icon: Icon, suffix }) => (
+              <div key={label} className="rounded-xl border border-border bg-card p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Icon size={13} className="text-primary" />
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</span>
+                </div>
+                {loadingPerf && label !== "Present days" ? (
+                  <Skeleton className="h-7 w-12" />
+                ) : (
+                  <p className="font-display font-bold text-xl text-primary">
+                    {value ?? 0}
+                    {suffix ?? ""}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isSupervisor && (
+          <section className="rounded-2xl border border-border overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+              onClick={() => setCalendarOpen(v => !v)}
+              data-testid="profile-calendar-toggle"
+            >
+              <div className="flex items-center gap-2">
+                <Calendar size={16} className="text-primary" />
+                <span className="text-sm font-semibold">Monthly attendance</span>
+              </div>
+              {calendarOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
+
+            {calendarOpen && (
+              <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                <input
+                  type="month"
+                  value={month}
+                  onChange={e => setMonth(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card"
+                  data-testid="input-month"
+                />
+                {loadingAttendance ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <Skeleton key={i} className="h-14 rounded-lg" />
+                    ))}
+                  </div>
+                ) : (attendance ?? []).length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground py-6">No records this month</p>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2">
+                    {(attendance ?? []).map(a => (
+                      <div
+                        key={a.id}
+                        className={`rounded-lg border p-2 text-center ${statusColors[a.status] ?? "border-border"}`}
+                        data-testid={`attendance-${a.date}`}
+                      >
+                        <p className="font-bold text-sm">{a.date?.split("-")[2]}</p>
+                        <p className="text-[10px] capitalize mt-0.5">{a.status?.replace(/_/g, " ")}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        <PushNotificationSettings variant="staff" />
 
         <Button
           variant="outline"

@@ -77,7 +77,7 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     customers: ["view"],
     staff: ["view"],
     bookings: ["view", "edit"],
-    complaints: ["view", "create"],
+    complaints: ["view", "create", "edit"],
     notifications: ["view"],
     services: ["view"],
     masters: ["view"],

@@ -42,6 +42,11 @@ router.get("/staff", async (req, res) => {
   try {
     const { branchId, role, isActive, verificationStatus, franchiseeId, forAssignment, roleSlug, staffCategory } = req.query as Record<string, string>;
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+
+    // Field staff may only see their own profile via list endpoint
+    if (req.user?.role === "staff" && req.user.staffId) {
+      conditions.push(eq(staffTable.id, req.user.staffId));
+    }
     if (branchId) conditions.push(eq(staffTable.branchId, parseInt(branchId)));
     if (role) conditions.push(eq(staffTable.role, role as (typeof staffTable.role)["_"]["data"]));
     if (staffCategory) conditions.push(eq(staffTable.staffCategory, staffCategory as (typeof staffTable.staffCategory)["_"]["data"]));
@@ -595,6 +600,26 @@ router.post("/staff/:id/attendance", async (req, res) => {
     return res.status(201).json(attendance);
   } catch (err) {
     req.log.error({ err }, "Mark attendance error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/staff/:id/test-job-alert", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const staffMember = await loadStaffInScope(req, id);
+    if (!staffMember) return res.status(404).json({ error: "Staff not found" });
+
+    const { sendStaffJobTestAlert } = await import("../lib/push/staffJobNotify");
+    const result = await sendStaffJobTestAlert(id, staffMember.name);
+
+    if (!result.ok) {
+      return res.status(result.skipped ? 400 : 500).json(result);
+    }
+
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Staff test job alert error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

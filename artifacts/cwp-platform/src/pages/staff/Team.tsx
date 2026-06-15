@@ -1,16 +1,20 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import StaffAppShell from "@/components/layout/StaffAppShell";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { useAccountScope } from "@/lib/account-scope";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
+import { StaffComplaintCard } from "@/features/staff/components/StaffComplaintCard";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, AlertCircle, Phone } from "lucide-react";
-import { StatusBadge } from "@/components/shared/StatusBadge";
+
+type ComplaintFilter = "open" | "all";
 
 export default function StaffTeam() {
   const { staffId, isLoading: scopeLoading, missingStaffLink } = useAccountScope();
+  const [filter, setFilter] = useState<ComplaintFilter>("open");
 
   const { data: ctx, isLoading } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-context"],
@@ -58,6 +62,10 @@ export default function StaffTeam() {
     );
   }
 
+  const filteredComplaints = (complaints ?? []).filter(c =>
+    filter === "open" ? c.status === "open" || c.status === "in_progress" : true,
+  );
+
   return (
     <StaffAppShell>
       <div className="space-y-5 pb-4">
@@ -102,32 +110,41 @@ export default function StaffTeam() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <AlertCircle size={16} className="text-destructive" />
               <p className="font-semibold text-sm">Customer Complaints</p>
             </div>
-            {ctx.openTeamComplaints > 0 && (
-              <Badge variant="destructive">{ctx.openTeamComplaints} open</Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {ctx.openTeamComplaints > 0 && (
+                <Badge variant="destructive">{ctx.openTeamComplaints} open</Badge>
+              )}
+              <div className="flex rounded-lg bg-muted p-0.5 gap-0.5">
+                {(["open", "all"] as const).map(key => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setFilter(key)}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-medium capitalize ${
+                      filter === key ? "bg-card shadow-sm" : "text-muted-foreground"
+                    }`}
+                  >
+                    {key}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           {loadingComplaints ? (
             <Skeleton className="h-20 w-full" />
-          ) : (complaints ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">No complaints routed to you.</p>
+          ) : filteredComplaints.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {filter === "open" ? "No open complaints — great work!" : "No complaints routed to you."}
+            </p>
           ) : (
             <div className="space-y-2">
-              {(complaints ?? []).slice(0, 10).map(c => (
-                <div key={c.id} className="p-3 rounded-xl border border-border space-y-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-sm">{c.title}</p>
-                    <StatusBadge status={c.status} />
-                  </div>
-                  <p className="text-xs text-muted-foreground line-clamp-2">{c.description}</p>
-                  <p className="text-[10px] text-muted-foreground capitalize">
-                    {c.type.replace(/_/g, " ")} · {new Date(c.createdAt).toLocaleDateString("en-IN")}
-                  </p>
-                </div>
+              {filteredComplaints.map(c => (
+                <StaffComplaintCard key={c.id} complaint={c} />
               ))}
             </div>
           )}

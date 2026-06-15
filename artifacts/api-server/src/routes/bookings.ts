@@ -11,6 +11,7 @@ import { notifyBookingConfirmed, notifyBookingCompleted } from "../lib/notificat
 import { captureBookingTransitionLocation } from "../lib/staffLocation/bookingLocation";
 import { handleLocationError } from "../lib/staffLocation/locationService";
 import { applyLegacyAssignmentDeprecation } from "../lib/assignments/legacyAssignmentDeprecation";
+import { notifyStaffJobAssigned } from "../lib/push/staffJobNotify";
 
 const router = Router();
 
@@ -71,6 +72,32 @@ const bookingSelect = {
   parentBookingId: bookingsTable.parentBookingId,
   createdAt: bookingsTable.createdAt,
 };
+
+async function fireStaffJobAssignedNotify(input: {
+  staffId: number;
+  bookingId: number;
+  customerId: number;
+  serviceId?: number | null;
+  serviceType?: string | null;
+  scheduledDate?: string | null;
+  scheduledTime?: string | null;
+}) {
+  const [customer] = await db.select({ name: customersTable.name }).from(customersTable)
+    .where(eq(customersTable.id, input.customerId)).limit(1);
+  const [service] = input.serviceId
+    ? await db.select({ name: servicesTable.name }).from(servicesTable)
+      .where(eq(servicesTable.id, input.serviceId)).limit(1)
+    : [null];
+
+  void notifyStaffJobAssigned({
+    staffId: input.staffId,
+    bookingId: input.bookingId,
+    customerName: customer?.name,
+    serviceName: service?.name ?? input.serviceType,
+    scheduledDate: input.scheduledDate,
+    scheduledTime: input.scheduledTime,
+  });
+}
 
 const allowedTransitions: Record<string, string[]> = {
   scheduled: ["en_route", "cancelled", "rescheduled"],
@@ -364,6 +391,22 @@ router.patch("/bookings/:id", async (req, res) => {
 
     const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
 
+    if (
+      staffId !== undefined &&
+      staffId != null &&
+      staffId !== existing.staffId
+    ) {
+      void fireStaffJobAssignedNotify({
+        staffId,
+        bookingId: id,
+        customerId: existing.customerId,
+        serviceId: existing.serviceId,
+        serviceType: existing.serviceType,
+        scheduledDate: (updateData.scheduledDate as string | undefined) ?? existing.scheduledDate,
+        scheduledTime: (updateData.scheduledTime as string | undefined) ?? existing.scheduledTime,
+      });
+    }
+
     if (beforePhotoUrl !== undefined) {
       await logEvent(id, "proof_upload", {
         body: "Before photo uploaded",
@@ -584,6 +627,15 @@ router.post("/bookings/:id/assign", async (req, res) => {
       body: reason ?? `Assigned to staff ${staffId}`,
       actorId: req.user?.id ?? req.scope?.staffId,
       actorName: req.user?.name ?? "system",
+    });
+    void fireStaffJobAssignedNotify({
+      staffId,
+      bookingId: id,
+      customerId: existing.customerId,
+      serviceId: existing.serviceId,
+      serviceType: existing.serviceType,
+      scheduledDate: existing.scheduledDate,
+      scheduledTime: existing.scheduledTime,
     });
     return res.json(booking);
   } catch (err) {

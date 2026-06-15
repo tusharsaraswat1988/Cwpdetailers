@@ -13,6 +13,7 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import CityServicePage from "@/pages/CityServicePage";
 import Login from "@/pages/Login";
+import StaffLogin from "@/pages/StaffLogin";
 import AdminLogin from "@/pages/AdminLogin";
 import Register from "@/pages/Register";
 
@@ -153,6 +154,7 @@ function Router() {
       {/* Public */}
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
+      <Route path="/staff/login" component={StaffLogin} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/register" component={Register} />
 
@@ -236,12 +238,12 @@ function Router() {
       <Route path="/customer/daily-cleaning" component={() => <ProtectedRoute component={CustomerDailyCleaningPage} roles={["customer"]} />} />
 
       {/* Staff — mobile-first field app (Sprint 3) */}
-      <Route path="/staff/dashboard" component={() => <ProtectedRoute component={StaffDashboard} roles={["staff"]} />} />
-      <Route path="/staff/team" component={() => <ProtectedRoute component={StaffTeam} roles={["staff"]} />} />
-      <Route path="/staff/jobs" component={() => <ProtectedRoute component={StaffJobs} roles={["staff"]} />} />
-      <Route path="/staff/earnings" component={() => <ProtectedRoute component={StaffEarnings} roles={["staff"]} />} />
-      <Route path="/staff/profile" component={() => <ProtectedRoute component={StaffProfile} roles={["staff"]} />} />
-      <Route path="/staff/daily-route" component={() => <ProtectedRoute component={StaffDailyRoutePage} roles={["staff"]} permission={{ resource: "daily_cleaning", action: "complete_visits" }} />} />
+      <Route path="/staff/dashboard" component={() => <ProtectedRoute component={StaffDashboard} roles={["staff"]} loginPath="/staff/login" />} />
+      <Route path="/staff/team" component={() => <ProtectedRoute component={StaffTeam} roles={["staff"]} loginPath="/staff/login" />} />
+      <Route path="/staff/jobs" component={() => <ProtectedRoute component={StaffJobs} roles={["staff"]} loginPath="/staff/login" />} />
+      <Route path="/staff/earnings" component={() => <ProtectedRoute component={StaffEarnings} roles={["staff"]} loginPath="/staff/login" />} />
+      <Route path="/staff/profile" component={() => <ProtectedRoute component={StaffProfile} roles={["staff"]} loginPath="/staff/login" />} />
+      <Route path="/staff/daily-route" component={() => <ProtectedRoute component={StaffDailyRoutePage} roles={["staff"]} permission={{ resource: "daily_cleaning", action: "complete_visits" }} loginPath="/staff/login" />} />
       <Route path="/staff/daily-cleaning" component={() => <Redirect to="/staff/daily-route" />} />
       <Route path="/staff/schedule" component={() => <Redirect to="/staff/jobs" />} />
       <Route path="/staff/attendance" component={() => <Redirect to="/staff/profile" />} />
