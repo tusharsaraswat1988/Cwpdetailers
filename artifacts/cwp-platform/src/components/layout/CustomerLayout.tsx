@@ -2,7 +2,6 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { AppShell, type BottomNavItem } from "@/components/app-shell";
-import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
@@ -76,11 +75,6 @@ export default function CustomerLayout({ children }: { children: ReactNode }) {
       }}
       bottomNav={navItems}
     >
-      <PwaInstallBanner
-        portalKey="customer"
-        title={`Install ${branding.brandName} app`}
-        description={`Add ${branding.brandName} to your home screen for quick access to bookings, wallet, and services.`}
-      />
       {children}
     </AppShell>
   );

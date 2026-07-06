@@ -11,14 +11,29 @@ import {
   applyMobileField,
   applyOptionalEmailField,
 } from "../lib/contactFields";
-import { assertContactIdentityAvailable } from "../lib/contactIdentity";
-import { createCustomerLoginAccount } from "../lib/customerAccount";
+import { assertContactIdentityAvailable, type ContactExclude } from "../lib/contactIdentity";
+import { createCustomerLoginAccount, syncCustomerLoginProfile } from "../lib/customerAccount";
 import { normalizeGstin } from "../lib/gstin";
 import { resolveSupervisorForCustomer } from "../lib/supervisor/supervisorContact";
 import { isLegacyDormantCustomer, tryReactivateLegacyCustomer } from "../lib/customerReactivation";
 import { ensureDefaultServiceLocation } from "../lib/serviceLocations/defaultLocationService";
 
 const router = Router();
+
+function customerSelfContactExcludes(
+  customerId: number,
+  existingUserId?: number | null,
+  sessionUserId?: number,
+): ContactExclude[] {
+  const excludes: ContactExclude[] = [{ entity: "customer", id: customerId }];
+  const linkedUserIds = new Set<number>();
+  if (existingUserId) linkedUserIds.add(existingUserId);
+  if (sessionUserId) linkedUserIds.add(sessionUserId);
+  for (const userId of linkedUserIds) {
+    excludes.push({ entity: "user", id: userId });
+  }
+  return excludes;
+}
 
 const SCOPE_COLS = {
   companyCol: customersTable.companyId,
@@ -249,6 +264,71 @@ router.get("/customers/me", async (req, res) => {
   }
 });
 
+router.patch("/customers/me", async (req, res) => {
+  try {
+    const customerId = req.scope?.customerId;
+    if (!customerId) return res.status(403).json({ error: "Customer profile only" });
+
+    const [existing] = await db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1);
+    if (!existing) return res.status(404).json({ error: "Customer not found" });
+
+    const { name, phone, photoUrl } = req.body as {
+      name?: string;
+      phone?: string;
+      photoUrl?: string | null;
+    };
+
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (name !== undefined) {
+      const trimmed = String(name).trim();
+      if (!trimmed) return res.status(400).json({ error: "Name is required" });
+      updateData.name = trimmed;
+    }
+
+    const phoneField = applyMobileField(req.body, "phone", updateData);
+    if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
+
+    if (updateData.phone !== undefined) {
+      const identityCheck = await assertContactIdentityAvailable(
+        updateData.phone,
+        existing.email,
+        customerSelfContactExcludes(customerId, existing.userId, req.user?.id),
+      );
+      if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+      updateData.phone = identityCheck.identity.phone;
+    }
+
+    if (photoUrl !== undefined) {
+      if (photoUrl !== null && typeof photoUrl === "string" && photoUrl.trim() && !/^https?:\/\//.test(photoUrl)) {
+        return res.status(400).json({ error: "photoUrl must be an https URL" });
+      }
+      updateData.photoUrl = photoUrl || null;
+    }
+
+    if (Object.keys(updateData).length === 1) {
+      return res.status(400).json({ error: "No profile fields to update" });
+    }
+
+    await db.update(customersTable).set(updateData).where(eq(customersTable.id, customerId));
+
+    await syncCustomerLoginProfile(customerId, {
+      name: typeof updateData.name === "string" ? updateData.name : undefined,
+      phone: typeof updateData.phone === "string" ? updateData.phone : undefined,
+    });
+
+    const [refreshed] = await db.select(CUSTOMER_LIST_SELECT).from(customersTable)
+      .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
+      .where(eq(customersTable.id, customerId))
+      .limit(1);
+
+    return res.json(refreshed ?? existing);
+  } catch (err) {
+    req.log.error({ err }, "Update customer profile error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/customers/me/supervisor-contact", async (req, res) => {
   try {
     const customerId = req.scope?.customerId;
@@ -294,6 +374,17 @@ router.patch("/customers/:id", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
 
+    const isCustomerSelf = req.scope?.customerId === id;
+    if (isCustomerSelf) {
+      const body = req.body as Record<string, unknown>;
+      const forbidden = Object.keys(body).filter(
+        key => body[key] !== undefined && !["name", "phone", "photoUrl"].includes(key),
+      );
+      if (forbidden.length > 0) {
+        return res.status(403).json({ error: "You can only update name, phone, and photo" });
+      }
+    }
+
     const { name, phone, email, address, city, status, branchId, photoUrl, operationalNotes, gstin, billingName, referredByCustomerId } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
@@ -307,7 +398,9 @@ router.patch("/customers/:id", async (req, res) => {
       const identityCheck = await assertContactIdentityAvailable(
         typeof updateData.phone === "string" ? updateData.phone : existing.phone,
         updateData.email !== undefined ? updateData.email : existing.email,
-        { entity: "customer", id },
+        isCustomerSelf
+          ? customerSelfContactExcludes(id, existing.userId, req.user?.id)
+          : { entity: "customer", id },
       );
       if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
       if (typeof updateData.phone === "string") updateData.phone = identityCheck.identity.phone;
@@ -351,6 +444,14 @@ router.patch("/customers/:id", async (req, res) => {
     // walletBalance is derived from ledger — never patch directly
 
     const [customer] = await db.update(customersTable).set(updateData).where(eq(customersTable.id, id)).returning();
+
+    if (isCustomerSelf) {
+      await syncCustomerLoginProfile(id, {
+        name: typeof updateData.name === "string" ? updateData.name : undefined,
+        phone: typeof updateData.phone === "string" ? updateData.phone : undefined,
+        email: updateData.email !== undefined ? (updateData.email as string | null) : undefined,
+      });
+    }
 
     let reactivated = false;
     if (status === "active" && isLegacyDormantCustomer(existing)) {

@@ -10,8 +10,8 @@ import { roleSlugForBookingService, staffOperationalRoleError } from "../lib/sta
 import { notifyBookingConfirmed, notifyBookingCompleted } from "../lib/notifications/dispatcher";
 import { captureBookingTransitionLocation } from "../lib/staffLocation/bookingLocation";
 import { handleLocationError } from "../lib/staffLocation/locationService";
-import { applyLegacyAssignmentDeprecation } from "../lib/assignments/legacyAssignmentDeprecation";
 import { notifyStaffJobAssigned } from "../lib/push/staffJobNotify";
+import { isDailyCleanCatalogServiceName } from "../lib/dcms/dailyCleanCatalogGuard";
 
 const router = Router();
 
@@ -100,7 +100,7 @@ async function fireStaffJobAssignedNotify(input: {
 }
 
 const allowedTransitions: Record<string, string[]> = {
-  scheduled: ["en_route", "cancelled", "rescheduled"],
+  scheduled: ["en_route", "in_progress", "cancelled", "rescheduled"],
   en_route: ["in_progress", "cancelled"],
   in_progress: ["completed", "cancelled"],
   completed: [],
@@ -177,6 +177,22 @@ router.get("/bookings", async (req, res) => {
     if (date) conditions.push(sql`${bookingsTable.scheduledDate}::text = ${date}`);
     if (status) conditions.push(eq(bookingsTable.status, status as any));
     if (serviceType) conditions.push(eq(bookingsTable.serviceType, serviceType as any));
+
+    const includeLegacyDaily = req.query.includeLegacyDaily === "true";
+    if (!includeLegacyDaily) {
+      conditions.push(sql`${bookingsTable.serviceType} <> 'daily_cleaning'`);
+      conditions.push(sql`NOT (
+        ${bookingsTable.serviceType} = 'one_time_wash'
+        AND EXISTS (
+          SELECT 1 FROM ${servicesTable} s
+          WHERE s.id = ${bookingsTable.serviceId}
+            AND (
+              lower(s.name) LIKE '%daily%'
+              AND (lower(s.name) LIKE '%clean%' OR lower(s.name) LIKE '%exterior%')
+            )
+        )
+      )`);
+    }
 
     const where = conditions.length ? and(...conditions) : undefined;
 
@@ -307,6 +323,16 @@ router.post("/bookings", async (req, res) => {
     }
 
     const initialStatus = req.user?.role === "customer" ? "pending" as const : "scheduled" as const;
+
+    if (serviceId) {
+      const [svc] = await db.select({ name: servicesTable.name }).from(servicesTable)
+        .where(eq(servicesTable.id, serviceId)).limit(1);
+      if (svc && isDailyCleanCatalogServiceName(svc.name)) {
+        return res.status(400).json({
+          error: "Daily cleaning is sold via monthly DCMS plans. Use Book Service → Plan, not one-time catalog service.",
+        });
+      }
+    }
 
     const values = tenantStamp(req, {
       customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId,
@@ -442,11 +468,12 @@ router.post("/bookings/:id/transition", async (req, res) => {
       return res.status(400).json({ error: `Invalid transition from ${existing.status} to ${toStatus}` });
     }
 
-    if (toStatus === "in_progress" && !existing.beforePhotoUrl) {
-      return res.status(400).json({ error: "Upload a before photo before starting the job" });
-    }
-    if (toStatus === "completed" && !existing.afterPhotoUrl) {
-      return res.status(400).json({ error: "Upload an after photo before completing the job" });
+    if (toStatus === "completed") {
+      const proof = (existing.proofPhotoUrls as string[] | null) ?? [];
+      const hasMultiPhotoProof = proof.length >= 6;
+      if (!hasMultiPhotoProof && !existing.afterPhotoUrl) {
+        return res.status(400).json({ error: "Upload 3 before and 3 after geo-tagged photos before completing the job" });
+      }
     }
 
     const isAssignedStaff =
@@ -597,49 +624,6 @@ router.post("/bookings/:id/proof", async (req, res) => {
     return res.json(booking);
   } catch (err) {
     req.log.error({ err }, "Proof upload error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-router.post("/bookings/:id/assign", async (req, res) => {
-  /** @deprecated Use POST /api/assignments/:pendingId/assign after pending_service_assignments enqueue. */
-  applyLegacyAssignmentDeprecation(res);
-  try {
-    const id = parseInt(req.params.id);
-    const { staffId, reason } = req.body;
-    const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
-    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Booking not found" });
-    if (!staffId) return res.status(400).json({ error: "staffId is required" });
-
-    const staff = await loadIfInScope(req,
-      () => db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1).then(r => r[0]),
-      r => ({ ...r, staffId: r.id }),
-    );
-    if (!staff) return res.status(404).json({ error: "Staff not found" });
-    const assignErr = await validateStaffAssignmentForService(staff, existing.serviceType);
-    if (assignErr) return res.status(409).json({ error: assignErr });
-    if (staff.verificationStatus !== "verified") {
-      return res.status(400).json({ error: "Staff must be verified before assignment" });
-    }
-
-    const [booking] = await db.update(bookingsTable).set({ staffId, updatedAt: new Date() }).where(eq(bookingsTable.id, id)).returning();
-    await logEvent(id, "reassign", {
-      body: reason ?? `Assigned to staff ${staffId}`,
-      actorId: req.user?.id ?? req.scope?.staffId,
-      actorName: req.user?.name ?? "system",
-    });
-    void fireStaffJobAssignedNotify({
-      staffId,
-      bookingId: id,
-      customerId: existing.customerId,
-      serviceId: existing.serviceId,
-      serviceType: existing.serviceType,
-      scheduledDate: existing.scheduledDate,
-      scheduledTime: existing.scheduledTime,
-    });
-    return res.json(booking);
-  } catch (err) {
-    req.log.error({ err }, "Assign booking error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

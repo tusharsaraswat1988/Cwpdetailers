@@ -42,6 +42,34 @@ export async function fetchStaffExecutions(limit = 100): Promise<ServiceExecutio
   return res.data;
 }
 
+export type ExecutionPhoto = {
+  id: number;
+  kind: string;
+  url: string;
+  caption: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
+};
+
+export type ExecutionDetail = ServiceExecution & {
+  photos: ExecutionPhoto[];
+};
+
+export async function fetchExecutionDetail(id: number): Promise<ExecutionDetail> {
+  return apiFetch(`/service-executions/${id}`);
+}
+
+export async function addExecutionPhotos(
+  id: number,
+  photos: { kind: "before" | "after"; url: string; latitude: number; longitude: number; accuracy?: number }[],
+): Promise<ExecutionDetail> {
+  return apiFetch(`/service-executions/${id}/photos`, {
+    method: "POST",
+    body: JSON.stringify({ photos }),
+  });
+}
+
 export async function startExecution(
   id: number,
   gps?: { latitude: number; longitude: number; accuracy?: number },

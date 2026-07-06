@@ -26,6 +26,11 @@ function formatPrice(price: string | number) {
   return Number.isFinite(n) ? `₹${n.toLocaleString("en-IN")}` : price;
 }
 
+function isDailyCleanCatalogServiceName(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.includes("daily") && (n.includes("clean") || n.includes("exterior"));
+}
+
 export function ServiceSelect({ asset, value, onChange }: Props) {
   const vehicleId = asset?.assetType === "vehicle" ? asset.vehicleId ?? undefined : undefined;
 
@@ -40,6 +45,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
 
     for (const s of adminServices ?? []) {
       if (s.status === "disabled" || s.status === "archived" || s.isActive === false) continue;
+      if (isDailyCleanCatalogServiceName(s.name)) continue;
       const solar = isSolarCategory(s.category, s.categorySlug);
       if (isSolar && !solar) continue;
       if (!isSolar && solar) continue;
@@ -122,7 +128,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
       <div>
         <Label>What service are you booking?</Label>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Car wash, packages, daily cleaning plans, and solar — prices from HQ catalog.
+          Car wash, packages, and solar — monthly daily clean plans are listed as <strong>Plan</strong>.
         </p>
       </div>
       <div className="grid gap-2 max-h-80 overflow-y-auto pr-1">

@@ -185,11 +185,21 @@ export function useDcmsVisits(filters?: Record<string, string | number>) {
   });
 }
 
-export function useDcmsAssignments(staffId?: number) {
-  return useQuery({
-    queryKey: ["dcms", "assignments", staffId],
-    queryFn: () => dcmsFetch<unknown[]>(`/daily-cleaning/assignments${staffId ? `?staffId=${staffId}` : ""}`),
-  });
+export function useDcmsSubscriptionMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["dcms"] });
+  return {
+    create: useMutation({
+      mutationFn: (data: Record<string, unknown>) =>
+        dcmsFetch("/daily-cleaning/subscriptions", { method: "POST", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+    renew: useMutation({
+      mutationFn: (id: number) =>
+        dcmsFetch(`/daily-cleaning/subscriptions/${id}/renew`, { method: "POST" }),
+      onSuccess: invalidate,
+    }),
+  };
 }
 
 export function useDcmsPlanMutations() {
@@ -212,35 +222,6 @@ export function useDcmsPlanMutations() {
       onSuccess: invalidate,
     }),
   };
-}
-
-export function useDcmsSubscriptionMutations() {
-  const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["dcms"] });
-  return {
-    create: useMutation({
-      mutationFn: (data: Record<string, unknown>) =>
-        dcmsFetch("/daily-cleaning/subscriptions", { method: "POST", body: JSON.stringify(data) }),
-      onSuccess: invalidate,
-    }),
-    assign: useMutation({
-      mutationFn: (data: { subscriptionId: number; staffId: number; routeOrder?: number }) =>
-        dcmsFetch("/daily-cleaning/assignments", { method: "POST", body: JSON.stringify(data) }),
-      onSuccess: invalidate,
-    }),
-    renew: useMutation({
-      mutationFn: (id: number) =>
-        dcmsFetch(`/daily-cleaning/subscriptions/${id}/renew`, { method: "POST" }),
-      onSuccess: invalidate,
-    }),
-  };
-}
-
-export function useStaffDcmsAssignments() {
-  return useQuery({
-    queryKey: ["dcms", "staff", "assignments"],
-    queryFn: () => dcmsFetch<unknown[]>("/daily-cleaning/staff/assignments"),
-  });
 }
 
 export function useVehicleSearch(registration: string, enabled: boolean) {

@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import { sql, eq, inArray, type SQL, type AnyColumn } from "drizzle-orm";
+import { sql, eq, inArray, or, isNull, type SQL, type AnyColumn } from "drizzle-orm";
 
 /**
  * Tenant scope helpers.
@@ -40,17 +40,22 @@ export function tenantFilters(req: Request, opts: TenantOpts): SQL[] {
 
   // Super-admin: only the company filter applies (and only if their session
   // is tied to a specific company). Multi-company root admins skip it.
+  // Rows with NULL company_id remain visible (legacy / unstamped queue rows).
   if (s.isSuperAdmin) {
-    if (s.companyId && opts.companyCol) return [eq(opts.companyCol, s.companyId)];
+    if (s.companyId && opts.companyCol) {
+      return [or(eq(opts.companyCol, s.companyId), isNull(opts.companyCol))];
+    }
     return [];
   }
 
   const out: SQL[] = [];
-  if (s.companyId && opts.companyCol) out.push(eq(opts.companyCol, s.companyId));
+  if (s.companyId && opts.companyCol) {
+    out.push(or(eq(opts.companyCol, s.companyId), isNull(opts.companyCol)));
+  }
 
   if (opts.branchCol && s.branchIds !== null) {
     if (s.branchIds.length === 0) out.push(sql`false`);
-    else out.push(inArray(opts.branchCol, s.branchIds));
+    else out.push(or(inArray(opts.branchCol, s.branchIds), isNull(opts.branchCol)));
   }
   if (s.franchiseeId && opts.franchiseeCol) out.push(eq(opts.franchiseeCol, s.franchiseeId));
   if (s.customerId && opts.customerCol) out.push(eq(opts.customerCol, s.customerId));

@@ -12,7 +12,6 @@ import { useAuth } from "@/lib/auth";
 import { useAccountScope } from "@/lib/account-scope";
 import StaffAppShell from "@/components/layout/StaffAppShell";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
-import { StaffProfileCompletionBanner } from "@/features/staff/components/StaffProfileCompletionBanner";
 import { StaffVerificationBanner, StaffVerificationBadge } from "@/features/staff/components/StaffVerificationBanner";
 import { StaffOperationalRoles } from "@/features/staff/components/StaffOperationalRoles";
 import { Button } from "@/components/ui/button";
@@ -27,7 +26,7 @@ import { markAttendanceWithLocation } from "@/lib/location";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
 import { resolveMediaUrl } from "@/lib/media-url";
-import { Link } from "wouter";
+import { StaffTeamSection } from "@/components/staff/StaffTeamSection";
 
 const statusColors: Record<string, string> = {
   present: "bg-green-500/10 text-green-600 border-green-500/20",
@@ -147,9 +146,6 @@ export default function StaffProfile() {
           <Skeleton className="h-24 w-full rounded-2xl" />
         ) : profile ? (
           <>
-            {profile.profileCompletion && (
-              <StaffProfileCompletionBanner completion={profile.profileCompletion} />
-            )}
             <StaffVerificationBanner status={profile.verificationStatus} notes={profile.verificationNotes} />
           </>
         ) : null}
@@ -193,11 +189,7 @@ export default function StaffProfile() {
           />
         )}
 
-        {isSupervisor && (
-          <Link href="/staff/team" className="block rounded-2xl border border-primary/30 bg-primary/5 p-4 text-sm font-medium text-primary hover:bg-primary/10">
-            View my team & customer complaints →
-          </Link>
-        )}
+        <StaffTeamSection />
 
         {profile && !isSupervisor && (
           <section className="rounded-2xl border border-border bg-card p-4 space-y-3">

@@ -123,6 +123,10 @@ async function createOneTimeContract(
   const serviceId = body.catalogServiceId ?? body.selectionId;
   const [svc] = await db.select().from(servicesTable).where(eq(servicesTable.id, serviceId)).limit(1);
   if (!svc) throw new Error("Service not found");
+  const { isDailyCleanCatalogServiceName } = await import("../dcms/dailyCleanCatalogGuard");
+  if (isDailyCleanCatalogServiceName(svc.name)) {
+    throw new Error("Daily cleaning monthly plans must be selected as a Plan — not as a one-time catalog service.");
+  }
 
   const scheduledDate = body.scheduledDate ?? body.startDate ?? getTodayIST();
   const amount = computeDiscountedAmount(

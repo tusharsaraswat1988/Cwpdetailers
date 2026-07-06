@@ -961,37 +961,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Booking"
 
-  /bookings/{id}/assign:
-    post:
-      operationId: assignBooking
-      tags: [bookings]
-      summary: Assign or reassign staff
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                staffId:
-                  type: integer
-                reason:
-                  type: string
-              required: [staffId]
-      responses:
-        "200":
-          description: Assigned
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Booking"
-
   /bookings/{id}/regenerate-occurrences:
     post:
       operationId: regenerateOccurrences

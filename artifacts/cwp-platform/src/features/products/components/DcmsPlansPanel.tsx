@@ -272,7 +272,7 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
           </p>
           {embedded && (
             <Link href="/admin/daily-cleaning" className="text-xs text-primary hover:underline mt-1 inline-block">
-              Legacy daily cleaning operations (visits, routes) →
+              Daily Clean reports &amp; visits →
             </Link>
           )}
         </div>

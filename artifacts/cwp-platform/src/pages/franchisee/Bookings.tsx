@@ -3,7 +3,7 @@ import FranchiseeLayout from "@/components/layout/FranchiseeLayout";
 import { useAuth } from "@/lib/auth";
 import {
   useListBookings, getListBookingsQueryKey,
-  useTransitionBooking, useAssignBooking,
+  useTransitionBooking, useUpdateBooking,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -64,7 +64,7 @@ export default function FranchiseeBookings() {
     },
   });
 
-  const assignMutation = useAssignBooking({
+  const assignMutation = useUpdateBooking({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
@@ -219,7 +219,7 @@ export default function FranchiseeBookings() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAssign(false)}>Cancel</Button>
-            <Button onClick={() => assignMutation.mutate({ id: detailBooking?.id ?? 0, data: { staffId: parseInt(assignStaffId), reason: assignReason } })} disabled={!assignStaffId}>
+            <Button onClick={() => assignMutation.mutate({ id: detailBooking?.id ?? 0, data: { staffId: parseInt(assignStaffId, 10) } })} disabled={!assignStaffId}>
               {assignMutation.isPending ? <Loader2 className="animate-spin mr-2" size={14} /> : null} Assign
             </Button>
           </DialogFooter>

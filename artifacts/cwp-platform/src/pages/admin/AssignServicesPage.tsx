@@ -365,6 +365,8 @@ export default function AssignServicesPage() {
 
       setTaskStaff({});
 
+      setTab("assigned");
+
       queryClient.invalidateQueries({ queryKey: ASSIGNMENTS_QUERY_KEY });
 
     },

@@ -34,6 +34,8 @@ export type CompleteVisitInput = {
   ocrText?: string | null;
   ocrConfidence?: number | null;
   confirmedRegistration?: string | null;
+  /** Walk-in entry without prior route assignment */
+  walkIn?: boolean;
 };
 
 export async function completeVisit(input: CompleteVisitInput): Promise<{ visit: DcmsVisit; consumed: boolean }> {
@@ -62,7 +64,7 @@ export async function completeVisit(input: CompleteVisitInput): Promise<{ visit:
       eq(dcmsStaffAssignmentsTable.staffId, input.staffId),
       eq(dcmsStaffAssignmentsTable.isActive, true),
     )).limit(1);
-  if (!assignment) throw new Error("Staff not assigned to this subscription");
+  if (!input.walkIn && !assignment) throw new Error("Staff not assigned to this subscription");
 
   const [vehicle] = await db.select().from(vehiclesTable)
     .where(eq(vehiclesTable.id, sub.vehicleId)).limit(1);

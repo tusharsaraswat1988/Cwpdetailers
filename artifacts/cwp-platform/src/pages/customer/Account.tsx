@@ -1,7 +1,11 @@
 import { useAuth } from "@/lib/auth";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Card, CardContent } from "@/components/ui/card";
-import { History, FileText, Car, AlertCircle, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { History, FileText, Car, AlertCircle, ChevronRight, Loader2, Save } from "lucide-react";
 import { Link } from "wouter";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +13,9 @@ import { PushNotificationSettings } from "@/components/settings/PushNotification
 import { CustomerPhotoEditor } from "@/components/shared/CustomerPhotoEditor";
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
+import { submitMobile } from "@/lib/contactForm";
+import { useToast } from "@/hooks/use-toast";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 const accountLinks = [
   { href: "/customer/history", label: "Service History", description: "Past bookings & photos", icon: History },
@@ -31,12 +38,22 @@ type CustomerProfile = {
 };
 
 export default function CustomerAccount() {
-  const { user } = useAuth();
+  const { user, token, login } = useAuth();
+  const { toast } = useToast();
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const loadProfile = useCallback(async () => {
-    const res = await fetch("/api/customers/me");
-    if (res.ok) setProfile(await res.json());
+    const res = await fetch("/api/customers/me", { credentials: "include" });
+    if (res.ok) {
+      const data = (await res.json()) as CustomerProfile;
+      setProfile(data);
+      setName(data.name);
+      setPhone(data.phone);
+    }
   }, []);
 
   useEffect(() => { void loadProfile(); }, [loadProfile]);
@@ -47,6 +64,65 @@ export default function CustomerAccount() {
   });
 
   const displayName = profile?.name ?? user?.name ?? "Customer";
+  const profileDirty =
+    profile != null && (name.trim() !== profile.name || phone.trim() !== profile.phone);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      toast({ title: "Name is required", variant: "destructive" });
+      return;
+    }
+
+    const phoneResult = submitMobile(phone);
+    setPhoneError(phoneResult.ok ? null : phoneResult.error);
+    if (!phoneResult.ok) {
+      toast({ title: phoneResult.error, variant: "destructive" });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/customers/me", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmedName, phone: phoneResult.value }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error ?? "Could not update profile");
+      }
+
+      setProfile(body);
+      setName(body.name);
+      setPhone(body.phone);
+
+      if (user) {
+        login(
+          {
+            ...user,
+            name: body.name,
+            phone: body.phone,
+          },
+          token ?? "",
+        );
+      }
+
+      toast({ title: "Profile updated" });
+    } catch (err) {
+      toast({
+        title: "Update failed",
+        description: getApiErrorMessage(err, "Could not save your profile"),
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <CustomerLayout>
@@ -64,20 +140,73 @@ export default function CustomerAccount() {
                 name={displayName}
                 photoUrl={profile.photoUrl}
                 size="lg"
+                selfService
                 onUpdated={() => void loadProfile()}
                 testIdPrefix="account-photo"
               />
             ) : null}
-            <div className="min-w-0 border-t border-border pt-3">
-              <p className="font-semibold">{displayName}</p>
-              <p className="text-sm text-muted-foreground">{profile?.phone ?? user?.phone}</p>
+
+            <form onSubmit={handleSaveProfile} className="space-y-4 border-t border-border pt-4">
+              <div>
+                <Label htmlFor="account-name">Full name</Label>
+                <Input
+                  id="account-name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="mt-1.5"
+                  autoComplete="name"
+                  data-testid="input-account-name"
+                />
+              </div>
+
+              <PhoneInput
+                id="account-phone"
+                label="Mobile number"
+                value={phone}
+                onChange={setPhone}
+                error={phoneError}
+                onErrorChange={setPhoneError}
+                data-testid="input-account-phone"
+              />
+
               {(profile?.email ?? user?.email) && (
-                <p className="text-xs text-muted-foreground">{profile?.email ?? user?.email}</p>
+                <div>
+                  <Label htmlFor="account-email">Email</Label>
+                  <Input
+                    id="account-email"
+                    value={profile?.email ?? user?.email ?? ""}
+                    readOnly
+                    disabled
+                    className="mt-1.5 bg-muted/50"
+                    data-testid="input-account-email"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Contact support to change your email.</p>
+                </div>
               )}
+
               {profile?.customerSince && (
-                <p className="text-xs text-muted-foreground mt-1">Customer since {profile.customerSince}</p>
+                <p className="text-xs text-muted-foreground">Customer since {profile.customerSince}</p>
               )}
-            </div>
+
+              <Button
+                type="submit"
+                disabled={saving || !profileDirty}
+                className="w-full sm:w-auto"
+                data-testid="btn-save-account-profile"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin mr-2" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <Save size={14} className="mr-2" />
+                    Save profile
+                  </>
+                )}
+              </Button>
+            </form>
           </CardContent>
         </Card>
 

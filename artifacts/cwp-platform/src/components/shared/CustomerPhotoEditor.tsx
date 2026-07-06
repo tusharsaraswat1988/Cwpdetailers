@@ -14,14 +14,21 @@ type Props = {
   name?: string;
   photoUrl?: string | null;
   editable?: boolean;
+  /** Use PATCH /api/customers/me (customer portal self-service). */
+  selfService?: boolean;
   size?: Size;
   onUpdated?: (photoUrl: string | null) => void;
   className?: string;
   testIdPrefix?: string;
 };
 
-async function patchCustomerPhoto(customerId: number, photoUrl: string | null) {
-  const res = await fetch(`/api/customers/${customerId}`, {
+async function patchCustomerPhoto(
+  customerId: number,
+  photoUrl: string | null,
+  selfService = false,
+) {
+  const url = selfService ? "/api/customers/me" : `/api/customers/${customerId}`;
+  const res = await fetch(url, {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -39,6 +46,7 @@ export function CustomerPhotoEditor({
   name,
   photoUrl,
   editable = true,
+  selfService = false,
   size = "md",
   onUpdated,
   className,
@@ -64,7 +72,7 @@ export function CustomerPhotoEditor({
         data: { name: file.name, size: file.size, contentType: file.type },
       });
       const secureUrl = await uploadFileToCloudinary(file, presign);
-      await patchCustomerPhoto(customerId, secureUrl);
+      await patchCustomerPhoto(customerId, secureUrl, selfService);
       setCurrentUrl(secureUrl);
       onUpdated?.(secureUrl);
       toast({ title: hasPhoto ? "Photo updated" : "Photo added" });
@@ -83,7 +91,7 @@ export function CustomerPhotoEditor({
   const removePhoto = async () => {
     setBusy(true);
     try {
-      await patchCustomerPhoto(customerId, null);
+      await patchCustomerPhoto(customerId, null, selfService);
       setCurrentUrl(null);
       onUpdated?.(null);
       toast({ title: "Photo removed" });

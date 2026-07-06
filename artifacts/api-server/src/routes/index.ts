@@ -10,6 +10,7 @@ import subscriptionsRouter from "./subscriptions";
 import bookingsRouter from "./bookings";
 import staffRouter from "./staff";
 import staffEcosystemRouter from "./staff-ecosystem";
+import staffWalkInRouter from "./staff-walk-in";
 import complaintsRouter from "./complaints";
 import paymentsRouter from "./payments";
 import branchesRouter from "./branches";
@@ -151,8 +152,15 @@ router.use(
     { match: /\/me\/ecosystem$/, method: "PATCH", action: "view" },
     { match: /\/me\/documents/, method: "POST", action: "view" },
     { match: /\/me\/team-complaints\/\d+$/, method: "PATCH", action: "view" },
+    { match: /\/walk-in\/resolve$/, method: "POST", action: "view" },
   ]),
   staffEcosystemRouter,
+);
+router.use(
+  guardResource("staff", [
+    { match: /\/walk-in\/resolve$/, method: "POST", action: "view" },
+  ]),
+  staffWalkInRouter,
 );
 router.use(guardResource("complaints"), complaintsRouter);
 router.use(

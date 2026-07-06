@@ -84,7 +84,7 @@ export type ExecutionView = {
 };
 
 export type ExecutionDetail = ExecutionView & {
-  photos: { id: number; kind: string; url: string; caption: string | null }[];
+  photos: { id: number; kind: string; url: string; caption: string | null; latitude: number | null; longitude: number | null; accuracy: number | null }[];
   notes: { id: number; kind: string; body: string; createdAt: string }[];
   checklist: { id: number; label: string; isCompleted: boolean }[];
   locationLogs: { id: number; eventType: string; latitude: number | null; longitude: number | null; recordedAt: string }[];
@@ -268,7 +268,15 @@ export async function getExecutionDetail(req: Request, executionId: number): Pro
 
   return {
     ...mapExecutionRow(row),
-    photos: photos.map(p => ({ id: p.id, kind: p.kind, url: p.url, caption: p.caption })),
+    photos: photos.map(p => ({
+      id: p.id,
+      kind: p.kind,
+      url: p.url,
+      caption: p.caption,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      accuracy: p.accuracy,
+    })),
     notes: notes.map(n => ({ id: n.id, kind: n.kind, body: n.body, createdAt: n.createdAt.toISOString() })),
     checklist: checklist.map(c => ({ id: c.id, label: c.label, isCompleted: c.isCompleted })),
     locationLogs: locationLogs.map(l => ({
@@ -319,11 +327,69 @@ export async function startExecution(req: Request, executionId: number, gps?: {
 }
 
 export type CompleteExecutionInput = {
-  photos?: { kind?: "before" | "after" | "proof" | "other"; url: string; caption?: string }[];
+  photos?: { kind?: "before" | "after" | "proof" | "other"; url: string; caption?: string; latitude?: number; longitude?: number; accuracy?: number }[];
   notes?: { kind?: "technician" | "customer" | "internal"; body: string }[];
   checklist?: { label: string; isCompleted: boolean }[];
   gps?: { latitude?: number; longitude?: number; accuracy?: number };
 };
+
+const REQUIRED_JOB_PHOTOS = 3;
+
+function isDailyCleanTask(taskType: string | null | undefined) {
+  return taskType === "daily_cleaning";
+}
+
+async function countExecutionPhotos(executionId: number) {
+  const rows = await db.select().from(serviceExecutionPhotosTable)
+    .where(eq(serviceExecutionPhotosTable.executionId, executionId));
+  return {
+    before: rows.filter(r => r.kind === "before").length,
+    after: rows.filter(r => r.kind === "after").length,
+  };
+}
+
+export type AddExecutionPhotoInput = {
+  kind: "before" | "after" | "proof" | "other";
+  url: string;
+  caption?: string;
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+};
+
+export async function addExecutionPhotos(
+  req: Request,
+  executionId: number,
+  photos: AddExecutionPhotoInput[],
+): Promise<ExecutionDetail> {
+  const execution = await getMutableExecution(req, executionId);
+  if (execution.status !== "started") {
+    throw new Error("Photos can only be added after the job is started");
+  }
+  if (!photos.length) throw new Error("At least one photo is required");
+
+  for (const p of photos) {
+    if (p.latitude == null || p.longitude == null) {
+      throw new Error("Geo-tagged location is required for every photo");
+    }
+  }
+
+  await db.insert(serviceExecutionPhotosTable).values(
+    photos.map(p => ({
+      executionId,
+      kind: p.kind,
+      url: p.url,
+      caption: p.caption ?? null,
+      latitude: p.latitude ?? null,
+      longitude: p.longitude ?? null,
+      accuracy: p.accuracy ?? null,
+    })),
+  );
+
+  const detail = await getExecutionDetail(req, executionId);
+  if (!detail) throw new Error("Execution not found");
+  return detail;
+}
 
 export async function completeExecution(
   req: Request,
@@ -334,6 +400,18 @@ export async function completeExecution(
   if (!ACTIVE.includes(execution.status as ExecutionStatus)) {
     throw new Error("Execution cannot be completed from current status");
   }
+
+  if (!isDailyCleanTask(execution.taskType)) {
+    const counts = await countExecutionPhotos(executionId);
+    const incomingBefore = input.photos?.filter(p => p.kind === "before").length ?? 0;
+    const incomingAfter = input.photos?.filter(p => p.kind === "after").length ?? 0;
+    const totalBefore = counts.before + incomingBefore;
+    const totalAfter = counts.after + incomingAfter;
+    if (totalBefore < REQUIRED_JOB_PHOTOS || totalAfter < REQUIRED_JOB_PHOTOS) {
+      throw new Error(`Upload ${REQUIRED_JOB_PHOTOS} before and ${REQUIRED_JOB_PHOTOS} after geo-tagged photos before closing the job`);
+    }
+  }
+
   const now = new Date();
   await db.update(serviceExecutionsTable)
     .set({
@@ -346,12 +424,20 @@ export async function completeExecution(
 
   const staffId = req.scope?.staffId ?? null;
   if (input.photos?.length) {
+    for (const p of input.photos) {
+      if (p.latitude == null || p.longitude == null) {
+        throw new Error("Geo-tagged location is required for every photo");
+      }
+    }
     await db.insert(serviceExecutionPhotosTable).values(
       input.photos.map(p => ({
         executionId,
         kind: p.kind ?? "proof",
         url: p.url,
         caption: p.caption ?? null,
+        latitude: p.latitude ?? null,
+        longitude: p.longitude ?? null,
+        accuracy: p.accuracy ?? null,
       })),
     );
   }

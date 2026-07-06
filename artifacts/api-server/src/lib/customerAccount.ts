@@ -88,3 +88,24 @@ export async function createCustomerLoginAccount(
 
   return { userId: user.id, phone: user.phone };
 }
+
+/** Keep login user row in sync when a customer updates their own profile. */
+export async function syncCustomerLoginProfile(
+  customerId: number,
+  fields: { name?: string; phone?: string; email?: string | null },
+) {
+  const [customer] = await db
+    .select({ userId: customersTable.userId })
+    .from(customersTable)
+    .where(eq(customersTable.id, customerId))
+    .limit(1);
+
+  if (!customer?.userId) return;
+
+  const userUpdate: Record<string, unknown> = { updatedAt: new Date() };
+  if (fields.name !== undefined) userUpdate.name = fields.name;
+  if (fields.phone !== undefined) userUpdate.phone = fields.phone;
+  if (fields.email !== undefined) userUpdate.email = fields.email ?? null;
+
+  await db.update(usersTable).set(userUpdate).where(eq(usersTable.id, customer.userId));
+}

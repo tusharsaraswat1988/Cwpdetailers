@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import {
   useListBookings, getListBookingsQueryKey,
-  useUpdateBooking, type ListBookingsParams,
-  useTransitionBooking, useAddProof, useAssignBooking,
-  useRescheduleBooking, useGetBookingEvents,
-  useRequestUploadUrl,
+  type ListBookingsParams,
+  useTransitionBooking, useRescheduleBooking, useGetBookingEvents,
   type ListBookingsStatus,
 } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
@@ -15,16 +13,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Clock, User, ChevronLeft, ChevronRight, MapPin, Camera, Route, CheckCircle, XCircle, ArrowRight, Loader2 } from "lucide-react";
+import { Link } from "wouter";
+import { Calendar, Clock, User, ChevronLeft, ChevronRight, Route, CheckCircle, XCircle, ArrowRight, Loader2 } from "lucide-react";
 import { Can } from "@/components/Can";
 import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shared";
 import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
-import { StaffAssignSelect } from "@/components/shared/StaffAssignSelect";
 import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
-import { roleSlugForBookingService, OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
-import { format, isToday, parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
 
 const statusColors: Record<string, string> = {
   pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
@@ -35,6 +33,7 @@ const statusColors: Record<string, string> = {
   completed: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
   cancelled: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
   rescheduled: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+  missed: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
 };
 
 type B = {
@@ -54,9 +53,6 @@ export default function AdminBookings() {
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleReason, setRescheduleReason] = useState("");
-  const [showAssign, setShowAssign] = useState(false);
-  const [assignStaffId, setAssignStaffId] = useState("");
-  const [assignReason, setAssignReason] = useState("");
   const [customerFilter, setCustomerFilter] = useState<string | undefined>(undefined);
   const limit = 15;
 
@@ -80,16 +76,6 @@ export default function AdminBookings() {
     query: { enabled: !!detailBooking?.id, queryKey: ["bookingEvents", detailBooking?.id] },
   });
 
-  const updateMutation = useUpdateBooking({
-    mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
-        toast({ title: "Booking updated" });
-      },
-      onError: () => toast({ title: "Update failed", variant: "destructive" }),
-    },
-  });
-
   const transitionMutation = useTransitionBooking({
     mutation: {
       onSuccess: () => {
@@ -97,17 +83,6 @@ export default function AdminBookings() {
         toast({ title: "Status updated" });
       },
       onError: (e) => toast({ title: (e as any)?.response?.data?.error || "Transition failed", variant: "destructive" }),
-    },
-  });
-
-  const assignMutation = useAssignBooking({
-    mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
-        toast({ title: "Staff assigned" });
-        setShowAssign(false);
-      },
-      onError: (e) => toast({ title: (e as any)?.response?.data?.error || "Assign failed", variant: "destructive" }),
     },
   });
 
@@ -171,13 +146,30 @@ export default function AdminBookings() {
     },
   ];
 
-  const statusFilters = ["all", "pending", "confirmed", "scheduled", "en_route", "in_progress", "completed", "cancelled", "rescheduled"];
+  const statusFilters = ["all", "pending", "confirmed", "scheduled", "en_route", "in_progress", "completed", "cancelled", "rescheduled", "missed"];
 
   return (
     <AdminLayout>
       <div className="p-6 space-y-5">
         <CustomerHubAdminNav />
-        <PageHeader title="Bookings" description={`${data?.total ?? 0} total bookings`} />
+        <PageHeader
+          title="Bookings"
+          description="One-time wash, detailing & solar jobs. Monthly daily clean → Assign Service."
+        />
+
+        <Alert>
+          <AlertDescription className="text-sm">
+            Monthly daily cleaning (₹1600 plans) is managed in{" "}
+            <Link href="/admin/assign-services" className="font-medium text-primary underline underline-offset-2">
+              Assign Service
+            </Link>
+            {" "}and{" "}
+            <Link href="/admin/daily-cleaning/subscriptions" className="font-medium text-primary underline underline-offset-2">
+              Daily Clean subscriptions
+            </Link>
+            . This list shows doorstep one-time jobs only.
+          </AlertDescription>
+        </Alert>
 
         {customerFilter && (
           <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2 text-sm">
@@ -313,9 +305,11 @@ export default function AdminBookings() {
                   <Button variant="outline" className="w-full" size="sm" onClick={() => setShowReschedule(true)}>
                     <Calendar size={14} className="mr-2" /> Reschedule
                   </Button>
-                  <Button variant="outline" className="w-full" size="sm" onClick={() => setShowAssign(true)}>
-                    <User size={14} className="mr-2" /> Reassign Staff
-                  </Button>
+                  <Link href="/admin/assign-services" className="block">
+                    <Button variant="outline" className="w-full" size="sm" type="button">
+                      <User size={14} className="mr-2" /> Assign staff (Assign Service)
+                    </Button>
+                  </Link>
                   {detailBooking.status !== "cancelled" && detailBooking.status !== "completed" && (
                     <Button variant="destructive" className="w-full" size="sm" onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "cancelled", reason: "Cancelled by admin" } })}>
                       <XCircle size={14} className="mr-2" /> Cancel
@@ -340,29 +334,6 @@ export default function AdminBookings() {
             <Button variant="outline" onClick={() => setShowReschedule(false)}>Cancel</Button>
             <Button onClick={() => rescheduleMutation.mutate({ id: detailBooking?.id ?? 0, data: { scheduledDate: rescheduleDate, reason: rescheduleReason } })} disabled={!rescheduleDate}>
               {rescheduleMutation.isPending ? <Loader2 className="animate-spin mr-2" size={14} /> : null} Reschedule
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Assign Dialog */}
-      <Dialog open={showAssign} onOpenChange={setShowAssign}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Assign Staff</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <StaffAssignSelect
-              roleSlug={roleSlugForBookingService(detailBooking?.serviceType) ?? OPERATIONAL_ROLE_SLUGS.CAR_WASHER}
-              value={assignStaffId}
-              onValueChange={setAssignStaffId}
-              placeholder="Select qualified staff"
-              data-testid="select-booking-staff"
-            />
-            <Textarea placeholder="Reason (optional)" value={assignReason} onChange={e => setAssignReason(e.target.value)} />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAssign(false)}>Cancel</Button>
-            <Button onClick={() => assignMutation.mutate({ id: detailBooking?.id ?? 0, data: { staffId: parseInt(assignStaffId), reason: assignReason } })} disabled={!assignStaffId}>
-              {assignMutation.isPending ? <Loader2 className="animate-spin mr-2" size={14} /> : null} Assign
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -6,7 +6,7 @@ import {
 } from "../lib/dcms/planService";
 import {
   createSubscription, listSubscriptions, getSubscriptionDetail,
-  updateSubscriptionLocation, assignStaff, listStaffAssignments, renewSubscription,
+  updateSubscriptionLocation, renewSubscription,
   getCustomerActiveSubscription,
 } from "../lib/dcms/subscriptionService";
 import { completeVisit, listVisits, listWashes } from "../lib/dcms/visitService";
@@ -14,7 +14,6 @@ import { searchVehicleByRegistration, searchVehicleFromOcrText } from "../lib/dc
 import { recognizePlateFromOcrText, shouldAutoSelectFromOcrConfidence } from "../lib/dcms/plateOcrEngine";
 import { searchCustomers, searchVehicles, searchStaff, searchSubscriptions } from "../lib/dcms/entitySearch";
 import { getStaffDailyRoute } from "../lib/dcms/dailyRouteService";
-import { applyLegacyAssignmentDeprecation } from "../lib/assignments/legacyAssignmentDeprecation";
 import { listSubscriptionsWithOutstandingVisits, runMissedVisitScheduler } from "../lib/dcms/missedVisitService";
 import {
   adminPauseSubscription, adminResumeSubscription, customerRequestPause,
@@ -317,50 +316,6 @@ router.patch(
   },
 );
 
-// ─── Assignments ─────────────────────────────────────────────────────────────
-
-router.get(
-  "/daily-cleaning/assignments",
-  requireAuth,
-  requirePermission("daily_cleaning", "view"),
-  async (req, res) => {
-    /** @deprecated Use GET /api/assignments/pending and /api/assignments/assigned */
-    applyLegacyAssignmentDeprecation(res);
-    try {
-      const staffId = req.query.staffId ? Number(req.query.staffId) : undefined;
-      const assignments = await listStaffAssignments(staffId);
-      return res.json(assignments);
-    } catch (err) {
-      return handleError(req, res, err);
-    }
-  },
-);
-
-router.post(
-  "/daily-cleaning/assignments",
-  requireAuth,
-  requirePermission("daily_cleaning", "manage_assignments"),
-  async (req, res) => {
-    /** @deprecated Use POST /api/assignments/:pendingId/assign via pending_service_assignments queue */
-    applyLegacyAssignmentDeprecation(res);
-    try {
-      const { subscriptionId, staffId, routeOrder } = req.body;
-      if (!subscriptionId || !staffId) {
-        return res.status(400).json({ error: "subscriptionId and staffId are required" });
-      }
-      const assignment = await assignStaff(
-        Number(subscriptionId),
-        Number(staffId),
-        req.user!.id,
-        routeOrder != null ? Number(routeOrder) : undefined,
-      );
-      return res.status(201).json(assignment);
-    } catch (err) {
-      return handleError(req, res, err);
-    }
-  },
-);
-
 // ─── Visits ──────────────────────────────────────────────────────────────────
 
 router.get(
@@ -391,7 +346,7 @@ router.post(
   dcmsRateLimit(30, 60_000),
   async (req, res) => {
     try {
-      const { subscriptionId, visitType, imageBase64, latitude, longitude, accuracy, exif, ocrText, ocrConfidence, confirmedRegistration } = req.body;
+      const { subscriptionId, visitType, imageBase64, latitude, longitude, accuracy, exif, ocrText, ocrConfidence, confirmedRegistration, walkIn } = req.body;
       if (!subscriptionId || !imageBase64 || latitude == null || longitude == null) {
         return res.status(400).json({ error: "subscriptionId, imageBase64, latitude, and longitude are required" });
       }
@@ -412,6 +367,7 @@ router.post(
         ocrText: ocrText ?? null,
         ocrConfidence: ocrConfidence != null ? Number(ocrConfidence) : null,
         confirmedRegistration: confirmedRegistration ?? null,
+        walkIn: Boolean(walkIn),
       });
       return res.status(201).json(result);
     } catch (err) {
@@ -465,30 +421,6 @@ router.post(
         autoSelect: shouldAutoSelectFromOcrConfidence(ocrResult.confidence),
         vehicle,
       });
-    } catch (err) {
-      return handleError(req, res, err);
-    }
-  },
-);
-
-// ─── Staff Dashboard ─────────────────────────────────────────────────────────
-
-router.get(
-  "/daily-cleaning/staff/assignments",
-  requireAuth,
-  requirePermission("daily_cleaning", "complete_visits"),
-  async (req, res) => {
-    /** @deprecated Staff execution list will move to Sprint 7 service_executions domain */
-    applyLegacyAssignmentDeprecation(res);
-    try {
-      const staffId = req.user!.staffId;
-      if (!staffId) return res.status(403).json({ error: "Staff account required" });
-      const hasRole = await staffHasOperationalRole(staffId, OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
-      if (!hasRole) {
-        return res.status(403).json({ error: "Daily Car Cleaner operational role required for daily cleaning assignments" });
-      }
-      const assignments = await listStaffAssignments(staffId);
-      return res.json(assignments);
     } catch (err) {
       return handleError(req, res, err);
     }

@@ -31,6 +31,7 @@ import {
   createCustomerBooking,
 } from "../api";
 import { useDcmsPlans, useDcmsSubscriptionMutations, type DcmsPlan } from "@/features/daily-cleaning/api";
+import { assignPendingServiceTasks, fetchPendingAssignments } from "@/features/assign-services/api";
 import { useCatalogPackages, useCatalogPricingQuote, useCatalogAddons, type CatalogPackage } from "@/features/service-catalog/api";
 import { OPERATIONAL_ROLE_SLUGS, roleSlugForBookingService } from "@/lib/staff-ecosystem/roles";
 import { BookingAddonsField } from "./BookingAddonsField";
@@ -144,7 +145,7 @@ export function AddCustomerServiceWizard({
   const { data: dcmsPlans } = useDcmsPlans(vehicleIdNum);
   const { data: packages } = useCatalogPackages();
   const { data: catalogServices } = useCatalogServices();
-  const { create: createDcms, assign: assignDcms } = useDcmsSubscriptionMutations();
+  const { create: createDcms } = useDcmsSubscriptionMutations();
 
   const washPackages = useMemo(() => (packages ?? []).filter(isWashPackage), [packages]);
   const solarAmcPackages = useMemo(() => (packages ?? []).filter(isSolarAmcPackage), [packages]);
@@ -279,12 +280,22 @@ export function AddCustomerServiceWizard({
           startDate,
         }) as { id: number };
         if (dcmsStaffId !== "none") {
-          await assignDcms.mutateAsync({
-            subscriptionId: sub.id,
-            staffId: parseInt(dcmsStaffId, 10),
-          });
+          const pending = await fetchPendingAssignments({ serviceType: "daily_cleaning" });
+          const vehicleNum = parseInt(vehicleId, 10);
+          const match = pending.find(p => p.customerId === customerId && p.assetId === vehicleNum);
+          if (match) {
+            const staffNum = parseInt(dcmsStaffId, 10);
+            await assignPendingServiceTasks(
+              match.id,
+              match.requiredTasks.map(t => ({ taskType: t.taskType, staffId: staffNum })),
+            );
+          }
         }
-        setDoneMessage("Daily cleaning plan created.");
+        setDoneMessage(
+          dcmsStaffId !== "none"
+            ? "Daily cleaning plan created and staff assigned."
+            : "Daily cleaning plan created. Assign staff from Assign Services if needed.",
+        );
       } else if (product === "wash_package") {
         if (!packageId) throw new Error("Select a package");
         await grantCustomerPackage(customerId, parseInt(packageId, 10));

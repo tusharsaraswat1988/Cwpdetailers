@@ -124,6 +124,37 @@ const ASSIGNED_SCOPE = {
   customerCol: serviceAssignmentsTable.customerId,
 };
 
+type TenantFields = {
+  companyId: number | null;
+  branchId: number | null;
+  franchiseeId: number | null;
+};
+
+/** Fill missing tenant columns from contract, pending row, or caller scope. */
+function resolveAssignmentTenant(
+  req: Request,
+  pending: {
+    companyId?: number | null;
+    branchId?: number | null;
+    franchiseeId?: number | null;
+  },
+  contract?: {
+    companyId?: number | null;
+    branchId?: number | null;
+    franchiseeId?: number | null;
+  } | null,
+): TenantFields {
+  const scope = req.scope;
+  const branchFromScope =
+    scope?.branchIds?.length === 1 ? scope.branchIds[0]! : null;
+
+  return {
+    companyId: pending.companyId ?? contract?.companyId ?? scope?.companyId ?? null,
+    branchId: pending.branchId ?? contract?.branchId ?? branchFromScope,
+    franchiseeId: pending.franchiseId ?? contract?.franchiseeId ?? scope?.franchiseeId ?? null,
+  };
+}
+
 async function resolveServiceName(
   contractId: number,
   serviceId: number | null,
@@ -380,6 +411,8 @@ export async function assignPendingServiceTasks(
     pending.serviceId,
   );
 
+  const tenant = resolveAssignmentTenant(req, pending, contract);
+
   const results: AssignedServiceView[] = [];
   const performedBy = req.user?.id ?? 0;
 
@@ -421,9 +454,9 @@ export async function assignPendingServiceTasks(
       status: "assigned",
       serviceLabel: serviceName,
       productLine,
-      companyId: pending.companyId,
-      franchiseeId: pending.franchiseeId,
-      branchId: pending.branchId,
+      companyId: tenant.companyId,
+      franchiseeId: tenant.franchiseeId,
+      branchId: tenant.branchId,
     }).returning();
 
     const executionId = await createScheduledExecutionForAssignment({
@@ -435,9 +468,9 @@ export async function assignPendingServiceTasks(
       assignedStaffId: staffId,
       taskType,
       scheduledDate: getTodayIST(),
-      companyId: pending.companyId,
-      franchiseeId: pending.franchiseeId,
-      branchId: pending.branchId,
+      companyId: tenant.companyId,
+      franchiseeId: tenant.franchiseeId,
+      branchId: tenant.branchId,
     });
 
     if (pending.sourceSystem === "dcms" && taskType === "daily_cleaning" && performedBy > 0) {
@@ -499,6 +532,20 @@ export async function assignPendingServiceTasks(
   }
 
   await markPendingFullyAssigned(pending.id, pending.contractRegistryId);
+
+  if (
+    tenant.companyId != null
+    && (pending.companyId == null || pending.branchId == null || pending.franchiseeId == null)
+  ) {
+    await db.update(pendingServiceAssignmentsTable)
+      .set({
+        companyId: pending.companyId ?? tenant.companyId,
+        branchId: pending.branchId ?? tenant.branchId,
+        franchiseeId: pending.franchiseeId ?? tenant.franchiseeId,
+        updatedAt: new Date(),
+      })
+      .where(eq(pendingServiceAssignmentsTable.id, pending.id));
+  }
 
   return results;
 }

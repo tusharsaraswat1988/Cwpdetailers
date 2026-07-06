@@ -12,7 +12,6 @@ import { submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { AuthSupportPanel } from "@/components/auth/AuthSupportPanel";
-import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { useBranding } from "@/lib/branding";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { Loader2 } from "lucide-react";
@@ -110,13 +109,6 @@ export default function StaffLogin() {
           <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">{branding.brandName} Staff</h1>
           <p className="text-white/50 mt-1 text-sm sm:text-base">Field team sign-in</p>
         </div>
-
-        <PwaInstallBanner
-          portalKey="staff"
-          title={`Install ${branding.brandName} Staff app`}
-          description="Home screen par add karein — jobs aur alerts turant milein."
-          className="mx-0 mb-6 border-white/15 bg-white/5 shadow-none [&_p]:text-white/90 [&_.text-muted-foreground]:text-white/55 [&_strong]:text-white"
-        />
 
         <div className="space-y-4 mb-4">
           <GoogleSignInButton

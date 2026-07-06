@@ -14,6 +14,13 @@ export type ContactExclude = {
   id: number;
 };
 
+type ContactExcludeInput = ContactExclude | ContactExclude[];
+
+function normalizeExcludes(exclude?: ContactExcludeInput): ContactExclude[] {
+  if (!exclude) return [];
+  return Array.isArray(exclude) ? exclude : [exclude];
+}
+
 const PHONE_MATCH = (tablePhone: SQL | unknown, normalized: string) =>
   sql`RIGHT(REGEXP_REPLACE(${tablePhone}, '[^0-9]', '', 'g'), 10) = ${normalized}`;
 
@@ -25,15 +32,16 @@ export type { ContactConflict, ParsedContactIdentity, ContactEntityType };
 
 export async function findContactConflicts(
   identity: ParsedContactIdentity,
-  exclude?: ContactExclude,
+  exclude?: ContactExcludeInput,
 ): Promise<ContactConflict[]> {
+  const excludes = normalizeExcludes(exclude);
   const conflicts: ContactConflict[] = [];
 
-  const phoneConflict = await findPhoneConflict(identity.phone, exclude);
+  const phoneConflict = await findPhoneConflict(identity.phone, excludes);
   if (phoneConflict) conflicts.push(phoneConflict);
 
   if (identity.email) {
-    const emailConflict = await findEmailConflict(identity.email, exclude);
+    const emailConflict = await findEmailConflict(identity.email, excludes);
     if (emailConflict && !conflicts.some(c => c.entity === emailConflict.entity && c.entityId === emailConflict.entityId)) {
       conflicts.push(emailConflict);
     }
@@ -44,29 +52,29 @@ export async function findContactConflicts(
 
 async function findPhoneConflict(
   phone: string,
-  exclude?: ContactExclude,
+  excludes: ContactExclude[],
 ): Promise<ContactConflict | null> {
-  const customer = await findEntityByPhone("customer", customersTable, phone, exclude);
+  const customer = await findEntityByPhone("customer", customersTable, phone, excludes);
   if (customer) return customer;
 
-  const staff = await findEntityByPhone("staff", staffTable, phone, exclude);
+  const staff = await findEntityByPhone("staff", staffTable, phone, excludes);
   if (staff) return staff;
 
-  const user = await findEntityByPhone("user", usersTable, phone, exclude);
+  const user = await findEntityByPhone("user", usersTable, phone, excludes);
   return user;
 }
 
 async function findEmailConflict(
   email: string,
-  exclude?: ContactExclude,
+  excludes: ContactExclude[],
 ): Promise<ContactConflict | null> {
-  const customer = await findEntityByEmail("customer", customersTable, email, exclude);
+  const customer = await findEntityByEmail("customer", customersTable, email, excludes);
   if (customer) return customer;
 
-  const staff = await findEntityByEmail("staff", staffTable, email, exclude);
+  const staff = await findEntityByEmail("staff", staffTable, email, excludes);
   if (staff) return staff;
 
-  const user = await findEntityByEmail("user", usersTable, email, exclude);
+  const user = await findEntityByEmail("user", usersTable, email, excludes);
   return user;
 }
 
@@ -74,11 +82,11 @@ async function findEntityByPhone(
   entity: ContactEntityType,
   table: typeof customersTable | typeof staffTable | typeof usersTable,
   phone: string,
-  exclude?: ContactExclude,
+  excludes: ContactExclude[],
 ): Promise<ContactConflict | null> {
   const conditions = [PHONE_MATCH(table.phone, phone)];
-  if (exclude?.entity === entity) {
-    conditions.push(ne(table.id, exclude.id));
+  for (const ex of excludes) {
+    if (ex.entity === entity) conditions.push(ne(table.id, ex.id));
   }
 
   const [row] = await db
@@ -108,15 +116,15 @@ async function findEntityByEmail(
   entity: ContactEntityType,
   table: typeof customersTable | typeof staffTable | typeof usersTable,
   email: string,
-  exclude?: ContactExclude,
+  excludes: ContactExclude[],
 ): Promise<ContactConflict | null> {
   const conditions = [
     sql`${table.email} IS NOT NULL`,
     sql`TRIM(${table.email}) <> ''`,
     EMAIL_MATCH(table.email, email),
   ];
-  if (exclude?.entity === entity) {
-    conditions.push(ne(table.id, exclude.id));
+  for (const ex of excludes) {
+    if (ex.entity === entity) conditions.push(ne(table.id, ex.id));
   }
 
   const [row] = await db
@@ -170,7 +178,7 @@ export function conflictToHttpBody(conflict: ContactConflict) {
 export async function assertContactIdentityAvailable(
   phone: unknown,
   email: unknown,
-  exclude?: ContactExclude,
+  exclude?: ContactExcludeInput,
 ): Promise<
   | { ok: true; identity: ParsedContactIdentity }
   | { ok: false; status: number; body: Record<string, unknown> }

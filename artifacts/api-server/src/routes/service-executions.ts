@@ -9,6 +9,7 @@ import {
   missExecution,
   rescheduleExecution,
   startExecution,
+  addExecutionPhotos,
 } from "../lib/executions/executionService";
 
 const router = Router();
@@ -60,6 +61,23 @@ router.post("/service-executions/:id/start", async (req, res) => {
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid execution id" });
     const { latitude, longitude, accuracy } = req.body ?? {};
     const result = await startExecution(req, id, { latitude, longitude, accuracy });
+    return res.json(result);
+  } catch (e) {
+    const msg = (e as Error).message;
+    return res.status(msg.includes("not found") ? 404 : 400).json({ error: msg });
+  }
+});
+
+router.post("/service-executions/:id/photos", async (req, res) => {
+  if (!isServiceExecutionsEnabled()) return disabled(req, res);
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid execution id" });
+    const { photos } = req.body ?? {};
+    if (!Array.isArray(photos) || photos.length === 0) {
+      return res.status(400).json({ error: "photos array is required" });
+    }
+    const result = await addExecutionPhotos(req, id, photos);
     return res.json(result);
   } catch (e) {
     const msg = (e as Error).message;

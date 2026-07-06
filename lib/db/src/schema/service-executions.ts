@@ -61,6 +61,9 @@ export const serviceExecutionPhotosTable = pgTable("service_execution_photos", {
   kind: serviceExecutionPhotoKindEnum("kind").notNull().default("proof"),
   url: text("url").notNull(),
   caption: text("caption"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  accuracy: doublePrecision("accuracy"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, t => [
   index("idx_service_execution_photos_execution").on(t.executionId),

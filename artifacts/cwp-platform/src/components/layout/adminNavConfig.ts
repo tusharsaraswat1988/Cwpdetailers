@@ -121,11 +121,25 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         perm: { resource: "bookings", action: "view" },
       },
       {
+        id: "bookings",
+        href: "/admin/bookings",
+        label: "Bookings",
+        icon: Calendar,
+        perm: { resource: "bookings", action: "view" },
+      },
+      {
         id: "assign-services",
         href: "/admin/assign-services",
         label: "Assign Service",
         icon: ClipboardCheck,
         perm: { resource: "bookings", action: "edit" },
+      },
+      {
+        id: "daily-clean-reports",
+        href: "/admin/daily-cleaning",
+        label: "Daily Clean Reports",
+        icon: Sparkles,
+        perm: { resource: "daily_cleaning", action: "view" },
       },
       {
         id: "service-updates",
@@ -180,29 +194,6 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     label: "Support",
     entries: [
       { id: "complaints", href: "/admin/complaints", label: "Complaints", icon: AlertCircle, perm: { resource: "complaints", action: "view" } },
-    ],
-  },
-  {
-    label: "Legacy",
-    defaultCollapsed: true,
-    variant: "legacy",
-    entries: [
-      {
-        id: LEGACY_GROUP_ID,
-        label: "Legacy Module",
-        icon: Archive,
-        perm: null,
-        description: "Old Daily Cleaning system. Use Book Service for new work.",
-        children: [
-          {
-            id: "dcms_ops",
-            href: "/admin/daily-cleaning",
-            label: "Legacy Daily Cleaning",
-            icon: Sparkles,
-            perm: { resource: "daily_cleaning", action: "view" },
-          },
-        ],
-      },
     ],
   },
   {
@@ -271,6 +262,14 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
     const path = location.split("?")[0]!;
     return path === "/admin/book-services";
   }
+  if (item.id === "bookings") {
+    const path = location.split("?")[0]!;
+    return path === "/admin/bookings";
+  }
+  if (item.id === "daily-clean-reports") {
+    const path = location.split("?")[0]!;
+    return path.startsWith("/admin/daily-cleaning");
+  }
   if (item.id === "assign-services") {
     const path = location.split("?")[0]!;
     return path === "/admin/assign-services";
@@ -298,11 +297,11 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
     const path = location.split("?")[0]!;
     return path === "/admin/service-updates" || path === "/admin/operations-wall";
   }
-  if (item.id === "dcms_ops") {
-    return location.startsWith("/admin/daily-cleaning");
-  }
   if (item.id === "legacy_contacts") {
     return location.startsWith("/admin/customers/legacy-contacts");
+  }
+  if (item.id === "daily-clean-reports") {
+    return location.startsWith("/admin/daily-cleaning");
   }
   if (item.id === "import") {
     return location.startsWith("/admin/customers/migration");

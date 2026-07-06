@@ -41,14 +41,18 @@ export function AppShell({
 
   return (
     <div
-      className={cn("min-h-[100dvh] bg-background flex flex-col mx-auto w-full", maxWidthClass[maxWidth], className)}
+      className={cn(
+        "h-[100dvh] overflow-hidden bg-background flex flex-col mx-auto w-full",
+        maxWidthClass[maxWidth],
+        className,
+      )}
       data-testid={testId}
     >
       {appBar && <AppBar {...appBar} />}
 
       <main
         className={cn(
-          "flex-1 w-full min-w-0 overflow-y-auto overflow-x-hidden",
+          "flex-1 min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden",
           hasBottomNav ? "pb-[var(--bottom-nav-height)]" : "pb-safe",
           appBar ? "px-4 py-4" : "px-4 py-4 sm:py-6",
         )}

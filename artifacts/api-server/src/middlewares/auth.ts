@@ -72,6 +72,26 @@ function isStaffSelfService(req: Request): boolean {
   return false;
 }
 
+/** Logged-in customers may read/update their own profile without RBAC edit rows. */
+function isCustomerSelfService(req: Request): boolean {
+  const user = req.user;
+  if (!user || user.role !== "customer" || user.customerId == null) return false;
+
+  const path = req.path;
+  const method = req.method.toUpperCase();
+
+  if (path === "/customers/me" || path.startsWith("/customers/me/")) {
+    return method === "GET" || method === "PATCH";
+  }
+
+  const ownCustomer = path.match(/^\/customers\/(\d+)$/);
+  if (ownCustomer && method === "PATCH" && parseInt(ownCustomer[1]!, 10) === user.customerId) {
+    return true;
+  }
+
+  return false;
+}
+
 export async function loadUserFromToken(token: string): Promise<AuthUser | null> {
   const th = hashToken(token);
   const rows = await db
@@ -228,6 +248,7 @@ export function requirePermission(resource: string, action: string) {
     // Align with client auth: admin/superadmin are not blocked by missing seed rows.
     if (isSuperAdminRole(req.user.role)) return next();
     if (isStaffSelfService(req)) return next();
+    if (isCustomerSelfService(req)) return next();
     const overrides = await db
       .select()
       .from(permissionOverridesTable)

@@ -1,13 +1,21 @@
 import { MapPin, Phone } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { StaffJobActions } from "@/components/staff/StaffJobActions";
+import { StaffServiceJobFlow } from "@/components/staff/StaffServiceJobFlow";
+import { isOtherServiceJob } from "@/lib/staff-jobs";
 import { resolveMediaUrl } from "@/lib/media-url";
 import type { StaffJob } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 
 type Mutations = Pick<
   ReturnType<typeof useStaffJobsData>,
-  "transitionJob" | "uploadPhoto" | "uploadingJobId" | "locatingJobId" | "isActionPending"
+  | "transitionJob"
+  | "uploadPhoto"
+  | "uploadGeoPhoto"
+  | "uploadingJobId"
+  | "uploadingPhotoIndex"
+  | "locatingJobId"
+  | "isActionPending"
 >;
 
 interface Props extends Mutations {
@@ -104,7 +112,11 @@ export function ActiveJobHero({ job, ...actions }: Props) {
         </div>
       )}
 
-      <StaffJobActions job={job} {...actions} size="hero" />
+      {isOtherServiceJob(job) ? (
+        <StaffServiceJobFlow job={job} {...actions} />
+      ) : (
+        <StaffJobActions job={job} {...actions} size="hero" />
+      )}
     </section>
   );
 }

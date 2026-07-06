@@ -1,7 +1,15 @@
+export type GeoTaggedPhoto = {
+  url: string;
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+};
+
 export type StaffJob = {
   id: number;
   source?: "booking" | "execution";
   executionId?: number;
+  taskType?: string | null;
   customerName?: string;
   customerPhone?: string;
   serviceType?: string | null;
@@ -15,9 +23,63 @@ export type StaffJob = {
   locationLng?: number | null;
   beforePhotoUrl?: string | null;
   afterPhotoUrl?: string | null;
+  proofPhotoUrls?: string[] | null;
+  beforePhotos?: GeoTaggedPhoto[];
+  afterPhotos?: GeoTaggedPhoto[];
   amount?: string | number | null;
   vehicleName?: string | null;
 };
+
+/** Required geo-tagged photos per phase for car wash & other on-site services */
+export const REQUIRED_SERVICE_PHOTOS = 3;
+
+export function isDailyCleanJob(job: Pick<StaffJob, "taskType" | "serviceType">) {
+  const task = (job.taskType ?? "").toLowerCase();
+  const svc = (job.serviceType ?? "").toLowerCase();
+  return task === "daily_cleaning" || svc.includes("daily clean");
+}
+
+export function isOtherServiceJob(job: Pick<StaffJob, "taskType" | "serviceType">) {
+  return !isDailyCleanJob(job);
+}
+
+export function partitionJobsByCategory(jobs: StaffJob[]) {
+  const dailyClean: StaffJob[] = [];
+  const otherServices: StaffJob[] = [];
+  for (const job of jobs) {
+    if (isDailyCleanJob(job)) dailyClean.push(job);
+    else otherServices.push(job);
+  }
+  return { dailyClean, otherServices };
+}
+
+export function countJobPhotos(job: StaffJob) {
+  if (job.beforePhotos?.length || job.afterPhotos?.length) {
+    return {
+      before: job.beforePhotos?.length ?? 0,
+      after: job.afterPhotos?.length ?? 0,
+    };
+  }
+  const proof = job.proofPhotoUrls ?? [];
+  if (proof.length >= REQUIRED_SERVICE_PHOTOS * 2) {
+    return { before: REQUIRED_SERVICE_PHOTOS, after: REQUIRED_SERVICE_PHOTOS };
+  }
+  if (proof.length > 0) {
+    return {
+      before: Math.min(proof.length, REQUIRED_SERVICE_PHOTOS),
+      after: Math.max(0, proof.length - REQUIRED_SERVICE_PHOTOS),
+    };
+  }
+  return {
+    before: job.beforePhotoUrl ? 1 : 0,
+    after: job.afterPhotoUrl ? 1 : 0,
+  };
+}
+
+export function canCompleteOtherServiceJob(job: StaffJob) {
+  const { before, after } = countJobPhotos(job);
+  return job.status === "in_progress" && before >= REQUIRED_SERVICE_PHOTOS && after >= REQUIRED_SERVICE_PHOTOS;
+}
 
 export function staffJobKey(job: StaffJob) {
   return `${job.source ?? "booking"}-${job.id}`;
@@ -58,6 +120,7 @@ export function executionToStaffJob(e: {
     source: "execution",
     id: e.id,
     executionId: e.id,
+    taskType: e.taskType ?? null,
     customerName: e.customerName,
     serviceName,
     serviceType: taskLabel ?? e.serviceLabel ?? "assigned service",

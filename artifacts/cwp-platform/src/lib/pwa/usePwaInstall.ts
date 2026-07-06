@@ -18,7 +18,11 @@ function isStandaloneMode(): boolean {
   );
 }
 
-/** @deprecated Use sessionDismissKey for "Not now" — kept for clearing old dismissals. */
+function seenKey(portalKey: string) {
+  return `cwp-pwa-install-seen-${portalKey}`;
+}
+
+/** @deprecated Use seenKey — kept for clearing old dismissals. */
 function legacyDismissKey(portalKey: string) {
   return `cwp-pwa-install-dismissed-${portalKey}`;
 }
@@ -27,28 +31,35 @@ function sessionDismissKey(portalKey: string) {
   return `cwp-pwa-install-dismissed-session-${portalKey}`;
 }
 
+function readSeen(portalKey: string): boolean {
+  try {
+    if (localStorage.getItem(seenKey(portalKey)) === "1") return true;
+    if (localStorage.getItem(legacyDismissKey(portalKey)) === "1") return true;
+    if (sessionStorage.getItem(sessionDismissKey(portalKey)) === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+function markSeen(portalKey: string) {
+  try {
+    localStorage.setItem(seenKey(portalKey), "1");
+    localStorage.removeItem(legacyDismissKey(portalKey));
+    sessionStorage.removeItem(sessionDismissKey(portalKey));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function usePwaInstall(portalKey: string) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(isStandaloneMode);
-  const [dismissed, setDismissed] = useState(false);
+  const [seen, setSeen] = useState(() => readSeen(portalKey));
   const [platform] = useState(detectInstallPlatform);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    try {
-      if (localStorage.getItem(legacyDismissKey(portalKey)) === "1") {
-        localStorage.removeItem(legacyDismissKey(portalKey));
-      }
-    } catch {
-      /* ignore */
-    }
-
-    try {
-      setDismissed(sessionStorage.getItem(sessionDismissKey(portalKey)) === "1");
-    } catch {
-      setDismissed(false);
-    }
 
     const onBeforeInstall = (event: BeforeInstallPromptEvent) => {
       event.preventDefault();
@@ -58,6 +69,8 @@ export function usePwaInstall(portalKey: string) {
     const onInstalled = () => {
       setDeferredPrompt(null);
       setIsStandalone(true);
+      markSeen(portalKey);
+      setSeen(true);
     };
 
     const mq = window.matchMedia("(display-mode: standalone)");
@@ -71,16 +84,15 @@ export function usePwaInstall(portalKey: string) {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       window.removeEventListener("appinstalled", onInstalled);
       mq.removeEventListener("change", onDisplayMode);
+      if (!isStandaloneMode()) {
+        markSeen(portalKey);
+      }
     };
   }, [portalKey]);
 
   const dismiss = useCallback(() => {
-    setDismissed(true);
-    try {
-      sessionStorage.setItem(sessionDismissKey(portalKey), "1");
-    } catch {
-      /* ignore */
-    }
+    markSeen(portalKey);
+    setSeen(true);
   }, [portalKey]);
 
   const install = useCallback(async () => {
@@ -95,7 +107,7 @@ export function usePwaInstall(portalKey: string) {
     return false;
   }, [deferredPrompt]);
 
-  const shouldShowBanner = !isStandalone && !dismissed;
+  const shouldShowBanner = !isStandalone && !seen;
   const hasNativePrompt = Boolean(deferredPrompt);
 
   return {
