@@ -4,6 +4,8 @@ import { hashPassword } from "./passwords";
 import { parseRequiredMobile, parseOptionalEmail } from "./contactFields";
 import { logger } from "./logger";
 
+const ADMIN_ROLES = new Set(["admin", "superadmin", "manager"]);
+
 export type AdminEnvConfig = {
   phone: string;
   password: string;
@@ -34,6 +36,47 @@ export function readAdminEnvConfig(): AdminEnvConfig | null {
   };
 }
 
+async function resolveBootstrapTarget(config: AdminEnvConfig): Promise<{
+  existingId?: number;
+  email: string | null;
+}> {
+  const byPhone = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.phone, config.phone))
+    .limit(1);
+  if (byPhone[0]) {
+    return { existingId: byPhone[0].id, email: config.email };
+  }
+
+  if (!config.email) {
+    return { email: null };
+  }
+
+  const byEmail = await db
+    .select({ id: usersTable.id, role: usersTable.role, phone: usersTable.phone })
+    .from(usersTable)
+    .where(eq(usersTable.email, config.email))
+    .limit(1);
+
+  if (byEmail[0]) {
+    if (ADMIN_ROLES.has(byEmail[0].role)) {
+      return { existingId: byEmail[0].id, email: config.email };
+    }
+    logger.warn(
+      {
+        email: config.email,
+        existingPhone: byEmail[0].phone,
+        existingRole: byEmail[0].role,
+      },
+      "ADMIN_EMAIL already used by a non-admin account — super admin will sync without that email",
+    );
+    return { email: null };
+  }
+
+  return { email: config.email };
+}
+
 /** Ensures the super-admin account exists and matches .env credentials (idempotent). */
 export async function bootstrapAdminFromEnv(): Promise<void> {
   const config = readAdminEnvConfig();
@@ -43,24 +86,21 @@ export async function bootstrapAdminFromEnv(): Promise<void> {
   }
 
   const passwordHash = await hashPassword(config.password);
-  const existing = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.phone, config.phone))
-    .limit(1);
+  const target = await resolveBootstrapTarget(config);
 
-  if (existing[0]) {
+  if (target.existingId) {
     await db
       .update(usersTable)
       .set({
         name: config.name,
-        email: config.email,
+        phone: config.phone,
+        email: target.email,
         passwordHash,
         role: "superadmin",
         isActive: true,
         updatedAt: new Date(),
       })
-      .where(eq(usersTable.id, existing[0].id));
+      .where(eq(usersTable.id, target.existingId));
     logger.info({ phone: config.phone }, "Super admin synced from env");
     return;
   }
@@ -68,7 +108,7 @@ export async function bootstrapAdminFromEnv(): Promise<void> {
   await db.insert(usersTable).values({
     name: config.name,
     phone: config.phone,
-    email: config.email,
+    email: target.email,
     passwordHash,
     role: "superadmin",
     isActive: true,

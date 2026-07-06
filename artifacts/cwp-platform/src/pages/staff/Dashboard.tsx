@@ -2,6 +2,7 @@ import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import { Redirect } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
+import { staffJobKey } from "@/lib/staff-jobs";
 import StaffAppShell from "@/components/layout/StaffAppShell";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { StaffPushPrompt } from "@/components/staff/StaffPushPrompt";
@@ -141,7 +142,7 @@ export default function StaffDashboard() {
               </Link>
             </div>
             {jobs.remainingToday.map(job => (
-              <StaffJobListItem key={job.id} job={job} compact linkToDashboard />
+              <StaffJobListItem key={staffJobKey(job)} job={job} compact linkToDashboard />
             ))}
           </section>
         )}

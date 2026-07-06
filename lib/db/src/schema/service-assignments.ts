@@ -1,6 +1,7 @@
 import { pgTable, serial, integer, text, timestamp, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { serviceTaskTypeEnum } from "./service-task-type";
 
 export const serviceAssignmentStatusEnum = pgEnum("service_assignment_status", ["pending", "assigned"]);
 
@@ -13,6 +14,7 @@ export const serviceAssignmentsTable = pgTable("service_assignments", {
   contractId: integer("contract_id").notNull(),
   serviceId: integer("service_id"),
   assignedStaffId: integer("assigned_staff_id").notNull(),
+  taskType: serviceTaskTypeEnum("task_type").notNull().default("one_time_service"),
   assignedAt: timestamp("assigned_at").notNull().defaultNow(),
   status: serviceAssignmentStatusEnum("status").notNull().default("assigned"),
   serviceLabel: text("service_label"),
@@ -23,7 +25,8 @@ export const serviceAssignmentsTable = pgTable("service_assignments", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, t => [
-  uniqueIndex("service_assignments_pending_unique").on(t.pendingAssignmentId),
+  uniqueIndex("service_assignments_pending_task_unique").on(t.pendingAssignmentId, t.taskType),
+  index("idx_service_assignments_task_type").on(t.taskType),
   index("idx_service_assignments_status").on(t.status),
   index("idx_service_assignments_staff").on(t.assignedStaffId),
   index("idx_service_assignments_location").on(t.serviceLocationId),

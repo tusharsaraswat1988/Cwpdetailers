@@ -1,5 +1,6 @@
 import { useState } from "react";
 import CustomerLayout from "@/components/layout/CustomerLayout";
+import { useAccountScope } from "@/lib/account-scope";
 import { useCustomerDcmsDashboard, usePendingFeedback, usePauseMutations } from "../api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,8 @@ type DcmsStats = {
 
 /** Compact card for customer home dashboard. */
 export function DcmsHomeCard() {
-  const { data, isLoading } = useCustomerDcmsDashboard();
+  const { customerId } = useAccountScope();
+  const { data, isLoading } = useCustomerDcmsDashboard(customerId != null);
   const stats = data?.stats as DcmsStats | null;
 
   if (isLoading) return null;

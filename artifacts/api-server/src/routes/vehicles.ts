@@ -7,6 +7,7 @@ import { roleSlugForVehicleAssignment, staffOperationalRoleError } from "../lib/
 import { normalizeRegistration } from "../lib/dcms/registration";
 import { registerVehicleAsset } from "../lib/assets/assetService";
 import { isAssetsModuleEnabled } from "../lib/assets/featureFlag";
+import { normalizeVehicleType, vehicleTypeFromCategorySlug } from "../lib/vehicleType";
 
 const router = Router();
 
@@ -59,7 +60,7 @@ router.post("/vehicles", async (req, res) => {
 
     let resolvedMake = make;
     let resolvedModel = model;
-    let resolvedType = vehicleType;
+    let resolvedType = normalizeVehicleType(vehicleType);
     let resolvedModelId = vehicleModelId;
 
     if (vehicleModelId) {
@@ -78,11 +79,7 @@ router.post("/vehicles", async (req, res) => {
       if (!vm) return res.status(400).json({ error: "Invalid vehicleModelId" });
       resolvedMake = vm.brandName;
       resolvedModel = vm.modelName;
-      const typeMap: Record<string, string> = {
-        hatchback: "hatchback", sedan: "sedan", suv: "suv", muv: "van", mpv: "van",
-        luxury: "luxury", van: "van", pickup: "truck",
-      };
-      resolvedType = typeMap[vm.categorySlug] ?? "sedan";
+      resolvedType = vehicleTypeFromCategorySlug(vm.categorySlug);
     }
 
     const locationComplete = !!(serviceAddress && serviceLat != null && serviceLng != null);
@@ -158,7 +155,7 @@ router.patch("/vehicles/:id", async (req, res) => {
       updateData.registrationNumber = registrationNumber;
       updateData.registrationNormalized = regNorm;
     }
-    if (vehicleType !== undefined) updateData.vehicleType = vehicleType;
+    if (vehicleType !== undefined) updateData.vehicleType = normalizeVehicleType(vehicleType);
     if (customerId !== undefined) updateData.customerId = customerId;
     if (vehicleModelId !== undefined) updateData.vehicleModelId = vehicleModelId;
     if (serviceAddress !== undefined) updateData.serviceAddress = serviceAddress;

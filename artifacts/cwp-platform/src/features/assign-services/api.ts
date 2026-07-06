@@ -2,6 +2,21 @@ export const ASSIGNMENTS_QUERY_KEY = ["service-assignments"];
 
 export type AssignmentPriority = "normal" | "high";
 
+export type ServiceTaskType =
+  | "daily_cleaning"
+  | "car_wash"
+  | "solar_cleaning"
+  | "interior_detailing"
+  | "one_time_service";
+
+export type TaskAssignmentSlot = {
+  taskType: ServiceTaskType;
+  taskTypeLabel: string;
+  assignmentId?: number;
+  staffId?: number;
+  staffName?: string;
+};
+
 export type PendingAssignment = {
   id: number;
   contractId: number;
@@ -18,6 +33,7 @@ export type PendingAssignment = {
   serviceType: string;
   priority: AssignmentPriority;
   createdAt: string;
+  requiredTasks: TaskAssignmentSlot[];
 };
 
 export type AssignedService = {
@@ -36,6 +52,8 @@ export type AssignedService = {
   staffName: string;
   serviceName: string;
   serviceType: string;
+  taskType: ServiceTaskType;
+  taskTypeLabel: string;
   assignedAt: string;
   status: "assigned";
 };
@@ -106,10 +124,59 @@ export async function assignPendingService(pendingId: number, staffId: number): 
   return res.json();
 }
 
-export type StaffOption = { id: number; name: string; employeeCode?: string | null };
+export type TaskAssignmentInput = {
+  taskType: ServiceTaskType;
+  staffId: number;
+};
 
-export async function fetchStaffForAssignment(): Promise<StaffOption[]> {
-  const res = await fetch("/api/staff?forAssignment=true&isActive=true", { credentials: "include" });
+export async function assignPendingServiceTasks(
+  pendingId: number,
+  tasks: TaskAssignmentInput[],
+): Promise<AssignedService[]> {
+  const res = await fetch(`/api/assignments/${pendingId}/assign`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tasks }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Assignment failed");
+  }
+  return res.json();
+}
+
+export async function recordSubstituteExecution(input: {
+  contractId: number;
+  taskType: ServiceTaskType;
+  substituteStaffId: number;
+  scheduledDate?: string;
+  reason?: string;
+}): Promise<{ executionId: number }> {
+  const res = await fetch("/api/assignments/substitute", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Substitute failed");
+  }
+  return res.json();
+}
+
+export type StaffOption = {
+  id: number;
+  name: string;
+  employeeCode?: string | null;
+  operationalRoles?: Array<{ roleName: string; roleSlug: string }>;
+};
+
+export async function fetchStaffForAssignment(roleSlug?: string): Promise<StaffOption[]> {
+  const params = new URLSearchParams({ forAssignment: "true", isActive: "true", staffCategory: "cleaning_staff" });
+  if (roleSlug) params.set("roleSlug", roleSlug);
+  const res = await fetch(`/api/staff?${params.toString()}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load staff");
   return res.json();
 }

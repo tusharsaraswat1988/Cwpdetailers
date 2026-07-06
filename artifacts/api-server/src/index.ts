@@ -1,6 +1,6 @@
-import "./load-env.js";
 import app from "./app";
 import { bootstrapAdminFromEnv } from "./lib/bootstrapAdmin";
+import { bootstrapMasterDataIfEmpty, bootstrapDcmsPlansIfEmpty } from "./lib/bootstrapMasterData";
 import { logger } from "./lib/logger";
 import { runDailyTick } from "./subscriptions/service";
 import { runMissedVisitScheduler } from "./lib/dcms/missedVisitScheduler";
@@ -24,13 +24,20 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+const dbHost = process.env.DATABASE_URL?.split("@")[1]?.split("/")[0] ?? "not-set";
+
 app.listen(port, "0.0.0.0", (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
+  logger.info({ port, dbHost }, "Server listening");
+  bootstrapMasterDataIfEmpty()
+    .then(() => bootstrapDcmsPlansIfEmpty())
+    .catch(err => {
+      logger.error({ err }, "Catalog bootstrap failed");
+    });
   bootstrapAdminFromEnv().catch(err => {
     logger.error({ err }, "Super admin bootstrap failed");
   });

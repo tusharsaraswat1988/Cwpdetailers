@@ -37,8 +37,13 @@ function visitsDone(sub: Subscription) {
   return sub.servicesUsed ?? 0;
 }
 
+function isDailyCleaning(sub: Subscription) {
+  return sub.type === "daily_cleaning";
+}
+
 function SubscriptionCard({ sub, accent }: { sub: Subscription; accent?: "amber" }) {
   const solar = isSolarAmc(sub);
+  const daily = isDailyCleaning(sub);
   const done = visitsDone(sub);
   const remaining = sub.servicesRemaining ?? (sub.totalServices != null ? sub.totalServices - done : null);
 
@@ -71,7 +76,18 @@ function SubscriptionCard({ sub, accent }: { sub: Subscription; accent?: "amber"
               )}
             </div>
           )}
-          {!solar && sub.nextServiceDate && (
+          {!solar && daily && (
+            <div className="mt-2 p-2.5 rounded-lg bg-primary/5 border border-primary/10 text-xs space-y-1">
+              <p className="font-medium text-primary">Daily Car Cleaning</p>
+              {sub.totalServices != null && (
+                <p>{done} visits done · {remaining ?? "—"} remaining</p>
+              )}
+              <Link href="/customer/daily-cleaning" className="text-primary hover:underline inline-flex items-center gap-1">
+                Open plan <ArrowRight size={11} />
+              </Link>
+            </div>
+          )}
+          {!solar && !daily && sub.nextServiceDate && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Calendar size={11} /> Next: {sub.nextServiceDate}
             </p>

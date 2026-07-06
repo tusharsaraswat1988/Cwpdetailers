@@ -4,6 +4,7 @@ import { subscriptionsTable, customersTable, servicesTable } from "@workspace/db
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { getDaysAgoIST, getDaysAheadIST } from "../subscriptions/service";
+import { listUnifiedCustomerSubscriptions } from "../lib/subscriptions/unifiedCustomerSubscriptions";
 
 const router = Router();
 
@@ -54,6 +55,14 @@ router.get("/subscriptions", async (req, res) => {
     const { customerId, status, type, limit = "50", offset = "0" } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
+
+    if (customerId && !type) {
+      let data = await listUnifiedCustomerSubscriptions(parseInt(customerId, 10));
+      if (status) data = data.filter(r => r.status === status);
+      const total = data.length;
+      data = data.slice(off, off + lim);
+      return res.json({ data, total, limit: lim, offset: off });
+    }
 
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
     if (customerId) conditions.push(eq(subscriptionsTable.customerId, parseInt(customerId)));

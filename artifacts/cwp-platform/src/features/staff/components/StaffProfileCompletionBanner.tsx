@@ -4,14 +4,14 @@ import { CheckCircle2, Circle, AlertTriangle } from "lucide-react";
 import type { ProfileCompletion } from "@/lib/staff-ecosystem/api";
 
 export function StaffProfileCompletionBanner({ completion, compact }: { completion: ProfileCompletion; compact?: boolean }) {
-  if (completion.percent >= 100) return null;
-
+  // Documents are uploaded by admin — staff only see fields they can update themselves.
   const items = [
     { label: "Identity", ok: completion.identityComplete },
-    { label: "Documents", ok: completion.documentsComplete },
     { label: "Bank", ok: completion.bankComplete },
     { label: "Address", ok: completion.addressComplete },
   ];
+  const staffPercent = Math.round((items.filter(i => i.ok).length / items.length) * 100);
+  if (staffPercent >= 100) return null;
 
   return (
     <div
@@ -21,9 +21,9 @@ export function StaffProfileCompletionBanner({ completion, compact }: { completi
       <div className="flex items-start gap-3">
         <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">Profile {completion.percent}% complete</p>
+          <p className="font-semibold text-sm">Profile {staffPercent}% complete</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Complete your profile so admin can verify you for assignments.
+            Update your details below. Admin will upload verification documents.
           </p>
         </div>
         {!compact && (
@@ -32,7 +32,7 @@ export function StaffProfileCompletionBanner({ completion, compact }: { completi
           </Link>
         )}
       </div>
-      <Progress value={completion.percent} className="h-1.5" />
+      <Progress value={staffPercent} className="h-1.5" />
       <div className="flex flex-wrap gap-3 text-[10px]">
         {items.map(i => (
           <span key={i.label} className={`flex items-center gap-1 ${i.ok ? "text-green-600" : "text-muted-foreground"}`}>

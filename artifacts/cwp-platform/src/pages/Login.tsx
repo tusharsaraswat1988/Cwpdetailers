@@ -1,18 +1,21 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { useLogin } from "@workspace/api-client-react";
+import { useState, useCallback } from "react";
+import { useLocation, Link } from "wouter";
+import { useLogin, useGoogleAuth } from "@workspace/api-client-react";
 import type { AuthResponse } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { useToast } from "@/hooks/use-toast";
 import { submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { GooglePhoneLinkDialog } from "@/components/auth/GooglePhoneLinkDialog";
+import { AuthSupportPanel } from "@/components/auth/AuthSupportPanel";
 import { useBranding } from "@/lib/branding";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { Loader2 } from "lucide-react";
-import { Link } from "wouter";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -22,32 +25,76 @@ export default function Login() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [googlePending, setGooglePending] = useState(false);
+  const [phoneLink, setPhoneLink] = useState<{
+    linkToken: string;
+    email: string;
+    name?: string | null;
+  } | null>(null);
+
+  const handleAuthSuccess = useCallback(
+    (data: AuthResponse) => {
+      const userRole = data.user.role;
+      if (userRole !== "customer" && userRole !== "staff") {
+        toast({
+          title: "Access denied",
+          description: "This sign-in is for customers and staff only.",
+          variant: "destructive",
+        });
+        return;
+      }
+      login(data.user, data.token);
+      if (userRole === "staff") setLocation("/staff/dashboard");
+      else setLocation("/customer/dashboard");
+    },
+    [login, setLocation, toast],
+  );
 
   const loginMutation = useLogin({
     mutation: {
-      onSuccess: (data: AuthResponse) => {
-        const userRole = data.user.role;
-        if (userRole !== "customer" && userRole !== "staff") {
-          toast({
-            title: "Access denied",
-            description: "This sign-in is for customers and staff only.",
-            variant: "destructive",
-          });
-          return;
-        }
-        login(data.user, data.token);
-        if (userRole === "staff") setLocation("/staff/dashboard");
-        else if (userRole === "customer") setLocation("/customer/dashboard");
-      },
-      onError: (err: any) => {
+      onSuccess: handleAuthSuccess,
+      onError: (err: unknown) => {
         toast({
           title: "Login failed",
-          description: err?.response?.data?.error ?? "Invalid phone number or password.",
+          description: getApiErrorMessage(err, "Invalid phone number or password."),
           variant: "destructive",
         });
       },
     },
   });
+
+  const googleMutation = useGoogleAuth({
+    mutation: {
+      onSuccess: (data) => {
+        setGooglePending(false);
+        if ("needsPhone" in data && data.needsPhone) {
+          setPhoneLink({
+            linkToken: data.linkToken,
+            email: data.email,
+            name: data.name,
+          });
+          return;
+        }
+        handleAuthSuccess(data as AuthResponse);
+      },
+      onError: (err: unknown) => {
+        setGooglePending(false);
+        toast({
+          title: "Google sign-in failed",
+          description: getApiErrorMessage(err, "Could not sign in with Google."),
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  const handleGoogleToken = useCallback(
+    (idToken: string) => {
+      setGooglePending(true);
+      googleMutation.mutate({ data: { idToken, portal: "customer" } });
+    },
+    [googleMutation],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,6 +118,29 @@ export default function Login() {
           <p className="text-white/50 mt-1 text-sm sm:text-base">Sign in to {branding.companyName}</p>
         </div>
 
+        <div className="space-y-4 mb-4">
+          <GoogleSignInButton
+            portal="customer"
+            onSuccess={handleGoogleToken}
+            onError={msg => toast({ title: msg, variant: "destructive" })}
+            disabled={googlePending || loginMutation.isPending}
+          />
+          {googlePending && (
+            <p className="text-center text-white/40 text-xs flex items-center justify-center gap-1.5">
+              <Loader2 size={12} className="animate-spin" /> Signing in with Google…
+            </p>
+          )}
+        </div>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/10" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-secondary px-3 text-white/30">or sign in with phone</span>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <PhoneInput
             id="phone"
@@ -83,21 +153,26 @@ export default function Login() {
             className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary [&+p]:text-white/40"
           />
           <div>
-            <Label htmlFor="password" className="text-white/70 text-sm">Password</Label>
-            <Input
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password" className="text-white/70 text-sm">Password</Label>
+              <Link href="/forgot-password" className="text-primary text-xs hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+            <PasswordInput
               id="password"
               data-testid="input-password"
-              type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="mt-1.5 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
+              containerClassName="mt-1.5"
+              className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
             />
           </div>
           <Button
             type="submit"
             data-testid="btn-submit-login"
-            disabled={loginMutation.isPending}
+            disabled={loginMutation.isPending || googlePending}
             className="w-full bg-primary text-secondary hover:bg-primary/90 font-semibold py-2.5 mt-2"
           >
             {loginMutation.isPending ? <><Loader2 size={14} className="animate-spin mr-2" />Signing in...</> : "Sign In"}
@@ -116,7 +191,9 @@ export default function Login() {
           </p>
         </div>
 
-        <div className="mt-8 pt-6 border-t border-white/5 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
+        <AuthSupportPanel portal="customer" className="mt-6" />
+
+        <div className="mt-6 pt-6 border-t border-white/5 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
           {[
             { href: "/privacy-policy", label: "Privacy Policy" },
             { href: "/terms-and-conditions", label: "Terms" },
@@ -128,6 +205,20 @@ export default function Login() {
           ))}
         </div>
       </div>
+
+      {phoneLink && (
+        <GooglePhoneLinkDialog
+          open
+          linkToken={phoneLink.linkToken}
+          googleEmail={phoneLink.email}
+          googleName={phoneLink.name}
+          onSuccess={data => {
+            setPhoneLink(null);
+            handleAuthSuccess(data);
+          }}
+          onClose={() => setPhoneLink(null)}
+        />
+      )}
     </div>
   );
 }

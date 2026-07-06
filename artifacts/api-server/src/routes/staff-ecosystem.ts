@@ -31,6 +31,7 @@ async function loadStaffInScope(req: Request, id: number) {
 }
 
 import { recalculateStaffProfile } from "../lib/staffEcosystem/recalculate";
+import { syncStaffLoginUser } from "../lib/staffLoginSync";
 import { getStaffOperationalRoles } from "../lib/staffEcosystem/operationalRoles";
 import {
   resolveSupervisorForStaff,
@@ -309,85 +310,12 @@ router.patch("/staff/me/ecosystem", async (req, res) => {
   }
 });
 
-router.post("/staff/me/documents", async (req, res) => {
-  try {
-    const staffId = req.user?.staffId;
-    if (!staffId) return res.status(403).json({ error: "Staff account required" });
-
-    const { documentType, documentNumber, fileUrl, contentType, fileSizeBytes, expiryDate, title, description } = req.body;
-    if (!documentType || !fileUrl) return res.status(400).json({ error: "documentType and fileUrl required" });
-    if (contentType && !ALLOWED_MIME.includes(contentType)) {
-      return res.status(400).json({ error: "Invalid file type" });
-    }
-
-    if (documentType !== "other") {
-      await db.update(staffDocumentsTable).set({ isCurrent: false, updatedAt: new Date() })
-        .where(and(
-          eq(staffDocumentsTable.staffId, staffId),
-          eq(staffDocumentsTable.documentType, documentType),
-          eq(staffDocumentsTable.isCurrent, true),
-        ));
-    }
-
-    const [doc] = await db.insert(staffDocumentsTable).values({
-      staffId,
-      documentType,
-      documentNumber,
-      fileUrl,
-      contentType,
-      fileSizeBytes,
-      expiryDate: expiryDate || null,
-      title,
-      description,
-      uploadedByUserId: req.user?.id ?? null,
-      isCurrent: true,
-    }).returning();
-
-    await recalculateStaffProfile(staffId);
-    return res.status(201).json(doc);
-  } catch (err) {
-    req.log.error({ err }, "Staff me document upload error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
+router.post("/staff/me/documents", async (_req, res) => {
+  return res.status(403).json({ error: "Document uploads are managed by admin. Contact your supervisor." });
 });
 
-router.post("/staff/me/documents/:docId/replace", async (req, res) => {
-  try {
-    const staffId = req.user?.staffId;
-    if (!staffId) return res.status(403).json({ error: "Staff account required" });
-
-    const docId = parseInt(req.params.docId);
-    const [existing] = await db.select().from(staffDocumentsTable)
-      .where(and(eq(staffDocumentsTable.id, docId), eq(staffDocumentsTable.staffId, staffId))).limit(1);
-    if (!existing) return res.status(404).json({ error: "Document not found" });
-
-    const { fileUrl, contentType, fileSizeBytes, documentNumber, expiryDate } = req.body;
-    if (!fileUrl) return res.status(400).json({ error: "fileUrl required" });
-
-    await db.update(staffDocumentsTable).set({ isCurrent: false, updatedAt: new Date() })
-      .where(eq(staffDocumentsTable.id, docId));
-
-    const [doc] = await db.insert(staffDocumentsTable).values({
-      staffId,
-      documentType: existing.documentType,
-      documentNumber: documentNumber ?? existing.documentNumber,
-      title: existing.title,
-      description: existing.description,
-      fileUrl,
-      contentType,
-      fileSizeBytes,
-      expiryDate: expiryDate ?? existing.expiryDate,
-      uploadedByUserId: req.user?.id ?? null,
-      isCurrent: true,
-      replacedByDocumentId: docId,
-    }).returning();
-
-    await recalculateStaffProfile(staffId);
-    return res.json(doc);
-  } catch (err) {
-    req.log.error({ err }, "Staff me document replace error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
+router.post("/staff/me/documents/:docId/replace", async (_req, res) => {
+  return res.status(403).json({ error: "Document uploads are managed by admin. Contact your supervisor." });
 });
 
 router.patch("/staff/me/team-complaints/:id", async (req, res) => {
@@ -589,6 +517,7 @@ router.patch("/staff/:id/ecosystem", async (req, res) => {
     const [staff] = await db.update(staffTable).set(updateData).where(eq(staffTable.id, id)).returning();
     await recalculateStaffProfile(id);
     const [updated] = await db.select().from(staffTable).where(eq(staffTable.id, id)).limit(1);
+    if (updated) await syncStaffLoginUser(updated);
     return res.json(updated ?? staff);
   } catch (err) {
     req.log.error({ err }, "Patch staff ecosystem error");

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDcmsPlans, useDcmsPlanMutations, type DcmsPlan } from "@/features/daily-cleaning/api";
-import { useVehicleCategories, useSeatCategories } from "@/features/master-data/api";
+import { useSeatCategories } from "@/features/master-data/api";
 import { useCatalogAddons } from "@/features/service-catalog/api";
 import { HomepagePlanToggle } from "./HomepagePlanToggle";
 import { Button } from "@/components/ui/button";
@@ -37,8 +37,6 @@ type PlanForm = {
   includedCleanings: string;
   includedWashes: string;
   weeklyOffs: string;
-  allVehicleCategories: boolean;
-  vehicleCategoryIds: number[];
   allSeatTiers: boolean;
   seatPricingTiers: Array<"standard" | "large">;
   addons: PlanAddonForm[];
@@ -52,8 +50,6 @@ const emptyForm = (): PlanForm => ({
   includedCleanings: "26",
   includedWashes: "0",
   weeklyOffs: "4",
-  allVehicleCategories: false,
-  vehicleCategoryIds: [],
   allSeatTiers: false,
   seatPricingTiers: [],
   addons: [],
@@ -70,7 +66,6 @@ type Props = { embedded?: boolean };
 
 export function DcmsPlansPanel({ embedded = false }: Props) {
   const { data: plans, isPending, isError, error, refetch } = useDcmsPlans();
-  const { data: categories } = useVehicleCategories();
   const { data: seatCategories } = useSeatCategories();
   const { data: catalogAddons } = useCatalogAddons();
   const { create, update, remove } = useDcmsPlanMutations();
@@ -125,8 +120,6 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
       includedCleanings: String(Math.max(0, plan.includedCleanings - addonCleanings)),
       includedWashes: String(Math.max(0, plan.includedWashes - addonWashes)),
       weeklyOffs: String(plan.weeklyOffs),
-      allVehicleCategories: !plan.vehicleCategoryId,
-      vehicleCategoryIds: plan.vehicleCategoryId ? [plan.vehicleCategoryId] : [],
       allSeatTiers: !plan.seatCategoryId,
       seatPricingTiers,
       addons: buildAddonForms(plan),
@@ -144,14 +137,6 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
     setEditing(plan);
     setForm(planToForm(plan));
     setDialogOpen(true);
-  };
-
-  const toggleVehicleCategory = (id: number, checked: boolean) => {
-    setForm(f => ({
-      ...f,
-      allVehicleCategories: false,
-      vehicleCategoryIds: checked ? [...f.vehicleCategoryIds, id] : f.vehicleCategoryIds.filter(x => x !== id),
-    }));
   };
 
   const toggleSeatTier = (tier: "standard" | "large", checked: boolean) => {
@@ -177,10 +162,9 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
   };
 
   const validateScope = () => {
-    const hasVehicle = form.allVehicleCategories || form.vehicleCategoryIds.length > 0;
     const hasSeat = form.allSeatTiers || form.seatPricingTiers.length > 0;
-    if (!hasVehicle || !hasSeat) {
-      toast({ title: "Select car type and seater tier (or choose All)", variant: "destructive" });
+    if (!hasSeat) {
+      toast({ title: "Select seater tier (or choose All)", variant: "destructive" });
       return false;
     }
     return true;
@@ -221,8 +205,7 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
         await update.mutateAsync({
           id: editing.id,
           ...basePayload,
-          allVehicleCategories: form.allVehicleCategories,
-          vehicleCategoryId: form.allVehicleCategories ? null : form.vehicleCategoryIds[0],
+          allVehicleCategories: true,
           allSeatTiers: form.allSeatTiers,
           seatCategoryId,
         });
@@ -230,8 +213,7 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
       } else {
         const result = await create.mutateAsync({
           ...basePayload,
-          allVehicleCategories: form.allVehicleCategories,
-          vehicleCategoryIds: form.allVehicleCategories ? undefined : form.vehicleCategoryIds,
+          allVehicleCategories: true,
           allSeatTiers: form.allSeatTiers,
           seatPricingTiers: form.allSeatTiers ? undefined : form.seatPricingTiers,
         });
@@ -307,32 +289,6 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
             <DialogTitle>{editing ? "Edit plan" : "New plan"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Car type</Label>
-              <div className="rounded-md border p-3 space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                  <Checkbox
-                    checked={form.allVehicleCategories}
-                    onCheckedChange={v => setForm(f => ({
-                      ...f,
-                      allVehicleCategories: Boolean(v),
-                      vehicleCategoryIds: v ? [] : f.vehicleCategoryIds,
-                    }))}
-                  />
-                  All car types
-                </label>
-                {!form.allVehicleCategories && categories?.map(c => (
-                  <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <Checkbox
-                      checked={form.vehicleCategoryIds.includes(c.id)}
-                      onCheckedChange={v => toggleVehicleCategory(c.id, Boolean(v))}
-                    />
-                    {c.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-
             <div className="space-y-2">
               <Label>Seater tier</Label>
               <div className="rounded-md border p-3 space-y-2">
@@ -429,8 +385,6 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
               <CardContent className="text-sm space-y-2">
                 <p className="text-2xl font-bold">₹{Number(plan.price).toLocaleString("en-IN")}</p>
                 <p className="text-xs font-medium text-primary">
-                  {plan.scopeVehicleLabel ?? plan.vehicleCategoryName ?? "All car types"}
-                  {" · "}
                   {plan.scopeSeatLabel ?? plan.seatPricingTierLabel ?? plan.seatCategoryName ?? "All seater tiers"}
                 </p>
                 <p>{plan.includedCleanings} cleanings · {plan.includedWashes} washes</p>

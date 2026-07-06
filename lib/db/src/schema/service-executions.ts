@@ -3,6 +3,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { serviceTaskTypeEnum } from "./service-task-type";
 
 export const serviceExecutionStatusEnum = pgEnum("service_execution_status", [
   "scheduled", "started", "completed", "missed", "cancelled", "rescheduled",
@@ -28,6 +29,9 @@ export const serviceExecutionsTable = pgTable("service_executions", {
   serviceLocationId: integer("service_location_id"),
   assetId: integer("asset_id"),
   assignedStaffId: integer("assigned_staff_id").notNull(),
+  taskType: serviceTaskTypeEnum("task_type").notNull().default("one_time_service"),
+  isSubstitute: boolean("is_substitute").notNull().default(false),
+  substituteForStaffId: integer("substitute_for_staff_id"),
   scheduledDate: date("scheduled_date").notNull(),
   scheduledTime: text("scheduled_time"),
   status: serviceExecutionStatusEnum("status").notNull().default("scheduled"),
@@ -45,6 +49,7 @@ export const serviceExecutionsTable = pgTable("service_executions", {
 }, t => [
   index("idx_service_executions_assignment").on(t.serviceAssignmentId),
   index("idx_service_executions_staff_date").on(t.assignedStaffId, t.scheduledDate),
+  index("idx_service_executions_task_type").on(t.taskType),
   index("idx_service_executions_status").on(t.status),
   index("idx_service_executions_customer").on(t.customerId),
   index("idx_service_executions_scheduled_date").on(t.scheduledDate),

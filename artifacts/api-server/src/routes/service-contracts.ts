@@ -15,6 +15,7 @@ import {
   createInvoiceForContract,
   previewContractBilling,
 } from "../lib/billing/contractBillingService";
+import { mapBillingError } from "../lib/billing/billingErrors";
 
 const router = Router();
 
@@ -76,9 +77,9 @@ router.post("/service-contracts/:id/quotation", requireAuth, async (req, res) =>
     const result = await createQuotationForContract(id, stamped);
     return res.status(201).json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Quotation creation failed";
+    const { status, message } = mapBillingError(err);
     req.log.error({ err }, "Create contract quotation error");
-    return res.status(400).json({ error: message });
+    return res.status(status).json({ error: message });
   }
 });
 
@@ -93,9 +94,9 @@ router.post("/service-contracts/:id/invoice", requireAuth, async (req, res) => {
     const result = await createInvoiceForContract(id, stamped);
     return res.status(201).json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Invoice creation failed";
+    const { status, message } = mapBillingError(err);
     req.log.error({ err }, "Create contract invoice error");
-    return res.status(400).json({ error: message });
+    return res.status(status).json({ error: message });
   }
 });
 

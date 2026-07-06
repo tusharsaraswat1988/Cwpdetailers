@@ -13,6 +13,8 @@ import {
   transferCustomerOwnership,
   parseDateField,
 } from "../lib/assets/assetService";
+import { normalizeVehicleType } from "../lib/vehicleType";
+import { mapAssetCreateError } from "../lib/assets/assetErrors";
 
 const router = Router();
 
@@ -93,22 +95,19 @@ router.post("/assets", async (req, res) => {
           serviceLocationId: parseInt(String(serviceLocationId), 10),
           registrationNumber: String(registrationNumber),
           vehicleType,
-          vehicleModelId,
+          vehicleModelId: vehicleModelId != null ? parseInt(String(vehicleModelId), 10) : undefined,
           make,
           model,
-          year,
+          year: year != null ? parseInt(String(year), 10) : undefined,
           color,
           notes,
           effectiveFrom: effFrom ?? undefined,
         });
         return res.status(201).json(result);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Create failed";
-        if (msg.includes("already exists")) return res.status(409).json({ error: msg });
-        if (msg.includes("location") || msg.includes("vehicleModelId") || msg.includes("make")) {
-          return res.status(400).json({ error: msg });
-        }
-        throw e;
+        const mapped = mapAssetCreateError(e);
+        if (mapped.status >= 500) req.log.error({ err: e }, "Create vehicle asset failed");
+        return res.status(mapped.status).json({ error: mapped.message });
       }
     }
 
@@ -146,9 +145,9 @@ router.post("/assets", async (req, res) => {
         });
         return res.status(201).json(result);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Create failed";
-        if (msg.includes("location")) return res.status(400).json({ error: msg });
-        throw e;
+        const mapped = mapAssetCreateError(e);
+        if (mapped.status >= 500) req.log.error({ err: e }, "Create solar asset failed");
+        return res.status(mapped.status).json({ error: mapped.message });
       }
     }
 
@@ -182,7 +181,7 @@ router.patch("/assets/:id", async (req, res) => {
         vUpdate.registrationNumber = req.body.registrationNumber;
         vUpdate.registrationNormalized = normalizeRegistration(req.body.registrationNumber);
       }
-      if (req.body.vehicleType !== undefined) vUpdate.vehicleType = req.body.vehicleType;
+      if (req.body.vehicleType !== undefined) vUpdate.vehicleType = normalizeVehicleType(req.body.vehicleType);
       if (req.body.make !== undefined) vUpdate.make = req.body.make;
       if (req.body.model !== undefined) vUpdate.model = req.body.model;
       if (req.body.year !== undefined) vUpdate.year = req.body.year;

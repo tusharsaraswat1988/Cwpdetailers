@@ -15,6 +15,7 @@ import CityServicePage from "@/pages/CityServicePage";
 import Login from "@/pages/Login";
 import StaffLogin from "@/pages/StaffLogin";
 import AdminLogin from "@/pages/AdminLogin";
+import ForgotPassword from "@/pages/ForgotPassword";
 import Register from "@/pages/Register";
 
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -155,6 +156,8 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/staff/login" component={StaffLogin} />
+      <Route path="/forgot-password" component={() => <ForgotPassword portal="customer" />} />
+      <Route path="/staff/forgot-password" component={() => <ForgotPassword portal="staff" />} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/register" component={Register} />
 

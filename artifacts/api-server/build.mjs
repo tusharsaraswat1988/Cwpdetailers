@@ -108,7 +108,9 @@ async function buildAll() {
     ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
-      js: `import { createRequire as __bannerCrReq } from 'node:module';
+      js: `import { loadRepoEnv } from '../../../lib/env/load-env.mjs';
+loadRepoEnv(import.meta.url);
+import { createRequire as __bannerCrReq } from 'node:module';
 import __bannerPath from 'node:path';
 import __bannerUrl from 'node:url';
 

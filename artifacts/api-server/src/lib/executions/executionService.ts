@@ -23,6 +23,19 @@ import type { Request } from "express";
 import { tenantFilters, rowInScope } from "../../middlewares/tenantScope";
 import { getTodayIST } from "../../subscriptions/service";
 
+const TASK_TYPE_LABELS: Record<string, string> = {
+  daily_cleaning: "Daily Clean",
+  car_wash: "Full Wash",
+  solar_cleaning: "Solar Cleaning",
+  interior_detailing: "Interior Detailing",
+  one_time_service: "One-Time Service",
+};
+
+function taskTypeLabelFor(value: string | null | undefined): string {
+  if (!value) return "Service";
+  return TASK_TYPE_LABELS[value] ?? value.replace(/_/g, " ");
+}
+
 export type ExecutionStatus =
   | "scheduled"
   | "started"
@@ -50,8 +63,12 @@ export type ExecutionView = {
   customerName: string;
   serviceLocationId: number | null;
   serviceLocationLabel: string | null;
+  serviceLocationAddress: string | null;
+  locationLatitude: number | null;
+  locationLongitude: number | null;
   assetId: number | null;
   assetLabel: string | null;
+  serviceLabel: string | null;
   assignedStaffId: number;
   staffName: string;
   scheduledDate: string;
@@ -61,6 +78,9 @@ export type ExecutionView = {
   completedAt: string | null;
   cancellationReason: string | null;
   rescheduledFromId: number | null;
+  taskType: string;
+  taskTypeLabel: string;
+  isSubstitute: boolean;
 };
 
 export type ExecutionDetail = ExecutionView & {
@@ -75,7 +95,11 @@ function mapExecutionRow(row: {
   customerName: string;
   staffName: string;
   locationLabel: string | null;
+  locationAddress: string | null;
+  locationLatitude: number | null;
+  locationLongitude: number | null;
   assetLabel: string | null;
+  serviceLabel: string | null;
 }): ExecutionView {
   return {
     id: row.execution.id,
@@ -85,33 +109,51 @@ function mapExecutionRow(row: {
     customerName: row.customerName,
     serviceLocationId: row.execution.serviceLocationId,
     serviceLocationLabel: row.locationLabel,
+    serviceLocationAddress: row.locationAddress,
+    locationLatitude: row.locationLatitude,
+    locationLongitude: row.locationLongitude,
     assetId: row.execution.assetId,
     assetLabel: row.assetLabel,
+    serviceLabel: row.serviceLabel,
     assignedStaffId: row.execution.assignedStaffId,
     staffName: row.staffName,
-    scheduledDate: String(row.execution.scheduledDate),
+    scheduledDate: String(row.execution.scheduledDate).slice(0, 10),
     scheduledTime: row.execution.scheduledTime,
     status: row.execution.status as ExecutionStatus,
     startedAt: row.execution.startedAt?.toISOString() ?? null,
     completedAt: row.execution.completedAt?.toISOString() ?? null,
     cancellationReason: row.execution.cancellationReason,
     rescheduledFromId: row.execution.rescheduledFromId,
+    taskType: row.execution.taskType ?? "one_time_service",
+    taskTypeLabel: taskTypeLabelFor(row.execution.taskType),
+    isSubstitute: row.execution.isSubstitute ?? false,
   };
 }
 
-async function loadExecutionRow(executionId: number) {
-  const [row] = await db.select({
-    execution: serviceExecutionsTable,
-    customerName: customersTable.name,
-    staffName: staffTable.name,
-    locationLabel: serviceLocationsTable.label,
-    assetLabel: assetsTable.label,
-  })
+const executionJoinSelect = {
+  execution: serviceExecutionsTable,
+  customerName: customersTable.name,
+  staffName: staffTable.name,
+  locationLabel: serviceLocationsTable.label,
+  locationAddress: serviceLocationsTable.address,
+  locationLatitude: serviceLocationsTable.latitude,
+  locationLongitude: serviceLocationsTable.longitude,
+  assetLabel: assetsTable.label,
+  serviceLabel: serviceAssignmentsTable.serviceLabel,
+};
+
+function executionJoinQuery() {
+  return db.select(executionJoinSelect)
     .from(serviceExecutionsTable)
     .innerJoin(customersTable, eq(serviceExecutionsTable.customerId, customersTable.id))
     .innerJoin(staffTable, eq(serviceExecutionsTable.assignedStaffId, staffTable.id))
     .leftJoin(serviceLocationsTable, eq(serviceExecutionsTable.serviceLocationId, serviceLocationsTable.id))
     .leftJoin(assetsTable, eq(serviceExecutionsTable.assetId, assetsTable.id))
+    .leftJoin(serviceAssignmentsTable, eq(serviceExecutionsTable.serviceAssignmentId, serviceAssignmentsTable.id));
+}
+
+async function loadExecutionRow(executionId: number) {
+  const [row] = await executionJoinQuery()
     .where(eq(serviceExecutionsTable.id, executionId))
     .limit(1);
   return row ?? null;
@@ -134,8 +176,11 @@ export type CreateScheduledExecutionInput = {
   serviceLocationId?: number | null;
   assetId?: number | null;
   assignedStaffId: number;
+  taskType?: string;
   scheduledDate: string;
   scheduledTime?: string | null;
+  isSubstitute?: boolean;
+  substituteForStaffId?: number | null;
   companyId?: number | null;
   franchiseeId?: number | null;
   branchId?: number | null;
@@ -151,6 +196,9 @@ export async function createScheduledExecutionForAssignment(
     serviceLocationId: input.serviceLocationId ?? null,
     assetId: input.assetId ?? null,
     assignedStaffId: input.assignedStaffId,
+    taskType: (input.taskType ?? "one_time_service") as typeof serviceExecutionsTable.$inferInsert.taskType,
+    isSubstitute: input.isSubstitute ?? false,
+    substituteForStaffId: input.substituteForStaffId ?? null,
     scheduledDate: input.scheduledDate,
     scheduledTime: input.scheduledTime ?? null,
     status: "scheduled",
@@ -172,20 +220,29 @@ export async function listTodayWork(req: Request, date?: string): Promise<Execut
     conditions.push(eq(serviceExecutionsTable.assignedStaffId, req.scope.staffId));
   }
 
-  const rows = await db.select({
-    execution: serviceExecutionsTable,
-    customerName: customersTable.name,
-    staffName: staffTable.name,
-    locationLabel: serviceLocationsTable.label,
-    assetLabel: assetsTable.label,
-  })
-    .from(serviceExecutionsTable)
-    .innerJoin(customersTable, eq(serviceExecutionsTable.customerId, customersTable.id))
-    .innerJoin(staffTable, eq(serviceExecutionsTable.assignedStaffId, staffTable.id))
-    .leftJoin(serviceLocationsTable, eq(serviceExecutionsTable.serviceLocationId, serviceLocationsTable.id))
-    .leftJoin(assetsTable, eq(serviceExecutionsTable.assetId, assetsTable.id))
+  const rows = await executionJoinQuery()
     .where(and(...conditions))
     .orderBy(serviceExecutionsTable.scheduledTime, desc(serviceExecutionsTable.createdAt));
+
+  return rows.map(mapExecutionRow);
+}
+
+export async function listStaffExecutions(
+  req: Request,
+  opts?: { limit?: number; staffId?: number },
+): Promise<ExecutionView[]> {
+  const limit = Math.min(opts?.limit ?? 100, 100);
+  const conditions: SQL[] = [...tenantFilters(req, EXEC_SCOPE)];
+
+  const staffId = opts?.staffId ?? (req.user?.role === "staff" ? req.scope?.staffId : undefined);
+  if (staffId) {
+    conditions.push(eq(serviceExecutionsTable.assignedStaffId, staffId));
+  }
+
+  const rows = await executionJoinQuery()
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(serviceExecutionsTable.scheduledDate), desc(serviceExecutionsTable.createdAt))
+    .limit(limit);
 
   return rows.map(mapExecutionRow);
 }

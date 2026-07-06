@@ -17,11 +17,12 @@ const TYPE_LABELS: Record<string, string> = {
 type Props = {
   customerId: number | null;
   serviceLocationId: number | null;
+  serviceLocationLabel?: string | null;
   value: AssetListRow | null;
   onChange: (asset: AssetListRow | null) => void;
 };
 
-export function AssetSelect({ customerId, serviceLocationId, value, onChange }: Props) {
+export function AssetSelect({ customerId, serviceLocationId, serviceLocationLabel, value, onChange }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
@@ -68,6 +69,7 @@ export function AssetSelect({ customerId, serviceLocationId, value, onChange }: 
         <InlineVehicleSolarForm
           customerId={customerId}
           serviceLocationId={serviceLocationId}
+          serviceLocationLabel={serviceLocationLabel ?? undefined}
           onCreated={asset => {
             setShowAddForm(false);
             onChange(asset);

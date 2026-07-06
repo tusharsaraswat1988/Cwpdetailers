@@ -6,8 +6,13 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const migrationsDir = path.join(root, "lib/db/migrations");
 
-/** Apply SQL migrations in numeric order (010+). Safe to re-run — migrations use IF NOT EXISTS. */
+/** Apply SQL migrations in numeric order (005+). Safe to re-run — migrations use IF NOT EXISTS. */
 const PENDING = [
+  "005_legal_cms.sql",
+  "006_master_data.sql",
+  "007_staff_ecosystem.sql",
+  "008_service_catalog.sql",
+  "009_legacy_migration.sql",
   "010_dcms.sql",
   "011_dcms_enhancements.sql",
   "012_vehicle_reference_photos.sql",
@@ -33,6 +38,9 @@ const PENDING = [
   "032_sprint4c_billing_integration.sql",
   "033_sprint6_service_assignments.sql",
   "034_sprint7_service_executions.sql",
+  "035_auth_google_password_reset.sql",
+  "036_wallet_transactions.sql",
+  "037_vehicles_assigned_staff.sql",
 ];
 
 async function main() {

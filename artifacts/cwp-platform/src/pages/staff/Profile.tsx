@@ -15,7 +15,6 @@ import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffProfileCompletionBanner } from "@/features/staff/components/StaffProfileCompletionBanner";
 import { StaffVerificationBanner, StaffVerificationBadge } from "@/features/staff/components/StaffVerificationBanner";
 import { StaffOperationalRoles } from "@/features/staff/components/StaffOperationalRoles";
-import { StaffMyDocuments } from "@/features/staff/components/StaffMyDocuments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -148,7 +147,7 @@ export default function StaffProfile() {
           <Skeleton className="h-24 w-full rounded-2xl" />
         ) : profile ? (
           <>
-            {profile.profileCompletion && profile.profileCompletion.percent < 100 && (
+            {profile.profileCompletion && (
               <StaffProfileCompletionBanner completion={profile.profileCompletion} />
             )}
             <StaffVerificationBanner status={profile.verificationStatus} notes={profile.verificationNotes} />
@@ -284,8 +283,6 @@ export default function StaffProfile() {
             )}
           </section>
         )}
-
-        {profile && !isSupervisor && <StaffMyDocuments profile={profile} />}
 
         {!isSupervisor && (
           <section className="rounded-2xl border border-border bg-card p-4 space-y-3" data-testid="profile-attendance-today">

@@ -3,7 +3,17 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
+import { fileURLToPath } from "url";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { loadEnvFile, findEnvFile } from "../../lib/env/load-env.mjs";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+// Preserve PORT from the parent process (e.g. scripts/dev.mjs sets 21456 for Vite).
+const portFromParent = process.env.PORT;
+loadEnvFile(findEnvFile(repoRoot));
+if (portFromParent) {
+  process.env.PORT = portFromParent;
+}
 
 const rawPort = process.env.PORT;
 
@@ -28,6 +38,8 @@ if (!basePath) {
 }
 
 export default defineConfig({
+  envDir: repoRoot,
+  envPrefix: ["VITE_", "GOOGLE_"],
   base: basePath,
   plugins: [
     react(),
@@ -157,6 +169,7 @@ export default defineConfig({
             "/api": {
               target: "http://127.0.0.1:8080",
               changeOrigin: true,
+              cookieDomainRewrite: "",
             },
           },
         }

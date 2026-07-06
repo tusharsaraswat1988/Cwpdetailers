@@ -16,7 +16,6 @@ export function expandPlanScopes(
   input: PlanScopeInput,
   seatCategoryIdByTier: Map<SeatPricingTier, number>,
 ): Array<{ vehicleCategoryId: number | null; seatCategoryId: number | null }> {
-  const vehicles = resolveVehicleScopes(input);
   const seats = input.allSeatTiers || !input.seatPricingTiers?.length
     ? [null]
     : [...new Set(input.seatPricingTiers)].map(tier => {
@@ -25,11 +24,6 @@ export function expandPlanScopes(
       return id;
     });
 
-  const combos: Array<{ vehicleCategoryId: number | null; seatCategoryId: number | null }> = [];
-  for (const vehicleCategoryId of vehicles) {
-    for (const seatCategoryId of seats) {
-      combos.push({ vehicleCategoryId, seatCategoryId });
-    }
-  }
-  return combos;
+  // Plans are priced by seater tier only — car type is always null (all types).
+  return seats.map(seatCategoryId => ({ vehicleCategoryId: null, seatCategoryId }));
 }

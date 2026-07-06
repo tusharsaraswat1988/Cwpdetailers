@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserCog, CheckCircle, XCircle, Clock, Eye, Key, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { PasswordInput } from "@/components/ui/password-input";
 
 async function fetchStaff(status?: string) {
   const url = status ? `/api/staff?verificationStatus=${status}` : "/api/staff";
@@ -202,9 +203,12 @@ export default function AdminStaffApproval() {
               <h3 className="font-display font-bold text-lg mb-1">Create Staff Login</h3>
               <p className="text-muted-foreground text-sm mb-4">For {accountModal.name}</p>
               <label className="text-xs text-muted-foreground mb-1 block">Set Password</label>
-              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-primary/40"
-                placeholder="Secure password" />
+              <PasswordInput
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                containerClassName="mb-4"
+                placeholder="Secure password"
+              />
               <div className="flex gap-2">
                 <Button className="bg-primary text-secondary flex-1" disabled={!newPassword || accountMut.isPending}
                   onClick={() => accountMut.mutate({ id: accountModal.id, password: newPassword })}>

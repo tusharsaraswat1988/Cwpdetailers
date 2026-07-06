@@ -5,6 +5,7 @@ import { useRequestUploadUrl, getListStaffQueryKey } from "@workspace/api-client
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -133,13 +134,16 @@ export default function StaffDetail() {
 
   const saveMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => staffEcosystemApi.patchProfile(id, data),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      qc.setQueryData([STAFF_ECOSYSTEM_QUERY_KEY, id], (old: StaffEcosystemProfile | undefined) =>
+        old ? { ...old, ...variables } as StaffEcosystemProfile : old,
+      );
       setDraft({});
       qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, id] });
       qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "admin-list"] });
       qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "supervisors"] });
       qc.invalidateQueries({ queryKey: getListStaffQueryKey() });
-      toast({ title: "Saved" });
+      toast({ title: "Saved", description: "Staff profile updated." });
     },
     onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
   });
@@ -231,6 +235,9 @@ export default function StaffDetail() {
     return payload;
   };
 
+  const hasDraft = Object.keys(draft).length > 0;
+  const handleSave = () => saveMutation.mutate(buildSavePayload(draft));
+
   const handleCategoryChange = (value: string) => {
     setDraft(d => ({
       ...d,
@@ -312,6 +319,20 @@ export default function StaffDetail() {
             <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="location">Location Log</TabsTrigger>
           </TabsList>
+
+          {hasDraft && (
+            <div className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm font-medium">Unsaved changes — click Save to apply updates</p>
+              <div className="flex gap-2 shrink-0">
+                <Button type="button" size="sm" variant="outline" onClick={() => setDraft({})} disabled={saveMutation.isPending}>
+                  Discard
+                </Button>
+                <Button type="button" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
+                  {saveMutation.isPending ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
+            </div>
+          )}
 
           <TabsContent value="overview" className="space-y-4">
             <Card>
@@ -494,7 +515,7 @@ export default function StaffDetail() {
               )}
             </Card>
 
-            <Button onClick={() => saveMutation.mutate(buildSavePayload(draft))} disabled={saveMutation.isPending || Object.keys(draft).length === 0}>
+            <Button type="button" onClick={handleSave} disabled={saveMutation.isPending || !hasDraft}>
               Save Overview
             </Button>
           </TabsContent>
@@ -565,7 +586,7 @@ export default function StaffDetail() {
                 <Field label="UPI ID"><Input value={p.upiId ?? ""} onChange={e => set("upiId", e.target.value)} /></Field>
               </CardContent>
             </Card>
-            <Button onClick={() => saveMutation.mutate(buildSavePayload(draft))} disabled={saveMutation.isPending || Object.keys(draft).length === 0}>Save Banking</Button>
+            <Button type="button" onClick={handleSave} disabled={saveMutation.isPending || !hasDraft}>Save Banking</Button>
           </TabsContent>
 
           <TabsContent value="performance">
@@ -663,9 +684,8 @@ export default function StaffDetail() {
           </p>
           <div className="space-y-2">
             <Label htmlFor="loginPassword">Password</Label>
-            <Input
+            <PasswordInput
               id="loginPassword"
-              type="password"
               value={loginPassword}
               onChange={e => setLoginPassword(e.target.value)}
               placeholder="Minimum 6 characters"

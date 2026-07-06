@@ -88,6 +88,89 @@ export const GetMeResponse = zod.object({
 });
 
 /**
+ * @summary Google Sign-In client configuration
+ */
+export const GetGoogleAuthConfigResponse = zod.object({
+  enabled: zod.boolean(),
+  clientId: zod.string().nullish(),
+});
+
+/**
+ * @summary Sign in with Google ID token
+ */
+export const GoogleAuthBody = zod.object({
+  idToken: zod.string(),
+  portal: zod.enum(["customer", "staff"]).optional(),
+});
+
+export const GoogleAuthResponse = zod.object({
+  token: zod.string(),
+  user: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    phone: zod.string(),
+    email: zod.string().optional(),
+    role: zod.enum([
+      "customer",
+      "staff",
+      "admin",
+      "superadmin",
+      "franchisee",
+      "manager",
+    ]),
+    branchId: zod.number().optional(),
+    companyId: zod.number().optional(),
+    franchiseeId: zod.number().optional(),
+    staffId: zod.number().optional(),
+    customerId: zod.number().optional(),
+    isActive: zod.boolean().optional(),
+    createdAt: zod.coerce.date().optional(),
+  }),
+});
+
+/**
+ * @summary Complete Google sign-up with phone number
+ */
+export const GoogleAuthCompleteBody = zod.object({
+  linkToken: zod.string(),
+  phone: zod.string(),
+});
+
+/**
+ * @summary Request password reset OTP via SMS and email
+ */
+export const ForgotPasswordBody = zod.object({
+  phone: zod.string().optional(),
+  email: zod.string().optional(),
+  portal: zod.enum(["customer", "staff"]).optional(),
+});
+
+export const ForgotPasswordResponse = zod.object({
+  ok: zod.boolean().optional(),
+  message: zod.string().optional(),
+  sentSms: zod.boolean().optional(),
+  sentEmail: zod.boolean().optional(),
+  maskedPhone: zod.string().optional(),
+  maskedEmail: zod.string().nullish(),
+});
+
+/**
+ * @summary Reset password with OTP code
+ */
+export const ResetPasswordBody = zod.object({
+  phone: zod.string().optional(),
+  email: zod.string().optional(),
+  code: zod.string(),
+  newPassword: zod.string(),
+  portal: zod.enum(["customer", "staff"]).optional(),
+});
+
+export const ResetPasswordResponse = zod.object({
+  ok: zod.boolean().optional(),
+  message: zod.string().optional(),
+});
+
+/**
  * @summary List all customers
  */
 export const listCustomersQueryLimitDefault = 50;

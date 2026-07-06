@@ -135,6 +135,7 @@ export default function MyAssets() {
               <p className="font-semibold text-sm flex items-center gap-1"><Plus size={14} /> Add vehicle</p>
 
               <VehicleModelSelect
+                selected={selectedModel}
                 modelId={selectedModel?.id}
                 onSelect={setSelectedModel}
               />

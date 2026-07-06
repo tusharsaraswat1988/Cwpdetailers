@@ -4,6 +4,7 @@ import { useListBranches, getListBranchesQueryKey } from "@workspace/api-client-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { EmailInput } from "@/components/ui/email-input";
@@ -217,12 +218,11 @@ export function QuickCreateCustomerForm({
       {form.createLogin && (
         <div>
           <Label htmlFor={`${idPrefix}-password`}>Portal password</Label>
-          <Input
+          <PasswordInput
             id={`${idPrefix}-password`}
-            type="password"
             value={form.password}
             onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-            className="mt-1"
+            containerClassName="mt-1"
           />
         </div>
       )}

@@ -40,6 +40,19 @@ export async function getPushStatus(): Promise<PushStatus | null> {
   return res.json() as Promise<PushStatus>;
 }
 
+/** Subscribe staff to push alerts when supported and not already registered. Safe to call repeatedly. */
+export async function autoSubscribeStaffPushIfNeeded(): Promise<{ ok: boolean; error?: string }> {
+  if (!isPushSupported()) return { ok: false, error: "unsupported" };
+  if (getBrowserNotificationPermission() === "denied") return { ok: false, error: "denied" };
+
+  const status = await getPushStatus();
+  if (!status?.pushConfigured) return { ok: false, error: "not configured" };
+  if (status.subscribed) return { ok: true };
+
+  const result = await subscribeToPush();
+  return result.ok ? { ok: true } : { ok: false, error: result.error };
+}
+
 export async function subscribeToPush(): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isPushSupported()) {
     return { ok: false, error: "Push notifications are not supported in this browser" };

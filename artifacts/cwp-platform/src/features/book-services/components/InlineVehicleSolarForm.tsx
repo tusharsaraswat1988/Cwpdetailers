@@ -12,15 +12,24 @@ import {
   VehicleForm,
 } from "@/features/assets/components/AssetForms";
 import type { VehicleModel } from "@/features/master-data/api";
+import { categorySlugToVehicleType } from "@/lib/vehicleMaster";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 type Props = {
   customerId: number;
   serviceLocationId: number;
+  serviceLocationLabel?: string;
   onCreated: (asset: AssetListRow) => void;
   onCancel?: () => void;
 };
 
-export function InlineVehicleSolarForm({ customerId, serviceLocationId, onCreated, onCancel }: Props) {
+export function InlineVehicleSolarForm({
+  customerId,
+  serviceLocationId,
+  serviceLocationLabel,
+  onCreated,
+  onCancel,
+}: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [tab, setTab] = useState<"vehicle" | "solar_site">("vehicle");
@@ -37,14 +46,37 @@ export function InlineVehicleSolarForm({ customerId, serviceLocationId, onCreate
   const [selectedModel, setSelectedModel] = useState<VehicleModel | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const serviceLocations = [{ id: serviceLocationId, label: "Selected address" }];
+  const serviceLocations = [{
+    id: serviceLocationId,
+    label: serviceLocationLabel?.trim() || "Selected service address",
+  }];
+
+  const handleModelSelect = (model: VehicleModel | null) => {
+    setSelectedModel(model);
+    if (model) {
+      setVehicleForm(prev => ({
+        ...prev,
+        vehicleType: categorySlugToVehicleType(model.categorySlug),
+      }));
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       if (tab === "vehicle") {
-        if (!vehicleForm.registrationNumber.trim() || !selectedModel) {
-          toast({ title: "Vehicle model and number are required", variant: "destructive" });
+        if (!selectedModel) {
+          toast({
+            title: "Select make & model",
+            description: "Search and pick a vehicle from master data (e.g. Hyundai Creta).",
+            variant: "destructive",
+          });
+          setSaving(false);
+          return;
+        }
+        if (!vehicleForm.registrationNumber.trim()) {
+          toast({ title: "Vehicle number is required", variant: "destructive" });
+          setSaving(false);
           return;
         }
         const result = await createAsset({
@@ -53,7 +85,6 @@ export function InlineVehicleSolarForm({ customerId, serviceLocationId, onCreate
           serviceLocationId,
           registrationNumber: vehicleForm.registrationNumber.trim(),
           vehicleModelId: selectedModel.id,
-          vehicleType: vehicleForm.vehicleType,
           year: vehicleForm.year ? parseInt(vehicleForm.year, 10) : undefined,
           color: vehicleForm.color || undefined,
           notes: vehicleForm.notes || undefined,
@@ -64,6 +95,7 @@ export function InlineVehicleSolarForm({ customerId, serviceLocationId, onCreate
       } else {
         if (!solarForm.siteName.trim() || !solarForm.panelCapacityKw.trim()) {
           toast({ title: "Site name and capacity are required", variant: "destructive" });
+          setSaving(false);
           return;
         }
         const result = await createAsset({
@@ -82,7 +114,7 @@ export function InlineVehicleSolarForm({ customerId, serviceLocationId, onCreate
     } catch (e) {
       toast({
         title: "Could not register item",
-        description: e instanceof Error ? e.message : "Error",
+        description: getApiErrorMessage(e, "Something went wrong. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -107,9 +139,10 @@ export function InlineVehicleSolarForm({ customerId, serviceLocationId, onCreate
             values={vehicleForm}
             onChange={setVehicleForm}
             selectedModel={selectedModel}
-            onModelSelect={setSelectedModel}
+            onModelSelect={handleModelSelect}
             serviceLocations={serviceLocations}
             showCustomerSelect={false}
+            lockServiceLocation
           />
         </TabsContent>
         <TabsContent value="solar_site" className="mt-3">

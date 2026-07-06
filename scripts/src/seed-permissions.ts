@@ -75,12 +75,13 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
 
   staff: {
     customers: ["view"],
-    staff: ["view"],
+    staff: ["view", "edit"],
     bookings: ["view", "edit"],
     complaints: ["view", "create", "edit"],
     notifications: ["view"],
     services: ["view"],
     masters: ["view"],
+    analytics: ["view"],
     daily_cleaning: ["view", "complete_visits"],
   },
 

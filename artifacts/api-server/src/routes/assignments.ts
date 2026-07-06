@@ -2,9 +2,12 @@ import { Router } from "express";
 import { isServiceAssignmentsEnabled } from "../lib/assignments/featureFlag";
 import {
   assignPendingService,
+  assignPendingServiceTasks,
   getAssignmentDetail,
   listAssignedServices,
   listPendingAssignments,
+  recordSubstituteExecution,
+  type ServiceTaskType,
 } from "../lib/assignments/assignmentService";
 
 const router = Router();
@@ -66,9 +69,23 @@ router.post("/assignments/:pendingId/assign", async (req, res) => {
     const pendingId = parseInt(req.params.pendingId, 10);
     if (!Number.isFinite(pendingId)) return res.status(400).json({ error: "Invalid pending assignment id" });
 
+    const rawTasks = req.body?.tasks;
+    if (Array.isArray(rawTasks) && rawTasks.length > 0) {
+      const tasks = rawTasks.map((t: { taskType?: string; staffId?: number }) => {
+        const taskType = t.taskType as ServiceTaskType;
+        const staffId = Number(t.staffId);
+        if (!taskType || !Number.isFinite(staffId) || staffId <= 0) {
+          throw new Error("Each task requires taskType and staffId");
+        }
+        return { taskType, staffId };
+      });
+      const result = await assignPendingServiceTasks(req, pendingId, tasks);
+      return res.status(201).json(result);
+    }
+
     const staffId = Number(req.body?.staffId);
     if (!Number.isFinite(staffId) || staffId <= 0) {
-      return res.status(400).json({ error: "staffId is required" });
+      return res.status(400).json({ error: "staffId or tasks[] is required" });
     }
 
     const result = await assignPendingService(req, pendingId, staffId);
@@ -76,6 +93,32 @@ router.post("/assignments/:pendingId/assign", async (req, res) => {
   } catch (e) {
     const msg = (e as Error).message;
     const status = msg.includes("not found") ? 404 : msg.includes("already") ? 409 : 400;
+    return res.status(status).json({ error: msg });
+  }
+});
+
+router.post("/assignments/substitute", async (req, res) => {
+  if (!isServiceAssignmentsEnabled()) {
+    return res.status(503).json({ error: "Service assignments are disabled" });
+  }
+  try {
+    const contractId = Number(req.body?.contractId);
+    const taskType = req.body?.taskType as ServiceTaskType;
+    const substituteStaffId = Number(req.body?.substituteStaffId);
+    if (!Number.isFinite(contractId) || !taskType || !Number.isFinite(substituteStaffId)) {
+      return res.status(400).json({ error: "contractId, taskType, and substituteStaffId are required" });
+    }
+    const result = await recordSubstituteExecution(req, {
+      contractId,
+      taskType,
+      substituteStaffId,
+      scheduledDate: req.body?.scheduledDate,
+      reason: req.body?.reason,
+    });
+    return res.status(201).json(result);
+  } catch (e) {
+    const msg = (e as Error).message;
+    const status = msg.includes("not found") ? 404 : 400;
     return res.status(status).json({ error: msg });
   }
 });

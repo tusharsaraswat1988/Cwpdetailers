@@ -60,7 +60,7 @@ router.patch("/branches/:id", async (req, res) => {
     if (!existing || !rowInScope(req, { ...existing, branchId: existing.id })) {
       return res.status(404).json({ error: "Branch not found" });
     }
-    const { name, city, address, phone, managerName } = req.body;
+    const { name, city, address, phone, managerName, isActive } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
     if (city !== undefined) updateData.city = city;
@@ -68,10 +68,44 @@ router.patch("/branches/:id", async (req, res) => {
     const phoneField = applyOptionalContactPhoneField(req.body, "phone", updateData);
     if (!phoneField.ok) return res.status(400).json({ error: phoneField.error });
     if (managerName !== undefined) updateData.managerName = managerName;
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
     const [branch] = await db.update(branchesTable).set(updateData).where(eq(branchesTable.id, id)).returning();
     return res.json(branch);
   } catch (err) {
     req.log.error({ err }, "Update branch error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/branches/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid branch id" });
+
+    const [existing] = await db.select().from(branchesTable).where(eq(branchesTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, { ...existing, branchId: existing.id })) {
+      return res.status(404).json({ error: "Branch not found" });
+    }
+
+    const [counts] = await db.select({
+      customerCount: sql<number>`(SELECT COUNT(*)::int FROM customers c WHERE c.branch_id = ${id})`,
+      staffCount: sql<number>`(SELECT COUNT(*)::int FROM staff s WHERE s.branch_id = ${id})`,
+    }).from(branchesTable).where(eq(branchesTable.id, id)).limit(1);
+
+    const customerCount = counts?.customerCount ?? 0;
+    const staffCount = counts?.staffCount ?? 0;
+    if (customerCount > 0 || staffCount > 0) {
+      return res.status(409).json({
+        error: "Cannot delete a branch that has customers or staff assigned. Deactivate it instead.",
+        customerCount,
+        staffCount,
+      });
+    }
+
+    await db.delete(branchesTable).where(eq(branchesTable.id, id));
+    return res.json({ success: true, id });
+  } catch (err) {
+    req.log.error({ err }, "Delete branch error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

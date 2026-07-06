@@ -4,6 +4,7 @@ import {
   cancelExecution,
   completeExecution,
   getExecutionDetail,
+  listStaffExecutions,
   listTodayWork,
   missExecution,
   rescheduleExecution,
@@ -22,6 +23,18 @@ router.get("/service-executions/today", async (req, res) => {
     const date = typeof req.query.date === "string" ? req.query.date : undefined;
     const data = await listTodayWork(req, date);
     return res.json(data);
+  } catch (e) {
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+router.get("/service-executions", async (req, res) => {
+  if (!isServiceExecutionsEnabled()) return disabled(req, res);
+  try {
+    const limit = req.query.limit != null ? Number(req.query.limit) : undefined;
+    const staffId = req.query.staffId != null ? Number(req.query.staffId) : undefined;
+    const data = await listStaffExecutions(req, { limit, staffId });
+    return res.json({ data, total: data.length });
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message });
   }

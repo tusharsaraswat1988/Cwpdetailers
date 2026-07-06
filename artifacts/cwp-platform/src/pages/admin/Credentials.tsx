@@ -3,6 +3,7 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Key, UserCog, Building2, CheckCircle, Lock, RefreshCw, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PasswordInput } from "@/components/ui/password-input";
 import { useToast } from "@/hooks/use-toast";
 
 async function fetchStaff() {
@@ -282,11 +283,14 @@ export default function AdminCredentials() {
             <label className="text-xs text-muted-foreground mb-1 block">
               {isReset ? "New Password" : "Set Password"}
             </label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            <PasswordInput
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="mb-4"
               placeholder="Enter a secure password (min 6 chars)"
               autoFocus
-              onKeyDown={e => e.key === "Enter" && password.length >= 6 && handleSubmit()} />
+              onKeyDown={e => e.key === "Enter" && password.length >= 6 && handleSubmit()}
+            />
             <div className="flex gap-2">
               <Button className="bg-primary text-secondary flex-1" disabled={password.length < 6 || isPending} onClick={handleSubmit}>
                 {isPending ? "Saving…" : isReset ? "Reset Password" : "Create Account"}

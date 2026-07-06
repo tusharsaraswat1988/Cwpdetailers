@@ -34,6 +34,8 @@ type VehicleFormProps = {
   serviceLocations: Array<{ id: number; label: string }>;
   customers?: Array<{ id: number; name: string }>;
   showCustomerSelect?: boolean;
+  hideServiceLocation?: boolean;
+  lockServiceLocation?: boolean;
 };
 
 export function VehicleForm({
@@ -44,8 +46,11 @@ export function VehicleForm({
   serviceLocations,
   customers,
   showCustomerSelect = true,
+  hideServiceLocation = false,
+  lockServiceLocation = false,
 }: VehicleFormProps) {
   const set = (patch: Partial<VehicleAssetFormValues>) => onChange({ ...values, ...patch });
+  const lockedLocation = serviceLocations.find(l => String(l.id) === values.serviceLocationId);
 
   return (
     <div className="space-y-4">
@@ -61,35 +66,51 @@ export function VehicleForm({
           </Select>
         </div>
       )}
-      <div>
-        <Label>Service address *</Label>
-        <Select value={values.serviceLocationId || "none"} onValueChange={v => set({ serviceLocationId: v === "none" ? "" : v })}>
-          <SelectTrigger className="mt-1" data-testid="vehicle-service-location"><SelectValue placeholder="Select location" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none" disabled>Select location</SelectItem>
-            {serviceLocations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-      <VehicleModelSelect modelId={selectedModel?.id} onSelect={onModelSelect} />
+      {!hideServiceLocation && (
+        <div>
+          <Label>Service address *</Label>
+          {lockServiceLocation && lockedLocation ? (
+            <p className="mt-1.5 text-sm rounded-md border border-border bg-muted/30 px-3 py-2">
+              {lockedLocation.label}
+            </p>
+          ) : (
+            <Select value={values.serviceLocationId || "none"} onValueChange={v => set({ serviceLocationId: v === "none" ? "" : v })}>
+              <SelectTrigger className="mt-1" data-testid="vehicle-service-location"><SelectValue placeholder="Select location" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" disabled>Select location</SelectItem>
+                {serviceLocations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
+      <VehicleModelSelect selected={selectedModel} modelId={selectedModel?.id} onSelect={onModelSelect} />
       <div>
         <Label>Vehicle number *</Label>
         <Input
           className="mt-1"
           value={values.registrationNumber}
           onChange={e => set({ registrationNumber: e.target.value.toUpperCase() })}
+          placeholder="e.g. UP65FQ0948"
           data-testid="vehicle-registration"
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label>Vehicle type</Label>
-          <Select value={values.vehicleType} onValueChange={v => set({ vehicleType: v })}>
-            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {VEHICLE_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {selectedModel ? (
+            <p className="mt-1.5 text-sm capitalize rounded-md border border-border bg-muted/30 px-3 py-2">
+              {values.vehicleType}
+              <span className="text-xs text-muted-foreground block normal-case">From master data category</span>
+            </p>
+          ) : (
+            <Select value={values.vehicleType} onValueChange={v => set({ vehicleType: v })}>
+              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {VEHICLE_TYPES.map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <div>
           <Label>Year</Label>

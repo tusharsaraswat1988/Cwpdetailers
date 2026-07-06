@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Calendar } from "lucide-react";
-import { formatJobDateHeader, groupJobsByDate } from "@/lib/staff-jobs";
+import { formatJobDateHeader, groupJobsByDate, staffJobKey } from "@/lib/staff-jobs";
 
 type Tab = "today" | "upcoming" | "done";
 
@@ -96,7 +96,7 @@ export default function StaffJobs() {
         ) : tab === "today" ? (
           <div className="space-y-3">
             {jobs.today.map(job => (
-              <StaffJobListItem key={job.id} job={job} linkToDashboard />
+              <StaffJobListItem key={staffJobKey(job)} job={job} linkToDashboard />
             ))}
           </div>
         ) : (
@@ -115,7 +115,7 @@ export default function StaffJobs() {
                 <div className="space-y-3">
                   {dayJobs.map(job => (
                     <StaffJobListItem
-                      key={job.id}
+                      key={staffJobKey(job)}
                       job={job}
                       compact={tab === "done"}
                       linkToDashboard={tab !== "done"}

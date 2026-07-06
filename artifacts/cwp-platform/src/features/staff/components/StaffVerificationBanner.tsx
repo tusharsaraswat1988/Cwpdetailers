@@ -18,7 +18,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: typeof ShieldCheck; c
     label: "Verification rejected",
     icon: ShieldX,
     className: "border-destructive/30 bg-destructive/5 text-destructive",
-    message: "Your profile was rejected. Update documents and contact your supervisor.",
+    message: "Your profile was rejected. Contact your supervisor or admin for next steps.",
   },
   suspended: {
     label: "Suspended",

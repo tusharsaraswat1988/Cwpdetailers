@@ -1,16 +1,22 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useLocation, Link } from "wouter";
-import { useRegister } from "@workspace/api-client-react";
+import { useRegister, useGoogleAuth } from "@workspace/api-client-react";
+import type { AuthResponse } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { EmailInput } from "@/components/ui/email-input";
 import { useToast } from "@/hooks/use-toast";
 import { submitEmail, submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { GooglePhoneLinkDialog } from "@/components/auth/GooglePhoneLinkDialog";
+import { AuthSupportPanel } from "@/components/auth/AuthSupportPanel";
 import { useBranding } from "@/lib/branding";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { Loader2 } from "lucide-react";
 
 export default function Register() {
@@ -20,13 +26,25 @@ export default function Register() {
   const { toast } = useToast();
   const [form, setForm] = useState({ name: "", phone: "", email: "", password: "", city: "" });
   const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
+  const [googlePending, setGooglePending] = useState(false);
+  const [phoneLink, setPhoneLink] = useState<{
+    linkToken: string;
+    email: string;
+    name?: string | null;
+  } | null>(null);
+
+  const handleAuthSuccess = useCallback(
+    (data: AuthResponse) => {
+      login(data.user, data.token);
+      if (data.user.role === "staff") setLocation("/staff/dashboard");
+      else setLocation("/customer/dashboard");
+    },
+    [login, setLocation],
+  );
 
   const registerMutation = useRegister({
     mutation: {
-      onSuccess: (data: any) => {
-        login(data.user, data.token);
-        setLocation("/customer/dashboard");
-      },
+      onSuccess: handleAuthSuccess,
       onError: (err: any) => {
         toast({
           title: "Registration failed",
@@ -36,6 +54,39 @@ export default function Register() {
       },
     },
   });
+
+  const googleMutation = useGoogleAuth({
+    mutation: {
+      onSuccess: (data) => {
+        setGooglePending(false);
+        if ("needsPhone" in data && data.needsPhone) {
+          setPhoneLink({
+            linkToken: data.linkToken,
+            email: data.email,
+            name: data.name,
+          });
+          return;
+        }
+        handleAuthSuccess(data as AuthResponse);
+      },
+      onError: (err: unknown) => {
+        setGooglePending(false);
+        toast({
+          title: "Google sign-up failed",
+          description: getApiErrorMessage(err, "Could not sign up with Google."),
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  const handleGoogleToken = useCallback(
+    (idToken: string) => {
+      setGooglePending(true);
+      googleMutation.mutate({ data: { idToken, portal: "customer" } });
+    },
+    [googleMutation],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +121,29 @@ export default function Register() {
           </div>
           <h1 className="font-display font-bold text-3xl text-white">Create account</h1>
           <p className="text-white/50 mt-1">Join the {branding.brandName} community</p>
+        </div>
+
+        <div className="space-y-4 mb-4">
+          <GoogleSignInButton
+            portal="customer"
+            onSuccess={handleGoogleToken}
+            onError={msg => toast({ title: msg, variant: "destructive" })}
+            disabled={googlePending || registerMutation.isPending}
+          />
+          {googlePending && (
+            <p className="text-center text-white/40 text-xs flex items-center justify-center gap-1.5">
+              <Loader2 size={12} className="animate-spin" /> Signing up with Google…
+            </p>
+          )}
+        </div>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/10" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-secondary px-3 text-white/30">or register with phone</span>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -108,23 +182,30 @@ export default function Register() {
             className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
           />
 
-          {[
-            { id: "city", label: "City", placeholder: "Varanasi", type: "text" },
-            { id: "password", label: "Password", placeholder: "••••••••", type: "password" },
-          ].map(({ id, label, placeholder, type }) => (
-            <div key={id}>
-              <Label htmlFor={id} className="text-white/70 text-sm">{label}</Label>
-              <Input
-                id={id}
-                data-testid={`input-${id}`}
-                type={type}
-                value={(form as any)[id]}
-                onChange={e => setForm(f => ({ ...f, [id]: e.target.value }))}
-                placeholder={placeholder}
-                className="mt-1.5 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
-              />
-            </div>
-          ))}
+          <div>
+            <Label htmlFor="city" className="text-white/70 text-sm">City</Label>
+            <Input
+              id="city"
+              data-testid="input-city"
+              value={form.city}
+              onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+              placeholder="Varanasi"
+              className="mt-1.5 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="password" className="text-white/70 text-sm">Password</Label>
+            <PasswordInput
+              id="password"
+              data-testid="input-password"
+              value={form.password}
+              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              placeholder="••••••••"
+              containerClassName="mt-1.5"
+              className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
+            />
+          </div>
 
           <Button
             type="submit"
@@ -135,6 +216,8 @@ export default function Register() {
             {registerMutation.isPending ? <><Loader2 size={14} className="animate-spin mr-2" />Creating account...</> : "Create Account"}
           </Button>
         </form>
+
+        <AuthSupportPanel portal="customer" className="mt-6" />
 
         <p className="mt-4 text-center text-white/30 text-xs px-2">
           By creating an account, you agree to our{" "}
@@ -161,6 +244,20 @@ export default function Register() {
           ))}
         </div>
       </div>
+
+      {phoneLink && (
+        <GooglePhoneLinkDialog
+          open
+          linkToken={phoneLink.linkToken}
+          googleEmail={phoneLink.email}
+          googleName={phoneLink.name}
+          onSuccess={data => {
+            setPhoneLink(null);
+            handleAuthSuccess(data);
+          }}
+          onClose={() => setPhoneLink(null)}
+        />
+      )}
     </div>
   );
 }

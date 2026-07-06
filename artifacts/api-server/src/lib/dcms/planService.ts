@@ -171,11 +171,7 @@ export async function listPlans(
   if (homepageOnly) conditions.push(eq(dcmsPlansTable.showOnHomepage, true));
 
   if (linkedOnly) {
-
-    conditions.push(isNotNull(dcmsPlansTable.vehicleCategoryId));
-
     conditions.push(isNotNull(dcmsPlansTable.seatCategoryId));
-
   }
 
 
@@ -365,7 +361,7 @@ async function insertSinglePlan(
 
     weeklyOffs: data.weeklyOffs,
 
-    vehicleCategoryId: data.vehicleCategoryId,
+    vehicleCategoryId: null,
 
     seatCategoryId: data.seatCategoryId,
 
@@ -468,13 +464,9 @@ export async function createPlans(
 
 
   if (!hasExplicitScope) {
-
-    if (data.vehicleCategoryId == null || data.seatCategoryId == null) {
-
-      throw new Error("Select at least one car type and seater tier, or choose All");
-
+    if (data.seatCategoryId == null && !data.allSeatTiers && !data.seatPricingTiers?.length) {
+      throw new Error("Select at least one seater tier, or choose All");
     }
-
   }
 
 
@@ -497,14 +489,8 @@ export async function createPlans(
 
 
 
-  if (data.vehicleCategoryId != null && data.seatCategoryId != null
-
-    && !data.allVehicleCategories && !data.allSeatTiers
-
-    && !data.vehicleCategoryIds?.length && !data.seatPricingTiers?.length) {
-
-    combos = [{ vehicleCategoryId: data.vehicleCategoryId, seatCategoryId: data.seatCategoryId }];
-
+  if (data.seatCategoryId != null && !data.allSeatTiers && !data.seatPricingTiers?.length) {
+    combos = [{ vehicleCategoryId: null, seatCategoryId: data.seatCategoryId }];
   } else {
 
     const seatMap = await loadSeatCategoryIdByTier();
@@ -601,7 +587,8 @@ export async function updatePlan(
 
   const patch: Record<string, unknown> = { ...planFields, updatedAt: new Date() };
 
-  if (allVehicleCategories) patch.vehicleCategoryId = null;
+  // Plans are priced by seater tier only — always clear car type on update.
+  patch.vehicleCategoryId = null;
 
   if (allSeatTiers) patch.seatCategoryId = null;
 

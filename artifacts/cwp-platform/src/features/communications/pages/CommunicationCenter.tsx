@@ -4,6 +4,7 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -984,7 +985,7 @@ function ProviderManager({
               <SelectItem value="whatsapp_business">WhatsApp Business</SelectItem>
             </SelectContent>
           </Select>
-          <Input placeholder="API Key" value={form.apiKey} onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))} type="password" />
+          <PasswordInput placeholder="API Key" value={form.apiKey} onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))} />
           <Input placeholder="Sender ID" value={form.senderId} onChange={e => setForm(f => ({ ...f, senderId: e.target.value }))} />
           <Button onClick={() => createMut.mutate()} disabled={!form.name} className="md:col-span-2">Add Provider</Button>
         </CardContent>

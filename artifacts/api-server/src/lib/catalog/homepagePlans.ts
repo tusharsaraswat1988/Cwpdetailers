@@ -77,10 +77,7 @@ export async function listHomepagePlans(citySlug?: string): Promise<HomepagePlan
 
   const dcmsPlans = await listPlans(true, undefined, false, true);
   for (const plan of dcmsPlans) {
-    const scopeLabel = [
-      plan.scopeVehicleLabel ?? plan.vehicleCategoryName ?? "All Car Types",
-      plan.scopeSeatLabel ?? plan.seatPricingTierLabel ?? plan.seatCategoryName ?? "All Seater Tiers",
-    ].join(" · ");
+    const scopeLabel = plan.scopeSeatLabel ?? plan.seatPricingTierLabel ?? plan.seatCategoryName ?? "All Seater Tiers";
     const features = [
       `${plan.includedCleanings} cleanings`,
       `${plan.includedWashes} washes`,

@@ -65,13 +65,14 @@ export function useVehicleBrands(q?: string) {
   });
 }
 
-export function useVehicleModels(opts?: { q?: string; brandId?: number }) {
+export function useVehicleModels(opts?: { q?: string; brandId?: number }, enabled = true) {
   const params = new URLSearchParams({ isActive: "true" });
   if (opts?.q) params.set("q", opts.q);
   if (opts?.brandId) params.set("brandId", String(opts.brandId));
   return useQuery({
     queryKey: ["masters", "vehicle-models", opts],
     queryFn: () => masterFetch<VehicleModel[]>(`/masters/vehicle-models?${params}`),
+    enabled: enabled && Boolean(opts),
   });
 }
 

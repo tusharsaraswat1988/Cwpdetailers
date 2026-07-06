@@ -1,7 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import { db, usersTable, sessionsTable, permissionsTable, permissionOverridesTable, franchiseesTable } from "@workspace/db";
+import { db, usersTable, sessionsTable, permissionsTable, permissionOverridesTable, franchiseesTable, customersTable } from "@workspace/db";
 import { eq, and, or, isNull, gt } from "drizzle-orm";
+import { listSessionTokens } from "../lib/sessionCookie";
 
 export type AuthUser = {
   id: number;
@@ -47,6 +48,30 @@ function isSuperAdminRole(role: string) {
   return role === "admin" || role === "superadmin";
 }
 
+/** Logged-in staff may read/update their own profile and attendance without RBAC seed rows. */
+function isStaffSelfService(req: Request): boolean {
+  const user = req.user;
+  if (!user || user.role !== "staff" || user.staffId == null) return false;
+
+  const path = req.path;
+  const method = req.method.toUpperCase();
+  const staffId = user.staffId;
+
+  if (path.startsWith("/staff/me/")) {
+    return method === "GET" || method === "PATCH" || method === "POST";
+  }
+
+  const ownStaff = path.match(/^\/staff\/(\d+)\/(attendance|performance)(\/|$)/);
+  if (ownStaff && parseInt(ownStaff[1]!, 10) === staffId) {
+    if (path.includes("/attendance") && (method === "GET" || method === "POST")) return true;
+    if (path.includes("/performance") && method === "GET") return true;
+  }
+
+  if (path === "/analytics/staff-leaderboard" && method === "GET") return true;
+
+  return false;
+}
+
 export async function loadUserFromToken(token: string): Promise<AuthUser | null> {
   const th = hashToken(token);
   const rows = await db
@@ -65,7 +90,20 @@ export async function loadUserFromToken(token: string): Promise<AuthUser | null>
     .limit(1);
   const r = rows[0];
   if (!r || !r.user.isActive) return null;
-  const u = r.user;
+  let u = r.user;
+
+  if (u.role === "customer" && u.customerId == null) {
+    const [customer] = await db
+      .select({ id: customersTable.id })
+      .from(customersTable)
+      .where(eq(customersTable.userId, u.id))
+      .limit(1);
+    if (customer) {
+      await db.update(usersTable).set({ customerId: customer.id, updatedAt: new Date() }).where(eq(usersTable.id, u.id));
+      u = { ...u, customerId: customer.id };
+    }
+  }
+
   return {
     id: u.id,
     name: u.name,
@@ -125,16 +163,24 @@ async function computeScope(user: AuthUser): Promise<TenantScope> {
 }
 
 /**
- * optionalAuth: if a Bearer token is present and valid, populates req.user/req.scope.
+ * Resolve the authenticated user from any valid session token (cookie or bearer).
+ * Invalid bearer tokens no longer block a valid httpOnly cookie.
+ */
+export async function resolveAuthenticatedUser(req: Request): Promise<AuthUser | null> {
+  for (const token of listSessionTokens(req)) {
+    const user = await loadUserFromToken(token);
+    if (user) return user;
+  }
+  return null;
+}
+
+/**
+ * optionalAuth: if a session token is present and valid, populates req.user/req.scope.
  * Never rejects — keeps legacy/demo callers working.
  */
 export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   try {
-    const h = req.headers.authorization;
-    if (!h?.startsWith("Bearer ")) return next();
-    const token = h.slice(7).trim();
-    if (!token) return next();
-    const user = await loadUserFromToken(token);
+    const user = await resolveAuthenticatedUser(req);
     if (user) {
       req.user = user;
       req.scope = await computeScope(user);
@@ -142,7 +188,7 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
     return next();
   } catch (err) {
     req.log.warn({ err }, "optionalAuth failed");
-    return next();
+    return next(err);
   }
 }
 
@@ -181,6 +227,7 @@ export function requirePermission(resource: string, action: string) {
 
     // Align with client auth: admin/superadmin are not blocked by missing seed rows.
     if (isSuperAdminRole(req.user.role)) return next();
+    if (isStaffSelfService(req)) return next();
     const overrides = await db
       .select()
       .from(permissionOverridesTable)

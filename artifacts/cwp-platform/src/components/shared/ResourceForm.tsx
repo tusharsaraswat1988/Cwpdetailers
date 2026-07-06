@@ -2,6 +2,7 @@ import { type ReactNode, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export type ResourceFormField<T> = {
   key: keyof T & string;
@@ -58,7 +59,19 @@ export function ResourceForm<T extends Record<string, unknown>>(props: ResourceF
           <Label htmlFor={f.key}>{f.label}{f.required && <span className="text-red-400 ml-0.5">*</span>}</Label>
           {f.render
             ? f.render(value[f.key] as T[keyof T & string], next => onChange({ ...value, [f.key]: next }))
-            : (
+            : f.type === "password"
+              ? (
+                <PasswordInput
+                  id={f.key}
+                  data-testid={testIdPrefix ? `${testIdPrefix}-${f.key}` : undefined}
+                  placeholder={f.placeholder}
+                  required={f.required}
+                  value={(value[f.key] as string | undefined) ?? ""}
+                  onChange={e => onChange({ ...value, [f.key]: e.target.value } as T)}
+                  containerClassName="mt-1"
+                />
+              )
+              : (
               <Input
                 id={f.key}
                 data-testid={testIdPrefix ? `${testIdPrefix}-${f.key}` : undefined}

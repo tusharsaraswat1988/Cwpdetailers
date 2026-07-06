@@ -18,6 +18,7 @@ import {
   canProceedToStep,
 } from "../types";
 import { createServiceContract, createContractBilling, type ServiceContractResult, type ContractBillingResult } from "../api";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { CustomerSelect } from "./CustomerSelect";
 import { LocationSelect } from "./LocationSelect";
 import { AssetSelect } from "./AssetSelect";
@@ -170,7 +171,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       qc.invalidateQueries({ queryKey: ["quotations"] });
       qc.invalidateQueries({ queryKey: ["/api/invoices"] });
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : "Failed to complete booking");
+      setCreateError(getApiErrorMessage(e, "Failed to complete booking"));
     } finally {
       setCreating(false);
     }
@@ -205,6 +206,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
           <AssetSelect
             customerId={draft.customer?.id ?? null}
             serviceLocationId={draft.location?.id ?? null}
+            serviceLocationLabel={draft.location?.label ?? draft.location?.address ?? null}
             value={draft.asset}
             onChange={handleAssetChange}
           />

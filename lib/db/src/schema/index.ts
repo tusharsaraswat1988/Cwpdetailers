@@ -1,3 +1,4 @@
+export * from "./service-task-type";
 export * from "./customer-contracts";
 export * from "./pending-assignments";
 export * from "./service-assignments";
@@ -5,6 +6,7 @@ export * from "./service-executions";
 export * from "./companies";
 export * from "./users";
 export * from "./sessions";
+export * from "./password-reset";
 export * from "./permissions";
 export * from "./branches";
 export * from "./customers";

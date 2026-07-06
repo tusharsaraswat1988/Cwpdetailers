@@ -6,6 +6,7 @@ import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantSco
 import { hashPassword } from "../lib/passwords";
 import { generateEmployeeCode } from "../lib/staffEcosystem/profileCompletion";
 import { recalculateStaffProfile } from "../lib/staffEcosystem/recalculate";
+import { syncStaffLoginUser } from "../lib/staffLoginSync";
 import {
   attachOperationalRoles,
   assignOperationalRoles,
@@ -388,6 +389,7 @@ router.patch("/staff/:id", async (req, res) => {
     }
 
     const [staff] = await db.update(staffTable).set(updateData).where(eq(staffTable.id, id)).returning();
+    if (staff) await syncStaffLoginUser(staff);
     return res.json(staff);
   } catch (err) {
     req.log.error({ err }, "Update staff error");

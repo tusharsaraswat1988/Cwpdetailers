@@ -125,11 +125,11 @@ router.post(
       if (!name || price == null || includedCleanings == null) {
         return res.status(400).json({ error: "name, price, and includedCleanings are required" });
       }
-      const hasScope = allVehicleCategories || allSeatTiers
-        || (vehicleCategoryIds?.length > 0) || (seatPricingTiers?.length > 0)
-        || (vehicleCategoryId != null && seatCategoryId != null);
+      const hasScope = allSeatTiers
+        || (seatPricingTiers?.length > 0)
+        || seatCategoryId != null;
       if (!hasScope) {
-        return res.status(400).json({ error: "Select car type(s) and seater tier(s), or choose All" });
+        return res.status(400).json({ error: "Select seater tier(s), or choose All" });
       }
       const plans = await createPlans({
         name,

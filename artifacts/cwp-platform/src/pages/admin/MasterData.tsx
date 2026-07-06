@@ -11,13 +11,14 @@ import { useMasterList, useMasterMutations } from "@/features/master-data/api";
 import { Plus, Database, Car, MapPin, Wrench } from "lucide-react";
 
 type EntityConfig = {
-  key: "vehicle-brands" | "vehicle-categories" | "seat-categories" | "states" | "cities" | "service-areas" | "pincodes" | "service-categories";
+  key: "vehicle-brands" | "vehicle-models" | "vehicle-categories" | "seat-categories" | "states" | "cities" | "service-areas" | "pincodes" | "service-categories";
   label: string;
   fields: Array<{ key: string; label: string; type?: string }>;
 };
 
 const ENTITIES: EntityConfig[] = [
   { key: "vehicle-brands", label: "Vehicle Brands", fields: [{ key: "name", label: "Name" }, { key: "slug", label: "Slug" }] },
+  { key: "vehicle-models", label: "Vehicle Models", fields: [{ key: "brandId", label: "Brand ID", type: "number" }, { key: "name", label: "Name" }, { key: "slug", label: "Slug" }] },
   { key: "vehicle-categories", label: "Vehicle Categories", fields: [{ key: "name", label: "Name" }, { key: "slug", label: "Slug" }] },
   { key: "seat-categories", label: "Seat Categories", fields: [{ key: "name", label: "Name" }, { key: "slug", label: "Slug" }, { key: "seatCount", label: "Seat Count", type: "number" }] },
   { key: "states", label: "States", fields: [{ key: "name", label: "Name" }, { key: "code", label: "Code" }] },
@@ -104,7 +105,11 @@ function MasterEntityPanel({ config }: { config: EntityConfig }) {
             {isLoading ? (
               <tr><td colSpan={displayFields.length + 2} className="px-4 py-6"><Skeleton className="h-8 w-full" /></td></tr>
             ) : (data ?? []).length === 0 ? (
-              <tr><td colSpan={displayFields.length + 2} className="px-4 py-6 text-center text-muted-foreground">No records</td></tr>
+              <tr><td colSpan={displayFields.length + 2} className="px-4 py-6 text-center text-muted-foreground">
+                No records. If this is a fresh database, run{" "}
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">cd scripts && pnpm run seed:master-data</code>
+                {" "}or restart the API server (auto-seeds when empty).
+              </td></tr>
             ) : (
               (data ?? []).map((row: Record<string, unknown>) => (
                 <tr key={row.id as number} className="border-t border-border hover:bg-muted/30">
@@ -151,6 +156,7 @@ export default function AdminMasterData() {
         <Tabs defaultValue="vehicle-brands">
           <TabsList className="flex flex-wrap h-auto gap-1">
             <TabsTrigger value="vehicle-brands" className="gap-1"><Car size={12} /> Brands</TabsTrigger>
+            <TabsTrigger value="vehicle-models">Models</TabsTrigger>
             <TabsTrigger value="vehicle-categories">Categories</TabsTrigger>
             <TabsTrigger value="seat-categories">Seats</TabsTrigger>
             <TabsTrigger value="states" className="gap-1"><MapPin size={12} /> States</TabsTrigger>

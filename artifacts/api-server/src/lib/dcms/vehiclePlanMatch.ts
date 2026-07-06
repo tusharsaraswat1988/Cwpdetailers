@@ -54,9 +54,7 @@ export function planMatchesVehicle(
   vehicle: VehiclePlanContext,
   planSeatCount?: number | null,
 ): boolean {
-  if (plan.vehicleCategoryId != null && plan.vehicleCategoryId !== vehicle.vehicleCategoryId) {
-    return false;
-  }
+  // Pricing is keyed by seater tier only — car type does not affect plan matching.
   if (plan.seatCategoryId != null) {
     if (planSeatCount == null) return false;
     if (!seatCountsShareTier(planSeatCount, vehicle.seatCount)) return false;
@@ -73,8 +71,8 @@ export function assertPlanMatchesVehicle(
     const tierLabel = vehicle.seatPricingTier === "standard" ? "up to 5 seater" : "5+ seater";
     throw new Error(
       `Plan "${plan.name}" does not match this vehicle. `
-      + `Vehicle is ${vehicle.vehicleCategoryName} · ${vehicle.seatCategoryName} (${tierLabel}). `
-      + `Choose a plan for the same car type and seater tier.`,
+      + `Vehicle is ${vehicle.seatCategoryName} (${tierLabel}). `
+      + `Choose a plan for the same seater tier.`,
     );
   }
 }

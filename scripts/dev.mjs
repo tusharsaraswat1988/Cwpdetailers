@@ -1,32 +1,13 @@
 import { spawn, execSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadEnvFile, findEnvFile } from "../lib/env/load-env.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function loadEnv(file) {
-  const env = { ...process.env };
-  if (!existsSync(file)) return env;
-  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let val = trimmed.slice(eq + 1).trim();
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
-      val = val.slice(1, -1);
-    }
-    env[key] = val;
-  }
-  return env;
-}
-
-const baseEnv = loadEnv(path.join(root, ".env"));
+const baseEnv = { ...process.env };
+loadEnvFile(findEnvFile(root), { override: process.env.NODE_ENV !== "production" });
+Object.assign(baseEnv, process.env);
 baseEnv.NODE_ENV = "development";
 
 /** Stop stale listeners so `pnpm dev` can restart after Ctrl+C left orphans (common on Windows). */
@@ -96,6 +77,13 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 console.log("Building API server...");
+execSync("pnpm --filter @workspace/scripts exec tsx src/ensure-master-data.ts", {
+  cwd: root,
+  env: baseEnv,
+  stdio: "inherit",
+  shell: true,
+});
+
 execSync("pnpm --filter @workspace/api-server run build", {
   cwd: root,
   env: { ...baseEnv, PORT: "8080" },

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Bell, Loader2, X } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  autoSubscribeStaffPushIfNeeded,
   getPushStatus,
-  subscribeToPush,
   isPushSupported,
   getBrowserNotificationPermission,
 } from "@/lib/pushNotifications";
@@ -15,7 +14,6 @@ export function StaffPushPrompt() {
   const { toast } = useToast();
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [enabling, setEnabling] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -33,33 +31,31 @@ export function StaffPushPrompt() {
         return;
       }
       const status = await getPushStatus();
-      setVisible(Boolean(status?.pushConfigured && !status?.subscribed));
+      if (!status?.pushConfigured || status.subscribed) {
+        setVisible(false);
+        return;
+      }
+      setVisible(true);
+      const result = await autoSubscribeStaffPushIfNeeded();
+      if (result.ok) {
+        toast({
+          title: "Job alerts enabled",
+          description: "You'll get vibration + notifications when admin assigns new work.",
+        });
+        setVisible(false);
+        return;
+      }
+      if (result.error && result.error !== "denied" && result.error !== "unsupported") {
+        toast({ title: "Could not enable alerts", description: result.error, variant: "destructive" });
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  const enable = async () => {
-    setEnabling(true);
-    try {
-      const result = await subscribeToPush();
-      if (!result.ok) {
-        toast({ title: "Could not enable alerts", description: result.error, variant: "destructive" });
-        return;
-      }
-      toast({
-        title: "Job alerts enabled",
-        description: "You'll get vibration + notifications when admin assigns new work.",
-      });
-      setVisible(false);
-    } finally {
-      setEnabling(false);
-    }
-  };
 
   const dismiss = () => {
     sessionStorage.setItem(DISMISS_KEY, "1");
@@ -78,19 +74,15 @@ export function StaffPushPrompt() {
           <Bell size={18} className="text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">Enable job alerts</p>
+          <p className="font-semibold text-sm">Allow job alerts</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Get vibration + popup when a new job is assigned — even if the app is in the background.
+            Tap Allow in the browser prompt so we can vibrate and notify you when a new job is assigned.
           </p>
         </div>
         <button type="button" onClick={dismiss} className="p-1 text-muted-foreground hover:text-foreground" aria-label="Dismiss">
           <X size={16} />
         </button>
       </div>
-      <Button className="w-full h-11 font-semibold" disabled={enabling} onClick={() => void enable()}>
-        {enabling ? <Loader2 size={16} className="animate-spin mr-2" /> : <Bell size={16} className="mr-2" />}
-        Turn on notifications
-      </Button>
     </div>
   );
 }

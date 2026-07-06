@@ -271,10 +271,12 @@ export function useCompleteVisit() {
   });
 }
 
-export function useCustomerDcmsDashboard() {
+export function useCustomerDcmsDashboard(enabled = true) {
   return useQuery({
     queryKey: ["dcms", "customer", "dashboard"],
     queryFn: () => dcmsFetch<{ subscriptions: unknown[]; stats: Record<string, unknown> | null }>("/daily-cleaning/customer/dashboard"),
+    enabled,
+    retry: false,
   });
 }
 

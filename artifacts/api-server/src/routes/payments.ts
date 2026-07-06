@@ -18,6 +18,7 @@ import {
 } from "../lib/billing/invoiceBillingSettings";
 import { renderInvoicePdf } from "../lib/billing/invoicePdfGenerator";
 import { computeInvoiceGst } from "../lib/billing/invoiceGstEngine";
+import { mapBillingError } from "../lib/billing/billingErrors";
 import type { InvoiceItem } from "@workspace/db";
 
 const router = Router();
@@ -190,8 +191,8 @@ router.post("/invoices", async (req, res) => {
     return res.status(201).json(invoice);
   } catch (err) {
     req.log.error({ err }, "Create invoice error");
-    const message = err instanceof Error ? err.message : "Internal server error";
-    return res.status(err instanceof Error && message !== "Internal server error" ? 400 : 500).json({ error: message });
+    const { status, message } = mapBillingError(err);
+    return res.status(status).json({ error: message });
   }
 });
 

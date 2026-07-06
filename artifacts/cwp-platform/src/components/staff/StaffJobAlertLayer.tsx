@@ -3,9 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useGetTodayBookings, getGetTodayBookingsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { useStaffJobAlerts, useStaffPushMessageAlerts } from "@/hooks/useStaffJobAlerts";
+import { useStaffPushAutoSubscribe } from "@/hooks/useStaffPushAutoSubscribe";
 import { StaffJobAlertPopup } from "@/components/staff/StaffJobAlertPopup";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
-import type { StaffJob } from "@/lib/staff-jobs";
+import { fetchTodayExecutions } from "@/features/service-executions/api";
+import { executionToStaffJob, type StaffJob } from "@/lib/staff-jobs";
 
 /** Polls today's jobs and surfaces vibration + popup when admin assigns new work. */
 export function StaffJobAlertLayer({ children }: { children: ReactNode }) {
@@ -23,7 +25,7 @@ export function StaffJobAlertLayer({ children }: { children: ReactNode }) {
     staffId != null &&
     myContext?.staffCategory !== "supervisor";
 
-  const { data: todayJobs } = useGetTodayBookings(
+  const { data: todayBookings } = useGetTodayBookings(
     { staffId: staffId ?? 0 },
     {
       query: {
@@ -36,8 +38,23 @@ export function StaffJobAlertLayer({ children }: { children: ReactNode }) {
     },
   );
 
-  const { latestAlert, dismissAlert } = useStaffJobAlerts((todayJobs ?? []) as StaffJob[], Boolean(enabled));
+  const { data: todayExecutions } = useQuery({
+    queryKey: ["service-executions", "today", staffId],
+    queryFn: fetchTodayExecutions,
+    enabled: enabled && staffId != null,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
+
+  const todayJobs: StaffJob[] = [
+    ...((todayBookings ?? []) as StaffJob[]).map(j => ({ ...j, source: "booking" as const })),
+    ...((todayExecutions ?? []).map(executionToStaffJob)),
+  ];
+
+  const { latestAlert, dismissAlert } = useStaffJobAlerts(todayJobs, Boolean(enabled));
   useStaffPushMessageAlerts(Boolean(enabled));
+  useStaffPushAutoSubscribe(Boolean(enabled));
 
   return (
     <>

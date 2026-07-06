@@ -3,6 +3,7 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, Plus, Phone, Mail, MapPin, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PasswordInput } from "@/components/ui/password-input";
 import { useToast } from "@/hooks/use-toast";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { EmailInput } from "@/components/ui/email-input";
@@ -242,9 +243,12 @@ export default function AdminFranchisees() {
               <h3 className="font-display font-bold text-lg mb-1">Create Login</h3>
               <p className="text-muted-foreground text-sm mb-4">For {accountModal.name}</p>
               <label className="text-xs text-muted-foreground mb-1 block">Set Password</label>
-              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-primary/40"
-                placeholder="Enter a secure password" />
+              <PasswordInput
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                containerClassName="mb-4"
+                placeholder="Enter a secure password"
+              />
               <div className="flex gap-2">
                 <Button className="bg-primary text-secondary flex-1"
                   disabled={!newPassword || accountMut.isPending}

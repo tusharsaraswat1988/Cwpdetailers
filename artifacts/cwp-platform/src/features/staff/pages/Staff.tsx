@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Star, UserCog } from "lucide-react";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
 import { PageHeader, EmptyState } from "@/components/shared";
@@ -25,7 +26,7 @@ type StaffForm = {
   phone: string;
   email: string;
   staffCategory: StaffCategory;
-  operationalRoleId: string;
+  operationalRoleIds: number[];
   reportingManagerId: string;
   branchId: string;
   monthlySalary: string;
@@ -74,7 +75,7 @@ export default function AdminStaff() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<StaffForm>({
     name: "", phone: "", email: "", staffCategory: "cleaning_staff",
-    operationalRoleId: "", reportingManagerId: "", branchId: "", monthlySalary: "", initialPassword: "staff123",
+    operationalRoleIds: [], reportingManagerId: "", branchId: "", monthlySalary: "", initialPassword: "",
   });
   const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
 
@@ -136,7 +137,7 @@ export default function AdminStaff() {
       setOpen(false);
       setForm({
         name: "", phone: "", email: "", staffCategory: "cleaning_staff",
-        operationalRoleId: "", reportingManagerId: "", branchId: "", monthlySalary: "", initialPassword: "staff123",
+        operationalRoleIds: [], reportingManagerId: "", branchId: "", monthlySalary: "", initialPassword: "",
       });
       if (data.loginWarning) {
         toast({ title: "Staff saved — login not created", description: data.loginWarning, variant: "destructive" });
@@ -163,8 +164,8 @@ export default function AdminStaff() {
       toast({ title: "Please fix phone or email format", variant: "destructive" });
       return;
     }
-    if (form.staffCategory === "cleaning_staff" && !form.operationalRoleId) {
-      toast({ title: "Select an operational role", variant: "destructive" });
+    if (form.staffCategory === "cleaning_staff" && form.operationalRoleIds.length === 0) {
+      toast({ title: "Select at least one operational role", variant: "destructive" });
       return;
     }
     if (form.initialPassword.length < 6) {
@@ -178,7 +179,7 @@ export default function AdminStaff() {
       staffCategory: form.staffCategory,
       branchId: parseInt(form.branchId),
       monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : undefined,
-      operationalRoleIds: form.staffCategory === "cleaning_staff" ? [parseInt(form.operationalRoleId, 10)] : undefined,
+      operationalRoleIds: form.staffCategory === "cleaning_staff" ? form.operationalRoleIds : undefined,
       reportingManagerId: form.staffCategory === "cleaning_staff" && form.reportingManagerId
         ? parseInt(form.reportingManagerId, 10)
         : undefined,
@@ -187,7 +188,16 @@ export default function AdminStaff() {
   };
 
   const isCleaningStaff = form.staffCategory === "cleaning_staff";
-  const canSubmit = Boolean(form.branchId) && (form.staffCategory === "supervisor" || form.operationalRoleId);
+  const canSubmit = Boolean(form.branchId) && (form.staffCategory === "supervisor" || form.operationalRoleIds.length > 0);
+
+  const toggleCreateRole = (roleId: number, checked: boolean) => {
+    setForm(f => ({
+      ...f,
+      operationalRoleIds: checked
+        ? [...f.operationalRoleIds, roleId]
+        : f.operationalRoleIds.filter(id => id !== roleId),
+    }));
+  };
 
   const allStaff = useMemo(
     () => (staff ?? []).map(row => ({ ...row, staffCategory: resolveStaffCategory(row) })),
@@ -223,7 +233,7 @@ export default function AdminStaff() {
                     <Plus size={15} className="mr-1.5" />Add staff member
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                   <DialogHeader><DialogTitle>New Staff Member</DialogTitle></DialogHeader>
                   <div className="space-y-4 mt-2">
                     <div>
@@ -255,17 +265,17 @@ export default function AdminStaff() {
                     </div>
                     <div>
                       <Label htmlFor="initialPassword">Portal Login Password</Label>
-                      <Input
+                      <PasswordInput
                         id="initialPassword"
-                        type="password"
                         data-testid="input-staff-password"
                         value={form.initialPassword}
                         onChange={e => setForm(f => ({ ...f, initialPassword: e.target.value }))}
-                        className="mt-1"
+                        containerClassName="mt-1"
                         placeholder="Min 6 characters"
+                        autoComplete="new-password"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Staff will sign in at /login with their phone number and this password.
+                        Staff will sign in at /staff/login with their phone number and this password.
                       </p>
                     </div>
                     <div>
@@ -275,7 +285,7 @@ export default function AdminStaff() {
                         onValueChange={v => setForm(f => ({
                           ...f,
                           staffCategory: v as StaffCategory,
-                          operationalRoleId: v === "supervisor" ? "" : f.operationalRoleId,
+                          operationalRoleIds: v === "supervisor" ? [] : f.operationalRoleIds,
                           reportingManagerId: v === "supervisor" ? "" : f.reportingManagerId,
                         }))}
                       >
@@ -293,18 +303,26 @@ export default function AdminStaff() {
                     {isCleaningStaff && (
                       <>
                         <div>
-                          <Label>Operational Role</Label>
-                          <Select value={form.operationalRoleId} onValueChange={v => setForm(f => ({ ...f, operationalRoleId: v }))}>
-                            <SelectTrigger className="mt-1" data-testid="select-staff-role"><SelectValue placeholder="Select role" /></SelectTrigger>
-                            <SelectContent>
-                              {(roleMaster ?? []).map((r: RoleMaster) => (
-                                <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Roles control daily cleaning, booking, and field assignments. Add more roles on the staff profile later.
+                          <Label>Operational Roles</Label>
+                          <p className="text-xs text-muted-foreground mt-1 mb-2">
+                            Select all task types this staff can perform (e.g. daily cleaner + car washer).
                           </p>
+                          <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
+                            {(roleMaster ?? []).map((r: RoleMaster) => (
+                              <label
+                                key={r.id}
+                                className="flex items-center gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-muted/50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={form.operationalRoleIds.includes(r.id)}
+                                  onChange={e => toggleCreateRole(r.id, e.target.checked)}
+                                  data-testid={`create-staff-role-${r.slug}`}
+                                />
+                                {r.name}
+                              </label>
+                            ))}
+                          </div>
                         </div>
                         <div>
                           <Label>Reporting Manager (Supervisor)</Label>

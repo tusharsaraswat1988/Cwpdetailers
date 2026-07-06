@@ -22,7 +22,7 @@ export function StaffJobListItem({ job, compact, showAmount, linkToDashboard }: 
         <div className="min-w-0 flex-1">
           <p className={`font-semibold truncate ${compact ? "text-sm" : "text-base"}`}>{job.customerName}</p>
           <p className="text-xs text-muted-foreground capitalize mt-0.5">
-            {job.serviceType?.replace(/_/g, " ")}
+            {(job.serviceName ?? job.serviceType)?.replace(/_/g, " ")}
             {job.scheduledTime ? ` · ${job.scheduledTime}` : ""}
           </p>
           {(job.address || job.area) && !compact && (

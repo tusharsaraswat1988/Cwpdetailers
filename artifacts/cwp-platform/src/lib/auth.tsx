@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 
 export type UserRole = "customer" | "staff" | "admin" | "superadmin" | "franchisee" | "manager";
 
@@ -40,21 +40,126 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const TOKEN_KEY = "cwp_token";
 const USER_KEY = "cwp_user";
+const SESSION_VALIDATE_RETRIES = 3;
+const SESSION_VALIDATE_RETRY_MS = 500;
 
 function isSuperAdmin(role?: UserRole | null) {
   return role === "admin" || role === "superadmin";
 }
 
-function persistSession(u: AuthUser, t: string) {
-  localStorage.setItem(TOKEN_KEY, t);
-  localStorage.setItem(USER_KEY, JSON.stringify(u));
+function clearStoredSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
 }
 
-// Patches window.fetch once so every SAME-ORIGIN /api/* request carries the
-// bearer token. We deliberately do NOT attach the token to cross-origin
-// requests — that would leak credentials to third-party hosts (e.g. Google
-// Maps, analytics) even if they happen to have "/api/" in their path.
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function normalizeAuthUser(raw: unknown): AuthUser | null {
+  if (!raw || typeof raw !== "object") return null;
+  const u = raw as Record<string, unknown>;
+  if (typeof u.id !== "number" || typeof u.name !== "string") return null;
+
+  const phone = typeof u.phone === "string" ? u.phone : String(u.phone ?? "");
+
+  return {
+    id: u.id,
+    name: u.name,
+    phone,
+    email: typeof u.email === "string" ? u.email : u.email ?? null,
+    role: u.role as UserRole,
+    branchId: typeof u.branchId === "number" ? u.branchId : u.branchId ?? null,
+    companyId: typeof u.companyId === "number" ? u.companyId : u.companyId ?? null,
+    franchiseeId: typeof u.franchiseeId === "number" ? u.franchiseeId : u.franchiseeId ?? null,
+    staffId: typeof u.staffId === "number" ? u.staffId : u.staffId ?? null,
+    customerId: typeof u.customerId === "number" ? u.customerId : u.customerId ?? null,
+  };
+}
+
+function loadCachedSession(): { user: AuthUser | null; token: string | null } {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const rawUser = localStorage.getItem(USER_KEY);
+  if (!rawUser) return { user: null, token };
+
+  try {
+    const user = normalizeAuthUser(JSON.parse(rawUser));
+    if (!user) {
+      localStorage.removeItem(USER_KEY);
+      return { user: null, token };
+    }
+    return { user, token };
+  } catch {
+    localStorage.removeItem(USER_KEY);
+    return { user: null, token };
+  }
+}
+
+function persistSession(u: AuthUser, token: string | null) {
+  localStorage.setItem(USER_KEY, JSON.stringify(u));
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+async function fetchAuthMe(bearerToken: string | null): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
+
+  return fetch("/api/auth/me", {
+    credentials: "include",
+    headers,
+  });
+}
+
+/**
+ * Validate session — cookie first (httpOnly), then bearer token from localStorage.
+ * Returns null only when the server definitively rejects all credentials (401).
+ */
+async function validateStoredSession(
+  bearerToken: string | null,
+  fallbackUser: AuthUser | null,
+): Promise<{ user: AuthUser | null; token: string | null }> {
+  const attempts: Array<string | null> = [null];
+  if (bearerToken) attempts.push(bearerToken);
+
+  for (const attemptToken of attempts) {
+    for (let retry = 0; retry < SESSION_VALIDATE_RETRIES; retry++) {
+      try {
+        const res = await fetchAuthMe(attemptToken);
+
+        if (res.status === 401) {
+          if (retry + 1 < SESSION_VALIDATE_RETRIES) {
+            await sleep(SESSION_VALIDATE_RETRY_MS * (retry + 1));
+            continue;
+          }
+          break;
+        }
+
+        if (res.ok) {
+          const fresh = normalizeAuthUser(await res.json());
+          if (fresh) {
+            return { user: fresh, token: attemptToken };
+          }
+          return { user: fallbackUser, token: bearerToken };
+        }
+
+        // Server/proxy hiccup — keep cached session.
+        return { user: fallbackUser, token: bearerToken };
+      } catch {
+        if (retry + 1 < SESSION_VALIDATE_RETRIES) {
+          await sleep(SESSION_VALIDATE_RETRY_MS * (retry + 1));
+          continue;
+        }
+        return { user: fallbackUser, token: bearerToken };
+      }
+    }
+  }
+
+  return { user: null, token: null };
+}
+
 let fetchPatched = false;
+
 function isSameOriginApi(url: string): boolean {
   try {
     const u = new URL(url, window.location.origin);
@@ -64,121 +169,124 @@ function isSameOriginApi(url: string): boolean {
     return false;
   }
 }
+
 function installFetchInterceptor() {
   if (fetchPatched) return;
   fetchPatched = true;
+
   const orig = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+    const url = typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : (input as Request).url;
+
     if (!isSameOriginApi(url)) return orig(input, init);
+
     const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) return orig(input, init);
     const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
-    if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
-    return orig(input, { ...init, headers });
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    return orig(input, {
+      ...init,
+      headers,
+      credentials: init.credentials ?? "include",
+    });
   };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const cachedRef = useRef(loadCachedSession());
+  const [user, setUser] = useState<AuthUser | null>(() => cachedRef.current.user);
+  const [token, setToken] = useState<string | null>(() => cachedRef.current.token);
   const [permissions, setPermissions] = useState<PermissionTuple[]>([]);
   const [scope, setScope] = useState<TenantScope | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionReady, setSessionReady] = useState(false);
+  const bootstrapGeneration = useRef(0);
 
-  // Bootstrap: restore session and refresh user from /auth/me for current linkages
   useEffect(() => {
     installFetchInterceptor();
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    const storedUser = localStorage.getItem(USER_KEY);
+    const generation = ++bootstrapGeneration.current;
+    let cancelled = false;
 
-    if (!storedToken || !storedUser) {
+    void (async () => {
+      const cached = cachedRef.current;
+      const result = await validateStoredSession(cached.token, cached.user);
+
+      if (cancelled || generation !== bootstrapGeneration.current) return;
+
+      if (result.user === null) {
+        clearStoredSession();
+        setUser(null);
+        setToken(null);
+        setPermissions([]);
+        setScope(null);
+        setSessionReady(false);
+      } else {
+        setUser(result.user);
+        setToken(result.token);
+        persistSession(result.user, result.token);
+        setSessionReady(true);
+      }
       setIsLoading(false);
-      return;
-    }
+    })();
 
-    let parsed: AuthUser;
-    try {
-      parsed = JSON.parse(storedUser);
-    } catch {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-      setIsLoading(false);
-      return;
-    }
-
-    setToken(storedToken);
-    setUser(parsed);
-
-    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${storedToken}` } })
-      .then(async r => {
-        if (r.status === 401) {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(USER_KEY);
-          setUser(null);
-          setToken(null);
-          return null;
-        }
-        return r.ok ? r.json() : parsed;
-      })
-      .then(fresh => {
-        if (fresh) {
-          setUser(fresh);
-          persistSession(fresh, storedToken);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Re-fetch permissions whenever user/token changes
   useEffect(() => {
-    if (!user || !token) {
+    if (!sessionReady || !user) {
       setPermissions([]);
       setScope(null);
       return;
     }
+
     let cancelled = false;
-    fetch("/api/auth/permissions")
-      .then(async r => {
-        // Token revoked / expired / user deactivated → force a clean logout
-        // instead of leaving a phantom session in the UI.
-        if (r.status === 401) {
-          if (!cancelled) {
-            setUser(null);
-            setToken(null);
-            setPermissions([]);
-            setScope(null);
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(USER_KEY);
-          }
-          return null;
-        }
-        return r.ok ? r.json() : { permissions: [], scope: null };
-      })
+    fetch("/api/auth/permissions", { credentials: "include" })
+      .then(async r => (r.ok ? r.json() : { permissions: [], scope: null }))
       .then(data => {
-        if (cancelled || data === null) return;
+        if (cancelled || !data) return;
         setPermissions(data.permissions ?? []);
         setScope(data.scope ?? null);
       })
-      .catch(() => { if (!cancelled) { setPermissions([]); setScope(null); } });
-    return () => { cancelled = true; };
-  }, [user, token]);
+      .catch(() => {
+        if (!cancelled) {
+          setPermissions([]);
+          setScope(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionReady, user]);
 
   const login = (u: AuthUser, t: string) => {
+    bootstrapGeneration.current += 1;
+    cachedRef.current = { user: u, token: t };
     setUser(u);
     setToken(t);
+    setSessionReady(true);
+    setIsLoading(false);
     persistSession(u, t);
   };
 
   const logout = () => {
-    fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    bootstrapGeneration.current += 1;
+    cachedRef.current = { user: null, token: null };
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
     setUser(null);
     setToken(null);
     setPermissions([]);
     setScope(null);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    setSessionReady(false);
+    clearStoredSession();
   };
 
   const hasPermission = (resource: string, action: string) => {

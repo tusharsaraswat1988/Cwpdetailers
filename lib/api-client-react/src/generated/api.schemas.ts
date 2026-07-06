@@ -65,6 +65,80 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface GoogleAuthConfig {
+  enabled: boolean;
+  clientId?: string | null;
+}
+
+export type GoogleAuthBodyPortal =
+  (typeof GoogleAuthBodyPortal)[keyof typeof GoogleAuthBodyPortal];
+
+export const GoogleAuthBodyPortal = {
+  customer: "customer",
+  staff: "staff",
+} as const;
+
+export interface GoogleAuthBody {
+  idToken: string;
+  portal?: GoogleAuthBodyPortal;
+}
+
+export interface GoogleNeedsPhoneResponse {
+  needsPhone: boolean;
+  linkToken: string;
+  email: string;
+  name?: string | null;
+}
+
+export interface GoogleCompleteBody {
+  linkToken: string;
+  phone: string;
+}
+
+export type ForgotPasswordBodyPortal =
+  (typeof ForgotPasswordBodyPortal)[keyof typeof ForgotPasswordBodyPortal];
+
+export const ForgotPasswordBodyPortal = {
+  customer: "customer",
+  staff: "staff",
+} as const;
+
+export interface ForgotPasswordBody {
+  phone?: string;
+  email?: string;
+  portal?: ForgotPasswordBodyPortal;
+}
+
+export interface ForgotPasswordResponse {
+  ok?: boolean;
+  message?: string;
+  sentSms?: boolean;
+  sentEmail?: boolean;
+  maskedPhone?: string;
+  maskedEmail?: string | null;
+}
+
+export type ResetPasswordBodyPortal =
+  (typeof ResetPasswordBodyPortal)[keyof typeof ResetPasswordBodyPortal];
+
+export const ResetPasswordBodyPortal = {
+  customer: "customer",
+  staff: "staff",
+} as const;
+
+export interface ResetPasswordBody {
+  phone?: string;
+  email?: string;
+  code: string;
+  newPassword: string;
+  portal?: ResetPasswordBodyPortal;
+}
+
+export interface OkMessage {
+  ok?: boolean;
+  message?: string;
+}
+
 export type CustomerStatus =
   (typeof CustomerStatus)[keyof typeof CustomerStatus];
 

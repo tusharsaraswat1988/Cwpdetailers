@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import {
   getPushStatus,
   subscribeToPush,
   unsubscribeFromPush,
+  autoSubscribeStaffPushIfNeeded,
   isPushSupported,
   getBrowserNotificationPermission,
   type PushStatus,
@@ -21,6 +22,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const autoAttempted = useRef(false);
   const supported = isPushSupported();
   const permission = getBrowserNotificationPermission();
 
@@ -37,6 +39,24 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Staff app: auto-enable push when the browser allows it (permission prompt may appear once).
+  useEffect(() => {
+    if (variant !== "staff" || loading || autoAttempted.current) return;
+    if (status?.subscribed || !status?.pushConfigured) return;
+    if (!isPushSupported() || getBrowserNotificationPermission() === "denied") return;
+
+    autoAttempted.current = true;
+    void (async () => {
+      setToggling(true);
+      try {
+        await autoSubscribeStaffPushIfNeeded();
+        await refresh();
+      } finally {
+        setToggling(false);
+      }
+    })();
+  }, [variant, loading, status?.subscribed, status?.pushConfigured, refresh]);
 
   const handleToggle = async (enabled: boolean) => {
     setToggling(true);
@@ -84,7 +104,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
               <p className="font-medium">Push Notifications</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {variant === "staff"
-                  ? "Vibration + popup when admin assigns a new job to you"
+                  ? "Auto-enabled for job alerts — vibration + popup when admin assigns work"
                   : "Browser alerts for visits, routes, and account updates"}
               </p>
             </div>
@@ -100,7 +120,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
           <>
             <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
               <Label htmlFor="push-enabled" className="text-sm cursor-pointer">
-                Enable notifications
+                {variant === "staff" ? "Job alerts" : "Enable notifications"}
               </Label>
               <Switch
                 id="push-enabled"
@@ -109,6 +129,12 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
                 onCheckedChange={v => void handleToggle(Boolean(v))}
               />
             </div>
+
+            {variant === "staff" && permission === "default" && !status?.subscribed && status?.pushConfigured && (
+              <p className="text-xs text-muted-foreground">
+                Allow notifications when your browser asks — job alerts turn on automatically.
+              </p>
+            )}
 
             {permission === "denied" && (
               <p className="text-xs text-destructive">

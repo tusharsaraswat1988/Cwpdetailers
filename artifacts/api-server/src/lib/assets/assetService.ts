@@ -15,6 +15,7 @@ import { tenantStamp, loadIfInScope } from "../../middlewares/tenantScope";
 import { normalizeRegistration } from "../dcms/registration";
 import { ensureDefaultServiceLocation } from "../serviceLocations/defaultLocationService";
 import { isAssetsModuleEnabled } from "./featureFlag";
+import { normalizeVehicleType, vehicleTypeFromCategorySlug } from "../vehicleType";
 
 type DbLike = typeof db;
 
@@ -199,7 +200,7 @@ export async function createVehicleAsset(req: Request, input: CreateVehicleAsset
 
   let resolvedMake = input.make;
   let resolvedModel = input.model;
-  let resolvedType = input.vehicleType ?? "sedan";
+  let resolvedType = normalizeVehicleType(input.vehicleType);
   let resolvedModelId = input.vehicleModelId;
 
   if (input.vehicleModelId) {
@@ -218,11 +219,7 @@ export async function createVehicleAsset(req: Request, input: CreateVehicleAsset
     if (!vm) throw new Error("Invalid vehicleModelId");
     resolvedMake = vm.brandName;
     resolvedModel = vm.modelName;
-    const typeMap: Record<string, string> = {
-      hatchback: "hatchback", sedan: "sedan", suv: "suv", muv: "van", mpv: "van",
-      luxury: "luxury", van: "van", pickup: "truck",
-    };
-    resolvedType = typeMap[vm.categorySlug] ?? "sedan";
+    resolvedType = vehicleTypeFromCategorySlug(vm.categorySlug);
   }
 
   if (!resolvedMake || !resolvedModel) throw new Error("vehicleModelId or make+model are required");

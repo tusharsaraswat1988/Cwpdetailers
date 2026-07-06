@@ -1,5 +1,7 @@
 export type StaffJob = {
   id: number;
+  source?: "booking" | "execution";
+  executionId?: number;
   customerName?: string;
   customerPhone?: string;
   serviceType?: string | null;
@@ -16,6 +18,58 @@ export type StaffJob = {
   amount?: string | number | null;
   vehicleName?: string | null;
 };
+
+export function staffJobKey(job: StaffJob) {
+  return `${job.source ?? "booking"}-${job.id}`;
+}
+
+const EXECUTION_STATUS_MAP: Record<string, string> = {
+  scheduled: "scheduled",
+  started: "in_progress",
+  completed: "completed",
+  cancelled: "cancelled",
+  missed: "cancelled",
+  rescheduled: "cancelled",
+};
+
+export function executionToStaffJob(e: {
+  id: number;
+  customerName: string;
+  serviceLabel?: string | null;
+  assetLabel?: string | null;
+  serviceLocationLabel?: string | null;
+  serviceLocationAddress?: string | null;
+  locationLatitude?: number | null;
+  locationLongitude?: number | null;
+  scheduledDate: string;
+  scheduledTime?: string | null;
+  status: string;
+  taskType?: string | null;
+  taskTypeLabel?: string | null;
+  isSubstitute?: boolean;
+}): StaffJob {
+  const taskLabel = e.taskTypeLabel ?? (e.taskType ? e.taskType.replace(/_/g, " ") : null);
+  const baseName = e.serviceLabel ?? undefined;
+  const serviceName = taskLabel
+    ? `${baseName ?? "Service"} — ${taskLabel}${e.isSubstitute ? " (substitute)" : ""}`
+    : baseName;
+
+  return {
+    source: "execution",
+    id: e.id,
+    executionId: e.id,
+    customerName: e.customerName,
+    serviceName,
+    serviceType: taskLabel ?? e.serviceLabel ?? "assigned service",
+    scheduledDate: e.scheduledDate.slice(0, 10),
+    scheduledTime: e.scheduledTime,
+    status: EXECUTION_STATUS_MAP[e.status] ?? e.status,
+    address: e.serviceLocationAddress ?? e.serviceLocationLabel,
+    locationLat: e.locationLatitude,
+    locationLng: e.locationLongitude,
+    vehicleName: e.assetLabel,
+  };
+}
 
 export function todayIso() {
   return new Date().toISOString().split("T")[0];

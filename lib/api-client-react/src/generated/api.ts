@@ -47,6 +47,8 @@ import type {
   CustomerSummary,
   DashboardStats,
   ErrorEnvelope,
+  ForgotPasswordBody,
+  ForgotPasswordResponse,
   GetDashboardStatsParams,
   GetOutstandingDuesParams,
   GetRevenueAnalyticsParams,
@@ -55,6 +57,10 @@ import type {
   GetStaffPerformanceParams,
   GetSubscriptionHealth200,
   GetTodayBookingsParams,
+  GoogleAuthBody,
+  GoogleAuthConfig,
+  GoogleCompleteBody,
+  GoogleNeedsPhoneResponse,
   HealthStatus,
   Invoice,
   InvoiceListResponse,
@@ -72,6 +78,7 @@ import type {
   LoginBody,
   MarkAttendanceBody,
   Notification,
+  OkMessage,
   OutstandingDues,
   Payment,
   PaymentListResponse,
@@ -79,6 +86,7 @@ import type {
   RegenerateOccurrences200,
   RegisterBody,
   RescheduleBookingBody,
+  ResetPasswordBody,
   RevenueAnalytics,
   Service,
   SolarSite,
@@ -419,6 +427,428 @@ export function useGetMe<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Google Sign-In client configuration
+ */
+export const getGetGoogleAuthConfigUrl = () => {
+  return `/api/auth/google/config`;
+};
+
+export const getGoogleAuthConfig = async (
+  options?: RequestInit,
+): Promise<GoogleAuthConfig> => {
+  return customFetch<GoogleAuthConfig>(getGetGoogleAuthConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetGoogleAuthConfigQueryKey = () => {
+  return [`/api/auth/google/config`] as const;
+};
+
+export const getGetGoogleAuthConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGoogleAuthConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getGoogleAuthConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetGoogleAuthConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGoogleAuthConfig>>
+  > = ({ signal }) => getGoogleAuthConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGoogleAuthConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetGoogleAuthConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGoogleAuthConfig>>
+>;
+export type GetGoogleAuthConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Google Sign-In client configuration
+ */
+
+export function useGetGoogleAuthConfig<
+  TData = Awaited<ReturnType<typeof getGoogleAuthConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getGoogleAuthConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetGoogleAuthConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Sign in with Google ID token
+ */
+export const getGoogleAuthUrl = () => {
+  return `/api/auth/google`;
+};
+
+export const googleAuth = async (
+  googleAuthBody: GoogleAuthBody,
+  options?: RequestInit,
+): Promise<AuthResponse | GoogleNeedsPhoneResponse> => {
+  return customFetch<AuthResponse | GoogleNeedsPhoneResponse>(
+    getGoogleAuthUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(googleAuthBody),
+    },
+  );
+};
+
+export const getGoogleAuthMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof googleAuth>>,
+    TError,
+    { data: BodyType<GoogleAuthBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof googleAuth>>,
+  TError,
+  { data: BodyType<GoogleAuthBody> },
+  TContext
+> => {
+  const mutationKey = ["googleAuth"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof googleAuth>>,
+    { data: BodyType<GoogleAuthBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return googleAuth(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GoogleAuthMutationResult = NonNullable<
+  Awaited<ReturnType<typeof googleAuth>>
+>;
+export type GoogleAuthMutationBody = BodyType<GoogleAuthBody>;
+export type GoogleAuthMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Sign in with Google ID token
+ */
+export const useGoogleAuth = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof googleAuth>>,
+    TError,
+    { data: BodyType<GoogleAuthBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof googleAuth>>,
+  TError,
+  { data: BodyType<GoogleAuthBody> },
+  TContext
+> => {
+  return useMutation(getGoogleAuthMutationOptions(options));
+};
+
+/**
+ * @summary Complete Google sign-up with phone number
+ */
+export const getGoogleAuthCompleteUrl = () => {
+  return `/api/auth/google/complete`;
+};
+
+export const googleAuthComplete = async (
+  googleCompleteBody: GoogleCompleteBody,
+  options?: RequestInit,
+): Promise<AuthResponse> => {
+  return customFetch<AuthResponse>(getGoogleAuthCompleteUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(googleCompleteBody),
+  });
+};
+
+export const getGoogleAuthCompleteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof googleAuthComplete>>,
+    TError,
+    { data: BodyType<GoogleCompleteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof googleAuthComplete>>,
+  TError,
+  { data: BodyType<GoogleCompleteBody> },
+  TContext
+> => {
+  const mutationKey = ["googleAuthComplete"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof googleAuthComplete>>,
+    { data: BodyType<GoogleCompleteBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return googleAuthComplete(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GoogleAuthCompleteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof googleAuthComplete>>
+>;
+export type GoogleAuthCompleteMutationBody = BodyType<GoogleCompleteBody>;
+export type GoogleAuthCompleteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Complete Google sign-up with phone number
+ */
+export const useGoogleAuthComplete = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof googleAuthComplete>>,
+    TError,
+    { data: BodyType<GoogleCompleteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof googleAuthComplete>>,
+  TError,
+  { data: BodyType<GoogleCompleteBody> },
+  TContext
+> => {
+  return useMutation(getGoogleAuthCompleteMutationOptions(options));
+};
+
+/**
+ * @summary Request password reset OTP via SMS and email
+ */
+export const getForgotPasswordUrl = () => {
+  return `/api/auth/forgot-password`;
+};
+
+export const forgotPassword = async (
+  forgotPasswordBody: ForgotPasswordBody,
+  options?: RequestInit,
+): Promise<ForgotPasswordResponse> => {
+  return customFetch<ForgotPasswordResponse>(getForgotPasswordUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(forgotPasswordBody),
+  });
+};
+
+export const getForgotPasswordMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    TError,
+    { data: BodyType<ForgotPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof forgotPassword>>,
+  TError,
+  { data: BodyType<ForgotPasswordBody> },
+  TContext
+> => {
+  const mutationKey = ["forgotPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    { data: BodyType<ForgotPasswordBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return forgotPassword(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ForgotPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof forgotPassword>>
+>;
+export type ForgotPasswordMutationBody = BodyType<ForgotPasswordBody>;
+export type ForgotPasswordMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Request password reset OTP via SMS and email
+ */
+export const useForgotPassword = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    TError,
+    { data: BodyType<ForgotPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof forgotPassword>>,
+  TError,
+  { data: BodyType<ForgotPasswordBody> },
+  TContext
+> => {
+  return useMutation(getForgotPasswordMutationOptions(options));
+};
+
+/**
+ * @summary Reset password with OTP code
+ */
+export const getResetPasswordUrl = () => {
+  return `/api/auth/reset-password`;
+};
+
+export const resetPassword = async (
+  resetPasswordBody: ResetPasswordBody,
+  options?: RequestInit,
+): Promise<OkMessage> => {
+  return customFetch<OkMessage>(getResetPasswordUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(resetPasswordBody),
+  });
+};
+
+export const getResetPasswordMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPassword>>,
+    TError,
+    { data: BodyType<ResetPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetPassword>>,
+  TError,
+  { data: BodyType<ResetPasswordBody> },
+  TContext
+> => {
+  const mutationKey = ["resetPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetPassword>>,
+    { data: BodyType<ResetPasswordBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return resetPassword(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetPassword>>
+>;
+export type ResetPasswordMutationBody = BodyType<ResetPasswordBody>;
+export type ResetPasswordMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reset password with OTP code
+ */
+export const useResetPassword = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPassword>>,
+    TError,
+    { data: BodyType<ResetPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetPassword>>,
+  TError,
+  { data: BodyType<ResetPasswordBody> },
+  TContext
+> => {
+  return useMutation(getResetPasswordMutationOptions(options));
+};
 
 /**
  * @summary List all customers

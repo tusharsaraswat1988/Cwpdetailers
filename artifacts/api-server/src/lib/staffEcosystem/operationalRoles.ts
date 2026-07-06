@@ -33,6 +33,21 @@ export function roleSlugForVehicleAssignment(): OperationalRoleSlug {
   return OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER;
 }
 
+/** Contract product lines (Assign Services) → required operational role. */
+export const PRODUCT_LINE_ROLE_MAP: Record<string, OperationalRoleSlug> = {
+  daily_cleaning: OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER,
+  wash_package: OPERATIONAL_ROLE_SLUGS.CAR_WASHER,
+  monthly_wash: OPERATIONAL_ROLE_SLUGS.CAR_WASHER,
+  solar_amc: OPERATIONAL_ROLE_SLUGS.SOLAR_CLEANER,
+  detailing_plan: OPERATIONAL_ROLE_SLUGS.INTERIOR_DETAILER,
+  one_time_service: OPERATIONAL_ROLE_SLUGS.CAR_WASHER,
+};
+
+export function roleSlugForProductLine(productLine?: string | null): OperationalRoleSlug | null {
+  if (!productLine) return null;
+  return PRODUCT_LINE_ROLE_MAP[productLine] ?? null;
+}
+
 /** Map operational slug → legacy `staff.role` enum for backward-compatible column writes. */
 export function operationalSlugToLegacyRole(
   slug: string,
