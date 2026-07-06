@@ -1,4 +1,12 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
+import {
+  authPortalHeaders,
+  migrateLegacySession,
+  resolveAuthPortal,
+  tokenStorageKey,
+  userStorageKey,
+  type AuthPortal,
+} from "./authPortal";
 
 export type UserRole = "customer" | "staff" | "admin" | "superadmin" | "franchisee" | "manager";
 
@@ -38,8 +46,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const TOKEN_KEY = "cwp_token";
-const USER_KEY = "cwp_user";
 const SESSION_VALIDATE_RETRIES = 3;
 const SESSION_VALIDATE_RETRY_MS = 500;
 
@@ -47,9 +53,9 @@ function isSuperAdmin(role?: UserRole | null) {
   return role === "admin" || role === "superadmin";
 }
 
-function clearStoredSession() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+function clearStoredSession(portal: AuthPortal) {
+  localStorage.removeItem(tokenStorageKey(portal));
+  localStorage.removeItem(userStorageKey(portal));
 }
 
 function sleep(ms: number) {
@@ -77,32 +83,34 @@ function normalizeAuthUser(raw: unknown): AuthUser | null {
   };
 }
 
-function loadCachedSession(): { user: AuthUser | null; token: string | null } {
-  const token = localStorage.getItem(TOKEN_KEY);
-  const rawUser = localStorage.getItem(USER_KEY);
+function loadCachedSession(portal: AuthPortal): { user: AuthUser | null; token: string | null } {
+  migrateLegacySession(portal);
+
+  const token = localStorage.getItem(tokenStorageKey(portal));
+  const rawUser = localStorage.getItem(userStorageKey(portal));
   if (!rawUser) return { user: null, token };
 
   try {
     const user = normalizeAuthUser(JSON.parse(rawUser));
     if (!user) {
-      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(userStorageKey(portal));
       return { user: null, token };
     }
     return { user, token };
   } catch {
-    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(userStorageKey(portal));
     return { user: null, token };
   }
 }
 
-function persistSession(u: AuthUser, token: string | null) {
-  localStorage.setItem(USER_KEY, JSON.stringify(u));
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+function persistSession(portal: AuthPortal, u: AuthUser, token: string | null) {
+  localStorage.setItem(userStorageKey(portal), JSON.stringify(u));
+  if (token) localStorage.setItem(tokenStorageKey(portal), token);
+  else localStorage.removeItem(tokenStorageKey(portal));
 }
 
-async function fetchAuthMe(bearerToken: string | null): Promise<Response> {
-  const headers: Record<string, string> = {};
+async function fetchAuthMe(portal: AuthPortal, bearerToken: string | null): Promise<Response> {
+  const headers: Record<string, string> = { ...authPortalHeaders(portal) };
   if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
 
   return fetch("/api/auth/me", {
@@ -112,10 +120,11 @@ async function fetchAuthMe(bearerToken: string | null): Promise<Response> {
 }
 
 /**
- * Validate session — cookie first (httpOnly), then bearer token from localStorage.
+ * Validate session — portal cookie first (httpOnly), then bearer token from portal localStorage.
  * Returns null only when the server definitively rejects all credentials (401).
  */
 async function validateStoredSession(
+  portal: AuthPortal,
   bearerToken: string | null,
   fallbackUser: AuthUser | null,
 ): Promise<{ user: AuthUser | null; token: string | null }> {
@@ -125,7 +134,7 @@ async function validateStoredSession(
   for (const attemptToken of attempts) {
     for (let retry = 0; retry < SESSION_VALIDATE_RETRIES; retry++) {
       try {
-        const res = await fetchAuthMe(attemptToken);
+        const res = await fetchAuthMe(portal, attemptToken);
 
         if (res.status === 401) {
           if (retry + 1 < SESSION_VALIDATE_RETRIES) {
@@ -184,8 +193,12 @@ function installFetchInterceptor() {
 
     if (!isSameOriginApi(url)) return orig(input, init);
 
-    const token = localStorage.getItem(TOKEN_KEY);
+    const portal = resolveAuthPortal();
+    const token = localStorage.getItem(tokenStorageKey(portal));
     const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
+    if (!headers.has("X-Auth-Portal")) {
+      headers.set("X-Auth-Portal", portal);
+    }
     if (token && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${token}`);
     }
@@ -199,7 +212,8 @@ function installFetchInterceptor() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const cachedRef = useRef(loadCachedSession());
+  const portalRef = useRef(resolveAuthPortal());
+  const cachedRef = useRef(loadCachedSession(portalRef.current));
   const [user, setUser] = useState<AuthUser | null>(() => cachedRef.current.user);
   const [token, setToken] = useState<string | null>(() => cachedRef.current.token);
   const [permissions, setPermissions] = useState<PermissionTuple[]>([]);
@@ -210,17 +224,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     installFetchInterceptor();
+    const portal = resolveAuthPortal();
+    portalRef.current = portal;
+    cachedRef.current = loadCachedSession(portal);
     const generation = ++bootstrapGeneration.current;
     let cancelled = false;
 
     void (async () => {
       const cached = cachedRef.current;
-      const result = await validateStoredSession(cached.token, cached.user);
+      const result = await validateStoredSession(portal, cached.token, cached.user);
 
       if (cancelled || generation !== bootstrapGeneration.current) return;
 
       if (result.user === null) {
-        clearStoredSession();
+        clearStoredSession(portal);
         setUser(null);
         setToken(null);
         setPermissions([]);
@@ -229,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setUser(result.user);
         setToken(result.token);
-        persistSession(result.user, result.token);
+        persistSession(portal, result.user, result.token);
         setSessionReady(true);
       }
       setIsLoading(false);
@@ -268,25 +285,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [sessionReady, user]);
 
   const login = (u: AuthUser, t: string) => {
+    const portal = resolveAuthPortal();
+    portalRef.current = portal;
     bootstrapGeneration.current += 1;
     cachedRef.current = { user: u, token: t };
     setUser(u);
     setToken(t);
     setSessionReady(true);
     setIsLoading(false);
-    persistSession(u, t);
+    persistSession(portal, u, t);
   };
 
   const logout = () => {
+    const portal = resolveAuthPortal();
     bootstrapGeneration.current += 1;
     cachedRef.current = { user: null, token: null };
-    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+    fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+      headers: authPortalHeaders(portal),
+    }).catch(() => {});
     setUser(null);
     setToken(null);
     setPermissions([]);
     setScope(null);
     setSessionReady(false);
-    clearStoredSession();
+    clearStoredSession(portal);
   };
 
   const hasPermission = (resource: string, action: string) => {

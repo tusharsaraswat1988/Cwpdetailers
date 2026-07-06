@@ -104,7 +104,7 @@ export default function Login() {
       toast({ title: phoneResult.error, variant: "destructive" });
       return;
     }
-    loginMutation.mutate({ data: { phone: phoneResult.value, password } });
+    loginMutation.mutate({ data: { phone: phoneResult.value, password, portal: "customer" } });
   };
 
   return (

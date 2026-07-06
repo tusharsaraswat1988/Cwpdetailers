@@ -1783,6 +1783,9 @@ components:
         role:
           type: string
           enum: [customer, staff, admin]
+        portal:
+          type: string
+          enum: [admin, staff, customer, franchisee]
       required: [password]
 
     RegisterBody:

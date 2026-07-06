@@ -57,7 +57,7 @@ export default function AdminLogin() {
       toast({ title: phoneResult.error, variant: "destructive" });
       return;
     }
-    loginMutation.mutate({ data: { phone: phoneResult.value, password } });
+    loginMutation.mutate({ data: { phone: phoneResult.value, password, portal: "admin" } });
   };
 
   return (

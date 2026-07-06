@@ -98,6 +98,8 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,json}"],
+        // Main bundle exceeds Workbox default 2 MiB precache limit.
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,json}"],

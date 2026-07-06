@@ -17,11 +17,17 @@ export type QueuedFetchResult =
   | { ok: true; queued: true; queueId: string }
   | { ok: false; error: Error; queued: false; requiresServerConfirmation?: boolean };
 
+import { resolveAuthPortal, tokenStorageKey } from "@/lib/authPortal";
+
 function buildHeaders(init?: RequestInit): Record<string, string> {
   const headers = new Headers(init?.headers);
-  const token = localStorage.getItem("cwp_token");
+  const portal = resolveAuthPortal();
+  const token = localStorage.getItem(tokenStorageKey(portal));
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (!headers.has("X-Auth-Portal")) {
+    headers.set("X-Auth-Portal", portal);
   }
   if (!headers.has("Content-Type") && init?.body) {
     headers.set("Content-Type", "application/json");

@@ -26,21 +26,29 @@ import {
   verifyPasswordResetOtp,
   revokeAllUserSessions,
 } from "../lib/passwordReset";
-import { setSessionCookie, clearSessionCookie, listSessionTokens } from "../lib/sessionCookie";
+import {
+  setSessionCookie,
+  clearSessionCookie,
+  clearAllSessionCookies,
+  listSessionTokens,
+  parseAuthPortalHeader,
+} from "../lib/sessionCookie";
+import {
+  type AuthPortal,
+  isAuthPortal,
+  isRoleAllowedForPortal,
+  portalMismatchMessage,
+} from "../lib/authPortals";
 
 const router = Router();
 
 const SESSION_TTL_DAYS = 30;
 const GOOGLE_LINK_TTL_MINUTES = 15;
 
-type AuthPortal = "customer" | "staff";
+type GoogleAuthPortal = Extract<AuthPortal, "customer" | "staff">;
 
-const STAFF_ROLES = new Set(["staff"]);
-const CUSTOMER_ROLES = new Set(["customer", "staff"]);
-
-function isRoleAllowedForPortal(role: string, portal: AuthPortal): boolean {
-  if (portal === "staff") return STAFF_ROLES.has(role);
-  return CUSTOMER_ROLES.has(role);
+function parseGooglePortal(raw: unknown): GoogleAuthPortal {
+  return raw === "staff" ? "staff" : "customer";
 }
 
 async function issueSession(userId: number, req: { headers: Record<string, unknown>; ip?: string }) {
@@ -106,11 +114,9 @@ router.get("/auth/google/config", (_req, res) => {
 
 router.post("/auth/google", async (req, res) => {
   try {
-    const { idToken, portal = "customer" } = req.body as { idToken?: string; portal?: AuthPortal };
+    const { idToken, portal: rawPortal = "customer" } = req.body as { idToken?: string; portal?: string };
     if (!idToken) return res.status(400).json({ error: "Google token required" });
-    if (portal !== "customer" && portal !== "staff") {
-      return res.status(400).json({ error: "Invalid portal" });
-    }
+    const portal = parseGooglePortal(rawPortal);
 
     const googleProfile = await verifyGoogleIdToken(idToken);
     const normalizedEmail = googleProfile.email.toLowerCase().trim();
@@ -151,7 +157,7 @@ router.post("/auth/google", async (req, res) => {
       user = updated ?? user;
 
       const token = await issueSession(user.id, req);
-      setSessionCookie(res, token);
+      setSessionCookie(res, token, portal);
       return res.json({ token, user: toSafeUser(user) });
     }
 
@@ -267,7 +273,7 @@ router.post("/auth/google/complete", async (req, res) => {
     });
 
     const token = await issueSession(result.id, req);
-    setSessionCookie(res, token);
+    setSessionCookie(res, token, "customer");
     return res.status(201).json({ token, user: toSafeUser(result) });
   } catch (err) {
     req.log.error({ err }, "Google complete error");
@@ -278,15 +284,13 @@ router.post("/auth/google/complete", async (req, res) => {
 
 router.post("/auth/forgot-password", async (req, res) => {
   try {
-    const { phone, email, portal = "customer" } = req.body as {
+    const { phone, email, portal: rawPortal = "customer" } = req.body as {
       phone?: string;
       email?: string;
-      portal?: AuthPortal;
+      portal?: string;
     };
 
-    if (portal !== "customer" && portal !== "staff") {
-      return res.status(400).json({ error: "Invalid portal" });
-    }
+    const portal = parseGooglePortal(rawPortal);
 
     const idResult = normalizeLoginIdentifier(phone, email);
     if (!idResult.ok) return res.status(400).json({ error: idResult.error });
@@ -328,12 +332,12 @@ router.post("/auth/forgot-password", async (req, res) => {
 
 router.post("/auth/reset-password", async (req, res) => {
   try {
-    const { phone, email, code, newPassword, portal = "customer" } = req.body as {
+    const { phone, email, code, newPassword, portal: rawPortal = "customer" } = req.body as {
       phone?: string;
       email?: string;
       code?: string;
       newPassword?: string;
-      portal?: AuthPortal;
+      portal?: string;
     };
 
     if (!code || !newPassword) {
@@ -342,9 +346,7 @@ router.post("/auth/reset-password", async (req, res) => {
     if (newPassword.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
-    if (portal !== "customer" && portal !== "staff") {
-      return res.status(400).json({ error: "Invalid portal" });
-    }
+    const portal = parseGooglePortal(rawPortal);
 
     const idResult = normalizeLoginIdentifier(phone, email);
     if (!idResult.ok) return res.status(400).json({ error: idResult.error });
@@ -374,8 +376,10 @@ router.post("/auth/reset-password", async (req, res) => {
 
 router.post("/auth/login", async (req, res) => {
   try {
-    const { phone, email, password } = req.body;
+    const { phone, email, password, portal: rawPortal } = req.body;
     if (!password) return res.status(400).json({ error: "Password required" });
+
+    const portal: AuthPortal = isAuthPortal(rawPortal) ? rawPortal : "customer";
 
     const idResult = normalizeLoginIdentifier(phone, email);
     if (!idResult.ok) return res.status(400).json({ error: idResult.error });
@@ -391,13 +395,17 @@ router.post("/auth/login", async (req, res) => {
     if (!valid) return res.status(401).json({ error: "Invalid credentials" });
     if (!user.isActive) return res.status(401).json({ error: "Account suspended" });
 
+    if (!isRoleAllowedForPortal(user.role, portal)) {
+      return res.status(403).json({ error: portalMismatchMessage(portal) });
+    }
+
     if (upgradedHash) {
       await db.update(usersTable).set({ passwordHash: upgradedHash, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
       user.passwordHash = upgradedHash;
     }
 
     const token = await issueSession(user.id, req);
-    setSessionCookie(res, token);
+    setSessionCookie(res, token, portal);
     return res.json({ token, user: toSafeUser(user) });
   } catch (err) {
     req.log.error({ err }, "Login error");
@@ -451,7 +459,7 @@ router.post("/auth/register", async (req, res) => {
     }
 
     const token = await issueSession(linkedUser.id, req);
-    setSessionCookie(res, token);
+    setSessionCookie(res, token, "customer");
     return res.status(201).json({ token, user: toSafeUser(linkedUser) });
   } catch (err) {
     req.log.error({ err }, "Register error");
@@ -466,8 +474,9 @@ router.get("/auth/me", optionalAuth, requireAuth, async (req, res) => {
     if (!u || !u.isActive) return res.status(401).json({ error: "Authentication required" });
 
     // Extend httpOnly cookie on activity (rolling session).
+    const portal = parseAuthPortalHeader(req);
     const activeToken = listSessionTokens(req).find(t => t.length > 0);
-    if (activeToken) setSessionCookie(res, activeToken);
+    if (activeToken && portal) setSessionCookie(res, activeToken, portal);
 
     return res.json(toSafeUser(u));
   } catch (err) {
@@ -497,7 +506,9 @@ router.post("/auth/logout", optionalAuth, async (req, res) => {
         .set({ revokedAt: new Date() })
         .where(eq(sessionsTable.tokenHash, hashToken(token)));
     }
-    clearSessionCookie(res);
+    const portal = parseAuthPortalHeader(req);
+    if (portal) clearSessionCookie(res, portal);
+    else clearAllSessionCookies(res);
     return res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Logout error");

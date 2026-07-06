@@ -22,6 +22,7 @@ export interface LoginBody {
   email?: string;
   password: string;
   role?: LoginBodyRole;
+  portal?: "admin" | "staff" | "customer" | "franchisee";
 }
 
 export interface RegisterBody {
