@@ -75,14 +75,7 @@ import CustomerWallet from "@/pages/customer/Wallet";
 import CustomerServices from "@/pages/customer/Services";
 import CustomerAccount from "@/pages/customer/Account";
 
-import StaffDashboard from "@/pages/staff/Dashboard";
-import StaffWork from "@/pages/staff/Work";
-import StaffBookings from "@/pages/staff/Bookings";
-import StaffDailyClean from "@/pages/staff/DailyClean";
-import StaffJobs from "@/pages/staff/Jobs";
-import StaffEarnings from "@/pages/staff/Earnings";
-import StaffProfile from "@/pages/staff/Profile";
-import StaffTeam from "@/pages/staff/Team";
+import StaffPortalRouter from "@/components/layout/StaffPortalRouter";
 
 import FranchiseeDashboard from "@/pages/franchisee/Dashboard";
 import FranchiseeBookings from "@/pages/franchisee/Bookings";
@@ -238,20 +231,8 @@ function Router() {
       <Route path="/customer/daily-cleaning/gallery" component={() => <ProtectedRoute component={CustomerDcmsGalleryPage} roles={["customer"]} />} />
       <Route path="/customer/daily-cleaning" component={() => <ProtectedRoute component={CustomerDailyCleaningPage} roles={["customer"]} />} />
 
-      {/* Staff — mobile-first field app (Sprint 3) */}
-      <Route path="/staff/dashboard" component={() => <ProtectedRoute component={StaffDashboard} roles={["staff"]} loginPath="/staff/login" />} />
-      <Route path="/staff/daily-clean" component={() => <ProtectedRoute component={StaffDailyClean} roles={["staff"]} loginPath="/staff/login" />} />
-      <Route path="/staff/bookings" component={() => <ProtectedRoute component={StaffBookings} roles={["staff"]} loginPath="/staff/login" />} />
-      <Route path="/staff/work" component={() => <ProtectedRoute component={StaffWork} roles={["staff"]} loginPath="/staff/login" />} />
-      <Route path="/staff/team" component={() => <ProtectedRoute component={StaffTeam} roles={["staff"]} loginPath="/staff/login" />} />
-      <Route path="/staff/jobs" component={() => <ProtectedRoute component={StaffJobs} roles={["staff"]} loginPath="/staff/login" />} />
-      <Route path="/staff/earnings" component={() => <ProtectedRoute component={StaffEarnings} roles={["staff"]} loginPath="/staff/login" />} />
-      <Route path="/staff/profile" component={() => <ProtectedRoute component={StaffProfile} roles={["staff"]} loginPath="/staff/login" />} />
-      <Route path="/staff/daily-route" component={() => <Redirect to="/staff/daily-clean" />} />
-      <Route path="/staff/daily-cleaning" component={() => <Redirect to="/staff/daily-clean" />} />
-      <Route path="/staff/schedule" component={() => <Redirect to="/staff/jobs" />} />
-      <Route path="/staff/attendance" component={() => <Redirect to="/staff/profile" />} />
-      <Route path="/staff/performance" component={() => <Redirect to="/staff/profile" />} />
+      {/* Staff — single router keeps LocationProvider mounted across tab navigation */}
+      <Route path="/staff/:_*" component={StaffPortalRouter} />
 
       {/* Franchisee */}
       <Route path="/franchisee/dashboard" component={() => <ProtectedRoute component={FranchiseeDashboard} roles={["franchisee"]} />} />

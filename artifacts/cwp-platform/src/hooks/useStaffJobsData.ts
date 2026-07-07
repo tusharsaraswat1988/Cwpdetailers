@@ -11,7 +11,7 @@ import {
 import { useAccountScope } from "@/lib/account-scope";
 import { uploadFileToCloudinary } from "@/lib/media-url";
 import { useToast } from "@/hooks/use-toast";
-import { transitionBookingWithLocation } from "@/lib/location";
+import { getStaffLocation, transitionBookingWithLocation } from "@/lib/location";
 import {
   type StaffJob,
   type GeoTaggedPhoto,
@@ -31,21 +31,6 @@ import {
   addExecutionPhotos,
   SERVICE_EXECUTIONS_QUERY_KEY,
 } from "@/features/service-executions/api";
-
-function getStaffGps(): Promise<{ latitude: number; longitude: number; accuracy: number }> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error("GPS not available"));
-    navigator.geolocation.getCurrentPosition(
-      pos => resolve({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-      }),
-      err => reject(err),
-      { enableHighAccuracy: true, timeout: 15000 },
-    );
-  });
-}
 
 function enrichBookingJob(job: StaffJob): StaffJob {
   const proof = job.proofPhotoUrls ?? [];
@@ -186,7 +171,7 @@ export function useStaffJobsData() {
   const executionMutation = useMutation({
     mutationFn: async ({ job, toStatus }: { job: StaffJob; toStatus: string }) => {
       const executionId = job.executionId ?? job.id;
-      const gps = await getStaffGps();
+      const gps = await getStaffLocation("action");
       if (toStatus === "in_progress") {
         return startExecution(executionId, gps);
       }
@@ -271,7 +256,7 @@ export function useStaffJobsData() {
     setUploadingJobId(job.id);
     setUploadingPhotoIndex(photoIndex);
     try {
-      const gps = await getStaffGps();
+      const gps = await getStaffLocation("action");
       const presign = await requestUrlMutation.mutateAsync({
         data: { name: file.name, size: file.size, contentType: file.type },
       });

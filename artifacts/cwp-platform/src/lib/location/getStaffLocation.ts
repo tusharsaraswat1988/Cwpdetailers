@@ -1,5 +1,10 @@
-import type { StaffGpsCoords } from "./types";
-import { GPS_OPTIONS } from "./constants";
+import type { GpsRequestMode, StaffGpsCoords } from "./types";
+import {
+  GPS_ACTION_OPTIONS,
+  GPS_NAVIGATION_OPTIONS,
+  GPS_NAV_CACHE_MS,
+} from "./constants";
+import { locationStoreSnapshot, modeUsesCache } from "./locationStore";
 
 function mapGeoError(err: GeolocationPositionError): string {
   switch (err.code) {
@@ -18,23 +23,50 @@ export function isGeolocationSupported(): boolean {
   return typeof navigator !== "undefined" && "geolocation" in navigator;
 }
 
-/** High-accuracy one-shot GPS read for staff field actions. */
-export function getStaffLocation(): Promise<StaffGpsCoords> {
+function optionsForMode(mode: GpsRequestMode): PositionOptions {
+  return mode === "action" ? GPS_ACTION_OPTIONS : GPS_NAVIGATION_OPTIONS;
+}
+
+function readPosition(options: PositionOptions): Promise<StaffGpsCoords> {
   return new Promise((resolve, reject) => {
     if (!isGeolocationSupported()) {
       reject(new Error("GPS is not available on this device"));
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      pos => resolve({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-      }),
+      pos =>
+        resolve({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        }),
       err => reject(new Error(mapGeoError(err))),
-      GPS_OPTIONS,
+      options,
     );
   });
+}
+
+/**
+ * Unified staff GPS read.
+ * - action: always fresh high-accuracy (attendance, jobs, photos, walk-in)
+ * - navigation / background: may return cache ≤30s, else low-accuracy read
+ */
+export async function getStaffLocation(mode: GpsRequestMode = "action"): Promise<StaffGpsCoords> {
+  const store = locationStoreSnapshot();
+
+  if (modeUsesCache(mode)) {
+    const cached = store.getCachedLocation(GPS_NAV_CACHE_MS);
+    if (cached) return cached;
+  }
+
+  const coords = await readPosition(optionsForMode(mode));
+  store.setLocation(coords);
+  return coords;
+}
+
+/** Apply a watchPosition / manual update to the shared cache. */
+export function applyStaffLocationUpdate(coords: StaffGpsCoords): void {
+  locationStoreSnapshot().setLocation(coords);
 }
 
 export function toLocationPayload(coords: StaffGpsCoords) {

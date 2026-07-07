@@ -14,7 +14,8 @@ import {
   type WalkInQuotaOption,
 } from "@/features/staff-walk-in/api";
 import { useCompleteVisit } from "@/features/daily-cleaning/api";
-import { getGps, validateCameraFile, readFileAsDataUrl, extractClientExif } from "@/features/daily-cleaning/lib/cameraCapture";
+import { getStaffLocation } from "@/lib/location";
+import { validateCameraFile, readFileAsDataUrl, extractClientExif } from "@/features/daily-cleaning/lib/cameraCapture";
 import { SERVICE_EXECUTIONS_QUERY_KEY } from "@/features/service-executions/api";
 import { getGetTodayBookingsQueryKey } from "@workspace/api-client-react";
 
@@ -81,14 +82,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
     if (!quota) return;
     setResolving(true);
     try {
-      const gps = await new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error("GPS not available"));
-        navigator.geolocation.getCurrentPosition(
-          p => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
-          reject,
-          { enableHighAccuracy: true, timeout: 15000 },
-        );
-      });
+      const gps = await getStaffLocation("action");
 
       const result = await resolveWalkIn({
         customerId,
@@ -131,7 +125,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
     try {
       validateCameraFile(file);
       const [gps, imageBase64, exif] = await Promise.all([
-        getGps(),
+        getStaffLocation("action"),
         readFileAsDataUrl(file),
         extractClientExif(file),
       ]);

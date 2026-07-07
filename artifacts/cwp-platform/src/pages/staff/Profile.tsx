@@ -10,7 +10,6 @@ import {
 } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { useAccountScope } from "@/lib/account-scope";
-import StaffAppShell from "@/components/layout/StaffAppShell";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffVerificationBanner, StaffVerificationBadge } from "@/features/staff/components/StaffVerificationBanner";
 import { StaffOperationalRoles } from "@/features/staff/components/StaffOperationalRoles";
@@ -140,8 +139,7 @@ export default function StaffProfile() {
   const avatarUrl = profile?.profilePhotoUrl ? resolveMediaUrl(profile.profilePhotoUrl) : null;
 
   return (
-    <StaffAppShell>
-      <div className="space-y-5 pb-4">
+    <div className="space-y-5 pb-4">
         {loadingProfile ? (
           <Skeleton className="h-24 w-full rounded-2xl" />
         ) : profile ? (
@@ -406,6 +404,5 @@ export default function StaffProfile() {
           Sign out
         </Button>
       </div>
-    </StaffAppShell>
   );
 }

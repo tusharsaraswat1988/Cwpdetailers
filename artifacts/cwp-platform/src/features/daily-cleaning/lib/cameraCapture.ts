@@ -54,14 +54,3 @@ export function readFileAsDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-
-export function getGps(): Promise<{ latitude: number; longitude: number; accuracy: number }> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error("GPS not available"));
-    navigator.geolocation.getCurrentPosition(
-      pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy }),
-      err => reject(err),
-      { enableHighAccuracy: true, timeout: 15000 },
-    );
-  });
-}
