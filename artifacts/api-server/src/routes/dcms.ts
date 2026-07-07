@@ -345,8 +345,19 @@ router.post(
   requirePermission("daily_cleaning", "complete_visits"),
   dcmsRateLimit(30, 60_000),
   async (req, res) => {
+    const { subscriptionId, visitType, imageBase64, latitude, longitude, accuracy, exif, ocrText, ocrConfidence, confirmedRegistration, walkIn } = req.body ?? {};
+    req.log.info({
+      dcmsVisitComplete: "http_request_received",
+      subscriptionId,
+      visitType: visitType ?? "cleaning",
+      imageBytes: typeof imageBase64 === "string" ? imageBase64.length : 0,
+      latitude,
+      longitude,
+      accuracy,
+      contentLength: req.headers["content-length"],
+    }, "POST /daily-cleaning/visits/complete");
+
     try {
-      const { subscriptionId, visitType, imageBase64, latitude, longitude, accuracy, exif, ocrText, ocrConfidence, confirmedRegistration, walkIn } = req.body;
       if (!subscriptionId || !imageBase64 || latitude == null || longitude == null) {
         return res.status(400).json({ error: "subscriptionId, imageBase64, latitude, and longitude are required" });
       }
@@ -368,9 +379,15 @@ router.post(
         ocrConfidence: ocrConfidence != null ? Number(ocrConfidence) : null,
         confirmedRegistration: confirmedRegistration ?? null,
         walkIn: Boolean(walkIn),
-      });
+      }, { log: req.log });
       return res.status(201).json(result);
     } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      req.log.error({
+        err: error,
+        stack: error.stack,
+        dcmsVisitComplete: "http_handler_failed",
+      }, `POST /daily-cleaning/visits/complete failed: ${error.message}`);
       return handleError(req, res, err);
     }
   },
