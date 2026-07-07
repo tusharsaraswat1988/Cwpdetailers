@@ -10,6 +10,11 @@ const METHOD_TO_ACTION: Record<string, string> = {
   DELETE: "delete",
 };
 
+/** Walk-in routes share the /staff URL prefix but are not staff CRUD. */
+export const WALK_IN_PATH_PREFIX = /^\/staff\/walk-in(?:\/|$)/;
+
+export type PermissionOverride = { match: RegExp; method?: string; action: string };
+
 /** Reserved first segment under /catalog/* — not city slugs for SEO pages. */
 const CATALOG_RESERVED_SEGMENTS = new Set([
   "pricing", "packages", "addons", "homepage", "homepage-plans", "settings", "services",
@@ -58,10 +63,12 @@ function catalogResourceForPath(path: string): string {
  */
 export function guardResource(
   resource: string,
-  overrides: { match: RegExp; method?: string; action: string }[] = [],
+  overrides: PermissionOverride[] = [],
+  excludePaths: RegExp[] = [],
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
     const path = req.path;
+    if (excludePaths.some(p => p.test(path))) return next();
     const resourcePrefix = `/${resource}`;
     if (!path.startsWith(resourcePrefix) && path !== `/${resource.replace(/-/g, "_")}`) {
       return next();
@@ -78,9 +85,37 @@ export function guardResource(
   };
 }
 
+/**
+ * Walk-in entry is staff self-service (search customer, start job, draft booking).
+ * Routes live under /staff/walk-in/* but must NOT inherit staff:create from the staff CRUD guard.
+ *
+ * GET  → staff:view      (portal read — search, customer context, quota)
+ * POST resolve → bookings:edit (creates/reuses booking — same action family as /bookings/:id/transition)
+ */
+export function guardWalkInRoutes() {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const path = req.path;
+    if (!WALK_IN_PATH_PREFIX.test(path)) return next();
+
+    const method = req.method.toUpperCase();
+    if (method === "GET") {
+      return requirePermission("staff", "view")(req, res, next);
+    }
+    if (method === "POST" && /\/walk-in\/resolve$/.test(path)) {
+      return requirePermission("bookings", "edit")(req, res, next);
+    }
+
+    return res.status(403).json({
+      error: "Permission denied",
+      resource: "staff",
+      action: METHOD_TO_ACTION[method] ?? "view",
+    });
+  };
+}
+
 /** Attach a guard to a router only for paths matching `prefix`. */
 export function mountGuarded(parent: Router, prefix: string, child: Router, resource: string,
-  overrides?: { match: RegExp; method?: string; action: string }[]) {
+  overrides?: PermissionOverride[]) {
   parent.use(prefix, guardResource(resource, overrides), child);
 }
 
