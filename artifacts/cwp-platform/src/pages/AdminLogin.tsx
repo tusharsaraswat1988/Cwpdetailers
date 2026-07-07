@@ -79,7 +79,7 @@ export default function AdminLogin() {
               Administrator
             </span>
             <div className="inline-flex items-center justify-center mb-4">
-              <BrandLogo variant="login" lazy={false} />
+              <BrandLogo variant="white" lazy={false} />
             </div>
             <h1 className="font-display font-bold text-2xl sm:text-3xl text-amber-50">{branding.brandName} Admin</h1>
             <p className="text-amber-200/55 mt-1 text-sm">Authorized personnel only</p>

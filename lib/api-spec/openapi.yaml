@@ -1882,7 +1882,7 @@ components:
           type: string
         portal:
           type: string
-          enum: [customer, staff]
+          enum: [customer]
       required: [idToken]
 
     GoogleNeedsPhoneResponse:

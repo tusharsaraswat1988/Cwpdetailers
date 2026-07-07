@@ -16,6 +16,7 @@ import Login from "@/pages/Login";
 import StaffLogin from "@/pages/StaffLogin";
 import AdminLogin from "@/pages/AdminLogin";
 import ForgotPassword from "@/pages/ForgotPassword";
+import VerifyOtp from "@/pages/VerifyOtp";
 import Register from "@/pages/Register";
 
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -151,11 +152,12 @@ function Router() {
       {/* Public */}
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+      <Route path="/verify-otp" component={VerifyOtp} />
       <Route path="/staff/login" component={StaffLogin} />
       <Route path="/forgot-password" component={() => <ForgotPassword portal="customer" />} />
       <Route path="/staff/forgot-password" component={() => <ForgotPassword portal="staff" />} />
       <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/register" component={Register} />
 
       {/* Public Legal Pages */}
       <Route path="/privacy-policy" component={PrivacyPolicy} />

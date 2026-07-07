@@ -108,6 +108,8 @@ export type BrandAssetSlot =
   | "splash_logo"
   | "loader_animation";
 
+import { buildThemeCssVariables, CWP_THEME_DEFAULTS } from "./buildThemeCssVariables";
+
 export const BRANDING_QUERY_KEY = ["branding", "public"] as const;
 export const BRANDING_ADMIN_QUERY_KEY = ["branding", "admin"] as const;
 
@@ -123,11 +125,11 @@ export const DEFAULT_BRANDING: PublicBranding = {
   supportPhone: null,
   gstNumber: null,
   address: null,
-  primaryColor: "#00cccc",
-  secondaryColor: "#212529",
-  accentColor: "#e0ffff",
-  backgroundColor: "#ffffff",
-  textColor: "#212529",
+  primaryColor: CWP_THEME_DEFAULTS.primaryColor,
+  secondaryColor: CWP_THEME_DEFAULTS.secondaryColor,
+  accentColor: CWP_THEME_DEFAULTS.accentColor,
+  backgroundColor: CWP_THEME_DEFAULTS.backgroundColor,
+  textColor: CWP_THEME_DEFAULTS.textColor,
   fullLogo: null,
   navbarLogo: null,
   mobileLogo: null,
@@ -147,7 +149,7 @@ export const DEFAULT_BRANDING: PublicBranding = {
   pdfLogo: null,
   splashLogo: null,
   loaderAnimation: null,
-  loaderBackground: "#ffffff",
+  loaderBackground: CWP_THEME_DEFAULTS.backgroundColor,
   loaderText: "Loading…",
   ogImage: null,
   twitterImage: null,
@@ -164,13 +166,7 @@ export const DEFAULT_BRANDING: PublicBranding = {
   schemaOrg: {},
   localBusinessSchema: {},
   generatedAssets: {},
-  cssVariables: {
-    "--brand-primary": "#00cccc",
-    "--brand-secondary": "#212529",
-    "--brand-accent": "#e0ffff",
-    "--brand-background": "#ffffff",
-    "--brand-text": "#212529",
-  },
+  cssVariables: buildThemeCssVariables(CWP_THEME_DEFAULTS),
   metaTitle: "Loading…",
   metaDescription: "",
 };

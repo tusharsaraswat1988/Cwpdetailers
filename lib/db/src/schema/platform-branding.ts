@@ -54,9 +54,9 @@ export const platformBrandingTable = pgTable("platform_branding", {
   id: serial("id").primaryKey(),
   isActive: boolean("is_active").notNull().default(true),
 
-  companyName: text("company_name").notNull().default(""),
-  brandName: text("brand_name").notNull().default(""),
-  tagline: text("tagline"),
+  companyName: text("company_name").notNull().default("CWP Detailers + Kleansolar"),
+  brandName: text("brand_name").notNull().default("CWP Detailers"),
+  tagline: text("tagline").default("Premium Car Care & Solar Cleaning"),
   shortDescription: text("short_description"),
 
   fullLogoUrl: text("full_logo_url"),
@@ -92,7 +92,7 @@ export const platformBrandingTable = pgTable("platform_branding", {
   primaryColor: text("primary_color").notNull().default("#00cccc"),
   secondaryColor: text("secondary_color").notNull().default("#212529"),
   accentColor: text("accent_color").notNull().default("#e0ffff"),
-  backgroundColor: text("background_color").notNull().default("#ffffff"),
+  backgroundColor: text("background_color").notNull().default("#f5f6f8"),
   textColor: text("text_color").default("#212529"),
 
   website: text("website"),

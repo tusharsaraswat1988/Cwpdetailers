@@ -2,6 +2,8 @@ export { useBranding, resolveLogoUrl, type BrandLogoVariant } from "./useBrandin
 export { BrandingProvider } from "./BrandingProvider";
 export { useBrandingPortal, usePwaBrandingHead } from "./useBrandingPortal";
 export { usePageSeo, type PageSeoOptions } from "./usePageSeo";
+export { buildThemeCssVariables, CWP_THEME_DEFAULTS } from "./buildThemeCssVariables";
+export type { ThemeColorInput } from "./buildThemeCssVariables";
 export { getBrandAsset, type BrandAssetKey } from "./brandAssets";
 export * from "./types";
 export * from "./api";

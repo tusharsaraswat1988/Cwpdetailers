@@ -2,12 +2,24 @@ import type { usersTable } from "@workspace/db";
 
 type UserRow = typeof usersTable.$inferSelect;
 
-/** User chose a password (phone login). Google-only accounts use authProvider "google". */
-export function userHasPassword(user: Pick<UserRow, "authProvider">): boolean {
+/** Staff portal always uses admin-created phone + password credentials. */
+export function isStaffPasswordLogin(user: Pick<UserRow, "role" | "passwordHash">): boolean {
+  return user.role === "staff" && Boolean(user.passwordHash);
+}
+
+/** User can sign in with a chosen password (not Google-only or OTP-only). */
+export function userHasPassword(user: Pick<UserRow, "authProvider" | "passwordHash" | "role">): boolean {
+  if (!user.passwordHash) return false;
+  if (user.role === "staff") return true;
   return user.authProvider === "local" || user.authProvider === "hybrid";
 }
 
-export function authProviderAfterPasswordSet(user: Pick<UserRow, "googleId">): string {
+export function authProviderForStaffPassword(): string {
+  return "local";
+}
+
+export function authProviderAfterPasswordSet(user: Pick<UserRow, "googleId" | "role">): string {
+  if (user.role === "staff") return authProviderForStaffPassword();
   return user.googleId ? "hybrid" : "local";
 }
 

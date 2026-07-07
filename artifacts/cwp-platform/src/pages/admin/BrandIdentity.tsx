@@ -408,14 +408,15 @@ export default function BrandIdentity() {
           <TabsContent value="theme" className="space-y-4 mt-4">
             <div className="grid sm:grid-cols-2 gap-4">
               {([
-                ["primaryColor", "Primary"],
-                ["secondaryColor", "Secondary"],
-                ["accentColor", "Accent"],
-                ["backgroundColor", "Background"],
-                ["textColor", "Text"],
-              ] as const).map(([key, label]) => (
+                ["primaryColor", "Primary", "Buttons, links, highlights"],
+                ["secondaryColor", "Secondary", "Header, footer, dark sections"],
+                ["accentColor", "Accent", "Subtle highlights and badges"],
+                ["backgroundColor", "Page Background", "Main page background color"],
+                ["textColor", "Text", "Body text and headings"],
+              ] as const).map(([key, label, hint]) => (
                 <div key={key}>
                   <Label>{label}</Label>
+                  <p className="text-xs text-muted-foreground mb-1">{hint}</p>
                   <div className="flex gap-2 mt-1.5">
                     <Input type="color" className="w-14 h-10 p-1" defaultValue={merged[key] ?? "#00cccc"} onChange={e => set(key, e.target.value)} />
                     <Input defaultValue={merged[key] ?? ""} onChange={e => set(key, e.target.value)} />

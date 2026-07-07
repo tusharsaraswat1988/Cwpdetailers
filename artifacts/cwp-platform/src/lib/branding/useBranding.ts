@@ -57,7 +57,7 @@ export function resolveLogoUrl(branding: PublicBranding, variant: BrandLogoVaria
     login: branding.loginLogo,
     light: branding.lightLogo,
     dark: branding.darkLogo,
-    white: branding.logoWhite,
+    white: branding.logoWhite ?? branding.lightLogo ?? branding.loginLogo,
     transparent: branding.logoTransparent,
     square: branding.logoSquare,
     icon: branding.logoIcon,

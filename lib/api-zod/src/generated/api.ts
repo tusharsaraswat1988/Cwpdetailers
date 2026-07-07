@@ -109,7 +109,7 @@ export const GetGoogleAuthConfigResponse = zod.object({
  */
 export const GoogleAuthBody = zod.object({
   idToken: zod.string(),
-  portal: zod.enum(["customer", "staff"]).optional(),
+  portal: zod.enum(["customer"]).optional(),
 });
 
 export const GoogleAuthResponse = zod.object({

@@ -14,6 +14,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { useBranding } from "@/lib/branding";
 import { DcmsHomeCard } from "@/features/daily-cleaning/pages/CustomerDailyCleaningPage";
+import { PasswordSetupNudge } from "@/components/auth/PasswordSetupNudge";
 
 async function fetchWalletTransactions(customerId: number) {
   const res = await fetch(`/api/customers/${customerId}/wallet/transactions?limit=5`, { credentials: "include" });
@@ -98,6 +99,7 @@ export default function CustomerDashboard() {
   return (
     <CustomerLayout>
       <div className="space-y-5">
+        <PasswordSetupNudge />
         {/* Next service hero */}
         {isLoading ? (
           <Skeleton className="h-36 w-full rounded-2xl" />

@@ -18,6 +18,7 @@ import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosys
 import { submitMobile } from "@/lib/contactForm";
 import { useToast } from "@/hooks/use-toast";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { clearRememberedPhone, hasRememberedPhone } from "@/lib/rememberPhone";
 
 const accountLinks = [
   { href: "/customer/history", label: "Service History", description: "Past bookings & photos", icon: History },
@@ -49,6 +50,7 @@ export default function CustomerAccount() {
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [rememberedOnDevice, setRememberedOnDevice] = useState(hasRememberedPhone);
 
   const loadProfile = useCallback(async () => {
     const res = await fetch("/api/customers/me", { credentials: "include" });
@@ -214,18 +216,18 @@ export default function CustomerAccount() {
           </CardContent>
         </Card>
 
-        <Card data-testid="account-password-card">
+        <Card data-testid="account-security-card">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
                 <KeyRound size={16} className="text-muted-foreground" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm">Sign-in password</p>
+                <p className="font-medium text-sm">Security</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {user?.hasUserPassword
-                    ? "You can sign in with your phone number and password, or continue with Google."
-                    : "Set a password to sign in with your phone number without Google."}
+                    ? "Sign in with your mobile number and password, or continue with Google."
+                    : "Create a password for quicker sign-in, or keep using OTP."}
                 </p>
               </div>
             </div>
@@ -238,6 +240,21 @@ export default function CustomerAccount() {
             >
               {user?.hasUserPassword ? "Change password" : "Set password"}
             </Button>
+            {rememberedOnDevice && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full sm:w-auto text-muted-foreground"
+                onClick={() => {
+                  clearRememberedPhone();
+                  setRememberedOnDevice(false);
+                  toast({ title: "Device forgotten", description: "Saved mobile number removed from this device." });
+                }}
+                data-testid="btn-forget-device"
+              >
+                Forget this device
+              </Button>
+            )}
           </CardContent>
         </Card>
 

@@ -88,7 +88,6 @@ export type GoogleAuthBodyPortal =
 
 export const GoogleAuthBodyPortal = {
   customer: "customer",
-  staff: "staff",
 } as const;
 
 export interface GoogleAuthBody {

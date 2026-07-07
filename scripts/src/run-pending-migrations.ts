@@ -43,6 +43,7 @@ const PENDING = [
   "037_vehicles_assigned_staff.sql",
   "043_auth_otp_codes.sql",
   "044_branding_settings_bms.sql",
+  "045_branding_theme_defaults.sql",
 ];
 
 async function main() {

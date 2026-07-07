@@ -2,6 +2,7 @@ import { db, usersTable, authOtpCodesTable } from "@workspace/db";
 import { eq, and, gt, isNull, desc } from "drizzle-orm";
 import { sendOtpSms, isOtpSmsConfigured } from "./dltSms";
 import { generateOtpCode, hashOtpCode, maskPhone } from "./googleAuth";
+import { findCustomerByPhone } from "./customerAccount";
 import type { AuthOtpPurpose } from "@workspace/db";
 
 const OTP_TTL_MINUTES = 15;
@@ -60,16 +61,21 @@ export async function sendAuthOtp(params: {
   const existingUser = (
     await db.select().from(usersTable).where(eq(usersTable.phone, phone)).limit(1)
   )[0];
+  const existingCustomer =
+    !existingUser && params.purpose === "login" ? await findCustomerByPhone(phone) : null;
 
   if (params.purpose === "login") {
-    if (!existingUser) {
+    if (!existingUser && !existingCustomer) {
       throw new Error("No account found for this phone number. Please sign up first.");
     }
-    if (!existingUser.isActive) {
+    if (existingUser && !existingUser.isActive) {
       throw new Error("Account suspended. Contact support.");
     }
-    if (existingUser.role !== "customer") {
+    if (existingUser && existingUser.role !== "customer") {
       throw new Error("This phone number is not registered as a customer account.");
+    }
+    if (existingCustomer && existingCustomer.status !== "active") {
+      throw new Error("Account suspended. Contact support.");
     }
   }
 
@@ -93,7 +99,7 @@ export async function sendAuthOtp(params: {
   const codeHash = hashOtpCode(code);
   const recipientName =
     params.purpose === "login"
-      ? (existingUser?.name ?? "Customer")
+      ? (existingUser?.name ?? existingCustomer?.name ?? "Customer")
       : (params.name?.trim() ?? "Customer");
 
   await db.insert(authOtpCodesTable).values({

@@ -146,17 +146,38 @@ function buildCssVariables(row: PlatformBranding): Record<string, string> {
   const primaryHsl = hexToHsl(row.primaryColor) ?? "180 100% 40%";
   const secondaryHsl = hexToHsl(row.secondaryColor) ?? "220 15% 15%";
   const accentHsl = hexToHsl(row.accentColor) ?? "180 100% 90%";
+  const backgroundHsl = hexToHsl(row.backgroundColor) ?? "220 20% 97%";
   const textHsl = hexToHsl(row.textColor ?? "#212529") ?? "220 40% 10%";
+
   return {
     "--brand-primary": row.primaryColor,
     "--brand-secondary": row.secondaryColor,
     "--brand-accent": row.accentColor,
     "--brand-background": row.backgroundColor,
     "--brand-text": row.textColor ?? "#212529",
-    "--primary": primaryHsl,
-    "--secondary": secondaryHsl,
-    "--accent": accentHsl,
+    "--background": backgroundHsl,
     "--foreground": textHsl,
+    "--card": "0 0% 100%",
+    "--card-foreground": textHsl,
+    "--card-border": "220 20% 90%",
+    "--popover": "0 0% 100%",
+    "--popover-foreground": textHsl,
+    "--popover-border": "220 20% 90%",
+    "--primary": primaryHsl,
+    "--primary-foreground": secondaryHsl,
+    "--secondary": secondaryHsl,
+    "--secondary-foreground": "0 0% 100%",
+    "--muted": "220 20% 90%",
+    "--muted-foreground": "220 10% 40%",
+    "--accent": accentHsl,
+    "--accent-foreground": primaryHsl,
+    "--destructive": "0 84% 60%",
+    "--destructive-foreground": "210 40% 98%",
+    "--border": "220 20% 90%",
+    "--input": "220 20% 90%",
+    "--ring": primaryHsl,
+    "--status-in-progress": primaryHsl,
+    "--status-scheduled": primaryHsl,
   };
 }
 
@@ -280,10 +301,16 @@ export async function getActiveBrandingRow(): Promise<PlatformBranding> {
   const [created] = await db
     .insert(platformBrandingTable)
     .values({
-      companyName: "",
-      brandName: "",
-      tagline: "",
-      metaDescriptionTemplate: "",
+      companyName: "CWP Detailers + Kleansolar",
+      brandName: "CWP Detailers",
+      tagline: "Premium Car Care & Solar Cleaning",
+      primaryColor: "#00cccc",
+      secondaryColor: "#212529",
+      accentColor: "#e0ffff",
+      backgroundColor: "#f5f6f8",
+      textColor: "#212529",
+      metaDescriptionTemplate:
+        "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
     })
     .returning();
 

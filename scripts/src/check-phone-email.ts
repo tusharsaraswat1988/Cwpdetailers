@@ -10,7 +10,7 @@ async function q(label: string, sql: string, params: unknown[] = []) {
 }
 
 async function main() {
-  await q("customers", `SELECT id, name, phone, email FROM customers WHERE phone = $1 OR lower(email) = lower($2)`, [phone, email]);
+  await q("customers", `SELECT id, name, phone, email, user_id, status FROM customers WHERE phone = $1 OR lower(email) = lower($2)`, [phone, email]);
   await q("users", `SELECT id, name, phone, email, role, customer_id, staff_id, google_id FROM users WHERE phone = $1 OR lower(email) = lower($2)`, [phone, email]);
   await q("staff", `SELECT id, name, phone, email, user_id FROM staff WHERE phone = $1 OR lower(email) = lower($2)`, [phone, email]);
   await q("auth_pending", `SELECT id, email, google_id, expires_at FROM auth_pending_google WHERE lower(email) = lower($1)`, [email]);

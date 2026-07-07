@@ -46,6 +46,15 @@ import {
   validateNewPassword,
 } from "../lib/userPassword";
 import { sendAuthOtp, verifyAuthOtp, isOtpSmsConfigured } from "../lib/authOtp";
+import { authRateLimit } from "../lib/authRateLimit";
+import { logAuthEvent, neutralizeOtpSendError } from "../lib/authObservability";
+import { normalizeStaffPasswordLogin } from "../lib/staffLoginSync";
+import {
+  findCustomerByEmail,
+  findCustomerForGooglePhoneLink,
+  linkGoogleAuthToExistingCustomer,
+} from "../lib/googleCustomerLink";
+import { ensureCustomerLoginUser, findCustomerByPhone } from "../lib/customerAccount";
 import type { AuthOtpPurpose } from "@workspace/db";
 
 const router = Router();
@@ -53,9 +62,7 @@ const router = Router();
 const SESSION_TTL_DAYS = 30;
 const GOOGLE_LINK_TTL_MINUTES = 15;
 
-type GoogleAuthPortal = Extract<AuthPortal, "customer" | "staff">;
-
-function parseGooglePortal(raw: unknown): GoogleAuthPortal {
+function parsePasswordPortal(raw: unknown): AuthPortal {
   return raw === "staff" ? "staff" : "customer";
 }
 
@@ -127,7 +134,12 @@ router.post("/auth/google", async (req, res) => {
   try {
     const { idToken, portal: rawPortal = "customer" } = req.body as { idToken?: string; portal?: string };
     if (!idToken) return res.status(400).json({ error: "Google token required" });
-    const portal = parseGooglePortal(rawPortal);
+    if (rawPortal === "staff") {
+      return res.status(400).json({
+        error: "Google sign-in is not available for the staff portal. Use your phone number and admin-provided password.",
+      });
+    }
+    const portal = "customer" as const;
 
     const googleProfile = await verifyGoogleIdToken(idToken);
     const normalizedEmail = googleProfile.email.toLowerCase().trim();
@@ -142,12 +154,22 @@ router.post("/auth/google", async (req, res) => {
       )[0];
     }
 
+    if (!user && normalizedEmail && portal === "customer") {
+      const customer = await findCustomerByEmail(normalizedEmail);
+      if (customer?.status === "active") {
+        user = await ensureCustomerLoginUser(customer, {
+          googleId: googleProfile.sub,
+          email: normalizedEmail,
+          avatarUrl: googleProfile.picture ?? null,
+          authProvider: "google",
+          passwordHash: await hashPassword(generateOpaqueToken()),
+        });
+      }
+    }
+
     if (user) {
       if (!isRoleAllowedForPortal(user.role, portal)) {
-        const msg =
-          portal === "staff"
-            ? "This Google account is not registered as staff. Contact admin for credentials."
-            : "This account cannot sign in here. Use the correct portal.";
+        const msg = "This account cannot sign in here. Use the correct portal.";
         return res.status(403).json({ error: msg });
       }
       if (!user.isActive) return res.status(401).json({ error: "Account suspended" });
@@ -170,12 +192,6 @@ router.post("/auth/google", async (req, res) => {
       const token = await issueSession(user.id, req);
       setSessionCookie(res, token, portal);
       return res.json({ token, user: toSafeUser(user) });
-    }
-
-    if (portal === "staff") {
-      return res.status(404).json({
-        error: "No staff account found for this Google email. Ask admin to create your login first.",
-      });
     }
 
     const linkToken = generateOpaqueToken();
@@ -244,6 +260,18 @@ router.post("/auth/google/complete", async (req, res) => {
 
     const normalizedEmail = pending.email.toLowerCase().trim();
     await cleanupIncompleteGoogleCustomers(pending.googleId, phoneResult.value, normalizedEmail);
+
+    const existingCustomer = await findCustomerForGooglePhoneLink(
+      phoneResult.value,
+      normalizedEmail,
+    );
+    if (existingCustomer) {
+      const linkedUser = await linkGoogleAuthToExistingCustomer(pending, existingCustomer, {
+        chosenPassword,
+      });
+      const token = await issueSession(linkedUser.id, req);
+      return res.json({ token, user: toSafeUser(linkedUser) });
+    }
 
     const identityCheck = await assertContactIdentityAvailable(phoneResult.value, normalizedEmail);
     if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
@@ -315,7 +343,7 @@ router.post("/auth/forgot-password", async (req, res) => {
       portal?: string;
     };
 
-    const portal = parseGooglePortal(rawPortal);
+    const portal = parsePasswordPortal(rawPortal);
 
     const idResult = normalizeLoginIdentifier(phone, email);
     if (!idResult.ok) return res.status(400).json({ error: idResult.error });
@@ -332,7 +360,7 @@ router.post("/auth/forgot-password", async (req, res) => {
       return res.status(401).json({ error: "Account suspended. Contact support." });
     }
 
-    if (user.authProvider === "google") {
+    if (user.authProvider === "google" && user.role !== "staff") {
       return res.status(400).json({
         error: "This account uses Google Sign-In only. Sign in with Google or set a password from your account.",
       });
@@ -371,7 +399,7 @@ router.post("/auth/reset-password", async (req, res) => {
     if (newPassword.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
-    const portal = parseGooglePortal(rawPortal);
+    const portal = parsePasswordPortal(rawPortal);
 
     const idResult = normalizeLoginIdentifier(phone, email);
     if (!idResult.ok) return res.status(400).json({ error: idResult.error });
@@ -456,9 +484,11 @@ router.post("/auth/login", async (req, res) => {
     const user = await findUserByIdentifier(idResult.value.phone, idResult.value.email);
 
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
-    if (!userHasPassword(user) || !user.passwordHash) {
+    if (!userHasPassword(user)) {
       return res.status(401).json({
-        error: "This account uses Google Sign-In. Use Continue with Google or set a password from your account.",
+        error: user.role === "staff"
+          ? "Invalid credentials"
+          : "This account uses Google Sign-In. Use Continue with Google or set a password from your account.",
       });
     }
 
@@ -473,6 +503,10 @@ router.post("/auth/login", async (req, res) => {
     if (upgradedHash) {
       await db.update(usersTable).set({ passwordHash: upgradedHash, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
       user.passwordHash = upgradedHash;
+    }
+
+    if (user.role === "staff") {
+      await normalizeStaffPasswordLogin(user.id);
     }
 
     const token = await issueSession(user.id, req);
@@ -495,7 +529,7 @@ router.get("/auth/otp/config", (_req, res) => {
   });
 });
 
-router.post("/auth/otp/send", async (req, res) => {
+router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), async (req, res) => {
   try {
     const { phone, purpose: rawPurpose, name } = req.body as {
       phone?: string;
@@ -516,6 +550,8 @@ router.post("/auth/otp/send", async (req, res) => {
       name,
     });
 
+    logAuthEvent(req, "auth.otp.send", { purpose, phone: phoneResult.value, portal: "customer" });
+
     return res.json({
       ok: true,
       message: "OTP sent",
@@ -524,12 +560,13 @@ router.post("/auth/otp/send", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Send OTP error");
-    const message = err instanceof Error ? err.message : "Could not send OTP";
-    return res.status(400).json({ error: message });
+    const raw = err instanceof Error ? err.message : "Could not send OTP";
+    logAuthEvent(req, "auth.otp.send.failed", { error: raw });
+    return res.status(400).json({ error: neutralizeOtpSendError(raw) });
   }
 });
 
-router.post("/auth/otp/verify", async (req, res) => {
+router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000), async (req, res) => {
   try {
     const {
       phone,
@@ -564,13 +601,25 @@ router.post("/auth/otp/verify", async (req, res) => {
       purpose,
       portal: "customer",
     });
-    if (!verified.ok) return res.status(400).json({ error: "Invalid or expired OTP" });
+    if (!verified.ok) {
+      logAuthEvent(req, "auth.otp.verify.failed", { purpose, phone: phoneResult.value });
+      return res.status(400).json({ error: "Invalid or expired OTP" });
+    }
+
+    logAuthEvent(req, "auth.otp.verify", { purpose, phone: phoneResult.value });
 
     if (purpose === "login") {
-      const user = (
+      let user = (
         await db.select().from(usersTable).where(eq(usersTable.phone, phoneResult.value)).limit(1)
       )[0];
-      if (!user || !user.isActive || user.role !== "customer") {
+
+      if (!user) {
+        const customer = await findCustomerByPhone(phoneResult.value);
+        if (!customer) return res.status(401).json({ error: "Invalid credentials" });
+        user = await ensureCustomerLoginUser(customer, { authProvider: "otp" });
+      }
+
+      if (!user.isActive || user.role !== "customer") {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 

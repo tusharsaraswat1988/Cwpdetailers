@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
+import { cn } from "@/lib/utils";
 
 declare global {
   interface Window {
@@ -17,10 +18,7 @@ declare global {
   }
 }
 
-type AuthPortal = "customer" | "staff";
-
 type GoogleSignInButtonProps = {
-  portal: AuthPortal;
   onSuccess: (idToken: string) => void;
   onError?: (message: string) => void;
   disabled?: boolean;
@@ -74,7 +72,6 @@ async function resolveGoogleClientId(): Promise<string | null> {
 }
 
 export function GoogleSignInButton({
-  portal,
   onSuccess,
   onError,
   disabled,
@@ -90,7 +87,7 @@ export function GoogleSignInButton({
     (response: { credential?: string }) => {
       setPending(false);
       if (response.credential) onSuccess(response.credential);
-      else onError?.("Google sign-in was cancelled");
+      else onError?.("Sign-in was cancelled. Try again when you're ready.");
     },
     [onSuccess, onError],
   );
@@ -153,7 +150,7 @@ export function GoogleSignInButton({
       width: 320,
       logo_alignment: "left",
     });
-  }, [status, clientId, portal, handleCredential]);
+  }, [status, clientId, handleCredential]);
 
   const triggerGoogleSignIn = () => {
     if (!window.google?.accounts?.id) {
@@ -217,7 +214,12 @@ export function GoogleSignInButton({
         onClick={triggerGoogleSignIn}
         disabled={disabled || pending}
         data-testid="btn-google-signin"
-        className={`w-full border-white/20 bg-white text-secondary hover:bg-white/90 font-medium py-2.5 ${className ?? ""}`}
+        className={cn(
+          "w-full h-12 min-h-12 text-base font-medium rounded-lg transition-all duration-200 ease-out",
+          "border border-white/15 bg-transparent text-white/85",
+          "hover:bg-white/[0.07] hover:text-white active:scale-[0.985]",
+          className,
+        )}
       >
         {pending ? (
           <Loader2 size={18} className="animate-spin mr-2" />
