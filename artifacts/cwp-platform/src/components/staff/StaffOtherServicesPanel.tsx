@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
+import { suppressStaffJobAlert } from "@/hooks/useStaffJobAlerts";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
 import { StaffServiceJobFlow } from "@/components/staff/StaffServiceJobFlow";
@@ -43,21 +44,20 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
   }, [search]);
 
   useEffect(() => {
-    if (!selectedJob) return;
-    const match = jobs.today.find(j => staffJobKey(j) === staffJobKey(selectedJob));
-    if (!match) return;
-    void jobs.loadJobWithPhotos(match).then(setSelectedJob);
-  }, [jobs.today, jobs.uploadingJobId]);
-
-  useEffect(() => {
     if (!selectedJobKey || jobs.loadingToday) return;
     const match = jobs.today.find(j => staffJobKey(j) === selectedJobKey);
     if (!match) return;
+
+    let cancelled = false;
     setLoadingDetail(true);
     void jobs.loadJobWithPhotos(match).then(enriched => {
+      if (cancelled) return;
       setSelectedJob(enriched);
       setLoadingDetail(false);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedJobKey, jobs.loadingToday, jobs.today]);
 
   async function handleTransitionJob(jobId: number, toStatus: string, job?: StaffJob) {
@@ -140,12 +140,12 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
             successMessage={walkInSuccess}
             onDismissSuccess={() => setWalkInSuccess(null)}
             onBookingResolved={async bookingId => {
-              await jobs.refetchToday();
-              const enriched = await jobs.loadJobWithPhotos({
-                source: "booking",
-                id: bookingId,
-                status: "scheduled",
-              });
+              suppressStaffJobAlert({ source: "booking", id: bookingId });
+              const refreshed = await jobs.refetchToday();
+              const match = refreshed.find(j => j.source !== "execution" && j.id === bookingId);
+              const enriched = await jobs.loadJobWithPhotos(
+                match ?? { source: "booking", id: bookingId, status: "scheduled" },
+              );
               setFromWalkIn(true);
               setSelectedJob(enriched);
               onSelectJob(`booking-${bookingId}`);

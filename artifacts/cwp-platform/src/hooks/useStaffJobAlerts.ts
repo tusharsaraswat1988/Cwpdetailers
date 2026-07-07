@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { vibrateStaffJobAlert } from "@/lib/staff-vibration";
-import type { StaffJob } from "@/lib/staff-jobs";
+import { staffJobKey, type StaffJob } from "@/lib/staff-jobs";
 
 export type StaffJobAlert = {
   id: number;
@@ -11,9 +11,23 @@ export type StaffJobAlert = {
   receivedAt: number;
 };
 
+/** Walk-in / self-start: do not vibrate or show "New job assigned" for this booking. */
+const suppressedAlertKeys = new Set<string>();
+
+export function suppressStaffJobAlert(job: Pick<StaffJob, "id" | "source">) {
+  suppressedAlertKeys.add(staffJobKey(job));
+}
+
 function jobLabel(job: StaffJob) {
   const service = job.serviceName ?? job.serviceType?.replace(/_/g, " ") ?? "Job";
   return `${service}${job.scheduledTime ? ` · ${job.scheduledTime}` : ""}`;
+}
+
+function jobsSnapshotKey(jobs: StaffJob[]) {
+  return jobs
+    .map(j => `${staffJobKey(j)}:${j.status ?? ""}`)
+    .sort()
+    .join("|");
 }
 
 /**
@@ -22,33 +36,43 @@ function jobLabel(job: StaffJob) {
  */
 export function useStaffJobAlerts(todayJobs: StaffJob[], enabled: boolean) {
   const { toast } = useToast();
-  const knownIdsRef = useRef<Set<number> | null>(null);
+  const knownKeysRef = useRef<Set<string> | null>(null);
+  const alertedKeysRef = useRef<Set<string>>(new Set());
   const [latestAlert, setLatestAlert] = useState<StaffJobAlert | null>(null);
 
   const dismissAlert = useCallback(() => setLatestAlert(null), []);
 
+  const jobsKey = useMemo(() => jobsSnapshotKey(todayJobs), [todayJobs]);
+
   useEffect(() => {
-    if (!enabled || todayJobs.length === 0) {
-      if (todayJobs.length === 0 && knownIdsRef.current === null) {
-        knownIdsRef.current = new Set();
+    if (!enabled) return;
+
+    const currentKeys = new Set(todayJobs.map(staffJobKey));
+
+    if (knownKeysRef.current === null) {
+      knownKeysRef.current = currentKeys;
+      return;
+    }
+
+    const newJobs = todayJobs.filter(j => {
+      const key = staffJobKey(j);
+      if (knownKeysRef.current!.has(key)) return false;
+      if (j.status === "completed" || j.status === "cancelled") return false;
+      if (suppressedAlertKeys.has(key)) {
+        suppressedAlertKeys.delete(key);
+        return false;
       }
-      return;
-    }
+      if (alertedKeysRef.current.has(key)) return false;
+      return true;
+    });
 
-    const currentIds = new Set(todayJobs.map(j => j.id));
-
-    if (knownIdsRef.current === null) {
-      knownIdsRef.current = currentIds;
-      return;
-    }
-
-    const newJobs = todayJobs.filter(
-      j => !knownIdsRef.current!.has(j.id) && j.status !== "completed" && j.status !== "cancelled",
-    );
-
-    knownIdsRef.current = currentIds;
+    knownKeysRef.current = currentKeys;
 
     if (newJobs.length === 0) return;
+
+    for (const job of newJobs) {
+      alertedKeysRef.current.add(staffJobKey(job));
+    }
 
     vibrateStaffJobAlert();
 
@@ -69,7 +93,7 @@ export function useStaffJobAlerts(todayJobs: StaffJob[], enabled: boolean) {
       scheduledTime: first.scheduledTime,
       receivedAt: Date.now(),
     });
-  }, [todayJobs, enabled, toast]);
+  }, [jobsKey, enabled, todayJobs, toast]);
 
   return { latestAlert, dismissAlert };
 }
@@ -77,6 +101,7 @@ export function useStaffJobAlerts(todayJobs: StaffJob[], enabled: boolean) {
 /** Listen for push messages relayed from the service worker while app is open. */
 export function useStaffPushMessageAlerts(enabled: boolean) {
   const { toast } = useToast();
+  const recentPushTagsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!enabled || !("serviceWorker" in navigator)) return;
@@ -88,8 +113,14 @@ export function useStaffPushMessageAlerts(enabled: boolean) {
         body?: string;
         url?: string;
         vibrate?: boolean;
+        tag?: string;
       } | null;
       if (data?.type !== "CWP_STAFF_PUSH") return;
+
+      const dedupeKey = data.tag ?? `${data.title ?? ""}:${data.body ?? ""}`;
+      if (recentPushTagsRef.current.has(dedupeKey)) return;
+      recentPushTagsRef.current.add(dedupeKey);
+      setTimeout(() => recentPushTagsRef.current.delete(dedupeKey), 15_000);
 
       if (data.vibrate !== false) vibrateStaffJobAlert();
 

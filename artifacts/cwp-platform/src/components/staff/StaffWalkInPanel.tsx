@@ -17,8 +17,6 @@ import {
   type WalkInServiceKind,
 } from "@/features/staff-walk-in/api";
 import { getStaffLocation } from "@/lib/location";
-import { SERVICE_EXECUTIONS_QUERY_KEY } from "@/features/service-executions/api";
-import { getGetTodayBookingsQueryKey } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 
 const SEARCH_MIN_CHARS = 3;
@@ -337,8 +335,6 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved, successMes
         forceDraft,
       });
 
-      qc.invalidateQueries({ queryKey: getGetTodayBookingsQueryKey() });
-      qc.invalidateQueries({ queryKey: SERVICE_EXECUTIONS_QUERY_KEY });
       qc.invalidateQueries({ queryKey: ["walk-in-customer", customerId] });
 
       const navigation = resolveWalkInNavigation(service.serviceKind, result);
@@ -381,7 +377,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved, successMes
         accuracy: gps.accuracy,
         forceDraft: true,
       });
-      qc.invalidateQueries({ queryKey: getGetTodayBookingsQueryKey() });
+      qc.invalidateQueries({ queryKey: ["walk-in-customer", customerId] });
       toast({
         title: "Draft booking ban gayi",
         description: result.mode === "booking" ? result.message : "Admin payment confirm karega",

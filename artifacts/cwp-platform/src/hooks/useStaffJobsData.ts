@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   useGetTodayBookings,
@@ -206,22 +206,38 @@ export function useStaffJobsData() {
     },
   });
 
-  const bookingToday = (todayBookings ?? []) as StaffJob[];
-  const executionToday = (todayExecutions ?? []).map(executionToStaffJob);
-  const todayRaw = mergeJobs(bookingToday, executionToday);
-  const today = todayRaw.filter(isOtherServiceJob);
+  const bookingToday = useMemo(() => (todayBookings ?? []) as StaffJob[], [todayBookings]);
+  const executionToday = useMemo(
+    () => (todayExecutions ?? []).map(executionToStaffJob),
+    [todayExecutions],
+  );
+  const todayRaw = useMemo(
+    () => mergeJobs(bookingToday, executionToday),
+    [bookingToday, executionToday],
+  );
+  const today = useMemo(() => todayRaw.filter(isOtherServiceJob), [todayRaw]);
 
-  const bookingAll = (allBookings?.data ?? []) as StaffJob[];
-  const executionAll = (allExecutions ?? []).map(executionToStaffJob);
-  const allRaw = mergeJobs(bookingAll, executionAll);
-  const all = allRaw.filter(isOtherServiceJob);
+  const bookingAll = useMemo(() => (allBookings?.data ?? []) as StaffJob[], [allBookings?.data]);
+  const executionAll = useMemo(
+    () => (allExecutions ?? []).map(executionToStaffJob),
+    [allExecutions],
+  );
+  const allRaw = useMemo(
+    () => mergeJobs(bookingAll, executionAll),
+    [bookingAll, executionAll],
+  );
+  const all = useMemo(() => allRaw.filter(isOtherServiceJob), [allRaw]);
 
-  const { upcoming, done } = partitionStaffJobs(all, today);
-  const activeJob = pickActiveJob(today);
-  const remainingToday = activeJob
-    ? today.filter(j => j.id !== activeJob.id || j.source !== activeJob.source)
-    : today;
-  const { otherServices: todayOtherServices } = partitionJobsByCategory(todayRaw);
+  const { upcoming, done } = useMemo(() => partitionStaffJobs(all, today), [all, today]);
+  const activeJob = useMemo(() => pickActiveJob(today), [today]);
+  const remainingToday = useMemo(
+    () => (activeJob ? today.filter(j => j.id !== activeJob.id || j.source !== activeJob.source) : today),
+    [today, activeJob],
+  );
+  const { otherServices: todayOtherServices } = useMemo(
+    () => partitionJobsByCategory(todayRaw),
+    [todayRaw],
+  );
 
   async function transitionJob(jobId: number, toStatus: string, job?: StaffJob) {
     setLocatingJobId(jobId);
@@ -313,9 +329,14 @@ export function useStaffJobsData() {
   const errorToday = errorTodayBookings || errorTodayExecutions;
   const errorAll = errorAllBookings || errorAllExecutions;
 
-  const refetchToday = () => {
-    void refetchTodayBookings();
-    void refetchTodayExecutions();
+  const refetchToday = async () => {
+    const [bookingsResult, executionsResult] = await Promise.all([
+      refetchTodayBookings(),
+      refetchTodayExecutions(),
+    ]);
+    const bookings = (bookingsResult.data ?? []) as StaffJob[];
+    const executions = (executionsResult.data ?? []).map(executionToStaffJob);
+    return mergeJobs(bookings, executions).filter(isOtherServiceJob);
   };
 
   const refetchAll = () => {

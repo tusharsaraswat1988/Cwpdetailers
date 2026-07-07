@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGetTodayBookings, getGetTodayBookingsQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
@@ -47,10 +47,13 @@ export function StaffJobAlertLayer({ children }: { children: ReactNode }) {
     refetchOnWindowFocus: true,
   });
 
-  const todayJobs: StaffJob[] = [
-    ...((todayBookings ?? []) as StaffJob[]).map(j => ({ ...j, source: "booking" as const })),
-    ...((todayExecutions ?? []).map(executionToStaffJob)),
-  ];
+  const todayJobs: StaffJob[] = useMemo(
+    () => [
+      ...((todayBookings ?? []) as StaffJob[]).map(j => ({ ...j, source: "booking" as const })),
+      ...((todayExecutions ?? []).map(executionToStaffJob)),
+    ],
+    [todayBookings, todayExecutions],
+  );
 
   const { latestAlert, dismissAlert } = useStaffJobAlerts(todayJobs, Boolean(enabled));
   useStaffPushMessageAlerts(Boolean(enabled));
