@@ -10,6 +10,7 @@ import {
   searchWalkIn,
   fetchWalkInCustomer,
   resolveWalkIn,
+  resolveWalkInNavigation,
   type WalkInIncludedService,
   type WalkInPackageCard,
   type WalkInCustomerContext,
@@ -23,8 +24,8 @@ const SEARCH_MIN_CHARS = 3;
 const SEARCH_DEBOUNCE_MS = 300;
 
 type Props = {
-  onBookingResolved: (bookingId: number) => void;
-  onDcmsResolved: (subscriptionId: number, visitType: "cleaning" | "wash") => void;
+  onBookingResolved: (bookingId: number, serviceKind: WalkInIncludedService["serviceKind"]) => void;
+  onDcmsResolved: (subscriptionId: number, visitType: "cleaning") => void;
 };
 
 function formatExpiry(value: string | null | undefined) {
@@ -264,9 +265,11 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
       qc.invalidateQueries({ queryKey: SERVICE_EXECUTIONS_QUERY_KEY });
       qc.invalidateQueries({ queryKey: ["walk-in-customer", customerId] });
 
-      if (result.mode === "dcms") {
+      const navigation = resolveWalkInNavigation(service.serviceKind, result);
+
+      if (navigation.route === "daily_clean") {
         toast({ title: "Opening Daily Clean", description: "Complete visit in the daily clean workflow" });
-        onDcmsResolved(result.subscriptionId, result.visitType);
+        onDcmsResolved(navigation.subscriptionId, navigation.visitType);
         resetCustomer();
         return;
       }
@@ -275,7 +278,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
         title: result.createdDraft ? "Draft booking created" : "Service started",
         description: result.message,
       });
-      onBookingResolved(result.bookingId);
+      onBookingResolved(navigation.bookingId, navigation.serviceKind);
       resetCustomer();
     } catch (e) {
       toast({
@@ -308,7 +311,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
         description: result.mode === "booking" ? result.message : "Admin will confirm payment",
       });
       if (result.mode === "booking") {
-        onBookingResolved(result.bookingId);
+        onBookingResolved(result.bookingId, "car_wash");
         resetCustomer();
       }
     } catch (e) {

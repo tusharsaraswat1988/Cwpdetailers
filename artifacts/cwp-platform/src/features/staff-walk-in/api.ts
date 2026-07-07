@@ -127,10 +127,6 @@ export async function fetchWalkInDcmsStop(subscriptionId: number, visitType: "cl
   );
 }
 
-export type ResolveWalkInResult =
-  | { mode: "dcms"; subscriptionId: number; vehicleId: number; visitType: "cleaning" | "wash"; quotaRemaining: number; message?: string }
-  | { mode: "booking"; bookingId: number; status: string; createdDraft: boolean; consumedFrom: string; message: string };
-
 export async function resolveWalkIn(body: {
   customerId: number;
   serviceKind: WalkInServiceKind;
@@ -149,3 +145,5 @@ export async function resolveWalkIn(body: {
     body: JSON.stringify(body),
   });
 }
+
+export { resolveWalkInNavigation, walkInNavigationPath, type WalkInNavigationTarget } from "./navigation";
