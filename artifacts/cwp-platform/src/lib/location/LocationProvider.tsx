@@ -3,6 +3,7 @@ import type { LocationPermissionState } from "./types";
 import { GPS_RECHECK_INTERVAL_MS, GPS_WATCH_OPTIONS } from "./constants";
 import { applyStaffLocationUpdate, getStaffLocation, isGeolocationSupported } from "./getStaffLocation";
 import { locationStoreSnapshot, useLocationStore } from "./locationStore";
+import { clearStaffGeolocationWatchRegistration, registerStaffGeolocationWatch } from "./geolocationCoordinator";
 
 type StaffLocationContextValue = {
   permissionState: LocationPermissionState;
@@ -114,6 +115,11 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       setRefreshing(false);
     }
   }, [setPermissionState, setRefreshing]);
+
+  useEffect(() => {
+    registerStaffGeolocationWatch({ suspend: stopWatch, resume: startWatch });
+    return () => clearStaffGeolocationWatchRegistration();
+  }, [startWatch, stopWatch]);
 
   useEffect(() => {
     void checkPermissionOnly();

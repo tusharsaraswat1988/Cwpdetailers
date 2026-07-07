@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine } from "lucide-react";
 import { extractClientExif, validateCameraFile, readFileAsDataUrl } from "../lib/cameraCapture";
+import { visitUploadErrorMessage } from "../lib/visitUploadError";
 import { getStaffLocation } from "@/lib/location";
 import { PlateScanFlow, type PlateScanMeta } from "../components/PlateScanFlow";
 import { cn } from "@/lib/utils";
@@ -80,7 +81,7 @@ export function StaffDailyRouteSimplified() {
       refetch();
       if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
     } catch (err) {
-      toast({ title: "Upload failed", description: (err as Error).message, variant: "destructive" });
+      toast({ title: "Upload failed", description: visitUploadErrorMessage(err), variant: "destructive" });
     }
   }, [current, completeVisit, toast, refetch, plateScanMeta, activeIdx, stops.length]);
 

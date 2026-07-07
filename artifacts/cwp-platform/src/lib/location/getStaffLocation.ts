@@ -5,6 +5,7 @@ import {
   GPS_NAV_CACHE_MS,
 } from "./constants";
 import { locationStoreSnapshot, modeUsesCache } from "./locationStore";
+import { runExclusiveGeolocationRead } from "./geolocationCoordinator";
 
 function mapGeoError(err: GeolocationPositionError): string {
   switch (err.code) {
@@ -59,7 +60,7 @@ export async function getStaffLocation(mode: GpsRequestMode = "action"): Promise
     if (cached) return cached;
   }
 
-  const coords = await readPosition(optionsForMode(mode));
+  const coords = await runExclusiveGeolocationRead(() => readPosition(optionsForMode(mode)));
   store.setLocation(coords);
   return coords;
 }
