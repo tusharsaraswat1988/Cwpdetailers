@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { useBranding } from "@/lib/branding";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserX, Send, Check, MessageSquare, Phone, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
@@ -29,12 +30,17 @@ async function updateRemark(id: number, remark: string) {
 }
 
 export default function AdminChurnedCustomers() {
+  const branding = useBranding();
+  const defaultMessage = useMemo(
+    () => `Hi {name}, we miss you at ${branding.brandName}! 🚗 Come back and get 10% off your next subscription renewal. Reply YES to know more. — Team ${branding.brandName}`,
+    [branding.brandName],
+  );
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: churned = [], isLoading } = useQuery({ queryKey: ["churned"], queryFn: fetchChurned });
 
   const [selected, setSelected] = useState<number[]>([]);
-  const [message, setMessage] = useState("Hi {name}, we miss you at CWP Detailers! 🚗 Come back and get 10% off your next subscription renewal. Reply YES to know more. — Team CWP");
+  const [message, setMessage] = useState(defaultMessage);
   const [showCompose, setShowCompose] = useState(false);
   const [editRemark, setEditRemark] = useState<{ id: number; text: string } | null>(null);
 

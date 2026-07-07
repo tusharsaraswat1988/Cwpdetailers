@@ -24,6 +24,15 @@ export function parseOptionalMobile(value: unknown): ParseResult<string | null> 
   return { ok: true, value: result.value };
 }
 
+export function parseRequiredEmail(value: unknown, label = "Email"): ParseResult<string> {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return { ok: false, error: `${label} is required` };
+  }
+  const result = validateEmail(String(value), { required: true });
+  if (!result.ok) return result;
+  return { ok: true, value: result.value! };
+}
+
 export function parseOptionalEmail(value: unknown): ParseResult<string | null> {
   if (value === undefined || value === null || String(value).trim() === "") {
     return { ok: true, value: null };

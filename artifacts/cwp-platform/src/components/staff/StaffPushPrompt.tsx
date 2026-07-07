@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, X } from "lucide-react";
+import { Bell, Loader2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
-  autoSubscribeStaffPushIfNeeded,
   getPushStatus,
   isPushSupported,
   getBrowserNotificationPermission,
+  subscribeToPush,
 } from "@/lib/pushNotifications";
 
 const DISMISS_KEY = "cwp-staff-push-prompt-dismissed";
@@ -14,6 +15,7 @@ export function StaffPushPrompt() {
   const { toast } = useToast();
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [enabling, setEnabling] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -36,7 +38,19 @@ export function StaffPushPrompt() {
         return;
       }
       setVisible(true);
-      const result = await autoSubscribeStaffPushIfNeeded();
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const enableAlerts = async () => {
+    setEnabling(true);
+    try {
+      const result = await subscribeToPush({ forceResync: true });
       if (result.ok) {
         toast({
           title: "Job alerts enabled",
@@ -45,17 +59,11 @@ export function StaffPushPrompt() {
         setVisible(false);
         return;
       }
-      if (result.error && result.error !== "denied" && result.error !== "unsupported") {
-        toast({ title: "Could not enable alerts", description: result.error, variant: "destructive" });
-      }
+      toast({ title: "Could not enable alerts", description: result.error, variant: "destructive" });
     } finally {
-      setLoading(false);
+      setEnabling(false);
     }
-  }, [toast]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  };
 
   const dismiss = () => {
     sessionStorage.setItem(DISMISS_KEY, "1");
@@ -76,13 +84,22 @@ export function StaffPushPrompt() {
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm">Allow job alerts</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Tap Allow in the browser prompt so we can vibrate and notify you when a new job is assigned.
+            Tap below, then Allow in the browser prompt — vibration + notification when admin assigns work.
           </p>
         </div>
         <button type="button" onClick={dismiss} className="p-1 text-muted-foreground hover:text-foreground" aria-label="Dismiss">
           <X size={16} />
         </button>
       </div>
+      <Button
+        className="w-full h-11 font-semibold"
+        onClick={() => void enableAlerts()}
+        disabled={enabling}
+        data-testid="btn-enable-staff-push"
+      >
+        {enabling ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
+        {enabling ? "Enabling…" : "Allow notifications"}
+      </Button>
     </div>
   );
 }

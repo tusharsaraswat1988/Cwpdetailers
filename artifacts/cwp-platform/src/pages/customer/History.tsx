@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Calendar, Star, Image } from "lucide-react";
 import { Link } from "wouter";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { Button } from "@/components/ui/button";
 
 function monthLabel(dateStr: string) {
@@ -61,7 +62,7 @@ export default function CustomerHistory() {
       ) : missingCustomerLink || customerId == null ? (
         <div className="max-w-md mx-auto text-center space-y-2 py-12">
           <p className="font-semibold">Account not linked</p>
-          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+          <NoCustomerProfileMessage />
         </div>
       ) : (
         <div className="space-y-5">

@@ -24,11 +24,11 @@ self.addEventListener("push", (event: PushEvent) => {
   }
 
   const pushData = payload.data ?? {};
-  const title = payload.title ?? "CWP Detailers";
+  const title = payload.title ?? "Notification";
+  const iconUrl = (pushData.icon as string | undefined) ?? undefined;
   const options: NotificationOptions = {
     body: payload.body ?? "",
-    icon: "/pwa/icon-192.png",
-    badge: "/pwa/icon-192.png",
+    ...(iconUrl ? { icon: iconUrl, badge: (pushData.badge as string | undefined) ?? iconUrl } : {}),
     tag: payload.tag ?? "cwp-push",
     data: { url: payload.url ?? "/", ...pushData },
     vibrate: [120, 60, 120, 60, 280],

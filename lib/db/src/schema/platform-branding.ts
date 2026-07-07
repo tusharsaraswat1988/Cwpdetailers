@@ -49,13 +49,15 @@ export type BrandSchemaOrg = {
   };
 };
 
+/** Enterprise Branding Management System — single source of truth for all brand assets */
 export const platformBrandingTable = pgTable("platform_branding", {
   id: serial("id").primaryKey(),
   isActive: boolean("is_active").notNull().default(true),
 
-  companyName: text("company_name").notNull().default("CWP Detailers + Kleansolar"),
-  brandName: text("brand_name").notNull().default("CWP Detailers"),
+  companyName: text("company_name").notNull().default(""),
+  brandName: text("brand_name").notNull().default(""),
   tagline: text("tagline"),
+  shortDescription: text("short_description"),
 
   fullLogoUrl: text("full_logo_url"),
   navbarLogoUrl: text("navbar_logo_url"),
@@ -63,8 +65,13 @@ export const platformBrandingTable = pgTable("platform_branding", {
   lightLogoUrl: text("light_logo_url"),
   darkLogoUrl: text("dark_logo_url"),
   loginLogoUrl: text("login_logo_url"),
+  logoWhiteUrl: text("logo_white_url"),
+  logoTransparentUrl: text("logo_transparent_url"),
+  logoSquareUrl: text("logo_square_url"),
+  logoIconUrl: text("logo_icon_url"),
 
   faviconUrl: text("favicon_url"),
+  faviconIcoUrl: text("favicon_ico_url"),
   pwaIconUrl: text("pwa_icon_url"),
   appleTouchIconUrl: text("apple_touch_icon_url"),
 
@@ -72,12 +79,21 @@ export const platformBrandingTable = pgTable("platform_branding", {
   invoiceLogoUrl: text("invoice_logo_url"),
   pdfLogoUrl: text("pdf_logo_url"),
 
+  splashLogoUrl: text("splash_logo_url"),
+  loaderAnimationUrl: text("loader_animation_url"),
+  loaderBackgroundColor: text("loader_background_color"),
+  loaderText: text("loader_text").default("Loading…"),
+
   ogImageUrl: text("og_image_url"),
+  twitterImageUrl: text("twitter_image_url"),
+  seoKeywords: text("seo_keywords"),
+  seoAuthor: text("seo_author"),
 
   primaryColor: text("primary_color").notNull().default("#00cccc"),
   secondaryColor: text("secondary_color").notNull().default("#212529"),
   accentColor: text("accent_color").notNull().default("#e0ffff"),
   backgroundColor: text("background_color").notNull().default("#ffffff"),
+  textColor: text("text_color").default("#212529"),
 
   website: text("website"),
   supportEmail: text("support_email"),
@@ -113,3 +129,5 @@ export const insertPlatformBrandingSchema = createInsertSchema(platformBrandingT
 
 export type InsertPlatformBranding = z.infer<typeof insertPlatformBrandingSchema>;
 export type PlatformBranding = typeof platformBrandingTable.$inferSelect;
+/** Alias for enterprise BMS — maps to platform_branding table */
+export type BrandingSettings = PlatformBranding;

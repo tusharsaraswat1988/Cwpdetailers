@@ -30,19 +30,35 @@ type AssetField = {
 };
 
 const LOGO_FIELDS: AssetField[] = [
-  { slot: "full_logo", label: "Full Logo (Horizontal)", field: "fullLogoUrl", hint: "SVG or PNG recommended. Auto-generates favicons & PWA icons.", autoGenerate: true },
+  { slot: "light_logo", label: "Light Logo", field: "lightLogoUrl" },
+  { slot: "dark_logo", label: "Dark Logo", field: "darkLogoUrl" },
+  { slot: "white_logo", label: "White Logo", field: "logoWhiteUrl" },
+  { slot: "transparent_logo", label: "Transparent Logo", field: "logoTransparentUrl" },
+  { slot: "square_logo", label: "Square Logo", field: "logoSquareUrl" },
+  { slot: "logo_icon", label: "Logo Icon", field: "logoIconUrl" },
+  { slot: "full_logo", label: "Full Logo (Horizontal)", field: "fullLogoUrl", hint: "Primary logo — auto-generates favicons & PWA icons.", autoGenerate: true },
   { slot: "navbar_logo", label: "Navbar Logo", field: "navbarLogoUrl" },
-  { slot: "mobile_logo", label: "Mobile Logo", field: "mobileLogoUrl" },
-  { slot: "login_logo", label: "Login Screen Logo", field: "loginLogoUrl" },
-  { slot: "light_logo", label: "Light Mode Logo", field: "lightLogoUrl" },
-  { slot: "dark_logo", label: "Dark Mode Logo", field: "darkLogoUrl" },
-  { slot: "favicon", label: "Favicon", field: "faviconUrl" },
-  { slot: "pwa_icon", label: "PWA App Icon", field: "pwaIconUrl", autoGenerate: true },
-  { slot: "apple_touch_icon", label: "Apple Touch Icon", field: "appleTouchIconUrl" },
-  { slot: "email_logo", label: "Email Header Logo", field: "emailLogoUrl" },
+  { slot: "splash_logo", label: "Splash Logo", field: "splashLogoUrl" },
+  { slot: "email_logo", label: "Email Logo", field: "emailLogoUrl" },
   { slot: "invoice_logo", label: "Invoice Logo", field: "invoiceLogoUrl" },
   { slot: "pdf_logo", label: "PDF Report Logo", field: "pdfLogoUrl" },
-  { slot: "og_image", label: "Open Graph Image", field: "ogImageUrl" },
+  { slot: "login_logo", label: "Login Screen Logo", field: "loginLogoUrl" },
+];
+
+const FAVICON_FIELDS: AssetField[] = [
+  { slot: "favicon_ico", label: "favicon.ico", field: "faviconIcoUrl" },
+  { slot: "favicon", label: "Favicon (32×32)", field: "faviconUrl" },
+  { slot: "apple_touch_icon", label: "Apple Touch Icon", field: "appleTouchIconUrl" },
+  { slot: "pwa_icon", label: "Android 192 / PWA Icon", field: "pwaIconUrl", autoGenerate: true },
+];
+
+const SEO_FIELDS: AssetField[] = [
+  { slot: "og_image", label: "Default Open Graph Image", field: "ogImageUrl" },
+  { slot: "twitter_image", label: "Default Twitter Image", field: "twitterImageUrl" },
+];
+
+const LOADER_FIELDS: AssetField[] = [
+  { slot: "loader_animation", label: "Loader Animation", field: "loaderAnimationUrl", hint: "GIF, SVG, or PNG animation shown during loading states." },
 ];
 
 function AssetUploader({
@@ -59,9 +75,9 @@ function AssetUploader({
   const requestUpload = useRequestUploadUrl();
 
   const handleFile = async (file: File) => {
-    const allowed = ["image/png", "image/webp", "image/svg+xml"];
-    if (!allowed.includes(file.type)) {
-      toast({ title: "Invalid file type", description: "Only SVG, PNG, and WebP are allowed.", variant: "destructive" });
+    const allowed = ["image/png", "image/webp", "image/svg+xml", "image/gif", "image/x-icon", "image/vnd.microsoft.icon"];
+    if (!allowed.includes(file.type) && !file.name.endsWith(".ico")) {
+      toast({ title: "Invalid file type", description: "Only SVG, PNG, WebP, GIF, and ICO are allowed.", variant: "destructive" });
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -77,7 +93,7 @@ function AssetUploader({
       }
 
       const presign = await requestUpload.mutateAsync({
-        data: { name: file.name, size: file.size, contentType: file.type },
+        data: { name: file.name, size: file.size, contentType: file.type || "image/png" },
       });
 
       const url = await uploadFileToCloudinary(file, presign as Parameters<typeof uploadFileToCloudinary>[1]);
@@ -85,7 +101,7 @@ function AssetUploader({
       await uploadBrandingAsset({
         url,
         slot,
-        contentType: file.type,
+        contentType: file.type || "image/png",
         size: file.size,
         svgContent,
         regenerateDerivatives: autoGenerate,
@@ -125,7 +141,7 @@ function AssetUploader({
         <input
           ref={inputRef}
           type="file"
-          accept="image/png,image/webp,image/svg+xml"
+          accept="image/png,image/webp,image/svg+xml,image/gif,.ico"
           className="hidden"
           onChange={e => {
             const f = e.target.files?.[0];
@@ -163,7 +179,7 @@ export default function BrandIdentity() {
   const saveMutation = useMutation({
     mutationFn: () => updateBranding(form),
     onSuccess: () => {
-      toast({ title: "Saved", description: "Brand identity updated platform-wide." });
+      toast({ title: "Saved", description: "Branding settings updated platform-wide." });
       setForm({});
       invalidate();
     },
@@ -192,14 +208,16 @@ export default function BrandIdentity() {
     );
   }
 
+  const rowData = row as Record<string, string | null>;
+
   return (
     <AdminLayout>
       <div className="p-6 space-y-6 max-w-5xl">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="font-display text-2xl font-bold">Brand Identity</h1>
+            <h1 className="font-display text-2xl font-bold">Branding</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Manage logos, colors, and company info — changes propagate across all portals instantly.
+              Single source of truth for logos, colors, SEO, and loaders — changes propagate across all portals instantly.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -221,34 +239,52 @@ export default function BrandIdentity() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Live Preview</CardTitle>
-            <CardDescription>How branding appears in the admin sidebar</CardDescription>
+            <CardDescription>Theme colors and logo as they appear across the platform</CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center gap-3 bg-secondary rounded-lg p-4 w-fit">
-            <BrandLogo variant="navbar" lazy={false} />
-            <div>
-              <p className="text-white font-display font-bold text-sm">{merged.brandName ?? "Brand"}</p>
-              <p className="text-white/40 text-xs">{merged.tagline ?? "Tagline"}</p>
+          <CardContent className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div
+              className="flex items-center gap-3 rounded-lg p-4 w-fit"
+              style={{ backgroundColor: merged.secondaryColor ?? "#212529" }}
+            >
+              <BrandLogo variant="navbar" lazy={false} />
+              <div>
+                <p className="text-white font-display font-bold text-sm">{merged.brandName ?? "Brand"}</p>
+                <p className="text-white/40 text-xs">{merged.tagline ?? "Tagline"}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {(["primaryColor", "secondaryColor", "accentColor", "backgroundColor"] as const).map(key => (
+                <div key={key} className="text-center">
+                  <div
+                    className="w-10 h-10 rounded-md border"
+                    style={{ backgroundColor: merged[key] ?? "#ccc" }}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">{key.replace("Color", "")}</p>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="company">
+        <Tabs defaultValue="identity">
           <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="company">Company</TabsTrigger>
-            <TabsTrigger value="assets">Logos & Assets</TabsTrigger>
-            <TabsTrigger value="colors">Colors</TabsTrigger>
-            <TabsTrigger value="seo">SEO & Social</TabsTrigger>
+            <TabsTrigger value="identity">Identity</TabsTrigger>
+            <TabsTrigger value="logos">Logos</TabsTrigger>
+            <TabsTrigger value="favicons">Favicons</TabsTrigger>
+            <TabsTrigger value="seo">SEO</TabsTrigger>
+            <TabsTrigger value="theme">Theme</TabsTrigger>
+            <TabsTrigger value="loader">Loader</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="company" className="space-y-4 mt-4">
+          <TabsContent value="identity" className="space-y-4 mt-4">
             <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <Label>Company Name</Label>
-                <Input className="mt-1.5" defaultValue={merged.companyName ?? ""} onChange={e => set("companyName", e.target.value)} />
-              </div>
               <div>
                 <Label>Brand Name</Label>
                 <Input className="mt-1.5" defaultValue={merged.brandName ?? ""} onChange={e => set("brandName", e.target.value)} />
+              </div>
+              <div>
+                <Label>Company Name</Label>
+                <Input className="mt-1.5" defaultValue={merged.companyName ?? ""} onChange={e => set("companyName", e.target.value)} />
               </div>
               <div className="sm:col-span-2">
                 <Label>Tagline</Label>
@@ -266,64 +302,81 @@ export default function BrandIdentity() {
                 <Label>Support Phone</Label>
                 <Input className="mt-1.5" defaultValue={merged.supportPhone ?? ""} onChange={e => set("supportPhone", e.target.value)} />
               </div>
-              <div>
-                <Label>GST Number</Label>
-                <Input className="mt-1.5" defaultValue={merged.gstNumber ?? ""} onChange={e => set("gstNumber", e.target.value)} />
-              </div>
               <div className="sm:col-span-2">
-                <Label>Business Address</Label>
-                <Textarea className="mt-1.5" rows={2} defaultValue={merged.address ?? ""} onChange={e => set("address", e.target.value)} />
+                <Label>Short Description</Label>
+                <Textarea className="mt-1.5" rows={2} defaultValue={merged.shortDescription ?? ""} onChange={e => set("shortDescription", e.target.value)} />
               </div>
             </div>
           </TabsContent>
 
-          <TabsContent value="assets" className="space-y-3 mt-4">
+          <TabsContent value="logos" className="space-y-3 mt-4">
             <p className="text-sm text-muted-foreground">
-              Upload a high-quality horizontal logo first — favicons, PWA icons, and OG images are generated automatically.
+              Upload logos for each context. The full horizontal logo auto-generates favicons and PWA icons.
             </p>
             <div className="grid md:grid-cols-2 gap-3">
               {LOGO_FIELDS.map(field => (
                 <AssetUploader
                   key={field.slot}
                   {...field}
-                  currentUrl={(row as Record<string, string | null>)?.[field.field]}
+                  currentUrl={rowData?.[field.field]}
                   onUploaded={invalidate}
                 />
               ))}
             </div>
           </TabsContent>
 
-          <TabsContent value="colors" className="space-y-4 mt-4">
-            <div className="grid sm:grid-cols-2 gap-4">
-              {([
-                ["primaryColor", "Primary Color", "--brand-primary"],
-                ["secondaryColor", "Secondary Color", "--brand-secondary"],
-                ["accentColor", "Accent Color", "--brand-accent"],
-                ["backgroundColor", "Background Color", "--brand-background"],
-              ] as const).map(([key, label, cssVar]) => (
-                <div key={key}>
-                  <Label>{label}</Label>
-                  <div className="flex gap-2 mt-1.5">
-                    <Input type="color" className="w-14 h-10 p-1" defaultValue={merged[key] ?? "#00cccc"} onChange={e => set(key, e.target.value)} />
-                    <Input defaultValue={merged[key] ?? ""} onChange={e => set(key, e.target.value)} placeholder={cssVar} />
-                  </div>
-                </div>
+          <TabsContent value="favicons" className="space-y-3 mt-4">
+            <p className="text-sm text-muted-foreground">
+              Favicon sizes 16×16, 32×32, and 48×48 are auto-generated from the full logo. Upload overrides here if needed.
+            </p>
+            <div className="grid md:grid-cols-2 gap-3">
+              {FAVICON_FIELDS.map(field => (
+                <AssetUploader
+                  key={field.slot}
+                  {...field}
+                  currentUrl={rowData?.[field.field]}
+                  onUploaded={invalidate}
+                />
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Colors map to CSS variables (<code>--brand-primary</code>, etc.) and update the entire platform theme.
-            </p>
+            {Boolean((row as Record<string, unknown>)?.generatedAssets) && (
+              <Card className="mt-4">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Auto-Generated Derivatives</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-3">
+                  {Object.entries(((row as Record<string, unknown>).generatedAssets as Record<string, string>) ?? {}).map(([key, url]) => (
+                    url ? (
+                      <div key={key} className="text-center">
+                        <img src={url} alt={key} className="h-8 w-8 object-contain border rounded" loading="lazy" />
+                        <p className="text-[10px] text-muted-foreground mt-1">{key}</p>
+                      </div>
+                    ) : null
+                  ))}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="seo" className="space-y-4 mt-4">
             <div className="grid gap-4">
               <div>
-                <Label>Meta Title Template</Label>
-                <Input className="mt-1.5" placeholder="{brand} | {tagline}" defaultValue={merged.metaTitleTemplate ?? ""} onChange={e => set("metaTitleTemplate", e.target.value)} />
+                <Label>Site Description</Label>
+                <Textarea className="mt-1.5" rows={2} defaultValue={merged.metaDescriptionTemplate ?? ""} onChange={e => set("metaDescriptionTemplate", e.target.value)} />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <Label>Keywords</Label>
+                  <Input className="mt-1.5" defaultValue={merged.seoKeywords ?? ""} onChange={e => set("seoKeywords", e.target.value)} placeholder="car detailing, wash, solar cleaning" />
+                </div>
+                <div>
+                  <Label>Author</Label>
+                  <Input className="mt-1.5" defaultValue={merged.seoAuthor ?? ""} onChange={e => set("seoAuthor", e.target.value)} />
+                </div>
               </div>
               <div>
-                <Label>Meta Description Template</Label>
-                <Textarea className="mt-1.5" rows={2} defaultValue={merged.metaDescriptionTemplate ?? ""} onChange={e => set("metaDescriptionTemplate", e.target.value)} />
+                <Label>Meta Title Template</Label>
+                <Input className="mt-1.5" placeholder="{brand} | {tagline}" defaultValue={merged.metaTitleTemplate ?? ""} onChange={e => set("metaTitleTemplate", e.target.value)} />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
@@ -339,6 +392,81 @@ export default function BrandIdentity() {
                 <Label>OpenGraph Description</Label>
                 <Textarea className="mt-1.5" rows={2} defaultValue={merged.ogDescription ?? ""} onChange={e => set("ogDescription", e.target.value)} />
               </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              {SEO_FIELDS.map(field => (
+                <AssetUploader
+                  key={field.slot}
+                  {...field}
+                  currentUrl={rowData?.[field.field]}
+                  onUploaded={invalidate}
+                />
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="theme" className="space-y-4 mt-4">
+            <div className="grid sm:grid-cols-2 gap-4">
+              {([
+                ["primaryColor", "Primary"],
+                ["secondaryColor", "Secondary"],
+                ["accentColor", "Accent"],
+                ["backgroundColor", "Background"],
+                ["textColor", "Text"],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <Label>{label}</Label>
+                  <div className="flex gap-2 mt-1.5">
+                    <Input type="color" className="w-14 h-10 p-1" defaultValue={merged[key] ?? "#00cccc"} onChange={e => set(key, e.target.value)} />
+                    <Input defaultValue={merged[key] ?? ""} onChange={e => set(key, e.target.value)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Card>
+              <CardContent className="p-4 mt-2">
+                <p className="text-sm font-medium mb-3">Live Theme Preview</p>
+                <div className="flex flex-wrap gap-3">
+                  <button type="button" className="px-4 py-2 rounded-md text-white text-sm font-medium" style={{ backgroundColor: merged.primaryColor ?? "#00cccc" }}>
+                    Primary Button
+                  </button>
+                  <button type="button" className="px-4 py-2 rounded-md text-sm font-medium border" style={{ color: merged.primaryColor ?? "#00cccc", borderColor: merged.primaryColor ?? "#00cccc" }}>
+                    Outline Button
+                  </button>
+                  <a href="#" className="text-sm underline" style={{ color: merged.primaryColor ?? "#00cccc" }} onClick={e => e.preventDefault()}>
+                    Link Text
+                  </a>
+                  <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: merged.accentColor ?? "#e0ffff" }}>
+                    <div className="h-full w-2/3 rounded-full" style={{ backgroundColor: merged.primaryColor ?? "#00cccc" }} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="loader" className="space-y-4 mt-4">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <Label>Loading Text</Label>
+                <Input className="mt-1.5" defaultValue={merged.loaderText ?? "Loading…"} onChange={e => set("loaderText", e.target.value)} />
+              </div>
+              <div>
+                <Label>Loader Background Color</Label>
+                <div className="flex gap-2 mt-1.5">
+                  <Input type="color" className="w-14 h-10 p-1" defaultValue={merged.loaderBackgroundColor ?? merged.backgroundColor ?? "#ffffff"} onChange={e => set("loaderBackgroundColor", e.target.value)} />
+                  <Input defaultValue={merged.loaderBackgroundColor ?? ""} onChange={e => set("loaderBackgroundColor", e.target.value)} />
+                </div>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              {LOADER_FIELDS.map(field => (
+                <AssetUploader
+                  key={field.slot}
+                  {...field}
+                  currentUrl={rowData?.[field.field]}
+                  onUploaded={invalidate}
+                />
+              ))}
             </div>
           </TabsContent>
         </Tabs>

@@ -21,6 +21,7 @@ export interface AuthUser {
   franchiseeId?: number | null;
   staffId?: number | null;
   customerId?: number | null;
+  hasUserPassword?: boolean;
 }
 
 export type PermissionTuple = { resource: string; action: string };
@@ -80,6 +81,7 @@ function normalizeAuthUser(raw: unknown): AuthUser | null {
     franchiseeId: typeof u.franchiseeId === "number" ? u.franchiseeId : u.franchiseeId ?? null,
     staffId: typeof u.staffId === "number" ? u.staffId : u.staffId ?? null,
     customerId: typeof u.customerId === "number" ? u.customerId : u.customerId ?? null,
+    hasUserPassword: u.hasUserPassword === true,
   };
 }
 

@@ -10,6 +10,7 @@ import {
   seoSettingsTable,
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { getPublicBranding } from "../lib/brandIdentityService";
 
 /** Safely extract a scalar string from Express route params (Express 5 types are string | string[]) */
 function param(p: string | string[]): string {
@@ -408,20 +409,21 @@ router.put(
     }
 
     try {
+      const branding = await getPublicBranding();
       // Ensure singleton row exists (migration seeds it, this is a safety net)
       await db
         .insert(businessInfoTable)
         .values({
           id: 1,
-          businessName: "CWP Detailers And Motors",
-          ownerName: "Tushar Saraswat",
+          businessName: branding.companyName || branding.brandName,
+          ownerName: "",
           businessType: "Proprietorship",
-          supportEmail: "cwpdetailers@gmail.com",
-          supportPhone: "+91-7054007733",
-          addressLine1: "Seer Goverdhanpur, Behind BHU",
-          city: "Varanasi",
-          state: "Uttar Pradesh",
-          pinCode: "221005",
+          supportEmail: branding.supportEmail ?? "",
+          supportPhone: branding.supportPhone ?? "",
+          addressLine1: branding.address ?? "",
+          city: "",
+          state: "",
+          pinCode: "",
           country: "India",
         })
         .onConflictDoNothing();
@@ -586,11 +588,12 @@ router.put(
     }
 
     try {
+      const branding = await getPublicBranding();
       await db.insert(seoSettingsTable).values({
         id: 1,
-        siteTitle: "CWP Detailers And Motors — Professional Car Detailing in Varanasi",
-        siteDescription: "Professional car wash, vehicle detailing, ceramic coating, PPF, and solar panel cleaning services in Varanasi, UP.",
-        canonicalDomain: "https://cwpdetailers.in",
+        siteTitle: branding.metaTitle,
+        siteDescription: branding.metaDescription,
+        canonicalDomain: branding.website ?? "",
       }).onConflictDoNothing();
 
       const [updated] = await db
@@ -699,14 +702,15 @@ router.get("/schema/local-business", async (req: Request, res: Response) => {
   try {
     const [info] = await db.select().from(businessInfoTable).where(eq(businessInfoTable.id, 1)).limit(1);
     const [seo] = await db.select().from(seoSettingsTable).where(eq(seoSettingsTable.id, 1)).limit(1);
+    const branding = await getPublicBranding();
 
-    const domain = seo?.canonicalDomain ?? "https://cwpdetailers.in";
+    const domain = seo?.canonicalDomain ?? branding.website ?? "";
 
     const schema = {
       "@context": "https://schema.org",
       "@type": ["LocalBusiness", "AutoBodyShop"],
-      name: info?.businessName ?? "CWP Detailers And Motors",
-      description: seo?.siteDescription ?? "Professional vehicle detailing and solar panel cleaning in Varanasi",
+      name: info?.businessName ?? branding.companyName ?? branding.brandName,
+      description: seo?.siteDescription ?? branding.metaDescription,
       url: domain,
       telephone: info?.supportPhone ?? "+91-7054007733",
       email: info?.supportEmail ?? "cwpdetailers@gmail.com",
@@ -767,14 +771,16 @@ router.get("/schema/organization", async (req: Request, res: Response) => {
   try {
     const [info] = await db.select().from(businessInfoTable).where(eq(businessInfoTable.id, 1)).limit(1);
     const [seo] = await db.select().from(seoSettingsTable).where(eq(seoSettingsTable.id, 1)).limit(1);
+    const branding = await getPublicBranding();
 
-    const domain = seo?.canonicalDomain ?? "https://cwpdetailers.in";
+    const domain = seo?.canonicalDomain ?? branding.website ?? "";
 
     const schema = {
       "@context": "https://schema.org",
       "@type": "Organization",
-      name: info?.businessName ?? "CWP Detailers And Motors",
+      name: info?.businessName ?? branding.companyName ?? branding.brandName,
       url: domain,
+      logo: branding.fullLogo ?? undefined,
       contactPoint: {
         "@type": "ContactPoint",
         telephone: info?.supportPhone ?? "+91-7054007733",

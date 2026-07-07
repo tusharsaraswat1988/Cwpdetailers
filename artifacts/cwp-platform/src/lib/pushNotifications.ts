@@ -40,27 +40,63 @@ export async function getPushStatus(): Promise<PushStatus | null> {
   return res.json() as Promise<PushStatus>;
 }
 
-/** Subscribe staff to push alerts when supported and not already registered. Safe to call repeatedly. */
+async function clearBrowserPushSubscription(): Promise<void> {
+  const registration = await navigator.serviceWorker.ready;
+  const existing = await registration.pushManager.getSubscription();
+  if (!existing) return;
+
+  await fetch("/api/push/unregister", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: existing.endpoint }),
+  }).catch(() => undefined);
+
+  await existing.unsubscribe();
+}
+
+/**
+ * Subscribe staff to push when browser permission is already granted.
+ * Does not show the permission prompt — use subscribeToPush() after a user tap.
+ */
 export async function autoSubscribeStaffPushIfNeeded(): Promise<{ ok: boolean; error?: string }> {
   if (!isPushSupported()) return { ok: false, error: "unsupported" };
   if (getBrowserNotificationPermission() === "denied") return { ok: false, error: "denied" };
+  if (getBrowserNotificationPermission() !== "granted") {
+    return { ok: false, error: "permission not granted" };
+  }
 
   const status = await getPushStatus();
   if (!status?.pushConfigured) return { ok: false, error: "not configured" };
   if (status.subscribed) return { ok: true };
 
-  const result = await subscribeToPush();
+  const result = await subscribeToPush({ skipPermissionRequest: true });
   return result.ok ? { ok: true } : { ok: false, error: result.error };
 }
 
-export async function subscribeToPush(): Promise<{ ok: true } | { ok: false; error: string }> {
+type SubscribeOptions = {
+  /** When true, only subscribe if Notification.permission is already granted. */
+  skipPermissionRequest?: boolean;
+  /** Force a fresh browser subscription (fixes VAPID key rotation). */
+  forceResync?: boolean;
+};
+
+export async function subscribeToPush(
+  options: SubscribeOptions = {},
+): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isPushSupported()) {
     return { ok: false, error: "Push notifications are not supported in this browser" };
   }
 
-  const permission = await Notification.requestPermission();
+  const permission = getBrowserNotificationPermission();
   if (permission !== "granted") {
-    return { ok: false, error: "Notification permission denied" };
+    if (options.skipPermissionRequest) {
+      return { ok: false, error: "Notification permission not granted yet" };
+    }
+    const requested = await Notification.requestPermission();
+    if (requested !== "granted") {
+      return { ok: false, error: "Notification permission denied" };
+    }
   }
 
   const publicKey = await fetchVapidPublicKey();
@@ -69,14 +105,12 @@ export async function subscribeToPush(): Promise<{ ok: true } | { ok: false; err
   }
 
   const registration = await navigator.serviceWorker.ready;
-  let subscription = await registration.pushManager.getSubscription();
+  await clearBrowserPushSubscription();
 
-  if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey),
-    });
-  }
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
 
   const json = subscription.toJSON();
   const res = await fetch("/api/push/register", {
@@ -99,17 +133,11 @@ export async function subscribeToPush(): Promise<{ ok: true } | { ok: false; err
   return { ok: true };
 }
 
+export async function resyncPushSubscription(): Promise<{ ok: true } | { ok: false; error: string }> {
+  await clearBrowserPushSubscription();
+  return subscribeToPush({ forceResync: true });
+}
+
 export async function unsubscribeFromPush(): Promise<void> {
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription();
-  if (!subscription) return;
-
-  await fetch("/api/push/unregister", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ endpoint: subscription.endpoint }),
-  });
-
-  await subscription.unsubscribe();
+  await clearBrowserPushSubscription();
 }

@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { History, FileText, Car, AlertCircle, ChevronRight, Loader2, Save } from "lucide-react";
+import { History, FileText, Car, AlertCircle, ChevronRight, Loader2, Save, KeyRound } from "lucide-react";
 import { Link } from "wouter";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 import { CustomerPhotoEditor } from "@/components/shared/CustomerPhotoEditor";
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
+import { SetPasswordDialog } from "@/components/auth/SetPasswordDialog";
+import { useBranding } from "@/lib/branding";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { submitMobile } from "@/lib/contactForm";
 import { useToast } from "@/hooks/use-toast";
@@ -38,6 +40,7 @@ type CustomerProfile = {
 };
 
 export default function CustomerAccount() {
+  const branding = useBranding();
   const { user, token, login } = useAuth();
   const { toast } = useToast();
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -45,6 +48,7 @@ export default function CustomerAccount() {
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
 
   const loadProfile = useCallback(async () => {
     const res = await fetch("/api/customers/me", { credentials: "include" });
@@ -210,12 +214,39 @@ export default function CustomerAccount() {
           </CardContent>
         </Card>
 
+        <Card data-testid="account-password-card">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                <KeyRound size={16} className="text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm">Sign-in password</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {user?.hasUserPassword
+                    ? "You can sign in with your phone number and password, or continue with Google."
+                    : "Set a password to sign in with your phone number without Google."}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => setShowPasswordDialog(true)}
+              data-testid="btn-manage-account-password"
+            >
+              {user?.hasUserPassword ? "Change password" : "Set password"}
+            </Button>
+          </CardContent>
+        </Card>
+
         <SupervisorContactCard
           supervisor={supervisorData?.supervisor}
           compact
           title="Field Supervisor"
           description="Contact your assigned supervisor for service issues."
-          whatsAppMessage="Hi, I need help regarding my CWP service."
+          whatsAppMessage={`Hi, I need help regarding my ${branding.brandName} service.`}
         />
 
         {(profile?.totalDues && parseFloat(profile.totalDues) > 0) && (
@@ -251,6 +282,18 @@ export default function CustomerAccount() {
           ))}
         </div>
       </div>
+
+      <SetPasswordDialog
+        open={showPasswordDialog}
+        onOpenChange={setShowPasswordDialog}
+        hasExistingPassword={Boolean(user?.hasUserPassword)}
+        onSuccess={updatedUser => {
+          if (user) {
+            login({ ...user, hasUserPassword: updatedUser.hasUserPassword ?? true }, token ?? "");
+          }
+          setShowPasswordDialog(false);
+        }}
+      />
     </CustomerLayout>
   );
 }

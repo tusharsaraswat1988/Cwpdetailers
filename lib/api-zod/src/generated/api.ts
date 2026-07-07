@@ -22,6 +22,7 @@ export const LoginBody = zod.object({
   email: zod.string().optional(),
   password: zod.string(),
   role: zod.enum(["customer", "staff", "admin"]).optional(),
+  portal: zod.enum(["admin", "staff", "customer", "franchisee"]).optional(),
 });
 
 export const LoginResponse = zod.object({
@@ -45,6 +46,10 @@ export const LoginResponse = zod.object({
     staffId: zod.number().optional(),
     customerId: zod.number().optional(),
     isActive: zod.boolean().optional(),
+    hasUserPassword: zod
+      .boolean()
+      .optional()
+      .describe("True when the user can sign in with phone and password"),
     createdAt: zod.coerce.date().optional(),
   }),
 });
@@ -84,6 +89,10 @@ export const GetMeResponse = zod.object({
   staffId: zod.number().optional(),
   customerId: zod.number().optional(),
   isActive: zod.boolean().optional(),
+  hasUserPassword: zod
+    .boolean()
+    .optional()
+    .describe("True when the user can sign in with phone and password"),
   createdAt: zod.coerce.date().optional(),
 });
 
@@ -124,6 +133,10 @@ export const GoogleAuthResponse = zod.object({
     staffId: zod.number().optional(),
     customerId: zod.number().optional(),
     isActive: zod.boolean().optional(),
+    hasUserPassword: zod
+      .boolean()
+      .optional()
+      .describe("True when the user can sign in with phone and password"),
     createdAt: zod.coerce.date().optional(),
   }),
 });
@@ -134,6 +147,10 @@ export const GoogleAuthResponse = zod.object({
 export const GoogleAuthCompleteBody = zod.object({
   linkToken: zod.string(),
   phone: zod.string(),
+  password: zod
+    .string()
+    .optional()
+    .describe("Optional password to enable phone sign-in"),
 });
 
 /**
@@ -168,6 +185,116 @@ export const ResetPasswordBody = zod.object({
 export const ResetPasswordResponse = zod.object({
   ok: zod.boolean().optional(),
   message: zod.string().optional(),
+});
+
+/**
+ * @summary Set or change password for the logged-in user
+ */
+export const SetPasswordBody = zod.object({
+  newPassword: zod.string(),
+  currentPassword: zod
+    .string()
+    .optional()
+    .describe("Required when changing an existing password"),
+});
+
+export const SetPasswordResponse = zod.object({
+  ok: zod.boolean().optional(),
+  message: zod.string().optional(),
+  user: zod
+    .object({
+      id: zod.number(),
+      name: zod.string(),
+      phone: zod.string(),
+      email: zod.string().optional(),
+      role: zod.enum([
+        "customer",
+        "staff",
+        "admin",
+        "superadmin",
+        "franchisee",
+        "manager",
+      ]),
+      branchId: zod.number().optional(),
+      companyId: zod.number().optional(),
+      franchiseeId: zod.number().optional(),
+      staffId: zod.number().optional(),
+      customerId: zod.number().optional(),
+      isActive: zod.boolean().optional(),
+      hasUserPassword: zod
+        .boolean()
+        .optional()
+        .describe("True when the user can sign in with phone and password"),
+      createdAt: zod.coerce.date().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary SMS OTP availability for customer auth
+ */
+export const GetOtpAuthConfigResponse = zod.object({
+  enabled: zod.boolean().optional(),
+  senderId: zod.string().optional(),
+});
+
+/**
+ * @summary Send SMS OTP for customer login or signup
+ */
+export const SendAuthOtpBody = zod.object({
+  phone: zod.string(),
+  purpose: zod.enum(["login", "signup"]),
+  name: zod.string().optional().describe("Required when purpose is signup"),
+});
+
+export const SendAuthOtpResponse = zod.object({
+  ok: zod.boolean().optional(),
+  message: zod.string().optional(),
+  sentSms: zod.boolean().optional(),
+  maskedPhone: zod.string().optional(),
+});
+
+/**
+ * @summary Verify SMS OTP and complete login or signup
+ */
+export const VerifyAuthOtpBody = zod.object({
+  phone: zod.string(),
+  code: zod.string(),
+  purpose: zod.enum(["login", "signup"]),
+  name: zod.string().optional(),
+  password: zod.string().optional(),
+  email: zod.string().optional(),
+  city: zod.string().optional(),
+  branchId: zod.number().optional(),
+});
+
+export const VerifyAuthOtpResponse = zod.object({
+  token: zod.string(),
+  user: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    phone: zod.string(),
+    email: zod.string().optional(),
+    role: zod.enum([
+      "customer",
+      "staff",
+      "admin",
+      "superadmin",
+      "franchisee",
+      "manager",
+    ]),
+    branchId: zod.number().optional(),
+    companyId: zod.number().optional(),
+    franchiseeId: zod.number().optional(),
+    staffId: zod.number().optional(),
+    customerId: zod.number().optional(),
+    isActive: zod.boolean().optional(),
+    hasUserPassword: zod
+      .boolean()
+      .optional()
+      .describe("True when the user can sign in with phone and password"),
+    createdAt: zod.coerce.date().optional(),
+  }),
 });
 
 /**
@@ -1736,76 +1863,6 @@ export const AddProofResponse = zod.object({
   afterPhotoUrl: zod.string().optional(),
   technicianNotes: zod.string().optional(),
   rating: zod.number().min(1).max(addProofResponseRatingMax).optional(),
-  amount: zod.number().optional(),
-  recurrenceRule: zod.string().optional(),
-  parentBookingId: zod.number().optional(),
-  createdAt: zod.coerce.date().optional(),
-});
-
-/**
- * @summary Assign or reassign staff
- */
-export const AssignBookingParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const AssignBookingBody = zod.object({
-  staffId: zod.number(),
-  reason: zod.string().optional(),
-});
-
-export const assignBookingResponseRatingMax = 5;
-
-export const AssignBookingResponse = zod.object({
-  id: zod.number(),
-  customerId: zod.number(),
-  customerName: zod.string().optional(),
-  customerPhone: zod.string().optional(),
-  vehicleId: zod.number().optional(),
-  vehicleInfo: zod.string().optional(),
-  solarSiteId: zod.number().optional(),
-  subscriptionId: zod.number().optional(),
-  serviceId: zod.number().optional(),
-  serviceName: zod.string().optional(),
-  staffId: zod.number().optional(),
-  staffName: zod.string().optional(),
-  branchId: zod.number().optional(),
-  scheduledDate: zod.coerce.date(),
-  scheduledTime: zod.string().optional(),
-  status: zod.enum([
-    "pending",
-    "confirmed",
-    "scheduled",
-    "en_route",
-    "in_progress",
-    "completed",
-    "cancelled",
-    "rescheduled",
-  ]),
-  serviceType: zod.enum([
-    "car_wash",
-    "detailing",
-    "solar_cleaning",
-    "one_time_wash",
-    "daily_cleaning",
-    "subscription_wash",
-    "pickup_drop",
-    "emergency",
-  ]),
-  address: zod.string().optional(),
-  area: zod.string().optional(),
-  locationLat: zod.number().optional(),
-  locationLng: zod.number().optional(),
-  notes: zod.string().optional(),
-  startedAt: zod.coerce.date().optional(),
-  completedAt: zod.coerce.date().optional(),
-  cancellationReason: zod.string().optional(),
-  proofPhotoUrls: zod.array(zod.string()).optional(),
-  customerSignatureUrl: zod.string().optional(),
-  beforePhotoUrl: zod.string().optional(),
-  afterPhotoUrl: zod.string().optional(),
-  technicianNotes: zod.string().optional(),
-  rating: zod.number().min(1).max(assignBookingResponseRatingMax).optional(),
   amount: zod.number().optional(),
   recurrenceRule: zod.string().optional(),
   parentBookingId: zod.number().optional(),

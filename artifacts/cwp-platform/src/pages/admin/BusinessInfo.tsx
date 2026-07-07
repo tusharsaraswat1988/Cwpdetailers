@@ -4,6 +4,7 @@ import {
   Building2, Mail, Phone, MapPin, Globe, Users, Save, Info,
 } from "lucide-react";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { useBranding } from "@/lib/branding";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,6 +79,7 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
 }
 
 export default function BusinessInfoPage() {
+  const branding = useBranding();
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -231,7 +233,7 @@ export default function BusinessInfoPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="businessName" className="text-xs text-muted-foreground mb-1">Business Name *</Label>
-              <Input {...f("businessName")} placeholder="CWP Detailers And Motors" />
+              <Input {...f("businessName")} placeholder={branding.companyName || branding.brandName || "Business name"} />
             </div>
             <div>
               <Label htmlFor="ownerName" className="text-xs text-muted-foreground mb-1">Owner Name *</Label>

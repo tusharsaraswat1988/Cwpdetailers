@@ -16,15 +16,15 @@ async function brandingFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function fetchPublicBranding(): Promise<PublicBranding> {
-  return brandingFetch<PublicBranding>("/branding/public");
+  return brandingFetch<PublicBranding>("/branding");
 }
 
 export function fetchAdminBranding(): Promise<Record<string, unknown>> {
-  return brandingFetch("/branding");
+  return brandingFetch("/branding/admin");
 }
 
 export function updateBranding(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  return brandingFetch("/branding", { method: "PUT", body: JSON.stringify(data) });
+  return brandingFetch("/admin/branding", { method: "PUT", body: JSON.stringify(data) });
 }
 
 export function uploadBrandingAsset(payload: {

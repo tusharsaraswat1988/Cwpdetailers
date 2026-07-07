@@ -4,6 +4,9 @@ export const GPS_OPTIONS: PositionOptions = {
   maximumAge: 0,
 };
 
+/** Minimum gap between automatic GPS re-checks (tab focus, etc.). */
+export const GPS_RECHECK_INTERVAL_MS = 60_000;
+
 export const LOCATION_ACTION_LABELS: Record<string, string> = {
   attendance: "Shift check-in",
   en_route: "On my way",

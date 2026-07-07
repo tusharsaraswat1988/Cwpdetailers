@@ -25,6 +25,51 @@ CREATE TABLE IF NOT EXISTS service_assignments (
   updated_at timestamp NOT NULL DEFAULT now()
 );
 
+-- Keep one row per pending_assignment_id before adding the unique index (legacy duplicates).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM service_assignments
+    GROUP BY pending_assignment_id
+    HAVING COUNT(*) > 1
+  ) THEN
+    IF to_regclass('public.service_executions') IS NOT NULL THEN
+      WITH ranked AS (
+        SELECT id,
+               FIRST_VALUE(id) OVER (
+                 PARTITION BY pending_assignment_id
+                 ORDER BY id DESC
+               ) AS keep_id
+        FROM service_assignments
+      ),
+      dupes AS (
+        SELECT id AS old_id, keep_id
+        FROM ranked
+        WHERE id <> keep_id
+      )
+      UPDATE service_executions se
+      SET service_assignment_id = d.keep_id
+      FROM dupes d
+      WHERE se.service_assignment_id = d.old_id;
+    END IF;
+
+    DELETE FROM service_assignments sa
+    WHERE sa.id IN (
+      SELECT id
+      FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY pending_assignment_id
+                 ORDER BY id DESC
+               ) AS rn
+        FROM service_assignments
+      ) ranked
+      WHERE rn > 1
+    );
+  END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS service_assignments_pending_unique ON service_assignments(pending_assignment_id);
 CREATE INDEX IF NOT EXISTS idx_service_assignments_status ON service_assignments(status);
 CREATE INDEX IF NOT EXISTS idx_service_assignments_staff ON service_assignments(assigned_staff_id);

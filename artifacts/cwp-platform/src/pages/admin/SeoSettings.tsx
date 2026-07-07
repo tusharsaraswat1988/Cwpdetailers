@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Globe, Map, FileCode, Save, ExternalLink, Info } from "lucide-react";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { useBranding } from "@/lib/branding";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +59,7 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
 }
 
 export default function SeoSettingsPage() {
+  const branding = useBranding();
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -203,7 +205,7 @@ export default function SeoSettingsPage() {
                   ({form.siteTitle.length}/60)
                 </span>
               </Label>
-              <Input {...f("siteTitle")} placeholder="CWP Detailers And Motors — Professional Car Detailing in Varanasi" />
+              <Input {...f("siteTitle")} placeholder={branding.metaTitle || `${branding.brandName} — Professional Services`} />
             </div>
             <div>
               <Label className="text-xs text-muted-foreground mb-1">

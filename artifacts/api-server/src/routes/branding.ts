@@ -16,6 +16,19 @@ const router: IRouter = Router();
 
 const PUBLIC_CACHE = "public, max-age=60, stale-while-revalidate=300";
 
+/** GET /branding — public branding (alias for /branding/public) */
+router.get("/branding", async (req: Request, res: Response) => {
+  try {
+    const branding = await getPublicBranding();
+    res.set("Cache-Control", PUBLIC_CACHE);
+    res.set("ETag", `"branding-v${branding.version}"`);
+    res.json(branding);
+  } catch (err) {
+    req.log.error({ err }, "Failed to load branding");
+    res.status(500).json({ error: "Failed to load branding" });
+  }
+});
+
 /** GET /branding/public — cached public branding for all portals */
 router.get("/branding/public", async (req: Request, res: Response) => {
   try {
@@ -48,8 +61,8 @@ router.get("/branding/public/manifest/:portal", async (req: Request, res: Respon
   }
 });
 
-/** GET /branding — admin view (full record) */
-router.get("/branding", requireAuth, requirePermission("settings", "view"), async (req: Request, res: Response) => {
+/** GET /branding/admin — admin view (full record) */
+router.get("/branding/admin", requireAuth, requirePermission("settings", "view"), async (req: Request, res: Response) => {
   try {
     const row = await getBrandingForAdmin();
     res.json(row);
@@ -59,7 +72,78 @@ router.get("/branding", requireAuth, requirePermission("settings", "view"), asyn
   }
 });
 
-/** PUT /branding — update company info, colors, SEO */
+/** GET /admin/branding — admin view (alias) */
+router.get("/admin/branding", requireAuth, requirePermission("settings", "view"), async (req: Request, res: Response) => {
+  try {
+    const row = await getBrandingForAdmin();
+    res.json(row);
+  } catch (err) {
+    req.log.error({ err }, "Failed to load branding");
+    res.status(500).json({ error: "Failed to load branding" });
+  }
+});
+
+/** PUT /branding/admin — update branding (admin) */
+router.put("/branding/admin", requireAuth, requirePermission("settings", "edit"), async (req: Request, res: Response) => {
+  try {
+    const body = req.body ?? {};
+    const allowed = [
+      "companyName", "brandName", "tagline", "shortDescription", "website", "supportEmail", "supportPhone",
+      "gstNumber", "address", "primaryColor", "secondaryColor", "accentColor", "backgroundColor", "textColor",
+      "metaTitleTemplate", "metaDescriptionTemplate", "ogTitle", "ogDescription",
+      "twitterCardType", "twitterTitle", "twitterDescription", "socialLinks", "schemaOrg",
+      "seoKeywords", "seoAuthor", "loaderText", "loaderBackgroundColor",
+      "fullLogoUrl", "navbarLogoUrl", "mobileLogoUrl", "lightLogoUrl", "darkLogoUrl",
+      "logoWhiteUrl", "logoTransparentUrl", "logoSquareUrl", "logoIconUrl",
+      "loginLogoUrl", "faviconUrl", "faviconIcoUrl", "pwaIconUrl", "appleTouchIconUrl",
+      "emailLogoUrl", "invoiceLogoUrl", "pdfLogoUrl", "ogImageUrl", "twitterImageUrl",
+      "splashLogoUrl", "loaderAnimationUrl",
+    ] as const;
+
+    const patch: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (body[key] !== undefined) patch[key] = body[key];
+    }
+
+    const updated = await updateBranding(patch);
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update branding");
+    res.status(500).json({ error: "Failed to update branding" });
+  }
+});
+
+/** PUT /admin/branding — update branding (admin alias) */
+router.put("/admin/branding", requireAuth, requirePermission("settings", "edit"), async (req: Request, res: Response) => {
+  try {
+    const body = req.body ?? {};
+    const allowed = [
+      "companyName", "brandName", "tagline", "shortDescription", "website", "supportEmail", "supportPhone",
+      "gstNumber", "address", "primaryColor", "secondaryColor", "accentColor", "backgroundColor", "textColor",
+      "metaTitleTemplate", "metaDescriptionTemplate", "ogTitle", "ogDescription",
+      "twitterCardType", "twitterTitle", "twitterDescription", "socialLinks", "schemaOrg",
+      "seoKeywords", "seoAuthor", "loaderText", "loaderBackgroundColor",
+      "fullLogoUrl", "navbarLogoUrl", "mobileLogoUrl", "lightLogoUrl", "darkLogoUrl",
+      "logoWhiteUrl", "logoTransparentUrl", "logoSquareUrl", "logoIconUrl",
+      "loginLogoUrl", "faviconUrl", "faviconIcoUrl", "pwaIconUrl", "appleTouchIconUrl",
+      "emailLogoUrl", "invoiceLogoUrl", "pdfLogoUrl", "ogImageUrl", "twitterImageUrl",
+      "splashLogoUrl", "loaderAnimationUrl",
+    ] as const;
+
+    const patch: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (body[key] !== undefined) patch[key] = body[key];
+    }
+
+    const updated = await updateBranding(patch);
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update branding");
+    res.status(500).json({ error: "Failed to update branding" });
+  }
+});
+
+/** PUT /branding — update company info, colors, SEO (legacy) */
 router.put("/branding", requireAuth, requirePermission("settings", "edit"), async (req: Request, res: Response) => {
   try {
     const body = req.body ?? {};
@@ -87,9 +171,10 @@ router.put("/branding", requireAuth, requirePermission("settings", "edit"), asyn
 });
 
 const VALID_SLOTS = new Set<BrandAssetSlot>([
-  "full_logo", "navbar_logo", "mobile_logo", "favicon", "pwa_icon",
-  "apple_touch_icon", "email_logo", "invoice_logo", "pdf_logo", "og_image",
-  "login_logo", "light_logo", "dark_logo",
+  "full_logo", "navbar_logo", "mobile_logo", "favicon", "favicon_ico", "pwa_icon",
+  "apple_touch_icon", "email_logo", "invoice_logo", "pdf_logo", "og_image", "twitter_image",
+  "login_logo", "light_logo", "dark_logo", "white_logo", "transparent_logo",
+  "square_logo", "logo_icon", "splash_logo", "loader_animation",
 ]);
 
 /**

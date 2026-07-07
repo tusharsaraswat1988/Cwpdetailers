@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -64,7 +65,7 @@ export default function CustomerComplaints() {
       ) : missingCustomerLink || customerId == null ? (
         <div className="max-w-md mx-auto text-center space-y-2 py-12">
           <p className="font-semibold">Account not linked</p>
-          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+          <NoCustomerProfileMessage />
         </div>
       ) : (
         <div className="space-y-5">

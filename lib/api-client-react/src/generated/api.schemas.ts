@@ -17,12 +17,22 @@ export const LoginBodyRole = {
   admin: "admin",
 } as const;
 
+export type LoginBodyPortal =
+  (typeof LoginBodyPortal)[keyof typeof LoginBodyPortal];
+
+export const LoginBodyPortal = {
+  admin: "admin",
+  staff: "staff",
+  customer: "customer",
+  franchisee: "franchisee",
+} as const;
+
 export interface LoginBody {
   phone?: string;
   email?: string;
   password: string;
   role?: LoginBodyRole;
-  portal?: "admin" | "staff" | "customer" | "franchisee";
+  portal?: LoginBodyPortal;
 }
 
 export interface RegisterBody {
@@ -58,6 +68,8 @@ export interface User {
   staffId?: number;
   customerId?: number;
   isActive?: boolean;
+  /** True when the user can sign in with phone and password */
+  hasUserPassword?: boolean;
   createdAt?: string;
 }
 
@@ -94,6 +106,66 @@ export interface GoogleNeedsPhoneResponse {
 export interface GoogleCompleteBody {
   linkToken: string;
   phone: string;
+  /** Optional password to enable phone sign-in */
+  password?: string;
+}
+
+export interface SetPasswordBody {
+  newPassword: string;
+  /** Required when changing an existing password */
+  currentPassword?: string;
+}
+
+export interface SetPasswordResponse {
+  ok?: boolean;
+  message?: string;
+  user?: User;
+}
+
+export interface OtpAuthConfig {
+  enabled?: boolean;
+  senderId?: string;
+}
+
+export type SendAuthOtpBodyPurpose =
+  (typeof SendAuthOtpBodyPurpose)[keyof typeof SendAuthOtpBodyPurpose];
+
+export const SendAuthOtpBodyPurpose = {
+  login: "login",
+  signup: "signup",
+} as const;
+
+export interface SendAuthOtpBody {
+  phone: string;
+  purpose: SendAuthOtpBodyPurpose;
+  /** Required when purpose is signup */
+  name?: string;
+}
+
+export interface SendAuthOtpResponse {
+  ok?: boolean;
+  message?: string;
+  sentSms?: boolean;
+  maskedPhone?: string;
+}
+
+export type VerifyAuthOtpBodyPurpose =
+  (typeof VerifyAuthOtpBodyPurpose)[keyof typeof VerifyAuthOtpBodyPurpose];
+
+export const VerifyAuthOtpBodyPurpose = {
+  login: "login",
+  signup: "signup",
+} as const;
+
+export interface VerifyAuthOtpBody {
+  phone: string;
+  code: string;
+  purpose: VerifyAuthOtpBodyPurpose;
+  name?: string;
+  password?: string;
+  email?: string;
+  city?: string;
+  branchId?: number;
 }
 
 export type ForgotPasswordBodyPortal =
@@ -1360,11 +1432,6 @@ export type TransitionBookingBody = {
 
 export type AddProofBody = {
   urls: string[];
-};
-
-export type AssignBookingBody = {
-  staffId: number;
-  reason?: string;
 };
 
 export type RegenerateOccurrences200 = {

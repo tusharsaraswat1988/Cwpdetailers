@@ -22,15 +22,14 @@ export type InvoiceBillingSettings = {
   terms: string[];
 };
 
-/** Matches CWP printed tax invoice wording */
-const DEFAULT_TERMS = [
+const DEFAULT_TERMS_TEMPLATE = [
   "Membership packages sold under this Tax Invoice are non-transferable to any other individual or vehicle.",
   "This Invoice cannot be considered as receipt; a separate receipt will be issued upon receiving the payment.",
   "Any legal disputes are subject to the Varanasi jurisdiction only.",
   "All service package validity are to be considered from the date of invoice.",
   "All prices on this invoice are GST-inclusive (18%) unless marked as complimentary.",
-  "Payment of full amount due to CWP Detailers and Motors is required as per agreed terms.",
-  "CWP Detailers and Motors will not be liable for any illegal and unethical usage of the vehicle after service.",
+  "Payment of full amount due to {company} is required as per agreed terms.",
+  "{company} will not be liable for any illegal and unethical usage of the vehicle after service.",
   "This Invoice shall be valid for 15 days and the booking only confirmed when payment is received.",
 ];
 
@@ -47,7 +46,7 @@ const DEFAULTS: Omit<InvoiceBillingSettings, "companyName" | "address" | "gstNum
   upiId: "pinelabs.stq4501838@pineaxis",
   signatureUrl: null,
   placeOfSupply: "Uttar Pradesh",
-  terms: DEFAULT_TERMS,
+  terms: DEFAULT_TERMS_TEMPLATE,
 };
 
 function panFromGstin(gstin: string | null | undefined): string | null {
@@ -81,8 +80,13 @@ export async function getInvoiceBillingSettings(): Promise<InvoiceBillingSetting
   const override = (settingsRow[0]?.value ?? {}) as Partial<InvoiceBillingSettings>;
   const gstNumber = override.gstNumber ?? brand.gstNumber ?? biz?.gstNumber ?? "09BYWPS9468R3ZG";
 
+  const companyName = override.companyName ?? brand.companyName ?? biz?.businessName ?? brand.brandName ?? "";
+  const termsTemplate = override.terms?.length ? override.terms : DEFAULT_TERMS_TEMPLATE.map(
+    t => t.replace(/\{company\}/g, companyName),
+  );
+
   return {
-    companyName: override.companyName ?? brand.companyName ?? biz?.businessName ?? "CWP DETAILERS AND MOTORS",
+    companyName,
     address: override.address ?? brand.address ?? formatBusinessAddress(biz),
     gstNumber,
     panNumber: override.panNumber ?? panFromGstin(gstNumber) ?? DEFAULTS.panNumber,
@@ -98,7 +102,7 @@ export async function getInvoiceBillingSettings(): Promise<InvoiceBillingSetting
     upiId: override.upiId ?? DEFAULTS.upiId,
     signatureUrl: override.signatureUrl ?? DEFAULTS.signatureUrl,
     placeOfSupply: override.placeOfSupply ?? biz?.state ?? DEFAULTS.placeOfSupply,
-    terms: override.terms?.length ? override.terms : DEFAULTS.terms,
+    terms: termsTemplate,
   };
 }
 

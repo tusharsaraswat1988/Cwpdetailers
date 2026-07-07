@@ -56,12 +56,22 @@ export async function sendWebPush(
     return { ok: true };
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode;
+    const body = (err as { body?: string }).body ?? "";
     const message = err instanceof Error ? err.message : "Push delivery failed";
-    if (status === 404 || status === 410) {
-      return { ok: false, error: message, expired: true };
+    const detail = body.trim() || message;
+    const expired = status === 404 || status === 410 || status === 401 || status === 403;
+    if (expired) {
+      logger.info(
+        { status, endpoint: subscription.endpoint.slice(0, 48), detail },
+        "Push subscription invalid — will remove",
+      );
+      return { ok: false, error: detail, expired: true };
     }
-    logger.warn({ err, endpoint: subscription.endpoint.slice(0, 48) }, "Web push delivery failed");
-    return { ok: false, error: message };
+    logger.warn(
+      { err, status, endpoint: subscription.endpoint.slice(0, 48), detail },
+      "Web push delivery failed",
+    );
+    return { ok: false, error: status ? `${detail} (HTTP ${status})` : detail };
   }
 }
 

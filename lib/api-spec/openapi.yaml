@@ -202,6 +202,86 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkMessage"
 
+  /auth/set-password:
+    post:
+      operationId: setPassword
+      tags: [auth]
+      summary: Set or change password for the logged-in user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPasswordBody"
+      responses:
+        "200":
+          description: Password saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetPasswordResponse"
+        "400":
+          description: Validation error
+        "401":
+          description: Authentication required
+
+  /auth/otp/config:
+    get:
+      operationId: getOtpAuthConfig
+      tags: [auth]
+      summary: SMS OTP availability for customer auth
+      responses:
+        "200":
+          description: OTP config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtpAuthConfig"
+
+  /auth/otp/send:
+    post:
+      operationId: sendAuthOtp
+      tags: [auth]
+      summary: Send SMS OTP for customer login or signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendAuthOtpBody"
+      responses:
+        "200":
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendAuthOtpResponse"
+
+  /auth/otp/verify:
+    post:
+      operationId: verifyAuthOtp
+      tags: [auth]
+      summary: Verify SMS OTP and complete login or signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyAuthOtpBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "201":
+          description: Signup successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
   # CUSTOMERS
   /customers:
     get:
@@ -1774,7 +1854,7 @@ components:
           type: string
         branchId:
           type: integer
-      required: [name, phone, password]
+      required: [name, phone, email, password]
 
     AuthResponse:
       type: object
@@ -1826,7 +1906,85 @@ components:
           type: string
         phone:
           type: string
+        password:
+          type: string
+          description: Optional password to enable phone sign-in
       required: [linkToken, phone]
+
+    SetPasswordBody:
+      type: object
+      properties:
+        newPassword:
+          type: string
+        currentPassword:
+          type: string
+          description: Required when changing an existing password
+      required: [newPassword]
+
+    SetPasswordResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    OtpAuthConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        senderId:
+          type: string
+
+    SendAuthOtpBody:
+      type: object
+      properties:
+        phone:
+          type: string
+        purpose:
+          type: string
+          enum: [login, signup]
+        name:
+          type: string
+          description: Required when purpose is signup
+      required: [phone, purpose]
+
+    SendAuthOtpResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+        sentSms:
+          type: boolean
+        maskedPhone:
+          type: string
+
+    VerifyAuthOtpBody:
+      type: object
+      properties:
+        phone:
+          type: string
+        code:
+          type: string
+        purpose:
+          type: string
+          enum: [login, signup]
+        name:
+          type: string
+        password:
+          type: string
+        email:
+          type: string
+        city:
+          type: string
+        branchId:
+          type: integer
+      required: [phone, code, purpose]
 
     ForgotPasswordBody:
       type: object
@@ -1907,6 +2065,9 @@ components:
           type: integer
         isActive:
           type: boolean
+        hasUserPassword:
+          type: boolean
+          description: True when the user can sign in with phone and password
         createdAt:
           type: string
           format: date-time

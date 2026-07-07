@@ -3,6 +3,7 @@ import { useRoute, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRequestUploadUrl, getListStaffQueryKey } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { useBranding } from "@/lib/branding";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -105,6 +106,7 @@ function DocumentCard({
 }
 
 export default function StaffDetail() {
+  const branding = useBranding();
   const [, params] = useRoute("/admin/staff/:id");
   const id = parseInt(params?.id ?? "0", 10);
   const qc = useQueryClient();
@@ -403,7 +405,7 @@ export default function StaffDetail() {
                   </>
                 )}
                 <Field label="City"><Input value={p.city ?? ""} onChange={e => set("city", e.target.value)} /></Field>
-                <Field label="Partner"><Input value={p.partnerName ?? "CWP Direct"} disabled /></Field>
+                <Field label="Partner"><Input value={p.partnerName ?? `${branding.brandName} Direct`} disabled /></Field>
                 {isCleaningStaff && p.reportingManagerName && !draft.reportingManagerId && (
                   <Field label="Current Supervisor">
                     <Input

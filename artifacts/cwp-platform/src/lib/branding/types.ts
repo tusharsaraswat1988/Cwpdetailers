@@ -33,6 +33,7 @@ export type PublicBranding = {
   companyName: string;
   brandName: string;
   tagline: string | null;
+  shortDescription: string | null;
   website: string | null;
   supportEmail: string | null;
   supportPhone: string | null;
@@ -42,19 +43,32 @@ export type PublicBranding = {
   secondaryColor: string;
   accentColor: string;
   backgroundColor: string;
+  textColor: string;
   fullLogo: string | null;
   navbarLogo: string | null;
   mobileLogo: string | null;
   lightLogo: string | null;
   darkLogo: string | null;
   loginLogo: string | null;
+  logoWhite: string | null;
+  logoTransparent: string | null;
+  logoSquare: string | null;
+  logoIcon: string | null;
   favicon: string | null;
+  faviconIco: string | null;
   pwaIcon: string | null;
   appleTouchIcon: string | null;
   emailLogo: string | null;
   invoiceLogo: string | null;
   pdfLogo: string | null;
+  splashLogo: string | null;
+  loaderAnimation: string | null;
+  loaderBackground: string | null;
+  loaderText: string;
   ogImage: string | null;
+  twitterImage: string | null;
+  seoKeywords: string | null;
+  seoAuthor: string | null;
   metaTitleTemplate: string | null;
   metaDescriptionTemplate: string | null;
   ogTitle: string | null;
@@ -64,6 +78,7 @@ export type PublicBranding = {
   twitterDescription: string | null;
   socialLinks: BrandSocialLinks;
   schemaOrg: Record<string, unknown>;
+  localBusinessSchema: Record<string, unknown>;
   generatedAssets: BrandGeneratedAssets;
   cssVariables: Record<string, string>;
   metaTitle: string;
@@ -75,24 +90,34 @@ export type BrandAssetSlot =
   | "navbar_logo"
   | "mobile_logo"
   | "favicon"
+  | "favicon_ico"
   | "pwa_icon"
   | "apple_touch_icon"
   | "email_logo"
   | "invoice_logo"
   | "pdf_logo"
   | "og_image"
+  | "twitter_image"
   | "login_logo"
   | "light_logo"
-  | "dark_logo";
+  | "dark_logo"
+  | "white_logo"
+  | "transparent_logo"
+  | "square_logo"
+  | "logo_icon"
+  | "splash_logo"
+  | "loader_animation";
 
 export const BRANDING_QUERY_KEY = ["branding", "public"] as const;
 export const BRANDING_ADMIN_QUERY_KEY = ["branding", "admin"] as const;
 
+/** Neutral fallback before branding loads from API — no hardcoded brand identity */
 export const DEFAULT_BRANDING: PublicBranding = {
-  version: 1,
-  companyName: "CWP Detailers + Kleansolar",
-  brandName: "CWP Detailers",
-  tagline: "Premium Car Care & Solar Cleaning",
+  version: 0,
+  companyName: "",
+  brandName: "",
+  tagline: null,
+  shortDescription: null,
   website: null,
   supportEmail: null,
   supportPhone: null,
@@ -102,21 +127,34 @@ export const DEFAULT_BRANDING: PublicBranding = {
   secondaryColor: "#212529",
   accentColor: "#e0ffff",
   backgroundColor: "#ffffff",
+  textColor: "#212529",
   fullLogo: null,
   navbarLogo: null,
   mobileLogo: null,
   lightLogo: null,
   darkLogo: null,
   loginLogo: null,
+  logoWhite: null,
+  logoTransparent: null,
+  logoSquare: null,
+  logoIcon: null,
   favicon: null,
+  faviconIco: null,
   pwaIcon: null,
   appleTouchIcon: null,
   emailLogo: null,
   invoiceLogo: null,
   pdfLogo: null,
+  splashLogo: null,
+  loaderAnimation: null,
+  loaderBackground: "#ffffff",
+  loaderText: "Loading…",
   ogImage: null,
+  twitterImage: null,
+  seoKeywords: null,
+  seoAuthor: null,
   metaTitleTemplate: "{brand} | {tagline}",
-  metaDescriptionTemplate: "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
+  metaDescriptionTemplate: null,
   ogTitle: null,
   ogDescription: null,
   twitterCardType: "summary_large_image",
@@ -124,13 +162,15 @@ export const DEFAULT_BRANDING: PublicBranding = {
   twitterDescription: null,
   socialLinks: {},
   schemaOrg: {},
+  localBusinessSchema: {},
   generatedAssets: {},
   cssVariables: {
     "--brand-primary": "#00cccc",
     "--brand-secondary": "#212529",
     "--brand-accent": "#e0ffff",
     "--brand-background": "#ffffff",
+    "--brand-text": "#212529",
   },
-  metaTitle: "CWP Detailers | Premium Car Care & Solar Cleaning",
-  metaDescription: "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
+  metaTitle: "Loading…",
+  metaDescription: "",
 };

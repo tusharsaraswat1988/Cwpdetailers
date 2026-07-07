@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import {
   getPushStatus,
   subscribeToPush,
   unsubscribeFromPush,
-  autoSubscribeStaffPushIfNeeded,
+  resyncPushSubscription,
   isPushSupported,
   getBrowserNotificationPermission,
   type PushStatus,
@@ -22,7 +22,6 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
-  const autoAttempted = useRef(false);
   const supported = isPushSupported();
   const permission = getBrowserNotificationPermission();
 
@@ -40,29 +39,11 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
     void refresh();
   }, [refresh]);
 
-  // Staff app: auto-enable push when the browser allows it (permission prompt may appear once).
-  useEffect(() => {
-    if (variant !== "staff" || loading || autoAttempted.current) return;
-    if (status?.subscribed || !status?.pushConfigured) return;
-    if (!isPushSupported() || getBrowserNotificationPermission() === "denied") return;
-
-    autoAttempted.current = true;
-    void (async () => {
-      setToggling(true);
-      try {
-        await autoSubscribeStaffPushIfNeeded();
-        await refresh();
-      } finally {
-        setToggling(false);
-      }
-    })();
-  }, [variant, loading, status?.subscribed, status?.pushConfigured, refresh]);
-
   const handleToggle = async (enabled: boolean) => {
     setToggling(true);
     try {
       if (enabled) {
-        const result = await subscribeToPush();
+        const result = await subscribeToPush({ forceResync: true });
         if (!result.ok) {
           toast({ title: "Could not enable notifications", description: result.error, variant: "destructive" });
           return;
@@ -132,7 +113,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
 
             {variant === "staff" && permission === "default" && !status?.subscribed && status?.pushConfigured && (
               <p className="text-xs text-muted-foreground">
-                Allow notifications when your browser asks — job alerts turn on automatically.
+                Turn on the switch above — browser will ask Allow once for job alerts.
               </p>
             )}
 
@@ -185,6 +166,29 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
             <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
               Refresh status
             </Button>
+
+            {status?.subscribed && status?.pushConfigured && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={toggling}
+                onClick={() => {
+                  setToggling(true);
+                  void resyncPushSubscription()
+                    .then(async result => {
+                      if (!result.ok) {
+                        toast({ title: "Re-sync failed", description: result.error, variant: "destructive" });
+                        return;
+                      }
+                      toast({ title: "Device re-synced", description: "Push notifications refreshed for this device." });
+                      await refresh();
+                    })
+                    .finally(() => setToggling(false));
+                }}
+              >
+                Re-sync this device
+              </Button>
+            )}
           </>
         )}
       </CardContent>

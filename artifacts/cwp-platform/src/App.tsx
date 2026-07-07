@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { BrandingProvider } from "@/lib/branding";
+import { BrandingProvider, BrandLoader } from "@/lib/branding";
 import { ConnectivityProvider } from "@/services/ConnectivityContext";
 import { ConnectivityBanner } from "@/components/connectivity/ConnectivityBanner";
 import { AppSplashGate } from "@/components/pwa/AppSplashGate";
@@ -114,7 +114,7 @@ function ProtectedRoute({ component: Component, roles, permission, loginPath = "
   loginPath?: string;
 }) {
   const { user, isLoading, hasPermission } = useAuth();
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+  if (isLoading) return <BrandLoader fullScreen />;
   if (!user) return <Redirect to={loginPath} />;
   if (roles && !roles.includes(user.role)) return <Redirect to={loginPath} />;
   if (permission && !hasPermission(permission.resource, permission.action)) {
@@ -132,13 +132,7 @@ function ProtectedRoute({ component: Component, roles, permission, loginPath = "
 
 function AdminRoot() {
   const { user, isLoading } = useAuth();
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading) return <BrandLoader fullScreen />;
   if (user && ["admin", "superadmin", "manager"].includes(user.role)) {
     return <Redirect to="/admin/dashboard" />;
   }

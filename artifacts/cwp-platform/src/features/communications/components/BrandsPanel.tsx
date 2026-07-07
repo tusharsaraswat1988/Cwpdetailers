@@ -29,7 +29,9 @@ export default function BrandsPanel() {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Multi-Brand Registry</CardTitle>
-          <CardDescription>CWP Detailers, Kleansolar, DCC, BidWar — isolated communication per brand</CardDescription>
+          <CardDescription>
+            {(brands ?? []).map((b: CommBrand) => b.name).join(", ") || "Register brands for isolated communication channels"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid md:grid-cols-2 gap-3">
           {(brands ?? []).map((b: CommBrand) => (

@@ -8,10 +8,8 @@ import {
   Bell, Funnel, Users,
 } from "lucide-react";
 import PanelShell from "./PanelShell";
-import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { BrandLogo } from "@/components/shared/BrandLogo";
-import { useBranding, useBrandingPortal } from "@/lib/branding";
-import { useMediaQuery } from "@/lib/useMediaQuery";
+import { useBranding } from "@/lib/branding";
 
 type NavItem = {
   href: string;
@@ -98,22 +96,12 @@ function FranchiseeSidebar({ onNavigate, embedded = false, className }: SidebarR
 }
 
 export default function FranchiseeLayout({ children }: { children: ReactNode }) {
-  const isMobile = useMediaQuery("(max-width: 1023px)");
-  const branding = useBrandingPortal("franchisee");
-
   return (
     <PanelShell
       testId="franchisee-layout"
       mobileTitle="Franchisee Portal"
       sidebar={(props) => <FranchiseeSidebar {...props} />}
     >
-      {isMobile && (
-        <PwaInstallBanner
-          portalKey="franchisee"
-          title={`Install ${branding.brandName} Franchise`}
-          description="Add the partner portal to your home screen for quick mobile access."
-        />
-      )}
       {children}
     </PanelShell>
   );

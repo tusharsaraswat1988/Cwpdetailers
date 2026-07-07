@@ -47,7 +47,7 @@ export default function ContactUs() {
     staleTime: 300_000,
   });
 
-  const businessName = info?.businessName ?? branding.companyName ?? "CWP Detailers And Motors";
+  const businessName = info?.businessName ?? branding.companyName ?? branding.brandName;
   const whatsapp = info?.whatsappNumber ?? info?.supportPhone;
 
   return (

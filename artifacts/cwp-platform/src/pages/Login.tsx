@@ -12,9 +12,11 @@ import { submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { GooglePhoneLinkDialog } from "@/components/auth/GooglePhoneLinkDialog";
-import { AuthSupportPanel } from "@/components/auth/AuthSupportPanel";
+import { SetPasswordDialog } from "@/components/auth/SetPasswordDialog";
+import { PhoneOtpAuthPanel } from "@/components/auth/PhoneOtpAuthPanel";
 import { useBranding } from "@/lib/branding";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useCustomerPasswordPrompt } from "@/hooks/useCustomerPasswordPrompt";
 import { Loader2 } from "lucide-react";
 
 export default function Login() {
@@ -26,11 +28,28 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [googlePending, setGooglePending] = useState(false);
+  const [authMode, setAuthMode] = useState<"password" | "otp">("password");
   const [phoneLink, setPhoneLink] = useState<{
     linkToken: string;
     email: string;
     name?: string | null;
   } | null>(null);
+
+  const redirectAfterAuth = useCallback(
+    (role: AuthResponse["user"]["role"]) => {
+      if (role === "staff") setLocation("/staff/dashboard");
+      else setLocation("/customer/dashboard");
+    },
+    [setLocation],
+  );
+
+  const {
+    showSetPassword,
+    setShowSetPassword,
+    handleAuthSuccess: completeCustomerAuth,
+    handlePasswordSaved,
+    handleSkipPassword,
+  } = useCustomerPasswordPrompt({ login, onComplete: redirectAfterAuth });
 
   const handleAuthSuccess = useCallback(
     (data: AuthResponse) => {
@@ -43,11 +62,14 @@ export default function Login() {
         });
         return;
       }
-      login(data.user, data.token);
-      if (userRole === "staff") setLocation("/staff/dashboard");
-      else setLocation("/customer/dashboard");
+      if (userRole === "staff") {
+        login(data.user, data.token);
+        redirectAfterAuth(userRole);
+        return;
+      }
+      completeCustomerAuth(data);
     },
-    [login, setLocation, toast],
+    [completeCustomerAuth, login, redirectAfterAuth, toast],
   );
 
   const loginMutation = useLogin({
@@ -141,16 +163,41 @@ export default function Login() {
           </div>
         </div>
 
+        <div className="flex rounded-lg border border-white/10 p-0.5 bg-white/5 mb-4">
+          <button
+            type="button"
+            onClick={() => setAuthMode("password")}
+            className={`flex-1 py-2 text-sm rounded-md transition-colors ${
+              authMode === "password" ? "bg-primary text-secondary font-medium" : "text-white/50 hover:text-white"
+            }`}
+            data-testid="login-mode-password"
+          >
+            Password
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuthMode("otp")}
+            className={`flex-1 py-2 text-sm rounded-md transition-colors ${
+              authMode === "otp" ? "bg-primary text-secondary font-medium" : "text-white/50 hover:text-white"
+            }`}
+            data-testid="login-mode-otp"
+          >
+            OTP
+          </button>
+        </div>
+
+        {authMode === "password" ? (
         <form onSubmit={handleSubmit} className="space-y-4">
           <PhoneInput
             id="phone"
             data-testid="input-phone"
             label="Phone Number"
+            dark
             value={phone}
             onChange={setPhone}
             error={phoneError}
             onErrorChange={setPhoneError}
-            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary [&+p]:text-white/40"
+            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
           />
           <div>
             <div className="flex items-center justify-between">
@@ -178,6 +225,13 @@ export default function Login() {
             {loginMutation.isPending ? <><Loader2 size={14} className="animate-spin mr-2" />Signing in...</> : "Sign In"}
           </Button>
         </form>
+        ) : (
+          <PhoneOtpAuthPanel
+            purpose="login"
+            dark
+            onSuccess={data => completeCustomerAuth(data)}
+          />
+        )}
 
         <div className="mt-6 text-center space-y-2">
           <p className="text-white/30 text-xs px-2">Use your registered phone and password — your portal opens automatically.</p>
@@ -190,8 +244,6 @@ export default function Login() {
             <Link href="/register" className="text-primary hover:underline">Create account</Link>
           </p>
         </div>
-
-        <AuthSupportPanel portal="customer" className="mt-6" />
 
         <div className="mt-6 pt-6 border-t border-white/5 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
           {[
@@ -219,6 +271,20 @@ export default function Login() {
           onClose={() => setPhoneLink(null)}
         />
       )}
+
+      <SetPasswordDialog
+        open={showSetPassword}
+        onOpenChange={open => {
+          if (!open) handleSkipPassword();
+          else setShowSetPassword(true);
+        }}
+        dark
+        showSkip
+        title="Set a password (optional)"
+        description="Add a password so you can sign in with your phone number without Google."
+        onSuccess={handlePasswordSaved}
+        onSkip={handleSkipPassword}
+      />
     </div>
   );
 }

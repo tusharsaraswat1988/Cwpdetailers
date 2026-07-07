@@ -14,9 +14,12 @@ import { submitEmail, submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { GooglePhoneLinkDialog } from "@/components/auth/GooglePhoneLinkDialog";
-import { AuthSupportPanel } from "@/components/auth/AuthSupportPanel";
+import { SetPasswordDialog } from "@/components/auth/SetPasswordDialog";
+import { PhoneOtpAuthPanel } from "@/components/auth/PhoneOtpAuthPanel";
 import { useBranding } from "@/lib/branding";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useCustomerPasswordPrompt } from "@/hooks/useCustomerPasswordPrompt";
+import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
 export default function Register() {
@@ -24,23 +27,31 @@ export default function Register() {
   const { login } = useAuth();
   const branding = useBranding();
   const { toast } = useToast();
-  const [form, setForm] = useState({ name: "", phone: "", email: "", password: "", city: "" });
-  const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
+  const [form, setForm] = useState({ name: "", phone: "", email: "", password: "", confirmPassword: "" });
+  const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null; confirmPassword?: string | null }>({});
   const [googlePending, setGooglePending] = useState(false);
+  const [authMode, setAuthMode] = useState<"form" | "otp">("form");
   const [phoneLink, setPhoneLink] = useState<{
     linkToken: string;
     email: string;
     name?: string | null;
   } | null>(null);
 
-  const handleAuthSuccess = useCallback(
-    (data: AuthResponse) => {
-      login(data.user, data.token);
-      if (data.user.role === "staff") setLocation("/staff/dashboard");
+  const redirectAfterAuth = useCallback(
+    (role: AuthResponse["user"]["role"]) => {
+      if (role === "staff") setLocation("/staff/dashboard");
       else setLocation("/customer/dashboard");
     },
-    [login, setLocation],
+    [setLocation],
   );
+
+  const {
+    showSetPassword,
+    setShowSetPassword,
+    handleAuthSuccess,
+    handlePasswordSaved,
+    handleSkipPassword,
+  } = useCustomerPasswordPrompt({ login, onComplete: redirectAfterAuth });
 
   const registerMutation = useRegister({
     mutation: {
@@ -92,7 +103,7 @@ export default function Register() {
     e.preventDefault();
 
     const phoneResult = submitMobile(form.phone);
-    const emailResult = submitEmail(form.email);
+    const emailResult = submitEmail(form.email, { required: true });
     setErrors({
       phone: phoneResult.ok ? null : phoneResult.error,
       email: emailResult.ok ? null : emailResult.error,
@@ -103,11 +114,24 @@ export default function Register() {
       return;
     }
 
+    const trimmedPassword = form.password.trim();
+    if (trimmedPassword.length < 6) {
+      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    if (trimmedPassword !== form.confirmPassword) {
+      setErrors(e => ({ ...e, confirmPassword: "Passwords do not match" }));
+      toast({ title: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    setErrors(e => ({ ...e, confirmPassword: null }));
+
     registerMutation.mutate({
       data: {
-        ...form,
+        name: form.name,
         phone: phoneResult.value,
-        email: emailResult.value,
+        email: emailResult.value!,
+        password: trimmedPassword,
       },
     });
   };
@@ -146,6 +170,30 @@ export default function Register() {
           </div>
         </div>
 
+        <div className="flex rounded-lg border border-white/10 p-0.5 bg-white/5 mb-4">
+          <button
+            type="button"
+            onClick={() => setAuthMode("form")}
+            className={`flex-1 py-2 text-sm rounded-md transition-colors ${
+              authMode === "form" ? "bg-primary text-secondary font-medium" : "text-white/50 hover:text-white"
+            }`}
+            data-testid="register-mode-form"
+          >
+            Password
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuthMode("otp")}
+            className={`flex-1 py-2 text-sm rounded-md transition-colors ${
+              authMode === "otp" ? "bg-primary text-secondary font-medium" : "text-white/50 hover:text-white"
+            }`}
+            data-testid="register-mode-otp"
+          >
+            OTP
+          </button>
+        </div>
+
+        {authMode === "form" ? (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="name" className="text-white/70 text-sm">Full Name</Label>
@@ -154,7 +202,7 @@ export default function Register() {
               data-testid="input-name"
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Arjun Sharma"
+              placeholder="yourname"
               className="mt-1.5 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
             />
           </div>
@@ -163,6 +211,8 @@ export default function Register() {
             id="phone"
             data-testid="input-phone"
             label="Phone Number"
+            dark
+            placeholder="your mobile number"
             value={form.phone}
             onChange={v => setForm(f => ({ ...f, phone: v }))}
             error={errors.phone}
@@ -173,8 +223,12 @@ export default function Register() {
           <EmailInput
             id="email"
             data-testid="input-email"
-            label="Email (optional)"
-            optional
+            label="Email"
+            dark
+            required
+            optional={false}
+            placeholder="your email"
+            hint="Valid email address required"
             value={form.email}
             onChange={v => setForm(f => ({ ...f, email: v }))}
             error={errors.email}
@@ -183,28 +237,43 @@ export default function Register() {
           />
 
           <div>
-            <Label htmlFor="city" className="text-white/70 text-sm">City</Label>
-            <Input
-              id="city"
-              data-testid="input-city"
-              value={form.city}
-              onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-              placeholder="Varanasi"
-              className="mt-1.5 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
-            />
-          </div>
-
-          <div>
             <Label htmlFor="password" className="text-white/70 text-sm">Password</Label>
             <PasswordInput
               id="password"
               data-testid="input-password"
               value={form.password}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-              placeholder="••••••••"
+              onChange={e => {
+                setForm(f => ({ ...f, password: e.target.value }));
+                if (errors.confirmPassword) setErrors(err => ({ ...err, confirmPassword: null }));
+              }}
+              placeholder="your password"
+              autoComplete="new-password"
               containerClassName="mt-1.5"
               className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="confirm-password" className="text-white/70 text-sm">Confirm Password</Label>
+            <PasswordInput
+              id="confirm-password"
+              data-testid="input-confirm-password"
+              value={form.confirmPassword}
+              onChange={e => {
+                setForm(f => ({ ...f, confirmPassword: e.target.value }));
+                if (errors.confirmPassword) setErrors(err => ({ ...err, confirmPassword: null }));
+              }}
+              placeholder="confirm your password"
+              autoComplete="new-password"
+              containerClassName="mt-1.5"
+              className={cn(
+                "bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary",
+                errors.confirmPassword && "border-destructive focus-visible:ring-destructive",
+              )}
+            />
+            {errors.confirmPassword ? (
+              <p className="text-destructive text-xs mt-1" role="alert">{errors.confirmPassword}</p>
+            ) : null}
           </div>
 
           <Button
@@ -216,8 +285,14 @@ export default function Register() {
             {registerMutation.isPending ? <><Loader2 size={14} className="animate-spin mr-2" />Creating account...</> : "Create Account"}
           </Button>
         </form>
-
-        <AuthSupportPanel portal="customer" className="mt-6" />
+        ) : (
+          <PhoneOtpAuthPanel
+            purpose="signup"
+            dark
+            signupName={form.name}
+            onSuccess={data => handleAuthSuccess(data)}
+          />
+        )}
 
         <p className="mt-4 text-center text-white/30 text-xs px-2">
           By creating an account, you agree to our{" "}
@@ -258,6 +333,20 @@ export default function Register() {
           onClose={() => setPhoneLink(null)}
         />
       )}
+
+      <SetPasswordDialog
+        open={showSetPassword}
+        onOpenChange={open => {
+          if (!open) handleSkipPassword();
+          else setShowSetPassword(true);
+        }}
+        dark
+        showSkip
+        title="Set a password (optional)"
+        description="Add a password so you can sign in with your phone number without Google."
+        onSuccess={handlePasswordSaved}
+        onSkip={handleSkipPassword}
+      />
     </div>
   );
 }

@@ -19,11 +19,16 @@ const VARIANT_IMG_CLASS: Record<BrandLogoVariant, string> = {
   full: "h-[39px] max-w-[210px]",
   light: "h-[34px] max-w-[182px]",
   dark: "h-[34px] max-w-[182px]",
+  white: "h-[34px] max-w-[182px]",
+  transparent: "h-[34px] max-w-[182px]",
+  square: "h-[34px] w-[34px]",
+  icon: "h-[28px] w-[28px]",
   email: "h-[34px] max-w-[182px]",
   invoice: "h-[34px] max-w-[182px]",
   pdf: "h-[34px] max-w-[182px]",
   favicon: "h-[22px] w-[22px]",
   pwa: "h-[28px] w-[28px]",
+  splash: "h-[80px] max-w-[200px]",
 };
 
 const VARIANT_FALLBACK_CLASS: Record<BrandLogoVariant, string> = {
@@ -33,11 +38,16 @@ const VARIANT_FALLBACK_CLASS: Record<BrandLogoVariant, string> = {
   full: "w-[39px] h-[39px]",
   light: "w-[34px] h-[34px]",
   dark: "w-[34px] h-[34px]",
+  white: "w-[34px] h-[34px]",
+  transparent: "w-[34px] h-[34px]",
+  square: "w-[34px] h-[34px]",
+  icon: "w-[28px] h-[28px]",
   email: "w-[34px] h-[34px]",
   invoice: "w-[34px] h-[34px]",
   pdf: "w-[34px] h-[34px]",
   favicon: "w-[22px] h-[22px]",
   pwa: "w-[28px] h-[28px]",
+  splash: "w-[80px] h-[80px]",
 };
 
 export function BrandLogo({

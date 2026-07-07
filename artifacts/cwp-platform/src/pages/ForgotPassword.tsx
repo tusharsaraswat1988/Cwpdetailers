@@ -17,7 +17,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { submitEmail, submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
-import { AuthSupportPanel } from "@/components/auth/AuthSupportPanel";
 import { useBranding } from "@/lib/branding";
 import { ArrowLeft, Loader2, Mail, Smartphone } from "lucide-react";
 
@@ -149,7 +148,7 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
           </div>
           <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">{title}</h1>
           <p className="text-white/50 mt-1 text-sm">
-            {step === "request" && "We'll send a code via SMS and email"}
+            {step === "request" && "We'll send an OTP via SMS"}
             {step === "verify" && "Enter the code and choose a new password"}
             {step === "done" && "All set — sign in with your new password"}
           </p>
@@ -184,21 +183,23 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
               <PhoneInput
                 id="forgot-phone"
                 label="Registered phone number"
+                dark
                 value={phone}
                 onChange={setPhone}
                 error={phoneError}
                 onErrorChange={setPhoneError}
-                className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary [&+p]:text-white/40"
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
               />
             ) : (
               <EmailInput
                 id="forgot-email"
                 label="Registered email address"
+                dark
                 value={email}
                 onChange={setEmail}
                 error={emailError}
                 onErrorChange={setEmailError}
-                className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary [&+p]:text-white/40"
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
               />
             )}
 
@@ -297,8 +298,6 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
             Back to login
           </Link>
         </div>
-
-        <AuthSupportPanel portal={portal} className="mt-6" />
       </div>
     </div>
   );

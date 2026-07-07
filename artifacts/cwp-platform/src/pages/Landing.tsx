@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import { useListServices } from "@workspace/api-client-react";
 import { useHomepagePlans, useHomepageSections } from "@/features/service-catalog/api";
 import { Button } from "@/components/ui/button";
-import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useBranding } from "@/lib/branding";
 import { Sun, Car, Shield, Sparkles, ChevronRight, MapPin, Phone, Star, Zap, Droplets, Check } from "lucide-react";
@@ -171,14 +170,6 @@ export default function Landing() {
           </div>
         </div>
       </header>
-
-      <div className="max-w-7xl mx-auto px-2 pt-2">
-        <PwaInstallBanner
-          portalKey="main"
-          title="Install CWP"
-          description="Add CWP to your home screen for quick access to services and your account."
-        />
-      </div>
 
       {/* Hero */}
       <section className="relative bg-secondary overflow-hidden">
@@ -366,7 +357,7 @@ export default function Landing() {
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }}>
             <div className="inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-full px-4 py-1.5 text-amber-500 text-sm font-medium mb-5">
               <Sun size={12} />
-              <span>Kleansolar — A Unit of CWP Detailers</span>
+              <span>{branding.companyName}{branding.tagline ? ` — ${branding.tagline}` : ""}</span>
             </div>
             <h2 className="font-display font-bold text-3xl md:text-4xl mb-4">
               Dirty panels cost you money.

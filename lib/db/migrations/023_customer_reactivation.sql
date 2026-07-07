@@ -13,6 +13,10 @@ CREATE INDEX IF NOT EXISTS customers_reactivated_at_idx
   ON customers (reactivated_at) WHERE reactivated_at IS NOT NULL;
 
 DO $$ BEGIN
-  ALTER TYPE comm_journey_event_type ADD VALUE 'customer_reactivated';
-EXCEPTION WHEN duplicate_object THEN NULL;
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'comm_journey_event_type') THEN
+    BEGIN
+      ALTER TYPE comm_journey_event_type ADD VALUE 'customer_reactivated';
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END IF;
 END $$;

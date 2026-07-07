@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import FranchiseeLayout from "@/components/layout/FranchiseeLayout";
+import { useBranding } from "@/lib/branding";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { UserX, MessageSquare, Send, Check, ExternalLink } from "lucide-react";
@@ -23,6 +24,11 @@ async function sendBulkMessage(payload: { subscriptionIds: number[]; message: st
 }
 
 export default function FranchiseeChurned() {
+  const branding = useBranding();
+  const defaultMessage = useMemo(
+    () => `Hi {name}, we miss you! 🚗 Come back to ${branding.brandName} and get 10% off your first renewal. Reply YES to know more.`,
+    [branding.brandName],
+  );
   const { user } = useAuth();
   const branchId = user?.branchId?.toString();
   const { toast } = useToast();
@@ -33,7 +39,7 @@ export default function FranchiseeChurned() {
   });
 
   const [selected, setSelected] = useState<number[]>([]);
-  const [message, setMessage] = useState("Hi {name}, we miss you! 🚗 Come back to CWP Detailers and get 10% off your first renewal. Reply YES to know more.");
+  const [message, setMessage] = useState(defaultMessage);
   const [showCompose, setShowCompose] = useState(false);
 
   const bulkMutation = useMutation({

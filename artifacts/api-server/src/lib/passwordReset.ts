@@ -1,7 +1,8 @@
 import { db, passwordResetCodesTable, sessionsTable } from "@workspace/db";
 import { eq, and, gt, isNull, desc } from "drizzle-orm";
 import { sendViaProvider } from "./communications/providerRegistry";
-import { getBrandName } from "./brandIdentityService";
+import { sendOtpSms } from "./dltSms";
+import { getEmailBranding } from "./brandIdentityService";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -57,7 +58,7 @@ export async function sendPasswordResetOtp(
 
   const code = generateOtpCode();
   const codeHash = hashOtpCode(code);
-  const brandName = await getBrandName();
+  const brand = await getEmailBranding();
 
   await db.insert(passwordResetCodesTable).values({
     userId: user.id,
@@ -67,30 +68,41 @@ export async function sendPasswordResetOtp(
     expiresAt: otpExpiry(),
   });
 
-  const smsMessage = `${brandName}: Your password reset code is ${code}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`;
   const emailHtml = `
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+      ${brand.logoUrl ? `<img src="${brand.logoUrl}" alt="${brand.brandName}" style="max-height:48px;margin-bottom:16px;" />` : ""}
       <h2 style="color:#111;">Password Reset</h2>
       <p>Hi ${user.name},</p>
       <p>Use this code to reset your ${portal === "staff" ? "staff portal" : "account"} password:</p>
-      <p style="font-size:28px;font-weight:bold;letter-spacing:4px;color:#c9a227;">${code}</p>
+      <p style="font-size:28px;font-weight:bold;letter-spacing:4px;color:${brand.primaryColor};">${code}</p>
       <p style="color:#666;font-size:14px;">This code expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, ignore this email.</p>
-      <p style="color:#999;font-size:12px;">— ${brandName} Support</p>
+      <p style="color:#999;font-size:12px;">— ${brand.brandName} Support${brand.supportEmail ? ` · ${brand.supportEmail}` : ""}</p>
+      ${brand.website ? `<p style="color:#999;font-size:11px;"><a href="${brand.website}" style="color:${brand.primaryColor};">${brand.website}</a></p>` : ""}
     </div>`;
 
   let sentSms = false;
   let sentEmail = false;
 
-  const smsResult = await sendViaProvider("sms", {
+  const smsResult = await sendOtpSms({
     phone: user.phone,
-    message: smsMessage,
+    recipientName: user.name,
+    otpCode: code,
+    otpExpiryMinutes: OTP_TTL_MINUTES,
   });
   sentSms = smsResult.success;
+
+  if (!sentSms) {
+    const fallback = await sendViaProvider("sms", {
+      phone: user.phone,
+      message: `${brand.brandName}: Your password reset code is ${code}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`,
+    });
+    sentSms = fallback.success;
+  }
 
   if (user.email) {
     const emailResult = await sendViaProvider("email", {
       email: user.email,
-      subject: `${brandName} — Password Reset Code`,
+      subject: `${brand.brandName} — Password Reset Code`,
       message: emailHtml,
     });
     sentEmail = emailResult.success;

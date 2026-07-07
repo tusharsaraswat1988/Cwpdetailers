@@ -12,8 +12,11 @@ import {
   ArrowDownLeft, ArrowUpRight, IndianRupee, Phone, MessageCircle, FileText,
 } from "lucide-react";
 import { Link } from "wouter";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
+import { useBranding } from "@/lib/branding";
 
 export default function CustomerWallet() {
+  const branding = useBranding();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
 
   const { data: summary, isLoading: summaryLoading, isError: summaryError, refetch: refetchSummary } =
@@ -57,7 +60,7 @@ export default function CustomerWallet() {
       <CustomerLayout>
         <div className="max-w-md mx-auto text-center space-y-2 py-12">
           <p className="font-semibold">Account not linked</p>
-          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+          <NoCustomerProfileMessage />
         </div>
       </CustomerLayout>
     );
@@ -116,7 +119,7 @@ export default function CustomerWallet() {
           <CardContent className="p-4 space-y-3">
             <p className="font-medium text-sm">Recharge your wallet</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              To add funds, contact CWP via WhatsApp or call. We accept cash, UPI, and bank transfer.
+              To add funds, contact {branding.brandName} via WhatsApp or call. We accept cash, UPI, and bank transfer.
               Your balance is credited after payment confirmation.
             </p>
             <div className="flex gap-2">
@@ -125,7 +128,7 @@ export default function CustomerWallet() {
                 className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
                 data-testid="wallet-call-cwp"
               >
-                <Phone size={15} className="text-green-600" /> Call CWP
+                <Phone size={15} className="text-green-600" /> Call {branding.brandName}
               </a>
               <a
                 href="https://wa.me/919999999999"

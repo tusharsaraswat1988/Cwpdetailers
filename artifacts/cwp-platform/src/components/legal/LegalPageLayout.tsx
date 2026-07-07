@@ -78,7 +78,7 @@ export default function LegalPageLayout({ slug }: Props) {
     );
   }
 
-  const businessName = businessInfo?.businessName ?? branding.companyName ?? "CWP Detailers And Motors";
+  const businessName = businessInfo?.businessName ?? branding.companyName ?? branding.brandName;
   const currentSlug = slug;
   const formattedDate = page.updatedAt
     ? new Date(page.updatedAt).toLocaleDateString("en-IN", {

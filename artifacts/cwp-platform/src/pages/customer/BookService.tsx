@@ -26,6 +26,7 @@ import { useFormDraft } from "@/hooks/useFormDraft";
 import { moduleError } from "@/lib/moduleErrors";
 import { Loader2, CheckCircle, Car, Sun, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 
 const defaultBookingForm = {
   serviceId: "",
@@ -150,7 +151,7 @@ export default function BookService() {
       <CustomerLayout>
         <div className="p-6 max-w-md mx-auto text-center space-y-2">
           <p className="font-semibold">Account not linked</p>
-          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+          <NoCustomerProfileMessage />
         </div>
       </CustomerLayout>
     );

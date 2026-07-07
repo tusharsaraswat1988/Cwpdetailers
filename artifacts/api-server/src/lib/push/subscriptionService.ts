@@ -7,7 +7,7 @@ import {
   staffTable,
   type PushSubscriptionKeys,
 } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne } from "drizzle-orm";
 import { sendWebPush, type WebPushPayload } from "./webPushService";
 
 export async function registerPushSubscription(input: {
@@ -35,6 +35,12 @@ export async function registerPushSubscription(input: {
       updatedAt: now,
     },
   }).returning();
+
+  // Drop stale device tokens (e.g. after VAPID key rotation) — keep only this endpoint.
+  await db.delete(pushSubscriptionsTable).where(and(
+    eq(pushSubscriptionsTable.userId, input.userId),
+    ne(pushSubscriptionsTable.endpoint, input.endpoint),
+  ));
 
   return row!;
 }

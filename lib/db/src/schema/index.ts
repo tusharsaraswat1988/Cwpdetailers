@@ -7,6 +7,7 @@ export * from "./companies";
 export * from "./users";
 export * from "./sessions";
 export * from "./password-reset";
+export * from "./auth-otp";
 export * from "./permissions";
 export * from "./branches";
 export * from "./customers";

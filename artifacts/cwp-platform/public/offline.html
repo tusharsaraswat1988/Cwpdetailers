@@ -3,13 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#00cccc" />
-    <title>Offline — CWP</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Offline</title>
     <style>
       :root {
         color-scheme: light;
-        --primary: #00cccc;
+        --primary: #cccccc;
         --bg: #f5f6f8;
         --text: #1a2332;
         --muted: #64748b;
@@ -29,61 +28,52 @@
       }
       .card {
         max-width: 24rem;
-        width: 100%;
         text-align: center;
       }
       .logo {
         width: 4rem;
         height: 4rem;
-        border-radius: 1rem;
-        background: var(--primary);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 1.5rem;
+        object-fit: contain;
+        margin: 0 auto 1.25rem;
+        display: none;
       }
-      .logo svg { width: 2rem; height: 2rem; }
-      h1 {
-        font-family: Outfit, system-ui, sans-serif;
-        font-size: 1.5rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-      }
-      p {
-        color: var(--muted);
-        font-size: 0.9375rem;
-        line-height: 1.5;
-        margin-bottom: 1.5rem;
-      }
+      .logo[src]:not([src=""]) { display: block; }
+      h1 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }
+      p { color: var(--muted); font-size: 0.875rem; line-height: 1.5; margin-bottom: 1.5rem; }
       button {
-        appearance: none;
-        border: none;
         background: var(--primary);
         color: #fff;
-        font-weight: 600;
-        font-size: 0.9375rem;
-        padding: 0.75rem 1.5rem;
+        border: none;
         border-radius: 0.5rem;
+        padding: 0.625rem 1.25rem;
+        font-size: 0.875rem;
+        font-weight: 600;
         cursor: pointer;
-        min-width: 10rem;
       }
-      button:active { opacity: 0.9; }
+      button:hover { opacity: 0.9; }
     </style>
   </head>
   <body>
     <div class="card">
-      <div class="logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
-          <circle cx="12" cy="12" r="4"/>
-          <line x1="12" y1="2" x2="12" y2="5"/>
-          <line x1="12" y1="19" x2="12" y2="22"/>
-          <line x1="2" y1="12" x2="5" y2="12"/>
-          <line x1="19" y1="12" x2="22" y2="12"/>
-        </svg>
-      </div>
-      <h1>Connection lost</h1>
-      <p>You're offline. Check your internet connection and try again. Live bookings, wallet, and billing require an active connection.</p>
-      <button type="button" onclick="window.location.reload()">Retry</button>
+      <img id="offline-logo" class="logo" src="" alt="" />
+      <h1 id="offline-title">You're offline</h1>
+      <p id="offline-desc">Check your internet connection and try again.</p>
+      <button onclick="location.reload()">Retry</button>
     </div>
+    <script>
+      fetch("/api/branding").then(function(r){return r.ok?r.json():null}).then(function(b){
+        if(!b)return;
+        if(b.primaryColor)document.documentElement.style.setProperty("--primary",b.primaryColor);
+        if(b.backgroundColor)document.documentElement.style.setProperty("--bg",b.backgroundColor);
+        if(b.brandName){
+          document.getElementById("offline-title").textContent="You're offline";
+          document.title="Offline — "+b.brandName;
+        }
+        var logo=b.logoIcon||b.fullLogo||(b.generatedAssets&&b.generatedAssets.pwaIcon192);
+        if(logo){var img=document.getElementById("offline-logo");img.src=logo;img.alt=b.brandName||"";}
+        var fav=b.favicon||(b.generatedAssets&&b.generatedAssets.favicon32);
+        if(fav){var l=document.createElement("link");l.rel="icon";l.href=fav;document.head.appendChild(l);}
+      }).catch(function(){});
+    </script>
   </body>
 </html>

@@ -20,6 +20,8 @@ type PhoneInputProps = Omit<ComponentProps<typeof Input>, "type" | "value" | "on
   /** Mobile = 10-digit Indian; contact = branch/landline (7–15 digits). */
   mode?: "mobile" | "contact";
   hint?: string;
+  /** Light label/hint colors for dark backgrounds (auth pages). */
+  dark?: boolean;
 };
 
 export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(function PhoneInput(
@@ -33,6 +35,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(function
     optional = false,
     mode = "mobile",
     hint,
+    dark = false,
     className,
     id,
     ...props
@@ -65,7 +68,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(function
   return (
     <div>
       {label && (
-        <Label htmlFor={id} className="text-sm">
+        <Label htmlFor={id} className={cn("text-sm", dark && "text-white/70")}>
           {label}
         </Label>
       )}
@@ -88,7 +91,9 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(function
           {error}
         </p>
       ) : (
-        <p className="text-muted-foreground text-xs mt-1">{hint ?? defaultHint}</p>
+        <p className={cn("text-xs mt-1", dark ? "text-white/40" : "text-muted-foreground")}>
+          {hint ?? defaultHint}
+        </p>
       )}
     </div>
   );

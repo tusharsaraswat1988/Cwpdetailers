@@ -5,6 +5,7 @@ import { useListStaff } from "@workspace/api-client-react";
 import { UserCog, CheckCircle, Clock, XCircle, Plus, Phone, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useBranding } from "@/lib/branding";
 
 const verificationBadge: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
   pending: { label: "Pending Verification", cls: "bg-amber-500/10 text-amber-500", icon: Clock },
@@ -13,6 +14,7 @@ const verificationBadge: Record<string, { label: string; cls: string; icon: Reac
 };
 
 export default function FranchiseeStaff() {
+  const branding = useBranding();
   const { user } = useAuth();
   const branchId = user?.branchId?.toString();
   const { data: staff = [], isLoading, refetch } = useListStaff({ branchId } as any);
@@ -24,7 +26,7 @@ export default function FranchiseeStaff() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="font-display font-bold text-2xl">My Staff</h1>
-            <p className="text-muted-foreground text-sm mt-1">Staff added by you — verification done by CWP Admin before they can take bookings</p>
+            <p className="text-muted-foreground text-sm mt-1">Staff added by you — verification done by {branding.brandName} Admin before they can take bookings</p>
           </div>
         </div>
 

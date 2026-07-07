@@ -1,13 +1,7 @@
 import { db } from "@workspace/db";
 import { commBrandsTable, type CommBrand } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
-
-export const DEFAULT_BRANDS = [
-  { name: "CWP Detailers", code: "cwp", primaryColor: "#1e40af" },
-  { name: "Kleansolar", code: "kleansolar", primaryColor: "#059669" },
-  { name: "DCC", code: "dcc", primaryColor: "#7c3aed" },
-  { name: "BidWar", code: "bidwar", primaryColor: "#dc2626" },
-] as const;
+import { getPublicBranding } from "../brandIdentityService";
 
 export async function listBrands(companyId?: number | null): Promise<CommBrand[]> {
   const conditions = companyId ? [eq(commBrandsTable.companyId, companyId)] : [];
@@ -32,8 +26,20 @@ export async function seedDefaultBrands(companyId?: number | null): Promise<Comm
   const existing = await listBrands(companyId);
   if (existing.length) return existing;
 
+  const branding = await getPublicBranding();
+  const primary = {
+    name: branding.brandName || branding.companyName || "Primary",
+    code: "primary",
+    primaryColor: branding.primaryColor,
+  };
+  const secondaryBrands = [
+    { name: "Kleansolar", code: "kleansolar", primaryColor: "#059669" },
+    { name: "DCC", code: "dcc", primaryColor: "#7c3aed" },
+    { name: "BidWar", code: "bidwar", primaryColor: "#dc2626" },
+  ];
+
   const rows = await db.insert(commBrandsTable).values(
-    DEFAULT_BRANDS.map(b => ({
+    [primary, ...secondaryBrands].map(b => ({
       name: b.name,
       code: b.code,
       primaryColor: b.primaryColor,
@@ -50,6 +56,6 @@ export async function resolveBrandId(
 ): Promise<number | null> {
   if (brandId) return brandId;
   const brands = await seedDefaultBrands(companyId);
-  const cwp = brands.find(b => b.code === "cwp");
-  return cwp?.id ?? brands[0]?.id ?? null;
+  const primary = brands.find(b => b.code === "primary" || b.code === "cwp");
+  return primary?.id ?? brands[0]?.id ?? null;
 }

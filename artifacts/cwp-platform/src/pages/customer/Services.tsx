@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Sun, CreditCard, Pause, Calendar, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 
 type Subscription = {
   id: number;
@@ -136,7 +137,7 @@ export default function CustomerServices() {
       <CustomerLayout>
         <div className="max-w-md mx-auto text-center space-y-2 py-12">
           <p className="font-semibold">Account not linked</p>
-          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+          <NoCustomerProfileMessage />
         </div>
       </CustomerLayout>
     );

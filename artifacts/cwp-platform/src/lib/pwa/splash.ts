@@ -5,9 +5,10 @@ export type PwaPortal = "main" | "admin" | "customer" | "staff" | "franchisee";
 export const SPLASH_ELEMENT_ID = "cwp-app-splash";
 export const SPLASH_LOGO_ID = "cwp-splash-logo";
 
-/** Resolve logo for boot / splash screens (prefers login / full brand marks). */
+/** Resolve logo for boot / splash screens */
 export function resolveSplashLogoUrl(branding: PublicBranding): string | null {
   return (
+    branding.splashLogo ??
     branding.loginLogo ??
     branding.fullLogo ??
     branding.pwaIcon ??
@@ -29,7 +30,7 @@ export function applyBrandingToSplash(branding: PublicBranding): void {
   const splash = document.getElementById(SPLASH_ELEMENT_ID);
   if (!splash) return;
 
-  splash.style.backgroundColor = branding.backgroundColor;
+  splash.style.backgroundColor = branding.loaderBackground ?? branding.backgroundColor;
 
   const logo = resolveSplashLogoUrl(branding);
   const img = document.getElementById(SPLASH_LOGO_ID) as HTMLImageElement | null;

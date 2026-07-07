@@ -9,6 +9,7 @@ import { FileText, Download, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { InvoicePdfButton } from "@/features/billing/components/InvoicePdfButton";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 
 export default function CustomerInvoices() {
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
@@ -35,7 +36,7 @@ export default function CustomerInvoices() {
       ) : missingCustomerLink || customerId == null ? (
         <div className="max-w-md mx-auto text-center space-y-2 py-12">
           <p className="font-semibold">Account not linked</p>
-          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+          <NoCustomerProfileMessage />
         </div>
       ) : (
         <div className="space-y-5">

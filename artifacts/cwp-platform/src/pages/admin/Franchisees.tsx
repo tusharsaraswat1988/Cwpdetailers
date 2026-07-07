@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { EmailInput } from "@/components/ui/email-input";
 import { submitEmail, submitMobile, submitOptionalMobile } from "@/lib/contactForm";
+import { useBranding } from "@/lib/branding";
 
 async function fetchFranchisees() {
   const res = await fetch("/api/franchisees");
@@ -43,6 +44,7 @@ const emptyForm = {
 };
 
 export default function AdminFranchisees() {
+  const branding = useBranding();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: franchisees = [], isLoading } = useQuery({ queryKey: ["franchisees"], queryFn: fetchFranchisees });
@@ -101,7 +103,7 @@ export default function AdminFranchisees() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="font-display font-bold text-2xl">Franchisees</h1>
-            <p className="text-muted-foreground text-sm mt-1">City franchise partners — owned locally, operated by CWP</p>
+            <p className="text-muted-foreground text-sm mt-1">City franchise partners — owned locally, operated by {branding.brandName}</p>
           </div>
           <Button onClick={() => setShowForm(!showForm)} className="bg-primary text-secondary">
             <Plus size={14} className="mr-2" />Add Franchisee

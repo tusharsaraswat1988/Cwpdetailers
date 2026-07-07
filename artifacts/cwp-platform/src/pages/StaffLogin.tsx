@@ -11,7 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import { submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
-import { AuthSupportPanel } from "@/components/auth/AuthSupportPanel";
 import { useBranding } from "@/lib/branding";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { Loader2 } from "lucide-react";
@@ -138,11 +137,12 @@ export default function StaffLogin() {
             id="staff-phone"
             data-testid="input-staff-phone"
             label="Phone Number"
+            dark
             value={phone}
             onChange={setPhone}
             error={phoneError}
             onErrorChange={setPhoneError}
-            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary [&+p]:text-white/40"
+            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
           />
           <div>
             <div className="flex items-center justify-between">
@@ -180,8 +180,6 @@ export default function StaffLogin() {
             <Link href="/login" className="text-primary hover:underline">Customer login</Link>
           </p>
         </div>
-
-        <AuthSupportPanel portal="staff" className="mt-6" />
       </div>
     </div>
   );

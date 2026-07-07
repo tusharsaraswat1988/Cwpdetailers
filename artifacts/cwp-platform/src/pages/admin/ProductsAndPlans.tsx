@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { useBranding } from "@/lib/branding";
 import { PageActionHeader } from "@/components/layout/PageActionHeader";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +47,7 @@ function isCarWashTab(tab: TabValue) {
 }
 
 export default function ProductsAndPlansPage() {
+  const branding = useBranding();
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
   const search = location.includes("?") ? location.slice(location.indexOf("?")) : "";
@@ -76,7 +78,7 @@ export default function ProductsAndPlansPage() {
           description={
             isHomepage
               ? "Website marketing content — hero, testimonials, and public homepage sections. Most branches rarely need this."
-              : "What CWP sells — three revenue lines. Prices are set by HQ; branches choose what to offer when booking."
+              : `What ${branding.brandName} sells — three revenue lines. Prices are set by HQ; branches choose what to offer when booking.`
           }
           primaryAction={{
             label: isHomepage ? "Back to catalog" : "Add car wash service",

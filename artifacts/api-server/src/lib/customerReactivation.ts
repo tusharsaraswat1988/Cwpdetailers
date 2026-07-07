@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { customersTable, commTimelineTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { recordJourneyEvent } from "./communications/journeyService";
+import { getBrandName } from "./brandIdentityService";
 
 export type ReactivationTrigger = "manual" | "booking" | "subscription" | "status_change";
 
@@ -14,8 +15,9 @@ export function isLegacyDormantCustomer(customer: {
   return customer.status === "inactive" && customer.legacySegment === LEGACY_SEGMENT_CONTACT;
 }
 
-export function welcomeBackMessage(name: string): string {
-  return `Welcome back, ${name}! We're glad to have you with CWP Detailers again. Your services are now active — book anytime or call us for help.`;
+export async function welcomeBackMessage(name: string): Promise<string> {
+  const brandName = await getBrandName();
+  return `Welcome back, ${name}! We're glad to have you with ${brandName} again. Your services are now active — book anytime or call us for help.`;
 }
 
 /** Reactivate a dormant legacy_contact customer and log welcome-back comms. */
@@ -53,7 +55,7 @@ export async function tryReactivateLegacyCustomer(
   await db.insert(commTimelineTable).values({
     customerId,
     channel: "whatsapp",
-    message: welcomeBackMessage(customer.name),
+    message: await welcomeBackMessage(customer.name),
     subject: "Welcome back",
     status: "queued",
     deliveryStatus: "queued",

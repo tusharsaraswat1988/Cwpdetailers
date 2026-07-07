@@ -12,6 +12,7 @@ import { hashPassword, verifyPasswordWithUpgrade } from "../lib/passwords";
 import {
   normalizeLoginIdentifier,
   parseRequiredMobile,
+  parseRequiredEmail,
   parseOptionalEmail,
 } from "../lib/contactFields";
 import { assertContactIdentityAvailable } from "../lib/contactIdentity";
@@ -39,6 +40,13 @@ import {
   isRoleAllowedForPortal,
   portalMismatchMessage,
 } from "../lib/authPortals";
+import {
+  authProviderAfterPasswordSet,
+  userHasPassword,
+  validateNewPassword,
+} from "../lib/userPassword";
+import { sendAuthOtp, verifyAuthOtp, isOtpSmsConfigured } from "../lib/authOtp";
+import type { AuthOtpPurpose } from "@workspace/db";
 
 const router = Router();
 
@@ -67,7 +75,10 @@ async function issueSession(userId: number, req: { headers: Record<string, unkno
 
 function toSafeUser(u: typeof usersTable.$inferSelect) {
   const { passwordHash: _, ...safeUser } = u;
-  return safeUser;
+  return {
+    ...safeUser,
+    hasUserPassword: userHasPassword(u),
+  };
 }
 
 /** Remove half-finished Google customer sign-ups that block phone/email reuse. */
@@ -196,11 +207,22 @@ router.post("/auth/google", async (req, res) => {
 
 router.post("/auth/google/complete", async (req, res) => {
   try {
-    const { linkToken, phone } = req.body as { linkToken?: string; phone?: string };
+    const { linkToken, phone, password: rawPassword } = req.body as {
+      linkToken?: string;
+      phone?: string;
+      password?: string;
+    };
     if (!linkToken) return res.status(400).json({ error: "Link token required" });
 
     const phoneResult = parseRequiredMobile(phone);
     if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    let chosenPassword: string | null = null;
+    if (rawPassword != null && String(rawPassword).trim() !== "") {
+      const pwCheck = validateNewPassword(rawPassword);
+      if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
+      chosenPassword = pwCheck.value;
+    }
 
     const tokenHash = hashOpaqueToken(linkToken);
     const now = new Date();
@@ -226,7 +248,10 @@ router.post("/auth/google/complete", async (req, res) => {
     const identityCheck = await assertContactIdentityAvailable(phoneResult.value, normalizedEmail);
     if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
 
-    const placeholderPassword = await hashPassword(generateOpaqueToken());
+    const passwordHash = chosenPassword
+      ? await hashPassword(chosenPassword)
+      : await hashPassword(generateOpaqueToken());
+    const authProvider = chosenPassword ? "hybrid" : "google";
 
     const result = await db.transaction(async (tx) => {
       const [user] = await tx
@@ -235,11 +260,11 @@ router.post("/auth/google/complete", async (req, res) => {
           name: pending.name,
           phone: identityCheck.identity.phone,
           email: identityCheck.identity.email,
-          passwordHash: placeholderPassword,
+          passwordHash,
           role: "customer",
           googleId: pending.googleId,
           avatarUrl: pending.avatarUrl,
-          authProvider: "google",
+          authProvider,
           isActive: true,
         })
         .returning();
@@ -307,9 +332,9 @@ router.post("/auth/forgot-password", async (req, res) => {
       return res.status(401).json({ error: "Account suspended. Contact support." });
     }
 
-    if (user.authProvider === "google" && !user.passwordHash) {
+    if (user.authProvider === "google") {
       return res.status(400).json({
-        error: "This account uses Google Sign-In. Sign in with Google or contact support.",
+        error: "This account uses Google Sign-In only. Sign in with Google or set a password from your account.",
       });
     }
 
@@ -360,9 +385,10 @@ router.post("/auth/reset-password", async (req, res) => {
     if (!valid) return res.status(400).json({ error: "Invalid or expired reset code" });
 
     const passwordHash = await hashPassword(newPassword);
+    const authProvider = authProviderAfterPasswordSet(user);
     await db
       .update(usersTable)
-      .set({ passwordHash, authProvider: "local", updatedAt: new Date() })
+      .set({ passwordHash, authProvider, updatedAt: new Date() })
       .where(eq(usersTable.id, user.id));
 
     await revokeAllUserSessions(user.id);
@@ -370,6 +396,49 @@ router.post("/auth/reset-password", async (req, res) => {
     return res.json({ ok: true, message: "Password updated successfully. Please sign in." });
   } catch (err) {
     req.log.error({ err }, "Reset password error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/auth/set-password", optionalAuth, requireAuth, async (req, res) => {
+  try {
+    const { newPassword, currentPassword } = req.body as {
+      newPassword?: string;
+      currentPassword?: string;
+    };
+
+    const pwCheck = validateNewPassword(newPassword);
+    if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
+
+    const rows = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id)).limit(1);
+    const user = rows[0];
+    if (!user || !user.isActive) return res.status(401).json({ error: "Authentication required" });
+
+    if (userHasPassword(user)) {
+      if (!currentPassword) {
+        return res.status(400).json({ error: "Current password is required" });
+      }
+      if (!user.passwordHash) {
+        return res.status(400).json({ error: "Could not verify current password" });
+      }
+      const { valid } = await verifyPasswordWithUpgrade(currentPassword, user.passwordHash);
+      if (!valid) return res.status(400).json({ error: "Current password is incorrect" });
+    }
+
+    const passwordHash = await hashPassword(pwCheck.value);
+    const authProvider = authProviderAfterPasswordSet(user);
+
+    const [updated] = await db
+      .update(usersTable)
+      .set({ passwordHash, authProvider, updatedAt: new Date() })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+
+    if (!updated) return res.status(500).json({ error: "Could not update password" });
+
+    return res.json({ ok: true, message: "Password saved", user: toSafeUser(updated) });
+  } catch (err) {
+    req.log.error({ err }, "Set password error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -387,8 +456,10 @@ router.post("/auth/login", async (req, res) => {
     const user = await findUserByIdentifier(idResult.value.phone, idResult.value.email);
 
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
-    if (!user.passwordHash) {
-      return res.status(401).json({ error: "This account uses Google Sign-In. Use Continue with Google." });
+    if (!userHasPassword(user) || !user.passwordHash) {
+      return res.status(401).json({
+        error: "This account uses Google Sign-In. Use Continue with Google or set a password from your account.",
+      });
     }
 
     const { valid, upgradedHash } = await verifyPasswordWithUpgrade(password, user.passwordHash);
@@ -413,6 +484,163 @@ router.post("/auth/login", async (req, res) => {
   }
 });
 
+function parseOtpPurpose(raw: unknown): AuthOtpPurpose | null {
+  return raw === "signup" ? "signup" : raw === "login" ? "login" : null;
+}
+
+router.get("/auth/otp/config", (_req, res) => {
+  return res.json({
+    enabled: isOtpSmsConfigured(),
+    senderId: process.env.FAST2SMS_SENDER_ID ?? "CWPDTL",
+  });
+});
+
+router.post("/auth/otp/send", async (req, res) => {
+  try {
+    const { phone, purpose: rawPurpose, name } = req.body as {
+      phone?: string;
+      purpose?: string;
+      name?: string;
+    };
+
+    const purpose = parseOtpPurpose(rawPurpose);
+    if (!purpose) return res.status(400).json({ error: "Invalid OTP purpose" });
+
+    const phoneResult = parseRequiredMobile(phone);
+    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    const delivery = await sendAuthOtp({
+      phone: phoneResult.value,
+      purpose,
+      portal: "customer",
+      name,
+    });
+
+    return res.json({
+      ok: true,
+      message: "OTP sent",
+      sentSms: delivery.sentSms,
+      maskedPhone: delivery.maskedPhone,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Send OTP error");
+    const message = err instanceof Error ? err.message : "Could not send OTP";
+    return res.status(400).json({ error: message });
+  }
+});
+
+router.post("/auth/otp/verify", async (req, res) => {
+  try {
+    const {
+      phone,
+      code,
+      purpose: rawPurpose,
+      name,
+      password,
+      email,
+      city,
+      branchId,
+    } = req.body as {
+      phone?: string;
+      code?: string;
+      purpose?: string;
+      name?: string;
+      password?: string;
+      email?: string;
+      city?: string;
+      branchId?: number;
+    };
+
+    const purpose = parseOtpPurpose(rawPurpose);
+    if (!purpose) return res.status(400).json({ error: "Invalid OTP purpose" });
+    if (!code || code.length !== 6) return res.status(400).json({ error: "Enter the 6-digit OTP" });
+
+    const phoneResult = parseRequiredMobile(phone);
+    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+
+    const verified = await verifyAuthOtp({
+      phone: phoneResult.value,
+      code,
+      purpose,
+      portal: "customer",
+    });
+    if (!verified.ok) return res.status(400).json({ error: "Invalid or expired OTP" });
+
+    if (purpose === "login") {
+      const user = (
+        await db.select().from(usersTable).where(eq(usersTable.phone, phoneResult.value)).limit(1)
+      )[0];
+      if (!user || !user.isActive || user.role !== "customer") {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      const token = await issueSession(user.id, req);
+      setSessionCookie(res, token, "customer");
+      return res.json({ token, user: toSafeUser(user) });
+    }
+
+    const signupName = (name ?? verified.pendingName ?? "").trim();
+    if (!signupName) return res.status(400).json({ error: "Name is required" });
+
+    const emailResult = parseOptionalEmail(email);
+    if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
+
+    const identityCheck = await assertContactIdentityAvailable(phoneResult.value, emailResult.value);
+    if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+
+    let passwordHash: string | null = null;
+    let authProvider = "otp";
+
+    if (password != null && String(password).trim() !== "") {
+      const pwCheck = validateNewPassword(password);
+      if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
+      passwordHash = await hashPassword(pwCheck.value);
+      authProvider = "local";
+    }
+
+    const [user] = await db.insert(usersTable).values({
+      name: signupName,
+      phone: identityCheck.identity.phone,
+      email: identityCheck.identity.email,
+      passwordHash,
+      role: "customer",
+      branchId: branchId || null,
+      isActive: true,
+      authProvider,
+    }).returning();
+
+    if (!user) return res.status(500).json({ error: "Failed to create user" });
+
+    const [customer] = await db.insert(customersTable).values({
+      userId: user.id,
+      name: signupName,
+      phone: identityCheck.identity.phone,
+      email: identityCheck.identity.email,
+      city: city || "Varanasi",
+      branchId: branchId || null,
+      status: "active",
+    }).returning();
+
+    let linkedUser = user;
+    if (customer) {
+      const [updated] = await db
+        .update(usersTable)
+        .set({ customerId: customer.id })
+        .where(eq(usersTable.id, user.id))
+        .returning();
+      if (updated) linkedUser = updated;
+    }
+
+    const token = await issueSession(linkedUser.id, req);
+    setSessionCookie(res, token, "customer");
+    return res.status(201).json({ token, user: toSafeUser(linkedUser) });
+  } catch (err) {
+    req.log.error({ err }, "Verify OTP error");
+    const message = err instanceof Error ? err.message : "Could not verify OTP";
+    return res.status(400).json({ error: message });
+  }
+});
+
 router.post("/auth/register", async (req, res) => {
   try {
     const { name, phone, email, password, address, city, branchId } = req.body;
@@ -421,7 +649,7 @@ router.post("/auth/register", async (req, res) => {
     const phoneResult = parseRequiredMobile(phone);
     if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
 
-    const emailResult = parseOptionalEmail(email);
+    const emailResult = parseRequiredEmail(email);
     if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
 
     const normalizedPhone = phoneResult.value;

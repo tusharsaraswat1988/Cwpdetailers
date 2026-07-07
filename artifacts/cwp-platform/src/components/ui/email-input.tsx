@@ -13,6 +13,8 @@ type EmailInputProps = Omit<ComponentProps<typeof Input>, "type" | "value" | "on
   required?: boolean;
   optional?: boolean;
   hint?: string;
+  /** Light label/hint colors for dark backgrounds (auth pages). */
+  dark?: boolean;
 };
 
 export const EmailInput = forwardRef<HTMLInputElement, EmailInputProps>(function EmailInput(
@@ -25,6 +27,7 @@ export const EmailInput = forwardRef<HTMLInputElement, EmailInputProps>(function
     required = false,
     optional = true,
     hint,
+    dark = false,
     className,
     id,
     ...props
@@ -47,7 +50,7 @@ export const EmailInput = forwardRef<HTMLInputElement, EmailInputProps>(function
   return (
     <div>
       {label && (
-        <Label htmlFor={id} className="text-sm">
+        <Label htmlFor={id} className={cn("text-sm", dark && "text-white/70")}>
           {label}
         </Label>
       )}
@@ -70,7 +73,9 @@ export const EmailInput = forwardRef<HTMLInputElement, EmailInputProps>(function
           {error}
         </p>
       ) : (
-        <p className="text-muted-foreground text-xs mt-1">{hint ?? "Valid email format required if provided"}</p>
+        <p className={cn("text-xs mt-1", dark ? "text-white/40" : "text-muted-foreground")}>
+          {hint ?? "Valid email format required if provided"}
+        </p>
       )}
     </div>
   );

@@ -240,7 +240,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { id: "communications", href: "/admin/communications", label: "Communication Center", icon: Radio, perm: { resource: "communications", action: "view" } },
       { id: "notifications", href: "/admin/notifications", label: "Notifications", icon: Bell, perm: { resource: "notifications", action: "view" } },
       { id: "push-logs", href: "/admin/push-logs", label: "Push Delivery Log", icon: BellRing, perm: { resource: "notifications", action: "view" } },
-      { id: "brand", href: "/admin/settings/brand", label: "Brand Identity", icon: Palette, perm: { resource: "settings", action: "view" } },
+      { id: "brand", href: "/admin/settings/brand", label: "Branding", icon: Palette, perm: { resource: "settings", action: "view" } },
       { id: "invoice_billing", href: "/admin/settings/invoice-billing", label: "Invoice & GST", icon: Receipt, perm: { resource: "invoices", action: "view" } },
       { id: "business", href: "/admin/settings/business", label: "Business Info", icon: Info, perm: { resource: "settings", action: "view" } },
       { id: "seo", href: "/admin/settings/seo", label: "SEO Management", icon: Search, perm: { resource: "settings", action: "view" } },

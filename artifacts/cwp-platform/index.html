@@ -6,15 +6,13 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#00cccc" />
-    <meta name="description" content="Premium car wash, detailing, and solar cleaning services across India." />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="CWP Detailers" />
+    <meta name="apple-mobile-web-app-title" content="" />
     <title>Loading…</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
     <link rel="manifest" href="/api/branding/public/manifest/main" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,12 +45,16 @@
         width: 7.5rem;
         height: 7.5rem;
         object-fit: contain;
+        display: none;
+      }
+      #cwp-splash-logo[src]:not([src=""]) {
+        display: block;
       }
       .cwp-splash-accent {
         width: 2rem;
         height: 0.2rem;
         border-radius: 9999px;
-        background-color: #00cccc;
+        background-color: #cccccc;
         animation: cwp-splash-pulse 1.1s ease-in-out infinite;
       }
       @keyframes cwp-splash-pulse {
@@ -69,26 +71,28 @@
       <div class="cwp-splash-inner">
         <img
           id="cwp-splash-logo"
-          src="/pwa/icon-512.png"
-          alt="CWP Detailers"
+          src=""
+          alt=""
           width="120"
           height="120"
           decoding="async"
         />
         <div class="cwp-splash-accent" aria-hidden="true"></div>
+        <p id="cwp-splash-text" style="font-family:sans-serif;font-size:0.875rem;color:#666;margin:0;"></p>
       </div>
     </div>
     <div id="root"></div>
     <script>
       (function () {
         var splash = document.getElementById("cwp-app-splash");
-        fetch("/api/branding/public", { credentials: "same-origin" })
+        fetch("/api/branding", { credentials: "same-origin" })
           .then(function (r) { return r.ok ? r.json() : null; })
           .then(function (b) {
             if (!b || !splash) return;
-            splash.style.backgroundColor = b.backgroundColor || "#ffffff";
+            splash.style.backgroundColor = b.loaderBackground || b.backgroundColor || "#ffffff";
             var ga = b.generatedAssets || {};
             var logo =
+              b.splashLogo ||
               b.loginLogo ||
               b.fullLogo ||
               b.pwaIcon ||
@@ -97,20 +101,42 @@
             var img = document.getElementById("cwp-splash-logo");
             if (img && logo) {
               img.src = logo;
-              img.alt = b.brandName || "CWP Detailers";
+              img.alt = b.brandName || "";
             }
             var accent = splash.querySelector(".cwp-splash-accent");
             if (accent && b.primaryColor) accent.style.backgroundColor = b.primaryColor;
+            var textEl = document.getElementById("cwp-splash-text");
+            if (textEl && b.loaderText) textEl.textContent = b.loaderText;
             var themeMeta = document.querySelector("meta[name='theme-color']");
             if (themeMeta && b.primaryColor) themeMeta.setAttribute("content", b.primaryColor);
             if (b.brandName) {
               var appleTitle = document.querySelector("meta[name='apple-mobile-web-app-title']");
               if (appleTitle) appleTitle.setAttribute("content", b.brandName);
+              document.title = b.metaTitle || b.brandName;
+            }
+            if (b.metaDescription) {
+              var descMeta = document.querySelector("meta[name='description']");
+              if (descMeta) descMeta.setAttribute("content", b.metaDescription);
             }
             var apple = b.appleTouchIcon || ga.appleTouchIcon;
             if (apple) {
               var appleLink = document.querySelector("link[rel='apple-touch-icon']");
-              if (appleLink) appleLink.setAttribute("href", apple);
+              if (!appleLink) {
+                appleLink = document.createElement("link");
+                appleLink.rel = "apple-touch-icon";
+                document.head.appendChild(appleLink);
+              }
+              appleLink.setAttribute("href", apple);
+            }
+            var fav = b.favicon || ga.favicon32;
+            if (fav) {
+              var favLink = document.querySelector("link[rel='icon']");
+              if (!favLink) {
+                favLink = document.createElement("link");
+                favLink.rel = "icon";
+                document.head.appendChild(favLink);
+              }
+              favLink.setAttribute("href", fav);
             }
           })
           .catch(function () {});

@@ -11,6 +11,8 @@ import { motion } from "framer-motion";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { CompletionRing } from "@/components/shared/CompletionRing";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
+import { useBranding } from "@/lib/branding";
 import { DcmsHomeCard } from "@/features/daily-cleaning/pages/CustomerDailyCleaningPage";
 
 async function fetchWalletTransactions(customerId: number) {
@@ -26,6 +28,7 @@ async function fetchWalletSummary(customerId: number) {
 }
 
 export default function CustomerDashboard() {
+  const branding = useBranding();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
 
   const { data: summary, isLoading } = useGetCustomerSummary(customerId ?? 0, {
@@ -67,7 +70,7 @@ export default function CustomerDashboard() {
       <CustomerLayout>
         <div className="p-6 max-w-md mx-auto text-center space-y-2">
           <p className="font-semibold">Account not linked</p>
-          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile. Contact CWP support.</p>
+          <NoCustomerProfileMessage />
         </div>
       </CustomerLayout>
     );
@@ -164,7 +167,7 @@ export default function CustomerDashboard() {
                   </p>
                 </div>
                 <p className="text-xs text-muted-foreground max-w-[160px] text-right">
-                  Contact CWP to recharge your wallet (cash / UPI / bank transfer)
+                  Contact {branding.brandName} to recharge your wallet (cash / UPI / bank transfer)
                 </p>
               </div>
               {(walletTx?.data ?? []).length > 0 && (

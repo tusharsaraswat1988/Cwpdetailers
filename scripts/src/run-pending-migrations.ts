@@ -41,6 +41,8 @@ const PENDING = [
   "035_auth_google_password_reset.sql",
   "036_wallet_transactions.sql",
   "037_vehicles_assigned_staff.sql",
+  "043_auth_otp_codes.sql",
+  "044_branding_settings_bms.sql",
 ];
 
 async function main() {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import FranchiseeLayout from "@/components/layout/FranchiseeLayout";
+import { useBranding } from "@/lib/branding";
 import { useAuth } from "@/lib/auth";
 import {
   useListBookings, getListBookingsQueryKey,
@@ -32,6 +33,7 @@ const statusColors: Record<string, string> = {
 type B = { id: number; customerId?: number; customerName?: string; status?: string; serviceName?: string | null; serviceType?: string | null; scheduledDate?: string; scheduledTime?: string | null; staffName?: string | null; address?: string | null; area?: string | null; amount?: string | number | null };
 
 export default function FranchiseeBookings() {
+  const branding = useBranding();
   const { user } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -86,7 +88,7 @@ export default function FranchiseeBookings() {
         </div>
 
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 mb-5 text-sm text-amber-600">
-          <strong>Note:</strong> All payments are collected and settled by CWP Admin. Your role is to coordinate job scheduling and staff dispatch.
+          <strong>Note:</strong> All payments are collected and settled by {branding.brandName} Admin. Your role is to coordinate job scheduling and staff dispatch.
         </div>
 
         <div className="flex gap-2 flex-wrap mb-5">

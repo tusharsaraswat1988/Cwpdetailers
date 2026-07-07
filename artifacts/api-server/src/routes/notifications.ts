@@ -1,7 +1,9 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, usersTable } from "@workspace/db";
 import { notificationsTable } from "@workspace/db";
 import { eq, and, or, desc, isNull } from "drizzle-orm";
+import { deliverPushToUser } from "../lib/push/subscriptionService";
+import { isWebPushConfigured } from "../lib/push/webPushService";
 
 const router = Router();
 
@@ -75,6 +77,29 @@ router.post("/notifications", async (req, res) => {
       userId: targetUserId, title, message, type, channel: channel || "in_app",
       deliveryStatus: "sent",
     }).returning();
+
+    if (isWebPushConfigured()) {
+      const [targetUser] = await db.select({ role: usersTable.role }).from(usersTable)
+        .where(eq(usersTable.id, targetUserId)).limit(1);
+      const pushUrl = targetUser?.role === "staff"
+        ? "/staff/dashboard"
+        : targetUser?.role === "customer"
+          ? "/customer/account"
+          : "/admin/notifications";
+
+      void deliverPushToUser({
+        userId: targetUserId,
+        message: {
+          title,
+          body: message,
+          url: pushUrl,
+          tag: `broadcast-${notification!.id}`,
+        },
+        eventType: "broadcast",
+        reason: `Notification: ${title}`,
+      }).catch(err => req.log.error({ err, notificationId: notification!.id }, "Broadcast push failed"));
+    }
+
     return res.status(201).json(notification);
   } catch (err) {
     req.log.error({ err }, "Create notification error");
