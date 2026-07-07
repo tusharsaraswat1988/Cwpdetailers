@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   searchWalkInTargets,
   getWalkInQuotaOptions,
-  getWalkInCustomerSummary,
+  getWalkInCustomerContext,
   resolveWalkInJob,
   type WalkInServiceKind,
 } from "../lib/staff/walkInService";
@@ -35,9 +35,10 @@ router.get("/staff/walk-in/customer/:customerId", async (req, res) => {
     if (!staffId) return;
     const customerId = parseInt(req.params.customerId, 10);
     if (!Number.isFinite(customerId)) return res.status(400).json({ error: "Invalid customer id" });
-    const summary = await getWalkInCustomerSummary(customerId);
-    if (!summary) return res.status(404).json({ error: "Customer not found" });
-    return res.json(summary);
+    const vehicleId = req.query.vehicleId != null ? Number(req.query.vehicleId) : undefined;
+    const context = await getWalkInCustomerContext(customerId, { vehicleId });
+    if (!context) return res.status(404).json({ error: "Customer not found" });
+    return res.json(context);
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message });
   }
@@ -75,6 +76,8 @@ router.post("/staff/walk-in/resolve", async (req, res) => {
       legacySubscriptionId,
       latitude,
       longitude,
+      accuracy,
+      forceDraft,
     } = req.body ?? {};
 
     if (!customerId || !serviceKind) {
@@ -92,6 +95,8 @@ router.post("/staff/walk-in/resolve", async (req, res) => {
       legacySubscriptionId: legacySubscriptionId != null ? Number(legacySubscriptionId) : undefined,
       latitude: latitude != null ? Number(latitude) : undefined,
       longitude: longitude != null ? Number(longitude) : undefined,
+      accuracy: accuracy != null ? Number(accuracy) : undefined,
+      forceDraft: forceDraft === true,
     });
 
     return res.json(result);
