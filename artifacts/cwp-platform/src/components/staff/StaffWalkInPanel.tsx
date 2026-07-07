@@ -15,6 +15,7 @@ import {
 } from "@/features/staff-walk-in/api";
 import { useCompleteVisit } from "@/features/daily-cleaning/api";
 import { getStaffLocation } from "@/lib/location";
+import { visitUploadErrorMessage } from "@/features/daily-cleaning/lib/visitUploadError";
 import { validateCameraFile, readFileAsDataUrl, extractClientExif } from "@/features/daily-cleaning/lib/cameraCapture";
 import { SERVICE_EXECUTIONS_QUERY_KEY } from "@/features/service-executions/api";
 import { getGetTodayBookingsQueryKey } from "@workspace/api-client-react";
