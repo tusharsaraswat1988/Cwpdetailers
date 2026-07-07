@@ -135,6 +135,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
         visitType: dcmsPending.visitType,
         imageBase64,
         exif,
+        capturedAt: new Date(file.lastModified).toISOString(),
         walkIn: true,
         ...gps,
       });

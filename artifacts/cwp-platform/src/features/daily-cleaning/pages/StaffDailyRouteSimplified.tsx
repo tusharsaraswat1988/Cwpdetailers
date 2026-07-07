@@ -71,6 +71,7 @@ export function StaffDailyRouteSimplified() {
         visitType: "cleaning",
         imageBase64,
         exif,
+        capturedAt: new Date(file.lastModified).toISOString(),
         ...gps,
         ocrText: plateScanMeta?.ocrText ?? null,
         ocrConfidence: plateScanMeta?.ocrConfidence ?? null,

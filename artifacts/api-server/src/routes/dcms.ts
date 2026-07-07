@@ -345,7 +345,7 @@ router.post(
   requirePermission("daily_cleaning", "complete_visits"),
   dcmsRateLimit(30, 60_000),
   async (req, res) => {
-    const { subscriptionId, visitType, imageBase64, latitude, longitude, accuracy, exif, ocrText, ocrConfidence, confirmedRegistration, walkIn } = req.body ?? {};
+    const { subscriptionId, visitType, imageBase64, latitude, longitude, accuracy, exif, capturedAt, ocrText, ocrConfidence, confirmedRegistration, walkIn } = req.body ?? {};
     req.log.info({
       dcmsVisitComplete: "http_request_received",
       subscriptionId,
@@ -378,6 +378,7 @@ router.post(
         ocrText: ocrText ?? null,
         ocrConfidence: ocrConfidence != null ? Number(ocrConfidence) : null,
         confirmedRegistration: confirmedRegistration ?? null,
+        capturedAt: typeof capturedAt === "string" ? capturedAt : undefined,
         walkIn: Boolean(walkIn),
       }, { log: req.log });
       return res.status(201).json(result);

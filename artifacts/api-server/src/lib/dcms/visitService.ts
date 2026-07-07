@@ -62,7 +62,9 @@ export async function completeVisit(
 
   let exifData: Record<string, unknown>;
   try {
-    exifData = sanitizeExifForStorage(validateCameraPhoto(input.imageBase64, input.exif));
+    exifData = sanitizeExifForStorage(validateCameraPhoto(input.imageBase64, input.exif, {
+      capturedAt: input.capturedAt,
+    }));
     traceVisitStep(log, "image_validation_passed");
   } catch (e) {
     if (e instanceof ImageValidationError) traceVisitFailure(log, "image_validation_passed", e);
