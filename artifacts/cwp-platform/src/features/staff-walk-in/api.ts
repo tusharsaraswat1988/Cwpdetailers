@@ -2,24 +2,32 @@ export type WalkInServiceKind = "car_wash" | "solar_clean" | "daily_clean" | "da
 
 export type WalkInEntitlementStatus = "active" | "exhausted" | "expired" | "not_active" | "inactive";
 
-export type WalkInEntitlementCard = {
+export type WalkInIncludedService = {
   key: string;
   serviceKind: WalkInServiceKind;
   displayName: string;
   remaining: number;
   total: number | null;
-  expiresAt: string | null;
   status: WalkInEntitlementStatus;
-  source: "entitlement" | "dcms" | "legacy_subscription" | null;
   recommended: boolean;
-  vehicleId?: number;
-  vehicleLabel?: string;
-  solarSiteId?: number;
   entitlementId?: number;
   subscriptionId?: number;
   legacySubscriptionId?: number;
   visitType?: "cleaning" | "wash";
-  packageName?: string | null;
+  solarSiteId?: number;
+};
+
+export type WalkInPackageCard = {
+  key: string;
+  packageName: string;
+  packagePrice: string | null;
+  expiresAt: string | null;
+  status: WalkInEntitlementStatus;
+  source: "entitlement" | "dcms" | "legacy_subscription" | null;
+  vehicleId?: number;
+  vehicleLabel?: string;
+  packageId?: number;
+  includedServices: WalkInIncludedService[];
 };
 
 export type WalkInCustomerContext = {
@@ -47,21 +55,22 @@ export type WalkInCustomerContext = {
     label: string;
   }>;
   membershipStatus: "active" | "inactive" | "suspended" | "none";
-  entitlements: WalkInEntitlementCard[];
-  eligibleToday: WalkInEntitlementCard[];
+  packages: WalkInPackageCard[];
+  eligibleToday: WalkInIncludedService[];
   hasActivePackage: boolean;
 };
 
-export type WalkInQuotaOption = {
-  source: "entitlement" | "dcms" | "legacy_subscription" | "none";
-  label: string;
-  entitlementId?: number;
-  subscriptionId?: number;
-  legacySubscriptionId?: number;
-  vehicleId?: number;
-  solarSiteId?: number;
-  remaining: number;
-  visitType?: "cleaning" | "wash";
+export type WalkInDcmsStop = {
+  subscriptionId: number;
+  customerName: string;
+  vehicleNumber: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  planName: string;
+  remainingCleanings: number;
+  remainingWashes: number;
+  todayStatus: "pending" | "completed" | "rejected";
+  visitType: "cleaning" | "wash";
 };
 
 function formatWalkInError(err: { error?: string; resource?: string; action?: string }, status: number): string {
@@ -112,10 +121,10 @@ export async function fetchWalkInCustomer(customerId: number, vehicleId?: number
   return walkInFetch<WalkInCustomerContext>(`/staff/walk-in/customer/${customerId}${qs}`);
 }
 
-export async function fetchWalkInQuota(customerId: number, serviceKind: WalkInServiceKind, vehicleId?: number) {
-  const qs = new URLSearchParams({ serviceKind });
-  if (vehicleId) qs.set("vehicleId", String(vehicleId));
-  return walkInFetch<{ options: WalkInQuotaOption[] }>(`/staff/walk-in/customer/${customerId}/quota?${qs}`);
+export async function fetchWalkInDcmsStop(subscriptionId: number, visitType: "cleaning" | "wash") {
+  return walkInFetch<WalkInDcmsStop>(
+    `/staff/walk-in/dcms-stop/${subscriptionId}?visitType=${visitType}`,
+  );
 }
 
 export type ResolveWalkInResult =

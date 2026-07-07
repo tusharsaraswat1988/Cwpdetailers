@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
@@ -11,7 +11,6 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Calendar, ChevronDown, ChevronLeft, UserPlus } from "lucide-react";
 import { staffJobKey, type StaffJob } from "@/lib/staff-jobs";
-import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -21,7 +20,7 @@ type Props = {
 
 export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) {
   const jobs = useStaffJobsData();
-  const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [selectedJob, setSelectedJob] = useState<StaffJob | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [walkInOpen, setWalkInOpen] = useState(false);
@@ -119,8 +118,9 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
               onSelectJob(`booking-${bookingId}`);
               setWalkInOpen(false);
             }}
-            onDcmsResolved={() => {
-              toast({ title: "Daily clean", description: "Daily Clean tab mein jaake visit complete karein" });
+            onDcmsResolved={(subscriptionId, visitType) => {
+              setWalkInOpen(false);
+              navigate(`/staff/daily-clean?walkIn=1&subscriptionId=${subscriptionId}&visitType=${visitType}`);
             }}
           />
         </CollapsibleContent>

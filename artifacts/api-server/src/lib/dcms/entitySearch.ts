@@ -9,14 +9,14 @@ import { OPERATIONAL_ROLE_SLUGS } from "../staffEcosystem/operationalRoles";
 
 export async function searchCustomers(query: string, limit = 20) {
   const q = query.trim();
-  if (q.length < 2) return [];
+  if (q.length < 3) return [];
 
   const phoneDigits = q.replace(/\D/g, "");
   const conditions = [
     or(
       ilike(customersTable.name, `%${q}%`),
       ilike(customersTable.phone, `%${q}%`),
-      phoneDigits.length >= 4 ? ilike(customersTable.phone, `%${phoneDigits}%`) : undefined,
+      phoneDigits.length >= 3 ? ilike(customersTable.phone, `%${phoneDigits}%`) : undefined,
     ),
   ];
 

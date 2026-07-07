@@ -288,11 +288,12 @@ export function useCustomerDcmsGallery(filters?: Record<string, string | number>
   });
 }
 
-export function useStaffDailyRoute(date?: string) {
+export function useStaffDailyRoute(date?: string, opts?: { enabled?: boolean }) {
   const qs = date ? `?date=${date}` : "";
   return useQuery({
     queryKey: ["dcms", "staff", "daily-route", date],
     queryFn: () => dcmsFetch<{ date: string; stops: unknown[] }>(`/daily-cleaning/staff/daily-route${qs}`),
+    enabled: opts?.enabled ?? true,
   });
 }
 

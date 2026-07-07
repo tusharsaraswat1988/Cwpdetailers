@@ -3,6 +3,7 @@ import {
   searchWalkInTargets,
   getWalkInQuotaOptions,
   getWalkInCustomerContext,
+  getWalkInDcmsStop,
   resolveWalkInJob,
   type WalkInServiceKind,
 } from "../lib/staff/walkInService";
@@ -57,6 +58,21 @@ router.get("/staff/walk-in/customer/:customerId/quota", async (req, res) => {
     const solarSiteId = req.query.solarSiteId != null ? Number(req.query.solarSiteId) : undefined;
     const options = await getWalkInQuotaOptions(customerId, serviceKind, { vehicleId, solarSiteId });
     return res.json({ options });
+  } catch (e) {
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+router.get("/staff/walk-in/dcms-stop/:subscriptionId", async (req, res) => {
+  try {
+    const staffId = requireStaff(req, res);
+    if (!staffId) return;
+    const subscriptionId = parseInt(req.params.subscriptionId, 10);
+    const visitType = req.query.visitType === "wash" ? "wash" : "cleaning";
+    if (!Number.isFinite(subscriptionId)) return res.status(400).json({ error: "Invalid subscription id" });
+    const stop = await getWalkInDcmsStop(subscriptionId, visitType);
+    if (!stop) return res.status(404).json({ error: "Subscription not found" });
+    return res.json(stop);
   } catch (e) {
     return res.status(500).json({ error: (e as Error).message });
   }

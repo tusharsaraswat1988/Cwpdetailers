@@ -1,24 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, isValid } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, UserPlus, Loader2, Camera, CheckCircle2, Circle } from "lucide-react";
+import { UserPlus, Loader2, CheckCircle2, Circle } from "lucide-react";
 import {
   searchWalkIn,
   fetchWalkInCustomer,
   resolveWalkIn,
-  type WalkInEntitlementCard,
+  type WalkInIncludedService,
+  type WalkInPackageCard,
   type WalkInCustomerContext,
 } from "@/features/staff-walk-in/api";
-import { useCompleteVisit } from "@/features/daily-cleaning/api";
 import { getStaffLocation } from "@/lib/location";
-import { validateCameraFile, readFileAsDataUrl, extractClientExif } from "@/features/daily-cleaning/lib/cameraCapture";
 import { SERVICE_EXECUTIONS_QUERY_KEY } from "@/features/service-executions/api";
 import { getGetTodayBookingsQueryKey } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
+
+const SEARCH_MIN_CHARS = 3;
+const SEARCH_DEBOUNCE_MS = 300;
 
 type Props = {
   onBookingResolved: (bookingId: number) => void;
@@ -31,22 +33,19 @@ function formatExpiry(value: string | null | undefined) {
   return isValid(d) ? format(d, "d MMM") : value;
 }
 
-function statusLabel(status: WalkInEntitlementCard["status"]) {
+function formatPrice(value: string | null | undefined) {
+  if (!value) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? `₹${n.toLocaleString("en-IN")}` : null;
+}
+
+function statusLabel(status: WalkInPackageCard["status"]) {
   switch (status) {
     case "active": return "Active";
     case "exhausted": return "Package Finished";
     case "expired": return "Expired";
     case "not_active": return "Not Active";
     default: return "Inactive";
-  }
-}
-
-function statusBadgeVariant(status: WalkInEntitlementCard["status"]) {
-  switch (status) {
-    case "active": return "default" as const;
-    case "exhausted": return "secondary" as const;
-    case "expired": return "outline" as const;
-    default: return "outline" as const;
   }
 }
 
@@ -92,75 +91,88 @@ function CustomerHeader({ context, onChange }: { context: WalkInCustomerContext;
         <Badge variant={context.membershipStatus === "active" ? "default" : "outline"}>
           Membership {membershipLabel(context.membershipStatus)}
         </Badge>
-        {context.customer.city && (
-          <Badge variant="outline">{context.customer.city}</Badge>
-        )}
+        {context.customer.city && <Badge variant="outline">{context.customer.city}</Badge>}
       </div>
     </div>
   );
 }
 
-function EntitlementCard({
-  card,
-  resolving,
+function PackageCard({
+  pkg,
+  resolvingKey,
   onStartService,
   onCreateDraft,
 }: {
-  card: WalkInEntitlementCard;
-  resolving: boolean;
-  onStartService: () => void;
-  onCreateDraft: () => void;
+  pkg: WalkInPackageCard;
+  resolvingKey: string | null;
+  onStartService: (service: WalkInIncludedService) => void;
+  onCreateDraft: (service: WalkInIncludedService) => void;
 }) {
-  const canStart = card.status === "active" && card.remaining > 0;
-  const showDraft = card.status === "exhausted" || card.status === "expired" || card.status === "not_active";
+  const priceLabel = formatPrice(pkg.packagePrice);
+  const hasActiveService = pkg.includedServices.some(s => s.status === "active" && s.remaining > 0);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+    <div className="rounded-xl border border-border bg-card p-3 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold">{card.displayName}</p>
-          {card.packageName && (
-            <p className="text-xs text-muted-foreground">{card.packageName}</p>
-          )}
-          {card.vehicleLabel && (
-            <p className="text-xs text-muted-foreground">{card.vehicleLabel}</p>
-          )}
+          <p className="text-sm font-semibold">
+            {pkg.packageName}
+            {priceLabel && <span className="font-normal text-muted-foreground"> · {priceLabel}</span>}
+          </p>
+          {pkg.vehicleLabel && <p className="text-xs text-muted-foreground">{pkg.vehicleLabel}</p>}
         </div>
-        <Badge variant={statusBadgeVariant(card.status)} className="text-[10px] shrink-0">
-          {statusLabel(card.status)}
+        <Badge variant={pkg.status === "active" ? "default" : "outline"} className="text-[10px] shrink-0">
+          {statusLabel(pkg.status)}
         </Badge>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div>
-          <p className="text-muted-foreground">Remaining</p>
-          <p className="font-semibold text-base">{card.remaining}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Expires</p>
-          <p className="font-medium">{formatExpiry(card.expiresAt)}</p>
-        </div>
+      <div className="text-xs text-muted-foreground">Expires {formatExpiry(pkg.expiresAt)}</div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Included services</p>
+        {pkg.includedServices.map(service => {
+          const canStart = service.status === "active" && service.remaining > 0;
+          const showDraft = !canStart && (service.status === "exhausted" || service.status === "expired" || service.status === "not_active");
+          const totalLabel = service.total != null ? `${service.remaining}/${service.total}` : String(service.remaining);
+
+          return (
+            <div key={service.key} className="rounded-lg border border-border/80 bg-muted/20 p-2.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">{service.displayName}</p>
+                <p className="text-xs text-muted-foreground">Remaining: {totalLabel}</p>
+              </div>
+              {canStart && (
+                <Button
+                  type="button"
+                  className="w-full"
+                  size="sm"
+                  disabled={resolvingKey === service.key}
+                  onClick={() => onStartService(service)}
+                >
+                  {resolvingKey === service.key ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
+                  Start Service
+                </Button>
+              )}
+              {showDraft && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  size="sm"
+                  disabled={resolvingKey === service.key}
+                  onClick={() => onCreateDraft(service)}
+                >
+                  {resolvingKey === service.key ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
+                  Create Draft Booking
+                </Button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {canStart && (
-        <Button type="button" className="w-full" size="sm" disabled={resolving} onClick={onStartService}>
-          {resolving ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
-          Start Service
-        </Button>
-      )}
-
-      {showDraft && (
-        <Button
-          type="button"
-          variant={card.status === "not_active" ? "default" : "outline"}
-          className="w-full"
-          size="sm"
-          disabled={resolving}
-          onClick={onCreateDraft}
-        >
-          {resolving ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
-          Create Draft Booking
-        </Button>
+      {!hasActiveService && pkg.source != null && pkg.includedServices.every(s => s.status === "exhausted" || s.status === "expired") && (
+        <p className="text-xs text-muted-foreground">Package finished — create draft booking for admin approval.</p>
       )}
     </div>
   );
@@ -175,8 +187,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [vehicleId, setVehicleId] = useState<number | undefined>();
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
-  const [dcmsPending, setDcmsPending] = useState<{ subscriptionId: number; visitType: "cleaning" | "wash" } | null>(null);
-  const completeVisit = useCompleteVisit();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: context, isLoading: loadingContext } = useQuery({
     queryKey: ["walk-in-customer", customerId, vehicleId],
@@ -184,48 +195,65 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
     enabled: customerId != null,
   });
 
-  async function handleSearch() {
-    if (query.trim().length < 2) return;
-    setSearching(true);
-    try {
-      const results = await searchWalkIn(query.trim());
-      setSearchResults(results);
-      if (results.customers.length === 0 && results.vehicles.length === 0) {
-        toast({ title: "No customer found", description: "Try phone number or vehicle registration", variant: "destructive" });
-      }
-    } catch (e) {
-      toast({ title: "Search failed", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setSearching(false);
+  useEffect(() => {
+    if (customerId) return;
+    const trimmed = query.trim();
+    if (trimmed.length < SEARCH_MIN_CHARS) {
+      setSearchResults(null);
+      return;
     }
-  }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearching(true);
+      void searchWalkIn(trimmed)
+        .then(results => {
+          setSearchResults(results);
+          if (results.customers.length === 0 && results.vehicles.length === 0) {
+            toast({ title: "No customer found", description: "Try phone number or vehicle registration", variant: "destructive" });
+          }
+        })
+        .catch(e => {
+          toast({ title: "Search failed", description: (e as Error).message, variant: "destructive" });
+        })
+        .finally(() => setSearching(false));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, customerId, toast]);
 
   function pickCustomer(id: number, vId?: number) {
     setCustomerId(id);
     setVehicleId(vId);
     setSearchResults(null);
+    setQuery("");
   }
 
   function resetCustomer() {
     setCustomerId(null);
     setVehicleId(undefined);
     setSearchResults(null);
+    setQuery("");
   }
 
-  async function handleAction(card: WalkInEntitlementCard, forceDraft: boolean) {
+  async function handleAction(
+    pkg: WalkInPackageCard,
+    service: WalkInIncludedService,
+    forceDraft: boolean,
+  ) {
     if (!customerId) return;
-    setResolvingKey(card.key);
+    setResolvingKey(service.key);
     try {
       const gps = await getStaffLocation("action");
 
       const result = await resolveWalkIn({
         customerId,
-        serviceKind: card.serviceKind,
-        vehicleId: card.vehicleId ?? vehicleId,
-        solarSiteId: card.solarSiteId,
-        entitlementId: forceDraft ? undefined : card.entitlementId,
-        subscriptionId: forceDraft ? undefined : card.subscriptionId,
-        legacySubscriptionId: forceDraft ? undefined : card.legacySubscriptionId,
+        serviceKind: service.serviceKind,
+        vehicleId: pkg.vehicleId ?? vehicleId,
+        solarSiteId: service.solarSiteId,
+        entitlementId: forceDraft ? undefined : service.entitlementId,
+        subscriptionId: forceDraft ? undefined : service.subscriptionId,
+        legacySubscriptionId: forceDraft ? undefined : service.legacySubscriptionId,
         latitude: gps.latitude,
         longitude: gps.longitude,
         accuracy: gps.accuracy,
@@ -237,9 +265,9 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
       qc.invalidateQueries({ queryKey: ["walk-in-customer", customerId] });
 
       if (result.mode === "dcms") {
-        setDcmsPending({ subscriptionId: result.subscriptionId, visitType: result.visitType });
-        toast({ title: "Quota confirmed", description: "Take a photo to complete the visit" });
+        toast({ title: "Opening Daily Clean", description: "Complete visit in the daily clean workflow" });
         onDcmsResolved(result.subscriptionId, result.visitType);
+        resetCustomer();
         return;
       }
 
@@ -248,8 +276,13 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
         description: result.message,
       });
       onBookingResolved(result.bookingId);
+      resetCustomer();
     } catch (e) {
-      toast({ title: forceDraft ? "Draft booking failed" : "Service start failed", description: (e as Error).message, variant: "destructive" });
+      toast({
+        title: forceDraft ? "Draft booking failed" : "Service start failed",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
     } finally {
       setResolvingKey(null);
     }
@@ -270,55 +303,19 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
         forceDraft: true,
       });
       qc.invalidateQueries({ queryKey: getGetTodayBookingsQueryKey() });
-      toast({ title: "Draft booking created", description: result.mode === "booking" ? result.message : "Admin will confirm payment" });
-      if (result.mode === "booking") onBookingResolved(result.bookingId);
+      toast({
+        title: "Draft booking created",
+        description: result.mode === "booking" ? result.message : "Admin will confirm payment",
+      });
+      if (result.mode === "booking") {
+        onBookingResolved(result.bookingId);
+        resetCustomer();
+      }
     } catch (e) {
       toast({ title: "Draft booking failed", description: (e as Error).message, variant: "destructive" });
     } finally {
       setResolvingKey(null);
     }
-  }
-
-  async function captureDcmsVisit(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !dcmsPending) return;
-    e.target.value = "";
-    try {
-      validateCameraFile(file);
-      const [gps, imageBase64, exif] = await Promise.all([
-        getStaffLocation("action"),
-        readFileAsDataUrl(file),
-        extractClientExif(file),
-      ]);
-      await completeVisit.mutateAsync({
-        subscriptionId: dcmsPending.subscriptionId,
-        visitType: dcmsPending.visitType,
-        imageBase64,
-        exif,
-        capturedAt: new Date(file.lastModified).toISOString(),
-        walkIn: true,
-        ...gps,
-      });
-      toast({ title: "Visit completed", description: "Package quota consumed" });
-      setDcmsPending(null);
-      resetCustomer();
-    } catch (err) {
-      toast({ title: "Visit failed", description: (err as Error).message, variant: "destructive" });
-    }
-  }
-
-  if (dcmsPending) {
-    return (
-      <section className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4 space-y-3">
-        <p className="text-sm font-semibold">Daily clean — photo required</p>
-        <p className="text-xs text-muted-foreground">GPS + camera photo completes the visit and consumes package quota</p>
-        <label className="flex items-center justify-center gap-2 h-12 rounded-xl border border-primary bg-primary/10 text-sm font-medium cursor-pointer">
-          <Camera size={18} /> Take completion photo
-          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => void captureDcmsVisit(e)} />
-        </label>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setDcmsPending(null)}>Cancel</Button>
-      </section>
-    );
   }
 
   return (
@@ -333,17 +330,16 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
 
       {!customerId ? (
         <>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Phone ya number plate..."
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && void handleSearch()}
-            />
-            <Button type="button" variant="secondary" onClick={() => void handleSearch()} disabled={searching}>
-              {searching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-            </Button>
-          </div>
+          <Input
+            placeholder="Phone ya number plate (min 3 chars)..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+          {searching && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Loader2 size={12} className="animate-spin" /> Searching…
+            </p>
+          )}
           {searchResults && (
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {searchResults.customers.map(c => (
@@ -396,16 +392,16 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
           {context.eligibleToday.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Today&apos;s eligible services</p>
-              {context.eligibleToday.map(card => (
-                <div key={`eligible-${card.key}`} className="flex items-center gap-2 text-sm">
-                  {card.recommended ? (
+              {context.eligibleToday.map(service => (
+                <div key={`eligible-${service.key}`} className="flex items-center gap-2 text-sm">
+                  {service.recommended ? (
                     <CheckCircle2 size={14} className="text-primary shrink-0" />
                   ) : (
                     <Circle size={14} className="text-muted-foreground shrink-0" />
                   )}
-                  <span className={cn(card.recommended && "font-medium")}>
-                    {card.recommended ? "Recommended" : "Optional"}: {card.displayName}
-                    {card.remaining > 0 && ` (${card.remaining} left)`}
+                  <span className={cn(service.recommended && "font-medium")}>
+                    {service.recommended ? "Recommended" : "Optional"}: {service.displayName}
+                    {service.remaining > 0 && ` (${service.remaining} left)`}
                   </span>
                 </div>
               ))}
@@ -414,7 +410,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Active packages</p>
-            {context.entitlements.length === 0 ? (
+            {context.packages.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-card p-4 text-center space-y-3">
                 <p className="text-sm text-muted-foreground">No active package found</p>
                 <Button
@@ -428,33 +424,17 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
                 </Button>
               </div>
             ) : (
-              context.entitlements.map(card => (
-                <EntitlementCard
-                  key={card.key}
-                  card={card}
-                  resolving={resolvingKey === card.key}
-                  onStartService={() => void handleAction(card, false)}
-                  onCreateDraft={() => void handleAction(card, true)}
+              context.packages.map(pkg => (
+                <PackageCard
+                  key={pkg.key}
+                  pkg={pkg}
+                  resolvingKey={resolvingKey}
+                  onStartService={service => void handleAction(pkg, service, false)}
+                  onCreateDraft={service => void handleAction(pkg, service, true)}
                 />
               ))
             )}
           </div>
-
-          {!context.hasActivePackage && context.entitlements.length > 0 && (
-            <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
-              <p className="text-xs text-muted-foreground">No package with remaining quota. Admin will invoice after draft booking.</p>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                size="sm"
-                disabled={resolvingKey != null}
-                onClick={() => void handleNoPackageDraft()}
-              >
-                Create Draft Booking (any service)
-              </Button>
-            </div>
-          )}
         </>
       )}
     </section>

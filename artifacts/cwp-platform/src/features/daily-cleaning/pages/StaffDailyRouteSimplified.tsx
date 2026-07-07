@@ -1,7 +1,10 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useSearch } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { useStaffDailyRoute, useCompleteVisit } from "../api";
+import { fetchWalkInDcmsStop } from "@/features/staff-walk-in/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -32,7 +35,19 @@ const statusLabel: Record<string, string> = {
 
 export function StaffDailyRouteSimplified() {
   const { user } = useAuth();
-  const { data, isLoading, refetch } = useStaffDailyRoute();
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const walkInMode = params.get("walkIn") === "1";
+  const walkInSubscriptionId = params.get("subscriptionId");
+  const walkInVisitType = params.get("visitType") === "wash" ? "wash" : "cleaning";
+
+  const { data, isLoading, refetch } = useStaffDailyRoute({ enabled: !walkInMode });
+  const walkInStopQuery = useQuery({
+    queryKey: ["walk-in-dcms-stop", walkInSubscriptionId, walkInVisitType],
+    queryFn: () => fetchWalkInDcmsStop(Number(walkInSubscriptionId), walkInVisitType),
+    enabled: walkInMode && walkInSubscriptionId != null && Number.isFinite(Number(walkInSubscriptionId)),
+  });
+
   const completeVisit = useCompleteVisit();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -40,9 +55,32 @@ export function StaffDailyRouteSimplified() {
   const [scanOpen, setScanOpen] = useState(false);
   const [plateScanMeta, setPlateScanMeta] = useState<PlateScanMeta | null>(null);
 
-  const stops = (data?.stops ?? []) as RouteStop[];
+  const routeStops = (data?.stops ?? []) as RouteStop[];
+  const walkInStop = walkInStopQuery.data;
+
+  const stops: RouteStop[] = walkInMode && walkInStop
+    ? [{
+        subscriptionId: walkInStop.subscriptionId,
+        customerName: walkInStop.customerName,
+        vehicleNumber: walkInStop.vehicleNumber,
+        vehicleMake: walkInStop.vehicleMake,
+        vehicleModel: walkInStop.vehicleModel,
+        todayStatus: walkInStop.todayStatus === "rejected" ? "rejected" : walkInStop.todayStatus,
+        remainingCleanings: walkInStop.remainingCleanings,
+        remainingWashes: walkInStop.remainingWashes,
+      }]
+    : routeStops;
+
+  useEffect(() => {
+    if (walkInMode && walkInSubscriptionId && stops.length > 0) {
+      const idx = stops.findIndex(s => s.subscriptionId === Number(walkInSubscriptionId));
+      if (idx >= 0) setActiveIdx(idx);
+    }
+  }, [walkInMode, walkInSubscriptionId, stops]);
+
   const current = stops[activeIdx];
   const doneCount = stops.filter(s => s.todayStatus === "completed").length;
+  const visitType = walkInMode ? walkInVisitType : "cleaning";
 
   const handlePlateConfirmed = useCallback(({ subscriptionId, scanMeta }: {
     subscriptionId: number;
@@ -68,23 +106,28 @@ export function StaffDailyRouteSimplified() {
       ]);
       await completeVisit.mutateAsync({
         subscriptionId: current.subscriptionId,
-        visitType: "cleaning",
+        visitType,
         imageBase64,
         exif,
         capturedAt: new Date(file.lastModified).toISOString(),
+        walkIn: walkInMode,
         ...gps,
         ocrText: plateScanMeta?.ocrText ?? null,
         ocrConfidence: plateScanMeta?.ocrConfidence ?? null,
         confirmedRegistration: plateScanMeta?.confirmedRegistration ?? current.vehicleNumber,
       });
-      toast({ title: "Done!", description: `${current.vehicleNumber} — agla customer` });
+      toast({ title: "Done!", description: `${current.vehicleNumber} — visit complete` });
       setPlateScanMeta(null);
-      refetch();
-      if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
+      if (walkInMode) {
+        walkInStopQuery.refetch();
+      } else {
+        refetch();
+        if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
+      }
     } catch (err) {
       toast({ title: "Upload failed", description: visitUploadErrorMessage(err), variant: "destructive" });
     }
-  }, [current, completeVisit, toast, refetch, plateScanMeta, activeIdx, stops.length]);
+  }, [current, completeVisit, toast, refetch, walkInStopQuery, plateScanMeta, activeIdx, stops.length, visitType, walkInMode]);
 
   if (!user?.staffId) {
     return (
@@ -94,8 +137,16 @@ export function StaffDailyRouteSimplified() {
     );
   }
 
-  if (isLoading) {
+  if (walkInMode ? walkInStopQuery.isLoading : isLoading) {
     return <p className="text-sm text-muted-foreground py-8 text-center">Route load ho rahi hai…</p>;
+  }
+
+  if (walkInMode && walkInStopQuery.isError) {
+    return (
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
+        Walk-in visit load nahi ho payi. Bookings se dubara try karein.
+      </div>
+    );
   }
 
   if (stops.length === 0) {
@@ -108,13 +159,21 @@ export function StaffDailyRouteSimplified() {
 
   return (
     <div className="space-y-4">
+      {walkInMode && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+          Walk-in visit — complete using the same daily clean workflow as assigned jobs.
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {data?.date} · <span className="font-medium text-foreground">{doneCount}/{stops.length}</span> done
+          {walkInMode ? "Walk-in" : data?.date} · <span className="font-medium text-foreground">{doneCount}/{stops.length}</span> done
         </p>
-        <Button variant="outline" size="sm" onClick={() => setScanOpen(true)}>
-          <ScanLine className="h-4 w-4 mr-1" /> Scan plate
-        </Button>
+        {!walkInMode && (
+          <Button variant="outline" size="sm" onClick={() => setScanOpen(true)}>
+            <ScanLine className="h-4 w-4 mr-1" /> Scan plate
+          </Button>
+        )}
       </div>
 
       {current && (
@@ -155,46 +214,50 @@ export function StaffDailyRouteSimplified() {
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={activeIdx === 0}
-              onClick={() => setActiveIdx(i => i - 1)}
-            >
-              <ChevronLeft className="h-4 w-4 mr-0.5" /> Pehla
-            </Button>
-            <span className="text-xs text-muted-foreground">{activeIdx + 1} / {stops.length}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={activeIdx >= stops.length - 1}
-              onClick={() => setActiveIdx(i => i + 1)}
-            >
-              Agla <ChevronRight className="h-4 w-4 ml-0.5" />
-            </Button>
-          </div>
+          {!walkInMode && (
+            <div className="flex items-center justify-between pt-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={activeIdx === 0}
+                onClick={() => setActiveIdx(i => i - 1)}
+              >
+                <ChevronLeft className="h-4 w-4 mr-0.5" /> Pehla
+              </Button>
+              <span className="text-xs text-muted-foreground">{activeIdx + 1} / {stops.length}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={activeIdx >= stops.length - 1}
+                onClick={() => setActiveIdx(i => i + 1)}
+              >
+                Agla <ChevronRight className="h-4 w-4 ml-0.5" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {stops.map((s, i) => (
-          <button
-            key={s.subscriptionId}
-            type="button"
-            onClick={() => setActiveIdx(i)}
-            className={cn(
-              "shrink-0 px-3 py-2 rounded-lg text-xs font-medium border transition-colors",
-              i === activeIdx && "ring-2 ring-primary border-primary",
-              s.todayStatus === "completed" && "bg-green-500/10 border-green-500/30 text-green-800",
-              s.todayStatus === "pending" && "bg-card border-border",
-              s.todayStatus === "rejected" && "bg-destructive/10 border-destructive/30",
-            )}
-          >
-            {s.vehicleNumber.slice(-4)}
-          </button>
-        ))}
-      </div>
+      {!walkInMode && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {stops.map((s, i) => (
+            <button
+              key={s.subscriptionId}
+              type="button"
+              onClick={() => setActiveIdx(i)}
+              className={cn(
+                "shrink-0 px-3 py-2 rounded-lg text-xs font-medium border transition-colors",
+                i === activeIdx && "ring-2 ring-primary border-primary",
+                s.todayStatus === "completed" && "bg-green-500/10 border-green-500/30 text-green-800",
+                s.todayStatus === "pending" && "bg-card border-border",
+                s.todayStatus === "rejected" && "bg-destructive/10 border-destructive/30",
+              )}
+            >
+              {s.vehicleNumber.slice(-4)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <input
         ref={fileRef}
@@ -205,12 +268,14 @@ export function StaffDailyRouteSimplified() {
         onChange={e => void captureVisit(e)}
       />
 
-      <PlateScanFlow
-        open={scanOpen}
-        onOpenChange={setScanOpen}
-        routeSubscriptionIds={stops.map(s => s.subscriptionId)}
-        onVehicleConfirmed={handlePlateConfirmed}
-      />
+      {!walkInMode && (
+        <PlateScanFlow
+          open={scanOpen}
+          onOpenChange={setScanOpen}
+          routeSubscriptionIds={stops.map(s => s.subscriptionId)}
+          onVehicleConfirmed={handlePlateConfirmed}
+        />
+      )}
     </div>
   );
 }

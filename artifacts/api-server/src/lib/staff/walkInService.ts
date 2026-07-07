@@ -13,8 +13,11 @@ import {
   customerEntitlementsTable,
   branchesTable,
   staffTable,
+  dcmsPlansTable,
+  catalogPackagesTable,
+  dcmsVisitsTable,
 } from "@workspace/db";
-import { eq, and, sql, inArray, desc } from "drizzle-orm";
+import { eq, and, sql, inArray, desc, gte, lte } from "drizzle-orm";
 import type { Request } from "express";
 import { getTodayIST } from "../../subscriptions/service";
 import { getCustomerServicesHub } from "../customers/customerServicesHub";
@@ -22,29 +25,46 @@ import { searchCustomers, searchVehicles } from "../dcms/entitySearch";
 import { findEligibleEntitlement } from "../catalog/entitlementEngine";
 import { tenantStamp } from "../../middlewares/tenantScope";
 import { recordStaffLocation } from "../staffLocation/locationService";
+import { dayBoundsIST } from "../dcms/dateUtils";
 
 export type WalkInServiceKind = "car_wash" | "solar_clean" | "daily_clean" | "daily_wash";
 
 export type WalkInEntitlementStatus = "active" | "exhausted" | "expired" | "not_active" | "inactive";
 
-export type WalkInEntitlementCard = {
+export type WalkInIncludedService = {
   key: string;
   serviceKind: WalkInServiceKind;
   displayName: string;
   remaining: number;
   total: number | null;
-  expiresAt: string | null;
   status: WalkInEntitlementStatus;
-  source: "entitlement" | "dcms" | "legacy_subscription" | null;
   recommended: boolean;
-  vehicleId?: number;
-  vehicleLabel?: string;
-  solarSiteId?: number;
   entitlementId?: number;
   subscriptionId?: number;
   legacySubscriptionId?: number;
   visitType?: "cleaning" | "wash";
+  solarSiteId?: number;
+};
+
+export type WalkInPackageCard = {
+  key: string;
+  packageName: string;
+  packagePrice: string | null;
+  expiresAt: string | null;
+  status: WalkInEntitlementStatus;
+  source: "entitlement" | "dcms" | "legacy_subscription" | null;
+  vehicleId?: number;
+  vehicleLabel?: string;
+  packageId?: number;
+  includedServices: WalkInIncludedService[];
+};
+
+/** @deprecated Flat card — use WalkInPackageCard.includedServices */
+export type WalkInEntitlementCard = WalkInIncludedService & {
   packageName?: string | null;
+  vehicleLabel?: string;
+  source: "entitlement" | "dcms" | "legacy_subscription" | null;
+  expiresAt: string | null;
 };
 
 export type WalkInCustomerContext = {
@@ -72,8 +92,8 @@ export type WalkInCustomerContext = {
     label: string;
   }>;
   membershipStatus: "active" | "inactive" | "suspended" | "none";
-  entitlements: WalkInEntitlementCard[];
-  eligibleToday: WalkInEntitlementCard[];
+  packages: WalkInPackageCard[];
+  eligibleToday: WalkInIncludedService[];
   hasActivePackage: boolean;
 };
 
@@ -169,11 +189,11 @@ const KIND_CONFIG: Record<
 
 export async function searchWalkInTargets(query: string) {
   const q = query.trim();
-  if (q.length < 2) return { customers: [], vehicles: [] };
+  if (q.length < 3) return { customers: [], vehicles: [] };
 
   const [customers, vehicles] = await Promise.all([
     searchCustomers(q, 10),
-    searchVehicles({ query: q, registration: q.length >= 4 ? q : undefined, limit: 10 }),
+    searchVehicles({ query: q, registration: q.length >= 3 ? q : undefined, limit: 10 }),
   ]);
 
   return { customers, vehicles };
@@ -550,6 +570,96 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
   };
 }
 
+function entitlementServiceMeta(ent: { entitlementType: string; serviceName: string | null }): {
+  serviceKind: WalkInServiceKind;
+  displayName: string;
+} {
+  const name = ent.serviceName?.toLowerCase() ?? "";
+  if (ent.entitlementType === "solar_visit") return { serviceKind: "solar_clean", displayName: "Solar" };
+  if (name.includes("daily clean") || name.includes("daily cleaning")) {
+    return { serviceKind: "daily_clean", displayName: "Daily Clean" };
+  }
+  if (name.includes("daily wash")) return { serviceKind: "daily_wash", displayName: "Daily Wash" };
+  if (ent.entitlementType === "wash_credit" || ent.entitlementType === "cleaning_credit") {
+    return { serviceKind: "car_wash", displayName: ent.serviceName ?? "Car Wash" };
+  }
+  return { serviceKind: "car_wash", displayName: ent.serviceName ?? "Service" };
+}
+
+function packageAggregateStatus(services: WalkInIncludedService[]): WalkInEntitlementStatus {
+  if (services.some(s => s.status === "active" && s.remaining > 0)) return "active";
+  if (services.every(s => s.status === "not_active")) return "not_active";
+  if (services.some(s => s.status === "expired")) return "expired";
+  if (services.some(s => s.status === "exhausted")) return "exhausted";
+  return "inactive";
+}
+
+export type WalkInDcmsStop = {
+  subscriptionId: number;
+  customerName: string;
+  vehicleNumber: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  planName: string;
+  remainingCleanings: number;
+  remainingWashes: number;
+  todayStatus: "pending" | "completed" | "rejected";
+  visitType: "cleaning" | "wash";
+};
+
+export async function getWalkInDcmsStop(
+  subscriptionId: number,
+  visitType: "cleaning" | "wash",
+): Promise<WalkInDcmsStop | null> {
+  const [row] = await db.select({
+    sub: dcmsSubscriptionsTable,
+    planName: dcmsPlansTable.name,
+    customerName: customersTable.name,
+    vehicleNumber: vehiclesTable.registrationNumber,
+    vehicleMake: vehiclesTable.make,
+    vehicleModel: vehiclesTable.model,
+  })
+    .from(dcmsSubscriptionsTable)
+    .innerJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
+    .innerJoin(customersTable, eq(dcmsSubscriptionsTable.customerId, customersTable.id))
+    .innerJoin(vehiclesTable, eq(dcmsSubscriptionsTable.vehicleId, vehiclesTable.id))
+    .where(eq(dcmsSubscriptionsTable.id, subscriptionId))
+    .limit(1);
+
+  if (!row) return null;
+
+  const today = getTodayIST();
+  const { start, end } = dayBoundsIST(today);
+
+  const [visit] = await db.select()
+    .from(dcmsVisitsTable)
+    .where(and(
+      eq(dcmsVisitsTable.subscriptionId, subscriptionId),
+      eq(dcmsVisitsTable.visitType, visitType),
+      gte(dcmsVisitsTable.visitTime, start),
+      lte(dcmsVisitsTable.visitTime, end),
+    ))
+    .orderBy(desc(dcmsVisitsTable.visitTime))
+    .limit(1);
+
+  let todayStatus: WalkInDcmsStop["todayStatus"] = "pending";
+  if (visit?.status === "completed") todayStatus = "completed";
+  else if (visit?.status === "rejected") todayStatus = "rejected";
+
+  return {
+    subscriptionId: row.sub.id,
+    customerName: row.customerName,
+    vehicleNumber: row.vehicleNumber,
+    vehicleMake: row.vehicleMake,
+    vehicleModel: row.vehicleModel,
+    planName: row.planName,
+    remainingCleanings: row.sub.remainingCleanings,
+    remainingWashes: row.sub.remainingWashes,
+    todayStatus,
+    visitType,
+  };
+}
+
 export async function getWalkInCustomerContext(
   customerId: number,
   opts?: { vehicleId?: number },
@@ -591,129 +701,177 @@ export async function getWalkInCustomerContext(
     : vehicles.length === 1 ? vehicles[0]! : null;
 
   const hub = await getCustomerServicesHub(customerId);
-  const cards: WalkInEntitlementCard[] = [];
+  const packages: WalkInPackageCard[] = [];
   const vehicleFilter = opts?.vehicleId;
+
+  const dcmsRows = await db.select({
+    subId: dcmsSubscriptionsTable.id,
+    planId: dcmsSubscriptionsTable.planId,
+    planName: dcmsPlansTable.name,
+    planPrice: dcmsPlansTable.price,
+  })
+    .from(dcmsSubscriptionsTable)
+    .innerJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
+    .where(eq(dcmsSubscriptionsTable.customerId, customerId));
+
+  const dcmsMeta = new Map(dcmsRows.map(r => [r.subId, r]));
+
+  const entitlementRows = await db.select({
+    id: customerEntitlementsTable.id,
+    packageId: customerEntitlementsTable.packageId,
+    packageName: catalogPackagesTable.name,
+    packagePrice: catalogPackagesTable.price,
+  })
+    .from(customerEntitlementsTable)
+    .leftJoin(catalogPackagesTable, eq(customerEntitlementsTable.packageId, catalogPackagesTable.id))
+    .where(eq(customerEntitlementsTable.customerId, customerId));
+
+  const entPackageMeta = new Map(entitlementRows.map(r => [r.id, r]));
 
   for (const sub of hub.dailyCleaning) {
     if (vehicleFilter && sub.vehicleId !== vehicleFilter) continue;
+    const meta = dcmsMeta.get(sub.id);
+    const includedServices: WalkInIncludedService[] = [];
 
-    if (sub.remainingCleanings > 0 || ["active", "paused"].includes(sub.status)) {
-      const status = cardStatus(sub.status, sub.remainingCleanings);
-      cards.push({
-        key: `dcms-clean-${sub.id}`,
-        serviceKind: "daily_clean",
-        displayName: SERVICE_DISPLAY.daily_clean,
-        remaining: sub.remainingCleanings,
-        total: sub.allocatedCleanings,
-        expiresAt: null,
-        status,
-        source: "dcms",
-        recommended: status === "active",
-        subscriptionId: sub.id,
-        vehicleId: sub.vehicleId,
-        vehicleLabel: sub.vehicleLabel,
-        visitType: "cleaning",
-        packageName: sub.planName,
-      });
-    }
+    const cleanStatus = cardStatus(sub.status, sub.remainingCleanings);
+    includedServices.push({
+      key: `dcms-clean-${sub.id}`,
+      serviceKind: "daily_clean",
+      displayName: "Daily Clean",
+      remaining: sub.remainingCleanings,
+      total: sub.allocatedCleanings,
+      status: cleanStatus,
+      recommended: cleanStatus === "active",
+      subscriptionId: sub.id,
+      visitType: "cleaning",
+    });
 
-    if (sub.allocatedWashes > 0 || sub.remainingWashes > 0) {
+    if (sub.allocatedWashes > 0) {
       const washStatus = cardStatus(sub.status, sub.remainingWashes);
-      cards.push({
+      includedServices.push({
         key: `dcms-wash-${sub.id}`,
         serviceKind: "daily_wash",
-        displayName: SERVICE_DISPLAY.daily_wash,
+        displayName: "Car Wash",
         remaining: sub.remainingWashes,
         total: sub.allocatedWashes,
-        expiresAt: null,
         status: washStatus,
-        source: "dcms",
         recommended: false,
         subscriptionId: sub.id,
-        vehicleId: sub.vehicleId,
-        vehicleLabel: sub.vehicleLabel,
         visitType: "wash",
-        packageName: sub.planName,
       });
     }
-  }
 
-  for (const ent of hub.entitlements) {
-    const isCarWash = ["wash_credit", "cleaning_credit"].includes(ent.entitlementType);
-    const isSolar = ent.entitlementType === "solar_visit";
-    if (!isCarWash && !isSolar) continue;
-
-    const serviceKind: WalkInServiceKind = isSolar ? "solar_clean" : "car_wash";
-    const status = cardStatus(ent.status, ent.remainingCredits, ent.validUntil);
-
-    cards.push({
-      key: `ent-${ent.id}`,
-      serviceKind,
-      displayName: SERVICE_DISPLAY[serviceKind],
-      remaining: ent.remainingCredits,
-      total: ent.totalCredits,
-      expiresAt: ent.validUntil,
-      status,
-      source: "entitlement",
-      recommended: false,
-      entitlementId: ent.id,
-      packageName: ent.packageName ?? ent.serviceName,
+    packages.push({
+      key: `dcms-${sub.id}`,
+      packageName: sub.planName,
+      packagePrice: meta?.planPrice ?? null,
+      expiresAt: null,
+      status: packageAggregateStatus(includedServices),
+      source: "dcms",
+      vehicleId: sub.vehicleId,
+      vehicleLabel: sub.vehicleLabel,
+      includedServices,
     });
   }
 
+  const entitlementsByPackage = new Map<string, WalkInPackageCard>();
+
+  for (const ent of hub.entitlements) {
+    const meta = entPackageMeta.get(ent.id);
+    const pkgKey = meta?.packageId ? `pkg-${meta.packageId}` : `ent-${ent.id}`;
+    const { serviceKind, displayName } = entitlementServiceMeta(ent);
+    const status = cardStatus(ent.status, ent.remainingCredits, ent.validUntil);
+
+    const service: WalkInIncludedService = {
+      key: `ent-${ent.id}`,
+      serviceKind,
+      displayName,
+      remaining: ent.remainingCredits,
+      total: ent.totalCredits,
+      status,
+      recommended: serviceKind === "daily_clean",
+      entitlementId: ent.id,
+    };
+
+    const existing = entitlementsByPackage.get(pkgKey);
+    if (existing) {
+      existing.includedServices.push(service);
+      existing.status = packageAggregateStatus(existing.includedServices);
+      if (!existing.expiresAt && ent.validUntil) existing.expiresAt = ent.validUntil;
+    } else {
+      entitlementsByPackage.set(pkgKey, {
+        key: pkgKey,
+        packageName: meta?.packageName ?? ent.packageName ?? ent.serviceName ?? "Package",
+        packagePrice: meta?.packagePrice ?? null,
+        expiresAt: ent.validUntil,
+        status,
+        source: "entitlement",
+        packageId: meta?.packageId ?? undefined,
+        includedServices: [service],
+      });
+    }
+  }
+  packages.push(...entitlementsByPackage.values());
+
   for (const sub of hub.legacySubscriptions) {
-    const isSolar = Boolean(sub.solarSiteId);
-    const serviceKind: WalkInServiceKind = isSolar ? "solar_clean" : "car_wash";
     if (vehicleFilter && sub.vehicleId && sub.vehicleId !== vehicleFilter) continue;
     if (vehicleFilter && sub.solarSiteId) continue;
 
+    const isSolar = Boolean(sub.solarSiteId);
+    const serviceKind: WalkInServiceKind = isSolar ? "solar_clean" : "car_wash";
     const rem = sub.servicesRemaining ?? 0;
     const status = cardStatus(sub.status, rem, sub.endDate);
 
-    cards.push({
+    packages.push({
       key: `legacy-${sub.id}`,
-      serviceKind,
-      displayName: SERVICE_DISPLAY[serviceKind],
-      remaining: rem,
-      total: sub.totalServices,
+      packageName: sub.serviceName ?? sub.type,
+      packagePrice: null,
       expiresAt: sub.endDate,
       status,
       source: "legacy_subscription",
-      recommended: false,
-      legacySubscriptionId: sub.id,
       vehicleId: sub.vehicleId ?? undefined,
-      solarSiteId: sub.solarSiteId ?? undefined,
-      packageName: sub.serviceName ?? sub.type,
+      includedServices: [{
+        key: `legacy-svc-${sub.id}`,
+        serviceKind,
+        displayName: SERVICE_DISPLAY[serviceKind],
+        remaining: rem,
+        total: sub.totalServices,
+        status,
+        recommended: false,
+        legacySubscriptionId: sub.id,
+        solarSiteId: sub.solarSiteId ?? undefined,
+      }],
     });
   }
 
-  const hasAnyRealPackage = cards.some(c => c.source != null);
-  const coveredKinds = new Set(cards.map(c => c.serviceKind));
-  if (hasAnyRealPackage) {
-    for (const kind of ["solar_clean"] as WalkInServiceKind[]) {
-      if (!coveredKinds.has(kind)) {
-        cards.push({
-          key: `not-active-${kind}`,
-          serviceKind: kind,
-          displayName: SERVICE_DISPLAY[kind],
-          remaining: 0,
-          total: null,
-          expiresAt: null,
-          status: "not_active",
-          source: null,
-          recommended: false,
-        });
-      }
-    }
+  const hasAnyRealPackage = packages.some(p => p.source != null);
+  if (hasAnyRealPackage && !packages.some(p => p.includedServices.some(s => s.serviceKind === "solar_clean"))) {
+    packages.push({
+      key: "not-active-solar",
+      packageName: "Solar",
+      packagePrice: null,
+      expiresAt: null,
+      status: "not_active",
+      source: null,
+      includedServices: [{
+        key: "not-active-solar-svc",
+        serviceKind: "solar_clean",
+        displayName: "Solar",
+        remaining: 0,
+        total: null,
+        status: "not_active",
+        recommended: false,
+      }],
+    });
   }
 
-  const activeCards = cards.filter(c => c.status === "active" && c.remaining > 0);
-  const eligibleToday = activeCards.length > 0
-    ? activeCards
-    : cards.filter(c => c.status === "active");
+  const eligibleToday = packages
+    .flatMap(p => p.includedServices)
+    .filter(s => s.status === "active" && s.remaining > 0);
 
+  const activeServices = eligibleToday;
   const membershipStatus = customer.status === "active"
-    ? (activeCards.length > 0 ? "active" : "none")
+    ? (activeServices.length > 0 ? "active" : "none")
     : customer.status as WalkInCustomerContext["membershipStatus"];
 
   return {
@@ -729,9 +887,9 @@ export async function getWalkInCustomerContext(
     vehicle: selectedVehicle,
     vehicles,
     membershipStatus,
-    entitlements: cards,
+    packages,
     eligibleToday,
-    hasActivePackage: activeCards.length > 0,
+    hasActivePackage: activeServices.length > 0,
   };
 }
 
@@ -741,14 +899,14 @@ export async function getWalkInCustomerSummary(customerId: number) {
   if (!ctx) return null;
   return {
     customer: ctx.customer,
-    activeEntitlements: ctx.entitlements.filter(e => e.source === "entitlement" && e.status === "active"),
-    dailyCleaning: ctx.entitlements.filter(e => e.source === "dcms").map(e => ({
-      id: e.subscriptionId!,
-      vehicleId: e.vehicleId!,
-      vehicleLabel: e.vehicleLabel ?? "",
-      remainingCleanings: e.serviceKind === "daily_clean" ? e.remaining : 0,
-      remainingWashes: e.serviceKind === "daily_wash" ? e.remaining : 0,
+    activeEntitlements: ctx.packages.flatMap(p => p.includedServices).filter(s => s.status === "active"),
+    dailyCleaning: ctx.packages.filter(p => p.source === "dcms").map(p => ({
+      id: p.includedServices[0]?.subscriptionId!,
+      vehicleId: p.vehicleId!,
+      vehicleLabel: p.vehicleLabel ?? "",
+      remainingCleanings: p.includedServices.find(s => s.serviceKind === "daily_clean")?.remaining ?? 0,
+      remainingWashes: p.includedServices.find(s => s.serviceKind === "daily_wash")?.remaining ?? 0,
     })),
-    legacySubscriptions: ctx.entitlements.filter(e => e.source === "legacy_subscription"),
+    legacySubscriptions: ctx.packages.filter(p => p.source === "legacy_subscription"),
   };
 }
