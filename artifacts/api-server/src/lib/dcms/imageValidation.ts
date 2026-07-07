@@ -76,22 +76,47 @@ export function mergeExif(server: ExifPayload | null, client?: ExifPayload | nul
   return { ...(server ?? {}), ...(client ?? {}) };
 }
 
-export function validateCameraPhoto(imageBase64: string, clientExif?: ExifPayload | null): ExifPayload {
+/** Match client validateCameraFile — only accept very recent captures without EXIF. */
+const MAX_CAPTURE_AGE_MS = 5 * 60 * 1000;
+
+function isRecentCapture(capturedAt: string): boolean {
+  const t = Date.parse(capturedAt);
+  if (Number.isNaN(t)) return false;
+  const ageMs = Date.now() - t;
+  return ageMs >= 0 && ageMs <= MAX_CAPTURE_AGE_MS;
+}
+
+export type ValidateCameraPhotoOptions = {
+  /** ISO timestamp from File.lastModified when mobile browsers strip EXIF. */
+  capturedAt?: string | null;
+};
+
+export function validateCameraPhoto(
+  imageBase64: string,
+  clientExif?: ExifPayload | null,
+  opts?: ValidateCameraPhotoOptions,
+): ExifPayload {
   if (!imageBase64) throw new ImageValidationError("Photo required");
 
   const buffer = decodeBase64ToBuffer(imageBase64);
   if (buffer.length < 1000) throw new ImageValidationError("Invalid image data");
 
   const serverExif = parseJpegExif(buffer);
-  const exif = mergeExif(serverExif, clientExif);
+  let exif = mergeExif(serverExif, clientExif);
 
   const make = String(exif.Make ?? "").trim();
   const model = String(exif.Model ?? "").trim();
   const software = String(exif.Software ?? "").trim();
-  const dateTaken = exif.DateTimeOriginal ?? exif.CreateDate;
+  let dateTaken = exif.DateTimeOriginal ?? exif.CreateDate;
 
   if (!make && !model && !dateTaken) {
-    throw new ImageValidationError("Missing camera metadata — use device camera only");
+    // Chrome Android strips EXIF from <input capture> photos — trust fresh capturedAt.
+    if (opts?.capturedAt && isRecentCapture(opts.capturedAt)) {
+      dateTaken = opts.capturedAt;
+      exif = { ...exif, DateTimeOriginal: dateTaken, captureSource: "client_timestamp" };
+    } else {
+      throw new ImageValidationError("Missing camera metadata — use device camera only");
+    }
   }
 
   if (!dateTaken) {
@@ -115,7 +140,7 @@ export function validateCameraPhoto(imageBase64: string, clientExif?: ExifPayloa
 }
 
 export function sanitizeExifForStorage(exif: ExifPayload): Record<string, unknown> {
-  const allowed = ["Make", "Model", "Software", "DateTimeOriginal", "CreateDate", "ModifyDate", "Orientation", "GPSLatitude", "GPSLongitude"];
+  const allowed = ["Make", "Model", "Software", "DateTimeOriginal", "CreateDate", "ModifyDate", "Orientation", "GPSLatitude", "GPSLongitude", "captureSource"];
   const out: Record<string, unknown> = {};
   for (const k of allowed) {
     if (exif[k] != null) out[k] = exif[k];
