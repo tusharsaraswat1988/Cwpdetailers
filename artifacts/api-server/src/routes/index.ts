@@ -138,6 +138,8 @@ router.use(
     { match: /\/documents$/, method: "POST", action: "edit" },
     { match: /\/documents\/\d+\/replace$/, method: "POST", action: "edit" },
     { match: /\/notes$/, method: "POST", action: "edit" },
+    // Walk-in routes live under /staff/walk-in/* — POST resolve is operational entry, not staff CRUD.
+    { match: /\/walk-in\/resolve$/, method: "POST", action: "view" },
   ]),
   staffRouter,
 );
