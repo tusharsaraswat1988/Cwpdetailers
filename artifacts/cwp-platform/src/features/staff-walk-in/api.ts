@@ -56,6 +56,11 @@ export type WalkInCustomerContext = {
   }>;
   membershipStatus: "active" | "inactive" | "suspended" | "none";
   packages: WalkInPackageCard[];
+  primaryPackage: {
+    packageName: string;
+    packagePrice: string | null;
+    validTill: string | null;
+  } | null;
   eligibleToday: WalkInIncludedService[];
   hasActivePackage: boolean;
 };

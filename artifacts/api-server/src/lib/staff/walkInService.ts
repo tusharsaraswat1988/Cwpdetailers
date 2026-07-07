@@ -93,6 +93,11 @@ export type WalkInCustomerContext = {
   }>;
   membershipStatus: "active" | "inactive" | "suspended" | "none";
   packages: WalkInPackageCard[];
+  primaryPackage: {
+    packageName: string;
+    packagePrice: string | null;
+    validTill: string | null;
+  } | null;
   eligibleToday: WalkInIncludedService[];
   hasActivePackage: boolean;
 };
@@ -101,7 +106,7 @@ const SERVICE_DISPLAY: Record<WalkInServiceKind, string> = {
   car_wash: "Car Wash",
   solar_clean: "Solar",
   daily_clean: "Daily Clean",
-  daily_wash: "Daily Wash",
+  daily_wash: "Car Wash",
 };
 
 function cardStatus(
@@ -579,7 +584,7 @@ function entitlementServiceMeta(ent: { entitlementType: string; serviceName: str
   if (name.includes("daily clean") || name.includes("daily cleaning")) {
     return { serviceKind: "daily_clean", displayName: "Daily Clean" };
   }
-  if (name.includes("daily wash")) return { serviceKind: "daily_wash", displayName: "Daily Wash" };
+  if (name.includes("daily wash")) return { serviceKind: "daily_wash", displayName: "Car Wash" };
   if (ent.entitlementType === "wash_credit" || ent.entitlementType === "cleaning_credit") {
     return { serviceKind: "car_wash", displayName: ent.serviceName ?? "Car Wash" };
   }
@@ -592,6 +597,53 @@ function packageAggregateStatus(services: WalkInIncludedService[]): WalkInEntitl
   if (services.some(s => s.status === "expired")) return "expired";
   if (services.some(s => s.status === "exhausted")) return "exhausted";
   return "inactive";
+}
+
+/** Merge multiple package rows into one card per vehicle (presentation only). */
+function consolidateWalkInPackages(packages: WalkInPackageCard[]): WalkInPackageCard[] {
+  const placeholders = packages.filter(p => p.source == null);
+  const real = packages.filter(p => p.source != null);
+  if (real.length <= 1) return [...real, ...placeholders];
+
+  const byVehicle = new Map<string, WalkInPackageCard[]>();
+  for (const pkg of real) {
+    const vk = pkg.vehicleId != null ? String(pkg.vehicleId) : "_none";
+    const list = byVehicle.get(vk) ?? [];
+    list.push(pkg);
+    byVehicle.set(vk, list);
+  }
+
+  const merged: WalkInPackageCard[] = [];
+  for (const [vk, group] of byVehicle) {
+    const primary = group.find(p => p.source === "dcms") ?? group[0]!;
+    const serviceMap = new Map<string, WalkInIncludedService>();
+
+    for (const pkg of group) {
+      for (const svc of pkg.includedServices) {
+        const kindKey = svc.serviceKind === "daily_wash" ? "car_wash" : svc.serviceKind;
+        const normalized: WalkInIncludedService = {
+          ...svc,
+          displayName: svc.serviceKind === "daily_wash" ? "Car Wash" : svc.displayName,
+        };
+        const existing = serviceMap.get(kindKey);
+        if (!existing || normalized.remaining > existing.remaining) {
+          serviceMap.set(kindKey, normalized);
+        }
+      }
+    }
+
+    const includedServices = [...serviceMap.values()];
+    merged.push({
+      ...primary,
+      key: `merged-${vk}`,
+      expiresAt: group.map(p => p.expiresAt).filter(Boolean).sort().at(-1) ?? primary.expiresAt,
+      packagePrice: primary.packagePrice ?? group.find(p => p.packagePrice)?.packagePrice ?? null,
+      includedServices,
+      status: packageAggregateStatus(includedServices),
+    });
+  }
+
+  return [...merged, ...placeholders];
 }
 
 export type WalkInDcmsStop = {
@@ -865,7 +917,9 @@ export async function getWalkInCustomerContext(
     });
   }
 
-  const eligibleToday = packages
+  const consolidated = consolidateWalkInPackages(packages);
+
+  const eligibleToday = consolidated
     .flatMap(p => p.includedServices)
     .filter(s => s.status === "active" && s.remaining > 0);
 
@@ -873,6 +927,8 @@ export async function getWalkInCustomerContext(
   const membershipStatus = customer.status === "active"
     ? (activeServices.length > 0 ? "active" : "none")
     : customer.status as WalkInCustomerContext["membershipStatus"];
+
+  const primary = consolidated.find(p => p.source != null) ?? null;
 
   return {
     customer: {
@@ -887,7 +943,14 @@ export async function getWalkInCustomerContext(
     vehicle: selectedVehicle,
     vehicles,
     membershipStatus,
-    packages,
+    packages: consolidated,
+    primaryPackage: primary
+      ? {
+          packageName: primary.packageName,
+          packagePrice: primary.packagePrice,
+          validTill: primary.expiresAt,
+        }
+      : null,
     eligibleToday,
     hasActivePackage: activeServices.length > 0,
   };

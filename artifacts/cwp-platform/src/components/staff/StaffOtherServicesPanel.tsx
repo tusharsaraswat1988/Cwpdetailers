@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
@@ -18,12 +18,29 @@ type Props = {
   onSelectJob: (key: string | null) => void;
 };
 
+const WALK_IN_SUCCESS_MSG = "Customer ready — agla customer khojo";
+
 export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) {
   const jobs = useStaffJobsData();
   const [, navigate] = useLocation();
+  const search = useSearch();
   const [selectedJob, setSelectedJob] = useState<StaffJob | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [fromWalkIn, setFromWalkIn] = useState(false);
+  const [walkInSuccess, setWalkInSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    if (params.get("walkInSuccess") === "1") {
+      setWalkInOpen(true);
+      setWalkInSuccess(WALK_IN_SUCCESS_MSG);
+      params.delete("walkInSuccess");
+      const qs = params.toString();
+      const path = qs ? `/staff/bookings?${qs}` : "/staff/bookings";
+      window.history.replaceState(null, "", path);
+    }
+  }, [search]);
 
   useEffect(() => {
     if (!selectedJob) return;
@@ -43,6 +60,18 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
     });
   }, [selectedJobKey, jobs.loadingToday, jobs.today]);
 
+  async function handleTransitionJob(jobId: number, toStatus: string, job?: StaffJob) {
+    await jobs.transitionJob(jobId, toStatus, job);
+    if (fromWalkIn && toStatus === "completed") {
+      setSelectedJob(null);
+      onSelectJob(null);
+      setFromWalkIn(false);
+      setWalkInOpen(true);
+      setWalkInSuccess(WALK_IN_SUCCESS_MSG);
+      navigate("/staff/bookings?walkInSuccess=1");
+    }
+  }
+
   if (jobs.scopeLoading || jobs.missingStaffLink || jobs.staffId == null) {
     return (
       <StaffAccountGate
@@ -56,7 +85,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
   }
 
   const mutations = {
-    transitionJob: jobs.transitionJob,
+    transitionJob: handleTransitionJob,
     uploadGeoPhoto: jobs.uploadGeoPhoto,
     uploadingJobId: jobs.uploadingJobId,
     uploadingPhotoIndex: jobs.uploadingPhotoIndex,
@@ -72,10 +101,11 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
           onClick={() => {
             setSelectedJob(null);
             onSelectJob(null);
+            setFromWalkIn(false);
           }}
           className="flex items-center gap-1 text-sm text-primary font-medium"
         >
-          <ChevronLeft size={16} /> Back to jobs
+          <ChevronLeft size={16} /> Jobs par wapas
         </button>
         <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
           <div>
@@ -101,12 +131,14 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-medium">
           <span className="flex items-center gap-2">
             <UserPlus size={16} className="text-primary" />
-            Walk-in entry
+            Walk-in Entry
           </span>
           <ChevronDown size={16} className={cn("text-muted-foreground transition-transform", walkInOpen && "rotate-180")} />
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-3">
           <StaffWalkInPanel
+            successMessage={walkInSuccess}
+            onDismissSuccess={() => setWalkInSuccess(null)}
             onBookingResolved={async bookingId => {
               await jobs.refetchToday();
               const enriched = await jobs.loadJobWithPhotos({
@@ -114,6 +146,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
                 id: bookingId,
                 status: "scheduled",
               });
+              setFromWalkIn(true);
               setSelectedJob(enriched);
               onSelectJob(`booking-${bookingId}`);
               setWalkInOpen(false);
@@ -137,7 +170,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
       ) : jobs.today.length === 0 ? (
         <EmptyState
           icon={<Calendar size={20} />}
-          title="No service jobs today"
+          title="Aaj koi service job nahi"
           description="Admin assign karte hi yahan dikhegi"
         />
       ) : (
@@ -163,7 +196,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
       )}
 
       <Link href="/staff/jobs" className="block text-center text-xs text-primary font-medium">
-        All jobs (upcoming & done) →
+        Saari jobs (aane wali & done) →
       </Link>
     </div>
   );
