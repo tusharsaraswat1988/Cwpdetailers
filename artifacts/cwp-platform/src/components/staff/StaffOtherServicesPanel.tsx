@@ -151,9 +151,9 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
               onSelectJob(`booking-${bookingId}`);
               setWalkInOpen(false);
             }}
-            onDcmsResolved={(subscriptionId, visitType) => {
+            onDcmsResolved={subscriptionId => {
               setWalkInOpen(false);
-              navigate(`/staff/daily-clean?walkIn=1&subscriptionId=${subscriptionId}&visitType=${visitType}`);
+              navigate(`/staff/daily-clean?walkIn=1&subscriptionId=${subscriptionId}&visitType=cleaning`);
             }}
           />
         </CollapsibleContent>

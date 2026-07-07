@@ -16,10 +16,12 @@ import {
   dcmsPlansTable,
   catalogPackagesTable,
   dcmsVisitsTable,
+  dcmsActivityLogsTable,
 } from "@workspace/db";
 import { eq, and, sql, inArray, desc, gte, lte } from "drizzle-orm";
 import type { Request } from "express";
 import { getTodayIST } from "../../subscriptions/service";
+import type { Transaction } from "../../subscriptions/service";
 import { getCustomerServicesHub } from "../customers/customerServicesHub";
 import { searchCustomers, searchVehicles } from "../dcms/entitySearch";
 import { findEligibleEntitlement } from "../catalog/entitlementEngine";
@@ -182,15 +184,98 @@ async function assertWalkInCustomerAccess(customerId: number, staffId: number) {
   return customer;
 }
 
-const KIND_CONFIG: Record<
-  WalkInServiceKind,
-  { serviceType: string; entitlementTypes: string[]; dcmsVisitType?: "cleaning" | "wash" }
-> = {
+type WalkInKindConfig = {
+  serviceType: string;
+  entitlementTypes: string[];
+  /** DCMS subscription quota to draw from (cleaning vs wash allocation). */
+  dcmsQuotaType?: "cleaning" | "wash";
+  /** Only daily clean uses the DCMS photo workflow — not car wash. */
+  useDcmsPhotoWorkflow?: boolean;
+};
+
+const KIND_CONFIG: Record<WalkInServiceKind, WalkInKindConfig> = {
   car_wash: { serviceType: "car_wash", entitlementTypes: ["wash_credit", "cleaning_credit"] },
   solar_clean: { serviceType: "solar_cleaning", entitlementTypes: ["solar_visit"] },
-  daily_clean: { serviceType: "daily_cleaning", entitlementTypes: [], dcmsVisitType: "cleaning" },
-  daily_wash: { serviceType: "daily_cleaning", entitlementTypes: [], dcmsVisitType: "wash" },
+  daily_clean: {
+    serviceType: "daily_cleaning",
+    entitlementTypes: [],
+    dcmsQuotaType: "cleaning",
+    useDcmsPhotoWorkflow: true,
+  },
+  daily_wash: {
+    serviceType: "car_wash",
+    entitlementTypes: ["wash_credit", "cleaning_credit"],
+    dcmsQuotaType: "wash",
+  },
 };
+
+export const DCMS_WASH_WALK_IN_NOTE_RE = /DCMS wash \(subscription (\d+)\)/;
+
+export function parseDcmsWashWalkInSubscriptionId(notes?: string | null): number | null {
+  const match = notes?.match(DCMS_WASH_WALK_IN_NOTE_RE);
+  if (!match) return null;
+  const id = Number(match[1]);
+  return Number.isFinite(id) ? id : null;
+}
+
+export async function consumeDcmsWashFromWalkInBooking(
+  booking: { id: number; notes?: string | null; staffId?: number | null; customerId?: number },
+  performedBy: number,
+  tx: Transaction,
+): Promise<boolean> {
+  const subscriptionId = parseDcmsWashWalkInSubscriptionId(booking.notes);
+  if (!subscriptionId) return false;
+
+  const [sub] = await tx.select().from(dcmsSubscriptionsTable)
+    .where(eq(dcmsSubscriptionsTable.id, subscriptionId)).limit(1);
+  if (!sub) throw new Error("DCMS wash subscription not found for walk-in booking");
+  if (sub.remainingWashes <= 0) throw new Error("DCMS wash quota already consumed");
+
+  const now = new Date();
+  const visitDateStr = getTodayIST();
+
+  const [visit] = await tx.insert(dcmsVisitsTable).values({
+    subscriptionId,
+    vehicleId: sub.vehicleId,
+    staffId: booking.staffId ?? performedBy,
+    visitType: "wash",
+    photoUrl: null,
+    visitTime: now,
+    visitDate: visitDateStr,
+    status: "completed",
+    latitude: null,
+    longitude: null,
+  }).returning();
+
+  const remainingWashes = sub.remainingWashes - 1;
+  const remainingCleanings = sub.remainingCleanings;
+  const updates = {
+    usedWashes: sub.usedWashes + 1,
+    remainingWashes,
+    updatedAt: now,
+    version: sub.version + 1,
+    ...(remainingCleanings === 0 && remainingWashes === 0 ? { status: "completed" as const } : {}),
+  };
+
+  await tx.update(dcmsSubscriptionsTable)
+    .set(updates)
+    .where(and(
+      eq(dcmsSubscriptionsTable.id, subscriptionId),
+      eq(dcmsSubscriptionsTable.version, sub.version),
+      sql`${dcmsSubscriptionsTable.remainingWashes} > 0`,
+    ));
+
+  await tx.insert(dcmsActivityLogsTable).values({
+    subscriptionId,
+    action: "wash_consumed",
+    entityType: "visit",
+    entityId: visit!.id,
+    performedBy,
+    metadataJson: { visitType: "wash", bookingId: booking.id, walkIn: true },
+  });
+
+  return true;
+}
 
 export async function searchWalkInTargets(query: string) {
   const q = query.trim();
@@ -226,19 +311,19 @@ export async function getWalkInQuotaOptions(
   const config = KIND_CONFIG[serviceKind];
   const options: WalkInQuotaOption[] = [];
 
-  if (config.dcmsVisitType) {
+  if (config.dcmsQuotaType && config.useDcmsPhotoWorkflow) {
     for (const sub of hub.dailyCleaning) {
       if (sub.status !== "active") continue;
       if (opts?.vehicleId && sub.vehicleId !== opts.vehicleId) continue;
-      const remaining = config.dcmsVisitType === "cleaning" ? sub.remainingCleanings : sub.remainingWashes;
+      const remaining = config.dcmsQuotaType === "cleaning" ? sub.remainingCleanings : sub.remainingWashes;
       if (remaining <= 0) continue;
       options.push({
         source: "dcms",
-        label: `${sub.vehicleLabel} · ${sub.planName} (${remaining} ${config.dcmsVisitType} left)`,
+        label: `${sub.vehicleLabel} · ${sub.planName} (${remaining} ${config.dcmsQuotaType} left)`,
         subscriptionId: sub.id,
         vehicleId: sub.vehicleId,
         remaining,
-        visitType: config.dcmsVisitType,
+        visitType: config.dcmsQuotaType,
       });
     }
     if (options.length === 0) {
@@ -249,6 +334,23 @@ export async function getWalkInQuotaOptions(
       });
     }
     return options;
+  }
+
+  if (config.dcmsQuotaType === "wash") {
+    for (const sub of hub.dailyCleaning) {
+      if (sub.status !== "active") continue;
+      if (opts?.vehicleId && sub.vehicleId !== opts.vehicleId) continue;
+      if ((sub.allocatedWashes ?? 0) <= 0) continue;
+      if (sub.remainingWashes <= 0) continue;
+      options.push({
+        source: "dcms",
+        label: `${sub.vehicleLabel} · ${sub.planName} (${sub.remainingWashes} wash left)`,
+        subscriptionId: sub.id,
+        vehicleId: sub.vehicleId,
+        remaining: sub.remainingWashes,
+        visitType: "wash",
+      });
+    }
   }
 
   for (const ent of hub.entitlements) {
@@ -388,18 +490,21 @@ export type ResolveWalkInInput = {
 export type ResolveWalkInResult =
   | {
       mode: "dcms";
+      serviceKind: "daily_clean";
       subscriptionId: number;
       vehicleId: number;
-      visitType: "cleaning" | "wash";
+      visitType: "cleaning";
       quotaRemaining: number;
       consumedFrom: "dcms";
     }
   | {
       mode: "booking";
+      serviceKind: WalkInServiceKind;
+      serviceType: string;
       bookingId: number;
       status: string;
       createdDraft: boolean;
-      consumedFrom: "entitlement" | "legacy_subscription" | "draft";
+      consumedFrom: "entitlement" | "legacy_subscription" | "draft" | "dcms_wash";
       entitlementId?: number | null;
       message: string;
     };
@@ -410,7 +515,7 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
   const config = KIND_CONFIG[input.serviceKind];
   const today = getTodayIST();
 
-  if (config.dcmsVisitType && !input.forceDraft) {
+  if (config.useDcmsPhotoWorkflow && !input.forceDraft) {
     const subId = input.subscriptionId;
     if (!subId) throw new Error("Select a daily cleaning subscription");
     const [sub] = await db.select().from(dcmsSubscriptionsTable)
@@ -420,11 +525,8 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
         eq(dcmsSubscriptionsTable.status, "active"),
       )).limit(1);
     if (!sub) throw new Error("Active daily cleaning subscription not found");
-    const remaining = config.dcmsVisitType === "cleaning"
-      ? sub.remainingCleanings
-      : sub.remainingWashes;
-    if (remaining <= 0) {
-      throw new Error(`Package exhausted — no remaining ${config.dcmsVisitType} visits. Create a draft booking instead.`);
+    if (sub.remainingCleanings <= 0) {
+      throw new Error("Package exhausted — no remaining cleaning visits. Create a draft booking instead.");
     }
 
     await logWalkInAudit({
@@ -435,17 +537,33 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
       longitude: input.longitude,
       accuracy: input.accuracy,
       subscriptionId: sub.id,
-      metadata: { serviceKind: input.serviceKind, mode: "dcms", visitType: config.dcmsVisitType },
+      metadata: { serviceKind: input.serviceKind, mode: "dcms", visitType: "cleaning" },
     });
 
     return {
       mode: "dcms",
+      serviceKind: "daily_clean",
       subscriptionId: sub.id,
       vehicleId: sub.vehicleId,
-      visitType: config.dcmsVisitType,
-      quotaRemaining: remaining,
+      visitType: "cleaning",
+      quotaRemaining: sub.remainingCleanings,
       consumedFrom: "dcms",
     };
+  }
+
+  let dcmsWashSubscriptionId: number | null = null;
+  if (input.serviceKind === "daily_wash" && input.subscriptionId && !input.forceDraft) {
+    const [sub] = await db.select().from(dcmsSubscriptionsTable)
+      .where(and(
+        eq(dcmsSubscriptionsTable.id, input.subscriptionId),
+        eq(dcmsSubscriptionsTable.customerId, input.customerId),
+        eq(dcmsSubscriptionsTable.status, "active"),
+      )).limit(1);
+    if (!sub) throw new Error("Active daily plan subscription not found");
+    if (sub.remainingWashes <= 0) {
+      throw new Error("Package exhausted — no remaining wash visits. Create a draft booking instead.");
+    }
+    dcmsWashSubscriptionId = sub.id;
   }
 
   const options = await getWalkInQuotaOptions(input.customerId, input.serviceKind, {
@@ -455,11 +573,13 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
 
   let entitlementId = input.entitlementId ?? null;
   let legacySubscriptionId = input.legacySubscriptionId ?? null;
-  let consumedFrom: "entitlement" | "legacy_subscription" | "draft" = "draft";
+  let consumedFrom: "entitlement" | "legacy_subscription" | "draft" | "dcms_wash" = "draft";
   const legacyOption = options.find(o => o.source === "legacy_subscription");
 
   if (input.forceDraft) {
     consumedFrom = "draft";
+  } else if (dcmsWashSubscriptionId) {
+    consumedFrom = "dcms_wash";
   } else {
     const entitlementOption = options.find(o => o.source === "entitlement");
 
@@ -502,6 +622,8 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
 
     return {
       mode: "booking",
+      serviceKind: input.serviceKind,
+      serviceType: config.serviceType,
       bookingId: existing.id,
       status: existing.status,
       createdDraft: existing.status === "pending",
@@ -536,9 +658,11 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
     area: loc.area ?? null,
     locationLat: loc.locationLat,
     locationLng: loc.locationLng,
-    notes: isDraft
-      ? `Staff walk-in — draft booking, payment pending (created ${today})`
-      : `Staff walk-in entry (${consumedFrom})`,
+    notes: dcmsWashSubscriptionId
+      ? `Staff walk-in — DCMS wash (subscription ${dcmsWashSubscriptionId})`
+      : isDraft
+        ? `Staff walk-in — draft booking, payment pending (created ${today})`
+        : `Staff walk-in entry (${consumedFrom})`,
     amount: entitlementId ? "0" : null,
     entitlementId,
     status: initialStatus,
@@ -554,8 +678,10 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
     longitude: input.longitude,
     accuracy: input.accuracy,
     bookingId: booking.id,
+    subscriptionId: dcmsWashSubscriptionId ?? undefined,
     metadata: {
       serviceKind: input.serviceKind,
+      serviceType: config.serviceType,
       mode: "booking",
       consumedFrom,
       createdDraft: isDraft,
@@ -564,6 +690,8 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
 
   return {
     mode: "booking",
+    serviceKind: input.serviceKind,
+    serviceType: config.serviceType,
     bookingId: booking.id,
     status: booking.status,
     createdDraft: isDraft,

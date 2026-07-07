@@ -534,6 +534,13 @@ router.post("/bookings/:id/transition", async (req, res) => {
             await consumeEntitlementOnCompletion(existing.entitlementId as number, id, 1, tx);
           }
 
+          const { consumeDcmsWashFromWalkInBooking } = await import("../lib/staff/walkInService");
+          await consumeDcmsWashFromWalkInBooking(
+            existing,
+            req.user?.id ?? req.scope?.staffId ?? existing.staffId ?? 0,
+            tx,
+          );
+
           const {
             maybeCreateInvoiceOnBookingComplete,
             resolveBookingServiceName,
