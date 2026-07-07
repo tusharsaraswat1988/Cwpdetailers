@@ -66,9 +66,15 @@ export type WalkInQuotaOption = {
 
 function formatWalkInError(err: { error?: string; resource?: string; action?: string }, status: number): string {
   if (err.error === "Permission denied") {
+    if (err.resource === "bookings" && err.action === "edit") {
+      return "You do not have permission to create or update bookings. Contact your supervisor.";
+    }
+    if (err.resource === "staff" && err.action === "view") {
+      return "You do not have permission to access staff walk-in entry. Contact your supervisor.";
+    }
     const detail = err.resource && err.action
       ? `You do not have permission to ${err.action} ${err.resource.replace(/_/g, " ")}.`
-      : "You do not have permission to create walk-in bookings. Contact your supervisor.";
+      : "You do not have permission to perform this walk-in action. Contact your supervisor.";
     return detail;
   }
   if (err.error) return err.error;

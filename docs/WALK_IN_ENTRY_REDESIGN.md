@@ -167,3 +167,20 @@ Examples now shown to staff:
 Both **Start Service** and **Create Draft Booking** capture fresh GPS (latitude, longitude, accuracy) and log to `staff_location_logs` via `recordStaffLocation()` with metadata:
 - `walkInAction`: `start_service` | `create_draft_booking`
 - `customerId`, `serviceKind`, `bookingId` / `subscriptionId`
+
+## Walk-in RBAC (Critical Fix)
+
+Walk-in routes live under `/staff/walk-in/*` but are **not** staff CRUD. A dedicated `guardWalkInRoutes()` middleware evaluates permissions by business operation:
+
+| Endpoint | Method | Permission |
+|----------|--------|------------|
+| `/staff/walk-in/search` | GET | `staff:view` |
+| `/staff/walk-in/customer/:id` | GET | `staff:view` |
+| `/staff/walk-in/customer/:id/quota` | GET | `staff:view` |
+| `/staff/walk-in/resolve` | POST | `bookings:edit` |
+
+Staff CRUD guards (`guardResource("staff")`) **exclude** `/staff/walk-in/*` via `WALK_IN_PATH_PREFIX`, so `POST /staff` still correctly requires `staff:create`.
+
+Middleware order: `guardWalkInRoutes()` → `staffWalkInRouter` → (excluded) `staffRouter` guard → (excluded) `staffEcosystem` guard.
+
+Staff role seed already includes `staff:view` and `bookings:edit` — no new grants required.

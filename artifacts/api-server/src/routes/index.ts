@@ -41,7 +41,7 @@ import assetsRouter from "./assets";
 import serviceContractsRouter from "./service-contracts";
 import assignmentsRouter from "./assignments";
 import serviceExecutionsRouter from "./service-executions";
-import { guardResource, guardMasterDataRoutes, guardCatalogRoutes } from "../middlewares/permissions";
+import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
 
@@ -124,6 +124,8 @@ router.use(
   ]),
   bookingsRouter,
 );
+// Walk-in must be registered before staff CRUD guards — dedicated guard, not staff:create.
+router.use(guardWalkInRoutes(), staffWalkInRouter);
 router.use(
   guardResource("staff", [
     { match: /\/verify$/, method: "POST", action: "approve" },
@@ -138,9 +140,7 @@ router.use(
     { match: /\/documents$/, method: "POST", action: "edit" },
     { match: /\/documents\/\d+\/replace$/, method: "POST", action: "edit" },
     { match: /\/notes$/, method: "POST", action: "edit" },
-    // Walk-in routes live under /staff/walk-in/* — POST resolve is operational entry, not staff CRUD.
-    { match: /\/walk-in\/resolve$/, method: "POST", action: "view" },
-  ]),
+  ], [WALK_IN_PATH_PREFIX]),
   staffRouter,
 );
 router.use(
@@ -154,15 +154,8 @@ router.use(
     { match: /\/me\/ecosystem$/, method: "PATCH", action: "view" },
     { match: /\/me\/documents/, method: "POST", action: "view" },
     { match: /\/me\/team-complaints\/\d+$/, method: "PATCH", action: "view" },
-    { match: /\/walk-in\/resolve$/, method: "POST", action: "view" },
-  ]),
+  ], [WALK_IN_PATH_PREFIX]),
   staffEcosystemRouter,
-);
-router.use(
-  guardResource("staff", [
-    { match: /\/walk-in\/resolve$/, method: "POST", action: "view" },
-  ]),
-  staffWalkInRouter,
 );
 router.use(guardResource("complaints"), complaintsRouter);
 router.use(
