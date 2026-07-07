@@ -3,13 +3,12 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { AppShell, type BottomNavItem } from "@/components/app-shell";
-import { LocationGate } from "@/lib/location";
+import { LocationStatusIndicator } from "@/lib/location/LocationStatusIndicator";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
 import { Zap, ClipboardCheck, Sparkles, IndianRupee, User } from "lucide-react";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
-import { StaffJobAlertLayer } from "@/components/staff/StaffJobAlertLayer";
 
 type StaffNavDef = BottomNavItem & { requiresRole?: string; requiresCategory?: "supervisor" | "cleaning_staff" };
 
@@ -87,13 +86,16 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
         ),
         title: pageTitle,
         subtitle: user?.name ? `${user.name}${myContext?.staffCategory === "supervisor" ? " · Supervisor" : ""}` : undefined,
-        trailing: <SyncStatusIndicator compact />,
+        trailing: (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <LocationStatusIndicator />
+            <SyncStatusIndicator compact />
+          </div>
+        ),
       }}
       bottomNav={staffNavItems}
     >
-      <LocationGate>
-        <StaffJobAlertLayer>{children}</StaffJobAlertLayer>
-      </LocationGate>
+      {children}
     </AppShell>
   );
 }

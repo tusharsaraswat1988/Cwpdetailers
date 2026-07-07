@@ -1,50 +1,52 @@
 import { ReactNode } from "react";
-import { Loader2, MapPin, Navigation, RefreshCw, ShieldAlert } from "lucide-react";
+import { MapPin, Navigation, RefreshCw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useLocationPermission } from "./useLocationPermission";
+import { useStaffLocation } from "./LocationProvider";
 
-export function LocationGate({ children }: { children: ReactNode }) {
-  const { state, refresh, isReady, isVerifying } = useLocationPermission();
+/**
+ * Blocks staff UI only when location permission is missing or denied.
+ * Does NOT block navigation while GPS fix is acquired in the background.
+ */
+export function LocationPermissionGate({ children }: { children: ReactNode }) {
+  const { permissionState, requestPermission } = useStaffLocation();
+
+  const canEnterApp = permissionState === "granted";
 
   return (
     <>
       {children}
-      {!isReady && (
+      {!canEnterApp && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/50 backdrop-blur-[1px]"
-          data-testid="location-gate"
+          data-testid="location-permission-gate"
         >
           <div className="w-full max-w-xs rounded-2xl border border-border bg-background p-5 shadow-lg text-center">
             <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
-              {state === "unsupported" ? (
+              {permissionState === "unsupported" ? (
                 <ShieldAlert className="text-destructive" size={22} />
-              ) : isVerifying ? (
-                <Loader2 className="animate-spin text-primary" size={22} />
               ) : (
                 <MapPin className="text-primary" size={22} />
               )}
             </div>
 
             <h2 className="font-display mb-1 text-base font-bold">
-              {state === "unsupported"
+              {permissionState === "unsupported"
                 ? "GPS not supported"
-                : isVerifying
-                  ? "GPS check ho raha hai…"
+                : permissionState === "denied"
+                  ? "Location blocked"
                   : "Location on karein"}
             </h2>
 
             <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-              {state === "unsupported" &&
+              {permissionState === "unsupported" &&
                 "Is device par GPS nahi hai. Android phone se staff app use karein."}
-              {state === "denied" &&
+              {permissionState === "denied" &&
                 "Attendance aur visit proof ke liye location zaroori hai."}
-              {(state === "prompt" || state === "checking") && !isVerifying &&
-                "Prompt aane par Allow karein — field work ke liye live GPS chahiye."}
-              {isVerifying && state !== "unsupported" &&
-                "Thoda wait karein, location verify ho rahi hai."}
+              {(permissionState === "prompt" || permissionState === "checking") &&
+                "Allow karein — field work ke liye live GPS chahiye."}
             </p>
 
-            {state !== "unsupported" && state !== "checking" && !isVerifying && (
+            {permissionState !== "unsupported" && (
               <ul className="mb-4 space-y-1.5 rounded-xl border bg-muted/40 p-3 text-left text-[11px] text-muted-foreground">
                 <li className="flex gap-2">
                   <Navigation size={12} className="mt-0.5 shrink-0 text-primary" />
@@ -57,14 +59,14 @@ export function LocationGate({ children }: { children: ReactNode }) {
               </ul>
             )}
 
-            {state !== "unsupported" && !isVerifying && (
+            {permissionState !== "unsupported" && (
               <Button
                 className="h-10 w-full font-semibold"
-                onClick={() => void refresh()}
+                onClick={() => void requestPermission()}
                 data-testid="btn-enable-location"
               >
                 <RefreshCw size={14} className="mr-2" />
-                {state === "denied" ? "Try again" : "Enable location"}
+                {permissionState === "denied" ? "Try again" : "Enable location"}
               </Button>
             )}
           </div>
@@ -73,3 +75,6 @@ export function LocationGate({ children }: { children: ReactNode }) {
     </>
   );
 }
+
+/** @deprecated Use LocationPermissionGate */
+export { LocationPermissionGate as LocationGate };

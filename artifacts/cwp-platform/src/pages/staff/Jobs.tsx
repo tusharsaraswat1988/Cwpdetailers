@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
-import StaffAppShell from "@/components/layout/StaffAppShell";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,8 +34,7 @@ export default function StaffJobs() {
   const grouped = tab === "today" ? null : groupJobsByDate(displayJobs);
 
   return (
-    <StaffAppShell>
-      <div className="space-y-4">
+    <div className="space-y-4">
         <div>
           <h1 className="font-display font-bold text-xl">All Jobs</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Tap a job to open actions on Today</p>
@@ -127,6 +125,5 @@ export default function StaffJobs() {
           </div>
         )}
       </div>
-    </StaffAppShell>
   );
 }

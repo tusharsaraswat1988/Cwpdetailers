@@ -4,7 +4,6 @@ import { Redirect, Link } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { useStaffDailyRoute } from "@/features/daily-cleaning/api";
 import { staffJobKey } from "@/lib/staff-jobs";
-import StaffAppShell from "@/components/layout/StaffAppShell";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
 import { StaffPushPrompt } from "@/components/staff/StaffPushPrompt";
@@ -126,8 +125,7 @@ export default function StaffDashboard() {
   };
 
   return (
-    <StaffAppShell>
-      <div className="space-y-5 pb-2">
+    <div className="space-y-5 pb-2">
         <StaffPushPrompt />
 
         {myProfile && (
@@ -260,6 +258,5 @@ export default function StaffDashboard() {
           </section>
         )}
       </div>
-    </StaffAppShell>
   );
 }

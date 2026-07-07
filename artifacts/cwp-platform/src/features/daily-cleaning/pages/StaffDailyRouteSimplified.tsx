@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine } from "lucide-react";
-import { extractClientExif, validateCameraFile, readFileAsDataUrl, getGps } from "../lib/cameraCapture";
+import { extractClientExif, validateCameraFile, readFileAsDataUrl } from "../lib/cameraCapture";
+import { getStaffLocation } from "@/lib/location";
 import { PlateScanFlow, type PlateScanMeta } from "../components/PlateScanFlow";
 import { cn } from "@/lib/utils";
 
@@ -60,7 +61,7 @@ export function StaffDailyRouteSimplified() {
     try {
       validateCameraFile(file);
       const [gps, imageBase64, exif] = await Promise.all([
-        getGps(),
+        getStaffLocation("action"),
         readFileAsDataUrl(file),
         extractClientExif(file),
       ]);

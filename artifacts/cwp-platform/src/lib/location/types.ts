@@ -11,6 +11,9 @@ export type LocationPermissionState =
   | "denied"
   | "unsupported";
 
+/** navigation = cached 30s; action = fresh high-accuracy fix */
+export type GpsRequestMode = "navigation" | "action" | "background";
+
 export type StaffLocationLogRow = {
   id: number;
   staffId: number;

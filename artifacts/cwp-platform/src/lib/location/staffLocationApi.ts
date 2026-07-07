@@ -9,7 +9,7 @@ export async function transitionBookingWithLocation(
   let payload: Record<string, unknown> = { ...body };
 
   if (needsLocation) {
-    const coords = await getStaffLocation();
+    const coords = await getStaffLocation("action");
     payload = { ...payload, ...toLocationPayload(coords) };
   }
 
@@ -29,7 +29,7 @@ export async function markAttendanceWithLocation(
   staffId: number,
   body: { date: string; status: string; checkInTime?: string; checkOutTime?: string; notes?: string },
 ): Promise<unknown> {
-  const coords = await getStaffLocation();
+  const coords = await getStaffLocation("action");
   const payload = { ...body, ...toLocationPayload(coords) };
 
   const res = await fetch(`/api/staff/${staffId}/attendance`, {
