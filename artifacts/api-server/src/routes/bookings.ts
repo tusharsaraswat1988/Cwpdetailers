@@ -100,14 +100,14 @@ async function fireStaffJobAssignedNotify(input: {
 }
 
 const allowedTransitions: Record<string, string[]> = {
-  scheduled: ["en_route", "in_progress", "cancelled", "rescheduled"],
+  scheduled: ["confirmed", "cancelled", "rescheduled"],
+  confirmed: ["en_route", "cancelled"],
   en_route: ["in_progress", "cancelled"],
   in_progress: ["completed", "cancelled"],
   completed: [],
   cancelled: [],
-  rescheduled: ["en_route", "cancelled"],
+  rescheduled: ["confirmed", "en_route", "cancelled"],
   pending: ["confirmed", "cancelled"],
-  confirmed: ["scheduled", "cancelled"],
 };
 
 async function logEvent(

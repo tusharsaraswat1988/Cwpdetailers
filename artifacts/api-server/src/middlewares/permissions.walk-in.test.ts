@@ -96,3 +96,35 @@ describe("guardResource staff CRUD excludes walk-in", () => {
     expect(next).toHaveBeenCalled();
   });
 });
+
+describe("guardResource pathPrefix scoping", () => {
+  beforeEach(() => {
+    requirePermissionMock.mockClear();
+  });
+
+  it("scopes bookings guards to their router prefix", () => {
+    const next = vi.fn();
+    const contractsGuard = guardResource(
+      "bookings",
+      [{ match: /\/service-contracts$/, method: "POST", action: "create" }],
+      [],
+      "/service-contracts",
+    );
+    contractsGuard(mockReq("POST", "/bookings/42/transition"), mockRes(), next);
+    expect(requirePermissionMock).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalled();
+  });
+
+  it("maps booking transition POST to bookings:edit", () => {
+    const next = vi.fn();
+    const bookingsGuard = guardResource(
+      "bookings",
+      [{ match: /\/transition$/, method: "POST", action: "edit" }],
+      [],
+      "/bookings",
+    );
+    bookingsGuard(mockReq("POST", "/bookings/42/transition"), mockRes(), next);
+    expect(requirePermissionMock).toHaveBeenCalledWith("bookings", "edit");
+    expect(next).toHaveBeenCalled();
+  });
+});

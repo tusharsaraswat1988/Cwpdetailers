@@ -65,12 +65,13 @@ export function guardResource(
   resource: string,
   overrides: PermissionOverride[] = [],
   excludePaths: RegExp[] = [],
+  pathPrefix?: string,
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
     const path = req.path;
     if (excludePaths.some(p => p.test(path))) return next();
-    const resourcePrefix = `/${resource}`;
-    if (!path.startsWith(resourcePrefix) && path !== `/${resource.replace(/-/g, "_")}`) {
+    const prefix = pathPrefix ?? `/${resource}`;
+    if (!path.startsWith(prefix) && path !== `/${resource.replace(/-/g, "_")}`) {
       return next();
     }
     const method = req.method.toUpperCase();

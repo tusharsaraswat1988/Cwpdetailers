@@ -93,13 +93,13 @@ router.use(
   guardResource("bookings", [
     { match: /\/service-contracts$/, method: "POST", action: "create" },
     { match: /\/service-contracts\/\d+\/status$/, method: "PATCH", action: "edit" },
-  ]),
+  ], [], "/service-contracts"),
   serviceContractsRouter,
 );
 router.use(
   guardResource("bookings", [
     { match: /\/assignments\/\d+\/assign$/, method: "POST", action: "edit" },
-  ]),
+  ], [], "/assignments"),
   assignmentsRouter,
 );
 router.use(
@@ -109,7 +109,7 @@ router.use(
     { match: /\/service-executions\/\d+\/miss$/, method: "POST", action: "edit" },
     { match: /\/service-executions\/\d+\/cancel$/, method: "POST", action: "edit" },
     { match: /\/service-executions\/\d+\/reschedule$/, method: "POST", action: "edit" },
-  ]),
+  ], [], "/service-executions"),
   serviceExecutionsRouter,
 );
 router.use(
@@ -121,7 +121,7 @@ router.use(
     { match: /\/proof$/, method: "POST", action: "edit" },
     { match: /\/reschedule$/, method: "POST", action: "edit" },
     { match: /\/regenerate-occurrences$/, method: "POST", action: "edit" },
-  ]),
+  ], [], "/bookings"),
   bookingsRouter,
 );
 // Walk-in must be registered before staff CRUD guards — dedicated guard, not staff:create.
@@ -167,7 +167,7 @@ router.use(
 );
 router.use(guardResource("branches"), branchesRouter);
 router.use(guardResource("analytics"), analyticsRouter);
-router.use(guardResource("bookings"), operationsRouter);
+router.use(guardResource("bookings", [], [], "/operations"), operationsRouter);
 router.use(
   guardResource("notifications", [
     { match: /\/broadcast$/, method: "POST", action: "create" },

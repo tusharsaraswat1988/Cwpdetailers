@@ -62,30 +62,32 @@ export function ActiveJobHero({ job, ...actions }: Props) {
         </p>
       )}
 
-      <div className="flex gap-2">
-        {job.customerPhone && (
-          <a
-            href={`tel:${job.customerPhone}`}
-            className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
-            data-testid={`hero-call-${job.id}`}
-          >
-            <Phone size={16} className="text-green-600" />
-            Call
-          </a>
-        )}
-        {job.address && (
-          <a
-            href={`https://maps.google.com/?q=${encodeURIComponent(addressLine ?? job.address ?? "")}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
-            data-testid={`hero-navigate-${job.id}`}
-          >
-            <MapPin size={16} className="text-blue-500" />
-            Navigate
-          </a>
-        )}
-      </div>
+      {!isOtherServiceJob(job) && (
+        <div className="flex gap-2">
+          {job.customerPhone && (
+            <a
+              href={`tel:${job.customerPhone}`}
+              className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+              data-testid={`hero-call-${job.id}`}
+            >
+              <Phone size={16} className="text-green-600" />
+              Call
+            </a>
+          )}
+          {job.address && (
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(addressLine ?? job.address ?? "")}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+              data-testid={`hero-navigate-${job.id}`}
+            >
+              <MapPin size={16} className="text-blue-500" />
+              Navigate
+            </a>
+          )}
+        </div>
+      )}
 
       {(job.beforePhotoUrl || job.afterPhotoUrl) && (
         <div className="flex gap-4 justify-center">
