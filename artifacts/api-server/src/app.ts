@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
@@ -30,8 +30,25 @@ app.use(
 );
 app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+/** Camera visit uploads send multi-MB base64 JSON; default 100kb rejects before route handler. */
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
+
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+  const tooLarge =
+    typeof err === "object"
+    && err !== null
+    && "type" in err
+    && (err as { type?: string }).type === "entity.too.large";
+  if (tooLarge) {
+    req.log?.warn({ url: req.url, contentLength: req.headers["content-length"] }, "request body too large");
+    return res.status(413).json({
+      error: "Photo upload too large (max 15MB). Try lower camera resolution.",
+      code: "PAYLOAD_TOO_LARGE",
+    });
+  }
+  return next(err);
+});
 
 app.use("/api", optionalAuth, router);
 

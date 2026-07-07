@@ -7,8 +7,19 @@ async function dcmsFetch<T>(path: string, opts?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...opts?.headers },
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? "Request failed");
+    const bodyText = await res.text();
+    let message = res.statusText || "Request failed";
+    try {
+      const parsed = JSON.parse(bodyText) as { error?: string; code?: string };
+      if (parsed.error?.trim()) message = parsed.error;
+      else if (parsed.code === "PAYLOAD_TOO_LARGE") message = "Photo upload too large — try lower camera resolution";
+    } catch {
+      if (bodyText.trim()) message = bodyText.slice(0, 200);
+    }
+    const err = new Error(message) as Error & { status?: number; body?: string };
+    err.status = res.status;
+    err.body = bodyText;
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
