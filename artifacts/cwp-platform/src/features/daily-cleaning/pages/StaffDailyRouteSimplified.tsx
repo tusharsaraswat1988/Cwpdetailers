@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useSearch } from "wouter";
+import { useSearch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
@@ -36,6 +36,7 @@ const statusLabel: Record<string, string> = {
 export function StaffDailyRouteSimplified() {
   const { user } = useAuth();
   const search = useSearch();
+  const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
   const walkInMode = params.get("walkIn") === "1";
   const walkInSubscriptionId = params.get("subscriptionId");
@@ -116,18 +117,18 @@ export function StaffDailyRouteSimplified() {
         ocrConfidence: plateScanMeta?.ocrConfidence ?? null,
         confirmedRegistration: plateScanMeta?.confirmedRegistration ?? current.vehicleNumber,
       });
-      toast({ title: "Done!", description: `${current.vehicleNumber} — visit complete` });
+      toast({ title: "Ho gaya!", description: `${current.vehicleNumber} — visit complete` });
       setPlateScanMeta(null);
       if (walkInMode) {
-        walkInStopQuery.refetch();
-      } else {
-        refetch();
-        if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
+        navigate("/staff/bookings?walkInSuccess=1");
+        return;
       }
+      refetch();
+      if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
     } catch (err) {
       toast({ title: "Upload failed", description: visitUploadErrorMessage(err), variant: "destructive" });
     }
-  }, [current, completeVisit, toast, refetch, walkInStopQuery, plateScanMeta, activeIdx, stops.length, visitType, walkInMode]);
+  }, [current, completeVisit, toast, refetch, plateScanMeta, activeIdx, stops.length, visitType, walkInMode, navigate]);
 
   if (!user?.staffId) {
     return (
@@ -161,7 +162,7 @@ export function StaffDailyRouteSimplified() {
     <div className="space-y-4">
       {walkInMode && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-          Walk-in visit — complete using the same daily clean workflow as assigned jobs.
+          Walk-in visit — wahi daily clean workflow use karo jo assigned jobs mein hai.
         </div>
       )}
 
@@ -209,8 +210,18 @@ export function StaffDailyRouteSimplified() {
               Photo lein & complete
             </Button>
           ) : (
-            <div className="flex items-center justify-center gap-2 py-3 text-green-600 text-sm font-medium bg-green-500/10 rounded-xl">
-              <CheckCircle size={18} /> Is car ka kaam ho chuka hai
+            <div className="flex flex-col items-center gap-3 py-3">
+              <div className="flex items-center justify-center gap-2 text-green-600 text-sm font-medium bg-green-500/10 rounded-xl w-full py-3">
+                <CheckCircle size={18} /> Is car ka kaam ho chuka hai
+              </div>
+              {walkInMode && (
+                <Button
+                  className="w-full"
+                  onClick={() => navigate("/staff/bookings?walkInSuccess=1")}
+                >
+                  Agla customer khojo
+                </Button>
+              )}
             </div>
           )}
 

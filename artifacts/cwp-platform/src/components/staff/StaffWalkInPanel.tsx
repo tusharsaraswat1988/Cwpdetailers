@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Loader2, CheckCircle2, Circle } from "lucide-react";
+import { UserPlus, Loader2, CheckCircle2 } from "lucide-react";
 import {
   searchWalkIn,
   fetchWalkInCustomer,
@@ -13,6 +13,7 @@ import {
   type WalkInIncludedService,
   type WalkInPackageCard,
   type WalkInCustomerContext,
+  type WalkInServiceKind,
 } from "@/features/staff-walk-in/api";
 import { getStaffLocation } from "@/lib/location";
 import { SERVICE_EXECUTIONS_QUERY_KEY } from "@/features/service-executions/api";
@@ -25,12 +26,14 @@ const SEARCH_DEBOUNCE_MS = 300;
 type Props = {
   onBookingResolved: (bookingId: number) => void;
   onDcmsResolved: (subscriptionId: number, visitType: "cleaning" | "wash") => void;
+  successMessage?: string | null;
+  onDismissSuccess?: () => void;
 };
 
 function formatExpiry(value: string | null | undefined) {
   if (!value) return "—";
   const d = parseISO(value.length === 10 ? `${value}T00:00:00` : value);
-  return isValid(d) ? format(d, "d MMM") : value;
+  return isValid(d) ? format(d, "d MMM yyyy") : value;
 }
 
 function formatPrice(value: string | null | undefined) {
@@ -39,20 +42,36 @@ function formatPrice(value: string | null | undefined) {
   return Number.isFinite(n) ? `₹${n.toLocaleString("en-IN")}` : null;
 }
 
-function statusLabel(status: WalkInPackageCard["status"]) {
-  switch (status) {
-    case "active": return "Active";
-    case "exhausted": return "Package Finished";
-    case "expired": return "Expired";
-    case "not_active": return "Not Active";
-    default: return "Inactive";
+function serviceIcon(kind: WalkInServiceKind) {
+  switch (kind) {
+    case "daily_clean": return "🧹";
+    case "daily_wash":
+    case "car_wash": return "🚗";
+    case "solar_clean": return "☀️";
+    default: return "•";
   }
+}
+
+function serviceStatusInfo(service: WalkInIncludedService) {
+  if (service.status === "not_active") {
+    return { label: "Package Nahi Hai", tone: "muted" as const };
+  }
+  if (service.status === "expired") {
+    return { label: "Expired", tone: "danger" as const };
+  }
+  if (service.status === "exhausted" || service.remaining <= 0) {
+    return { label: "Khatam", tone: "muted" as const };
+  }
+  if (service.recommended) {
+    return { label: "Aaj Karna Hai", tone: "recommended" as const };
+  }
+  return { label: "Available", tone: "available" as const };
 }
 
 function membershipLabel(status: WalkInCustomerContext["membershipStatus"]) {
   switch (status) {
-    case "active": return "Active";
-    case "none": return "No Package";
+    case "active": return "Package Active";
+    case "none": return "Package Nahi Hai";
     case "inactive": return "Inactive";
     case "suspended": return "Suspended";
   }
@@ -60,12 +79,16 @@ function membershipLabel(status: WalkInCustomerContext["membershipStatus"]) {
 
 function CustomerHeader({ context, onChange }: { context: WalkInCustomerContext; onChange: () => void }) {
   const vehicle = context.vehicle;
+  const pkg = context.primaryPackage;
+  const priceLabel = pkg ? formatPrice(pkg.packagePrice) : null;
+
   return (
     <div className="rounded-xl border border-border bg-card p-3 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1 min-w-0">
+          <p className="text-base font-semibold truncate">{context.customer.name}</p>
           {vehicle && (
-            <p className="text-sm font-semibold truncate">
+            <p className="text-sm font-medium truncate">
               {vehicle.registrationNumber}
               {(vehicle.make || vehicle.model) && (
                 <span className="font-normal text-muted-foreground">
@@ -74,26 +97,51 @@ function CustomerHeader({ context, onChange }: { context: WalkInCustomerContext;
               )}
             </p>
           )}
-          <p className="text-sm">
-            <span className="text-muted-foreground">Customer </span>
-            {context.customer.name}
-          </p>
+          {pkg && (
+            <p className="text-sm">
+              {pkg.packageName}
+              {priceLabel && <span className="text-muted-foreground"> {priceLabel}</span>}
+            </p>
+          )}
+          {pkg?.validTill && (
+            <p className="text-xs text-muted-foreground">
+              Valid tak {formatExpiry(pkg.validTill)}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             ID {context.customer.id}
             {context.customer.branchName && ` · ${context.customer.branchName}`}
           </p>
         </div>
         <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onChange}>
-          Change
+          Badlo
         </Button>
       </div>
       <div className="flex flex-wrap gap-2">
         <Badge variant={context.membershipStatus === "active" ? "default" : "outline"}>
-          Membership {membershipLabel(context.membershipStatus)}
+          {membershipLabel(context.membershipStatus)}
         </Badge>
-        {context.customer.city && <Badge variant="outline">{context.customer.city}</Badge>}
       </div>
     </div>
+  );
+}
+
+function ServiceStatusBadge({ service }: { service: WalkInIncludedService }) {
+  const info = serviceStatusInfo(service);
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "text-[10px] shrink-0",
+        info.tone === "recommended" && "border-primary/50 bg-primary/10 text-primary",
+        info.tone === "available" && "border-green-500/30 bg-green-500/10 text-green-800",
+        info.tone === "danger" && "border-destructive/30 bg-destructive/10 text-destructive",
+        info.tone === "muted" && "text-muted-foreground",
+      )}
+    >
+      {info.tone === "recommended" && <CheckCircle2 size={10} className="mr-1 inline" />}
+      {info.label}
+    </Badge>
   );
 }
 
@@ -110,6 +158,32 @@ function PackageCard({
 }) {
   const priceLabel = formatPrice(pkg.packagePrice);
   const hasActiveService = pkg.includedServices.some(s => s.status === "active" && s.remaining > 0);
+  const isSolarOnly = pkg.source == null && pkg.packageName === "Solar";
+
+  if (isSolarOnly) {
+    const service = pkg.includedServices[0]!;
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium">
+            {serviceIcon(service.serviceKind)} {service.displayName}
+          </p>
+          <ServiceStatusBadge service={service} />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          size="sm"
+          disabled={resolvingKey === service.key}
+          onClick={() => onCreateDraft(service)}
+        >
+          {resolvingKey === service.key ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
+          Draft Booking Banao
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-border bg-card p-3 space-y-3">
@@ -117,30 +191,32 @@ function PackageCard({
         <div>
           <p className="text-sm font-semibold">
             {pkg.packageName}
-            {priceLabel && <span className="font-normal text-muted-foreground"> · {priceLabel}</span>}
+            {priceLabel && <span className="font-normal text-muted-foreground"> {priceLabel}</span>}
           </p>
           {pkg.vehicleLabel && <p className="text-xs text-muted-foreground">{pkg.vehicleLabel}</p>}
         </div>
-        <Badge variant={pkg.status === "active" ? "default" : "outline"} className="text-[10px] shrink-0">
-          {statusLabel(pkg.status)}
-        </Badge>
       </div>
 
-      <div className="text-xs text-muted-foreground">Expires {formatExpiry(pkg.expiresAt)}</div>
+      {pkg.expiresAt && (
+        <p className="text-xs text-muted-foreground">Valid tak {formatExpiry(pkg.expiresAt)}</p>
+      )}
 
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Included services</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Package mein shamil</p>
         {pkg.includedServices.map(service => {
           const canStart = service.status === "active" && service.remaining > 0;
           const showDraft = !canStart && (service.status === "exhausted" || service.status === "expired" || service.status === "not_active");
-          const totalLabel = service.total != null ? `${service.remaining}/${service.total}` : String(service.remaining);
+          const totalLabel = service.total != null ? `${service.remaining} / ${service.total}` : String(service.remaining);
 
           return (
             <div key={service.key} className="rounded-lg border border-border/80 bg-muted/20 p-2.5 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">{service.displayName}</p>
-                <p className="text-xs text-muted-foreground">Remaining: {totalLabel}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium">
+                  {serviceIcon(service.serviceKind)} {service.displayName}
+                </p>
+                <ServiceStatusBadge service={service} />
               </div>
+              <p className="text-xs text-muted-foreground">Baki: {totalLabel}</p>
               {canStart && (
                 <Button
                   type="button"
@@ -150,7 +226,7 @@ function PackageCard({
                   onClick={() => onStartService(service)}
                 >
                   {resolvingKey === service.key ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
-                  Start Service
+                  Kaam Shuru Karo
                 </Button>
               )}
               {showDraft && (
@@ -163,7 +239,7 @@ function PackageCard({
                   onClick={() => onCreateDraft(service)}
                 >
                   {resolvingKey === service.key ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
-                  Create Draft Booking
+                  Draft Booking Banao
                 </Button>
               )}
             </div>
@@ -172,13 +248,13 @@ function PackageCard({
       </div>
 
       {!hasActiveService && pkg.source != null && pkg.includedServices.every(s => s.status === "exhausted" || s.status === "expired") && (
-        <p className="text-xs text-muted-foreground">Package finished — create draft booking for admin approval.</p>
+        <p className="text-xs text-muted-foreground">Package khatam — admin ke liye draft booking banao.</p>
       )}
     </div>
   );
 }
 
-export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
+export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved, successMessage, onDismissSuccess }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
@@ -209,11 +285,11 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
         .then(results => {
           setSearchResults(results);
           if (results.customers.length === 0 && results.vehicles.length === 0) {
-            toast({ title: "No customer found", description: "Try phone number or vehicle registration", variant: "destructive" });
+            toast({ title: "Customer nahi mila", description: "Phone ya number plate try karo", variant: "destructive" });
           }
         })
         .catch(e => {
-          toast({ title: "Search failed", description: (e as Error).message, variant: "destructive" });
+          toast({ title: "Search fail", description: (e as Error).message, variant: "destructive" });
         })
         .finally(() => setSearching(false));
     }, SEARCH_DEBOUNCE_MS);
@@ -265,21 +341,21 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
       qc.invalidateQueries({ queryKey: ["walk-in-customer", customerId] });
 
       if (result.mode === "dcms") {
-        toast({ title: "Opening Daily Clean", description: "Complete visit in the daily clean workflow" });
+        toast({ title: "Daily Clean khul raha hai", description: "Wahi workflow use karo jo assigned jobs mein hai" });
         onDcmsResolved(result.subscriptionId, result.visitType);
         resetCustomer();
         return;
       }
 
       toast({
-        title: result.createdDraft ? "Draft booking created" : "Service started",
+        title: result.createdDraft ? "Draft booking ban gayi" : "Service shuru",
         description: result.message,
       });
       onBookingResolved(result.bookingId);
       resetCustomer();
     } catch (e) {
       toast({
-        title: forceDraft ? "Draft booking failed" : "Service start failed",
+        title: forceDraft ? "Draft booking fail" : "Service start fail",
         description: (e as Error).message,
         variant: "destructive",
       });
@@ -304,15 +380,15 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
       });
       qc.invalidateQueries({ queryKey: getGetTodayBookingsQueryKey() });
       toast({
-        title: "Draft booking created",
-        description: result.mode === "booking" ? result.message : "Admin will confirm payment",
+        title: "Draft booking ban gayi",
+        description: result.mode === "booking" ? result.message : "Admin payment confirm karega",
       });
       if (result.mode === "booking") {
         onBookingResolved(result.bookingId);
         resetCustomer();
       }
     } catch (e) {
-      toast({ title: "Draft booking failed", description: (e as Error).message, variant: "destructive" });
+      toast({ title: "Draft booking fail", description: (e as Error).message, variant: "destructive" });
     } finally {
       setResolvingKey(null);
     }
@@ -323,21 +399,35 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
       <div className="flex items-center gap-2">
         <UserPlus size={18} className="text-primary" />
         <div>
-          <p className="font-semibold text-sm">Walk-in entry</p>
-          <p className="text-xs text-muted-foreground">Customer dhundho — package dekho — service start karo</p>
+          <p className="font-semibold text-sm">Walk-in Entry</p>
+          <p className="text-xs text-muted-foreground">Customer khojo — package dekho — kaam shuru karo</p>
         </div>
       </div>
+
+      {successMessage && (
+        <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-3 space-y-1">
+          <p className="text-sm font-semibold text-green-800 flex items-center gap-1.5">
+            <CheckCircle2 size={16} /> Kaam complete ho gaya
+          </p>
+          <p className="text-xs text-green-700">{successMessage}</p>
+          {onDismissSuccess && (
+            <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-green-800" onClick={onDismissSuccess}>
+              Agla customer khojo
+            </Button>
+          )}
+        </div>
+      )}
 
       {!customerId ? (
         <>
           <Input
-            placeholder="Phone ya number plate (min 3 chars)..."
+            placeholder="Phone, naam ya number plate (min 3 akshar)..."
             value={query}
             onChange={e => setQuery(e.target.value)}
           />
           {searching && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Loader2 size={12} className="animate-spin" /> Searching…
+              <Loader2 size={12} className="animate-spin" /> Dhundh rahe hain…
             </p>
           )}
           {searchResults && (
@@ -367,7 +457,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
         </>
       ) : loadingContext || !context ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
-          <Loader2 size={14} className="animate-spin" /> Loading customer packages…
+          <Loader2 size={14} className="animate-spin" /> Package load ho raha hai…
         </div>
       ) : (
         <>
@@ -375,7 +465,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
 
           {context.vehicles.length > 1 && !vehicleId && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Select vehicle</p>
+              <p className="text-xs font-medium text-muted-foreground">Gaadi chuno</p>
               {context.vehicles.map(v => (
                 <button
                   key={v.id}
@@ -389,30 +479,10 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
             </div>
           )}
 
-          {context.eligibleToday.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Today&apos;s eligible services</p>
-              {context.eligibleToday.map(service => (
-                <div key={`eligible-${service.key}`} className="flex items-center gap-2 text-sm">
-                  {service.recommended ? (
-                    <CheckCircle2 size={14} className="text-primary shrink-0" />
-                  ) : (
-                    <Circle size={14} className="text-muted-foreground shrink-0" />
-                  )}
-                  <span className={cn(service.recommended && "font-medium")}>
-                    {service.recommended ? "Recommended" : "Optional"}: {service.displayName}
-                    {service.remaining > 0 && ` (${service.remaining} left)`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Active packages</p>
             {context.packages.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-card p-4 text-center space-y-3">
-                <p className="text-sm text-muted-foreground">No active package found</p>
+                <p className="text-sm text-muted-foreground">Koi package active nahi</p>
                 <Button
                   type="button"
                   className="w-full"
@@ -420,7 +490,7 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved }: Props) {
                   onClick={() => void handleNoPackageDraft()}
                 >
                   {resolvingKey === "no-package" ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
-                  Create Draft Booking
+                  Draft Booking Banao
                 </Button>
               </div>
             ) : (
