@@ -9,6 +9,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useToast } from "@/hooks/use-toast";
 import { submitMobile } from "@/lib/contactForm";
+import { getAuthErrorMessage } from "@/lib/authErrorMessages";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useBranding } from "@/lib/branding";
 import { Loader2, Shield } from "lucide-react";
@@ -39,10 +40,10 @@ export default function AdminLogin() {
         login(data.user, data.token);
         setLocation("/admin/dashboard");
       },
-      onError: (err: any) => {
+      onError: (err: unknown) => {
         toast({
           title: "Login failed",
-          description: err?.response?.data?.error ?? "Invalid credentials. Check your phone number and password.",
+          description: getAuthErrorMessage(err, "Invalid credentials. Check your phone number and password."),
           variant: "destructive",
         });
       },
@@ -118,6 +119,11 @@ export default function AdminLogin() {
             >
               {loginMutation.isPending ? <><Loader2 size={14} className="animate-spin mr-2" />Signing in...</> : "Sign In to Admin"}
             </Button>
+            <p className="text-center">
+              <a href="/admin/forgot-password" className="text-amber-300/70 hover:text-amber-200 text-xs underline underline-offset-2">
+                Forgot password?
+              </a>
+            </p>
           </form>
 
           <p className="mt-6 text-center text-amber-200/40 text-xs">

@@ -16,7 +16,7 @@ export type AdminEnvConfig = {
 /** Reads super-admin bootstrap credentials from ADMIN_PHONE + ADMIN_PASSWORD. */
 export function readAdminEnvConfig(): AdminEnvConfig | null {
   const phoneRaw = process.env.ADMIN_PHONE?.trim();
-  const password = process.env.ADMIN_PASSWORD;
+  const password = process.env.ADMIN_PASSWORD?.trim();
   if (!phoneRaw || !password) return null;
 
   const phoneResult = parseRequiredMobile(phoneRaw, "ADMIN_PHONE");
@@ -89,6 +89,20 @@ export async function bootstrapAdminFromEnv(): Promise<void> {
   const target = await resolveBootstrapTarget(config);
 
   if (target.existingId) {
+    const [existing] = await db
+      .select({ id: usersTable.id, role: usersTable.role })
+      .from(usersTable)
+      .where(eq(usersTable.id, target.existingId))
+      .limit(1);
+
+    if (existing && !ADMIN_ROLES.has(existing.role)) {
+      logger.warn(
+        { phone: config.phone, existingRole: existing.role },
+        "ADMIN_PHONE matches a non-admin account — skipping super admin bootstrap",
+      );
+      return;
+    }
+
     await db
       .update(usersTable)
       .set({
@@ -96,6 +110,7 @@ export async function bootstrapAdminFromEnv(): Promise<void> {
         phone: config.phone,
         email: target.email,
         passwordHash,
+        authProvider: "local",
         role: "superadmin",
         isActive: true,
         updatedAt: new Date(),
@@ -110,6 +125,7 @@ export async function bootstrapAdminFromEnv(): Promise<void> {
     phone: config.phone,
     email: target.email,
     passwordHash,
+    authProvider: "local",
     role: "superadmin",
     isActive: true,
   });

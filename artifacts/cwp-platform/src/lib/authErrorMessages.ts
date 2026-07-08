@@ -16,6 +16,8 @@ const AUTH_ERROR_PATTERNS: ReadonlyArray<{ pattern: RegExp; message: string }> =
   { pattern: /google sign-in session expired/i, message: "Google sign-in timed out. Please try again." },
   { pattern: /invalid phone|invalid mobile/i, message: "Please enter a valid 10-digit mobile number." },
   { pattern: /invalid credentials|incorrect mobile/i, message: "Incorrect mobile number or password." },
+  { pattern: /cannot sign in to the admin portal/i, message: "This phone number is not registered as an admin. Contact your super admin." },
+  { pattern: /cannot sign in here|correct portal/i, message: "This account uses a different login portal. Try customer or staff login." },
   { pattern: /sms otp is not configured|verification is temporarily unavailable/i, message: "Verification is temporarily unavailable. Please try again later." },
 ];
 

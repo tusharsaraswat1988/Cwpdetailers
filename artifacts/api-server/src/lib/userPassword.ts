@@ -2,6 +2,8 @@ import type { usersTable } from "@workspace/db";
 
 type UserRow = typeof usersTable.$inferSelect;
 
+const ADMIN_ROLES = new Set(["admin", "superadmin", "manager"]);
+
 /** Staff portal always uses admin-created phone + password credentials. */
 export function isStaffPasswordLogin(user: Pick<UserRow, "role" | "passwordHash">): boolean {
   return user.role === "staff" && Boolean(user.passwordHash);
@@ -10,7 +12,7 @@ export function isStaffPasswordLogin(user: Pick<UserRow, "role" | "passwordHash"
 /** User can sign in with a chosen password (not Google-only or OTP-only). */
 export function userHasPassword(user: Pick<UserRow, "authProvider" | "passwordHash" | "role">): boolean {
   if (!user.passwordHash) return false;
-  if (user.role === "staff") return true;
+  if (user.role === "staff" || ADMIN_ROLES.has(user.role)) return true;
   return user.authProvider === "local" || user.authProvider === "hybrid";
 }
 

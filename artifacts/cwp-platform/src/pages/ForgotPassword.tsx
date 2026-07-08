@@ -35,7 +35,7 @@ import {
 import { ArrowLeft, Loader2, Mail, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type AuthPortal = "customer" | "staff";
+type AuthPortal = "customer" | "staff" | "admin";
 type Step = "request" | "verify" | "done";
 
 type ForgotPasswordPageProps = {
@@ -48,10 +48,14 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
   const [location, setLocation] = useLocation();
 
   const portal: AuthPortal = portalProp
-    ?? (location.startsWith("/staff") ? "staff" : "customer");
+    ?? (location.startsWith("/admin") ? "admin" : location.startsWith("/staff") ? "staff" : "customer");
 
-  const loginPath = portal === "staff" ? "/staff/login" : "/login";
-  const title = portal === "staff" ? `${branding.brandName} staff` : "Reset password";
+  const loginPath = portal === "staff" ? "/staff/login" : portal === "admin" ? "/admin/login" : "/login";
+  const title = portal === "staff"
+    ? `${branding.brandName} staff`
+    : portal === "admin"
+      ? `${branding.brandName} admin`
+      : "Reset password";
 
   const [step, setStep] = useState<Step>("request");
   const [mode, setMode] = useState<"phone" | "email">("phone");

@@ -55,6 +55,7 @@ import {
   linkGoogleAuthToExistingCustomer,
 } from "../lib/googleCustomerLink";
 import { ensureCustomerLoginUser, findCustomerByPhone } from "../lib/customerAccount";
+import { findUserByLoginIdentifier } from "../lib/userLookup";
 import type { AuthOtpPurpose } from "@workspace/db";
 
 const router = Router();
@@ -63,7 +64,9 @@ const SESSION_TTL_DAYS = 30;
 const GOOGLE_LINK_TTL_MINUTES = 15;
 
 function parsePasswordPortal(raw: unknown): AuthPortal {
-  return raw === "staff" ? "staff" : "customer";
+  if (raw === "staff") return "staff";
+  if (raw === "admin") return "admin";
+  return "customer";
 }
 
 async function issueSession(userId: number, req: { headers: Record<string, unknown>; ip?: string }) {
@@ -111,15 +114,7 @@ async function cleanupIncompleteGoogleCustomers(googleId: string, phone: string,
 }
 
 async function findUserByIdentifier(phone?: string, email?: string) {
-  if (phone) {
-    const rows = await db.select().from(usersTable).where(eq(usersTable.phone, phone)).limit(1);
-    return rows[0];
-  }
-  if (email) {
-    const rows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
-    return rows[0];
-  }
-  return undefined;
+  return findUserByLoginIdentifier(phone, email);
 }
 
 router.get("/auth/google/config", (_req, res) => {
@@ -492,7 +487,7 @@ router.post("/auth/login", async (req, res) => {
       });
     }
 
-    const { valid, upgradedHash } = await verifyPasswordWithUpgrade(password, user.passwordHash);
+    const { valid, upgradedHash } = await verifyPasswordWithUpgrade(password, user.passwordHash!);
     if (!valid) return res.status(401).json({ error: "Invalid credentials" });
     if (!user.isActive) return res.status(401).json({ error: "Account suspended" });
 
@@ -507,6 +502,11 @@ router.post("/auth/login", async (req, res) => {
 
     if (user.role === "staff") {
       await normalizeStaffPasswordLogin(user.id);
+    } else if (["admin", "superadmin", "manager"].includes(user.role) && user.authProvider !== "local") {
+      await db
+        .update(usersTable)
+        .set({ authProvider: "local", updatedAt: new Date() })
+        .where(eq(usersTable.id, user.id));
     }
 
     const token = await issueSession(user.id, req);

@@ -150,6 +150,7 @@ function Router() {
       <Route path="/staff/login" component={StaffLogin} />
       <Route path="/forgot-password" component={() => <ForgotPassword portal="customer" />} />
       <Route path="/staff/forgot-password" component={() => <ForgotPassword portal="staff" />} />
+      <Route path="/admin/forgot-password" component={() => <ForgotPassword portal="admin" />} />
       <Route path="/admin/login" component={AdminLogin} />
 
       {/* Public Legal Pages */}

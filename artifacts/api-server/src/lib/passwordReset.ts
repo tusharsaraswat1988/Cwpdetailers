@@ -14,7 +14,7 @@ import {
 const OTP_TTL_MINUTES = 15;
 const MAX_OTP_PER_HOUR = 5;
 
-type AuthPortal = "customer" | "staff";
+type AuthPortal = "customer" | "staff" | "admin";
 
 function otpExpiry(): Date {
   return new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
@@ -73,7 +73,9 @@ export async function sendPasswordResetOtp(
       ${brand.logoUrl ? `<img src="${brand.logoUrl}" alt="${brand.brandName}" style="max-height:48px;margin-bottom:16px;" />` : ""}
       <h2 style="color:#111;">Password Reset</h2>
       <p>Hi ${user.name},</p>
-      <p>Use this code to reset your ${portal === "staff" ? "staff portal" : "account"} password:</p>
+      <p>Use this code to reset your ${
+        portal === "staff" ? "staff portal" : portal === "admin" ? "admin portal" : "account"
+      } password:</p>
       <p style="font-size:28px;font-weight:bold;letter-spacing:4px;color:${brand.primaryColor};">${code}</p>
       <p style="color:#666;font-size:14px;">This code expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, ignore this email.</p>
       <p style="color:#999;font-size:12px;">— ${brand.brandName} Support${brand.supportEmail ? ` · ${brand.supportEmail}` : ""}</p>
