@@ -104,6 +104,10 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
       await jobs.uploadGeoPhoto(job, kind, file, photoIndex);
       await refreshSelectedJob(job);
     },
+    completeJobWithNotes: async (job: StaffJob, notes: string) => {
+      await jobs.completeJobWithNotes(job, notes);
+      await refreshSelectedJob(job);
+    },
     uploadingJobId: jobs.uploadingJobId,
     uploadingPhotoIndex: jobs.uploadingPhotoIndex,
     locatingJobId: jobs.locatingJobId,

@@ -28,6 +28,9 @@ export type StaffJob = {
   afterPhotos?: GeoTaggedPhoto[];
   amount?: string | number | null;
   vehicleName?: string | null;
+  technicianNotes?: string | null;
+  completedAt?: string | null;
+  startedAt?: string | null;
 };
 
 /** Required geo-tagged photos per phase for car wash & other on-site services */

@@ -311,6 +311,21 @@ export function useStaffJobsData() {
     }
   }
 
+  async function completeJobWithNotes(job: StaffJob, notes: string) {
+    const trimmed = notes.trim();
+    if (job.source === "execution") {
+      await transitionJob(job.id, "completed", job);
+      return;
+    }
+    if (trimmed) {
+      await updateMutation.mutateAsync({
+        id: job.id,
+        data: { technicianNotes: trimmed },
+      });
+    }
+    await transitionJob(job.id, "completed", job);
+  }
+
   async function loadJobWithPhotos(job: StaffJob): Promise<StaffJob> {
     if (job.source !== "execution") return enrichBookingJob(job);
     const detail = await fetchExecutionDetail(job.executionId ?? job.id);
@@ -361,6 +376,7 @@ export function useStaffJobsData() {
     transitionJob,
     uploadPhoto,
     uploadGeoPhoto,
+    completeJobWithNotes,
     loadJobWithPhotos,
     isActionPending:
       transitionMutation.isPending

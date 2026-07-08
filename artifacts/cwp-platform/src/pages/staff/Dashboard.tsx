@@ -117,6 +117,7 @@ export default function StaffDashboard() {
   const mutations = {
     transitionJob: jobs.transitionJob,
     uploadGeoPhoto: jobs.uploadGeoPhoto,
+    completeJobWithNotes: jobs.completeJobWithNotes,
     uploadPhoto: jobs.uploadPhoto,
     uploadingJobId: jobs.uploadingJobId,
     uploadingPhotoIndex: jobs.uploadingPhotoIndex,

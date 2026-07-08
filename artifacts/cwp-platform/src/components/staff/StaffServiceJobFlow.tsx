@@ -1,6 +1,9 @@
+import { resolveMediaUrl } from "@/lib/media-url";
 import { MapPin, Phone, ArrowRight, CheckCircle, Loader2, Route, ClipboardCheck } from "lucide-react";
 import { useEffect, useState } from "react";
+import { format, parseISO, isValid } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { GeoPhotoSlotGrid } from "@/components/staff/GeoPhotoSlotGrid";
 import {
@@ -16,6 +19,7 @@ type Mutations = Pick<
   ReturnType<typeof useStaffJobsData>,
   | "transitionJob"
   | "uploadGeoPhoto"
+  | "completeJobWithNotes"
   | "uploadingJobId"
   | "uploadingPhotoIndex"
   | "locatingJobId"
@@ -66,16 +70,23 @@ function JobDetailsCard({ job, addressLine }: { job: StaffJob; addressLine: stri
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        Accept karein, site ke liye nikle, 3 before + 3 after geo photos, phir close.
+        3 before photos → car wash → 3 after photos → remark → complete.
       </p>
     </div>
   );
+}
+
+function formatCompletedAt(value: string | null | undefined) {
+  if (!value) return null;
+  const d = parseISO(value);
+  return isValid(d) ? format(d, "d MMM yyyy, h:mm a") : value;
 }
 
 export function StaffServiceJobFlow({
   job,
   transitionJob,
   uploadGeoPhoto,
+  completeJobWithNotes,
   uploadingJobId,
   uploadingPhotoIndex,
   locatingJobId,
@@ -84,19 +95,22 @@ export function StaffServiceJobFlow({
   const [accepted, setAccepted] = useState(false);
   const [onWay, setOnWay] = useState(false);
   const [arrived, setArrived] = useState(false);
-  const [workStarted, setWorkStarted] = useState(false);
+  const [readyForAfter, setReadyForAfter] = useState(false);
+  const [remarks, setRemarks] = useState("");
+
+  const { before, after } = countJobPhotos(job);
 
   useEffect(() => {
     setAccepted(false);
     setOnWay(false);
     setArrived(false);
-    setWorkStarted(job.status === "in_progress");
-  }, [job.id, job.source, job.status]);
+    setReadyForAfter(after > 0);
+    setRemarks(job.technicianNotes ?? "");
+  }, [job.id, job.source, job.status, after, job.technicianNotes]);
 
   const btnClass = "w-full h-12 text-sm font-semibold";
   const isLocating = locatingJobId === job.id;
   const isUploading = uploadingJobId === job.id;
-  const { before, after } = countJobPhotos(job);
   const { beforePhotos, afterPhotos } = getJobPhotoArrays(job);
   const addressLine = job.area ? `${job.area}, ${job.address}` : job.address ?? undefined;
   const isExecution = job.source === "execution";
@@ -107,18 +121,48 @@ export function StaffServiceJobFlow({
   const isAccepted = job.status === "confirmed" || (isExecution && job.status === "scheduled" && accepted);
   const isEnRoute =
     job.status === "en_route" || (isExecution && job.status === "scheduled" && accepted && onWay);
+
+  const readyToStartWork = job.status === "en_route" && arrived && beforeDone;
+
   const onSiteForBefore =
-    (job.status === "en_route" && arrived)
-    || (job.status === "in_progress" && !beforeDone)
-    || (isExecution && job.status === "in_progress" && !workStarted && !beforeDone);
+    (job.status === "en_route" && arrived && !beforeDone)
+    || (job.status === "in_progress" && !beforeDone);
+
+  const onSiteForWashing =
+    job.status === "in_progress"
+    && beforeDone
+    && !readyForAfter
+    && after === 0;
+
   const onSiteForAfter =
-    (job.status === "in_progress" && beforeDone)
-    || (isExecution && workStarted && beforeDone);
+    job.status === "in_progress"
+    && beforeDone
+    && readyForAfter
+    && !afterDone;
+
+  const onSiteForWrapUp =
+    job.status === "in_progress"
+    && beforeDone
+    && afterDone;
 
   if (job.status === "completed") {
+    const completedLabel = formatCompletedAt(job.completedAt);
     return (
-      <div className="flex items-center justify-center gap-2 py-4 text-green-600 text-sm font-medium bg-green-500/10 rounded-xl">
-        <CheckCircle size={16} /> Job completed
+      <div className="space-y-3 py-4">
+        <div className="flex items-center justify-center gap-2 text-green-600 text-sm font-medium bg-green-500/10 rounded-xl py-4">
+          <CheckCircle size={16} /> Job completed
+        </div>
+        {completedLabel && (
+          <p className="text-center text-xs text-muted-foreground">
+            Completed on {completedLabel}
+          </p>
+        )}
+        {job.technicianNotes && (
+          <div className="rounded-xl border border-border bg-muted/30 p-3 text-sm">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Remark</p>
+            <p>{job.technicianNotes}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -213,38 +257,82 @@ export function StaffServiceJobFlow({
     );
   }
 
+  if (readyToStartWork) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
+          <p className="font-medium text-primary">Before photos done</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Ab car wash shuru karein. Kaam khatam hone ke baad clean car ki photos lenge.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {beforePhotos.map((photo, i) => (
+            <div key={photo.url} className="aspect-square rounded-xl overflow-hidden border border-green-500/30">
+              <img src={resolveMediaUrl(photo.url)} alt={`Before ${i + 1}`} className="h-full w-full object-cover" />
+            </div>
+          ))}
+        </div>
+        <Button
+          className={`${btnClass} bg-primary text-secondary hover:bg-primary/90`}
+          onClick={() => void transitionJob(job.id, "in_progress", job)}
+          disabled={isActionPending}
+          data-testid={`btn-start-work-${job.id}`}
+        >
+          {isLocating ? <Loader2 size={15} className="mr-2 animate-spin" /> : <ArrowRight size={15} className="mr-2" />}
+          {isLocating ? "Getting location…" : "Start Work"}
+        </Button>
+      </div>
+    );
+  }
+
   if (onSiteForBefore) {
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <StatusBadge status={job.status === "in_progress" ? "in_progress" : "en_route"} />
-          <p className="text-xs text-muted-foreground">Before photos — GPS required</p>
+          <p className="text-xs text-muted-foreground">Step 1 — Before photos (dirty car)</p>
         </div>
         <GeoPhotoSlotGrid
           label="Before — uncleaned"
           description={`${REQUIRED_SERVICE_PHOTOS} photos required with live location`}
           photos={beforePhotos}
-          uploadingIndex={isUploading && uploadingPhotoIndex != null && !beforeDone ? uploadingPhotoIndex : null}
+          uploadingIndex={isUploading && uploadingPhotoIndex != null ? uploadingPhotoIndex : null}
           disabled={beforeDone}
           onCapture={file => void uploadGeoPhoto(job, "before", file, beforePhotos.length)}
         />
-        {beforeDone && (
-          <Button
-            className={`${btnClass} bg-primary text-secondary hover:bg-primary/90`}
-            onClick={() => {
-              if (isExecution) {
-                setWorkStarted(true);
-                return;
-              }
-              void transitionJob(job.id, "in_progress", job);
-            }}
-            disabled={isActionPending}
-            data-testid={`btn-start-work-${job.id}`}
-          >
-            {isLocating ? <Loader2 size={15} className="mr-2 animate-spin" /> : <ArrowRight size={15} className="mr-2" />}
-            {isLocating ? "Getting location…" : "Start Work"}
-          </Button>
-        )}
+      </div>
+    );
+  }
+
+  if (onSiteForWashing) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 text-sm space-y-1">
+          <div className="flex items-center gap-2">
+            <StatusBadge status="in_progress" pulse />
+            <p className="font-medium text-blue-800">Car wash in progress</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Step 2 — Gaadi dho kar saaf karein. Kaam khatam hone par neeche dabayein.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 opacity-80">
+          {beforePhotos.map((photo, i) => (
+            <div key={photo.url} className="aspect-square rounded-xl overflow-hidden border border-green-500/30">
+              <img src={resolveMediaUrl(photo.url)} alt={`Before ${i + 1}`} className="h-full w-full object-cover" />
+            </div>
+          ))}
+        </div>
+        <Button
+          className={`${btnClass} bg-primary text-secondary hover:bg-primary/90`}
+          onClick={() => setReadyForAfter(true)}
+          disabled={isActionPending}
+          data-testid={`btn-wash-done-${job.id}`}
+        >
+          <CheckCircle size={15} className="mr-2" />
+          Wash Complete — After Photos
+        </Button>
       </div>
     );
   }
@@ -254,29 +342,52 @@ export function StaffServiceJobFlow({
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <StatusBadge status="in_progress" pulse />
-          <p className="text-xs text-muted-foreground">After photos — GPS required</p>
+          <p className="text-xs text-muted-foreground">Step 3 — After photos (clean car)</p>
         </div>
 
         <GeoPhotoSlotGrid
           label="After — cleaned"
           description={`${REQUIRED_SERVICE_PHOTOS} photos required with live location`}
           photos={afterPhotos}
-          uploadingIndex={isUploading && uploadingPhotoIndex != null && !afterDone ? uploadingPhotoIndex : null}
-          disabled={afterDone}
+          uploadingIndex={isUploading && uploadingPhotoIndex != null ? uploadingPhotoIndex : null}
+          disabled={false}
           onCapture={file => void uploadGeoPhoto(job, "after", file, afterPhotos.length)}
         />
+      </div>
+    );
+  }
 
-        {canComplete && (
-          <Button
-            className={`${btnClass} bg-green-600 hover:bg-green-700 text-white`}
-            onClick={() => void transitionJob(job.id, "completed", job)}
-            disabled={isActionPending}
-            data-testid={`btn-complete-${job.id}`}
-          >
-            {isLocating ? <Loader2 size={15} className="mr-2 animate-spin" /> : <CheckCircle size={15} className="mr-2" />}
-            {isLocating ? "Verifying location…" : "Submit & Complete"}
-          </Button>
-        )}
+  if (onSiteForWrapUp || canComplete) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <StatusBadge status="in_progress" pulse />
+          <p className="text-xs text-muted-foreground">Step 4 — Remark &amp; complete</p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor={`remarks-${job.id}`} className="text-sm font-medium">
+            Remark (optional)
+          </label>
+          <Textarea
+            id={`remarks-${job.id}`}
+            value={remarks}
+            onChange={e => setRemarks(e.target.value)}
+            placeholder="Koi note — scratch, extra dirt, customer request…"
+            rows={3}
+            className="resize-none"
+          />
+        </div>
+
+        <Button
+          className={`${btnClass} bg-green-600 hover:bg-green-700 text-white`}
+          onClick={() => void completeJobWithNotes(job, remarks)}
+          disabled={isActionPending || !canComplete}
+          data-testid={`btn-complete-${job.id}`}
+        >
+          {isLocating ? <Loader2 size={15} className="mr-2 animate-spin" /> : <CheckCircle size={15} className="mr-2" />}
+          {isLocating ? "Verifying location…" : "Submit & Complete Job"}
+        </Button>
       </div>
     );
   }
