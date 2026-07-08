@@ -21,6 +21,8 @@ import {
   isOtherServiceJob,
   partitionJobsByCategory,
   REQUIRED_SERVICE_PHOTOS,
+  parseProofPhotos,
+  getJobPhotoArrays,
 } from "@/lib/staff-jobs";
 import {
   fetchTodayExecutions,
@@ -34,26 +36,16 @@ import {
 
 function enrichBookingJob(job: StaffJob): StaffJob {
   const proof = job.proofPhotoUrls ?? [];
-  if (proof.length >= REQUIRED_SERVICE_PHOTOS * 2) {
-    const beforePhotos: GeoTaggedPhoto[] = proof.slice(0, REQUIRED_SERVICE_PHOTOS).map(url => ({
-      url,
-      latitude: 0,
-      longitude: 0,
-    }));
-    const afterPhotos: GeoTaggedPhoto[] = proof.slice(REQUIRED_SERVICE_PHOTOS, REQUIRED_SERVICE_PHOTOS * 2).map(url => ({
-      url,
-      latitude: 0,
-      longitude: 0,
-    }));
-    return {
-      ...job,
-      beforePhotos,
-      afterPhotos,
-      beforePhotoUrl: beforePhotos[0]?.url ?? job.beforePhotoUrl,
-      afterPhotoUrl: afterPhotos[0]?.url ?? job.afterPhotoUrl,
-    };
-  }
-  return job;
+  if (proof.length === 0) return job;
+
+  const { beforePhotos, afterPhotos } = parseProofPhotos(proof);
+  return {
+    ...job,
+    beforePhotos,
+    afterPhotos,
+    beforePhotoUrl: beforePhotos[0]?.url ?? job.beforePhotoUrl,
+    afterPhotoUrl: afterPhotos[0]?.url ?? job.afterPhotoUrl,
+  };
 }
 
 function enrichExecutionJob(
@@ -292,8 +284,9 @@ export function useStaffJobsData() {
         return;
       }
 
-      const currentBefore = job.beforePhotos?.map(p => p.url) ?? job.proofPhotoUrls?.slice(0, REQUIRED_SERVICE_PHOTOS) ?? [];
-      const currentAfter = job.afterPhotos?.map(p => p.url) ?? job.proofPhotoUrls?.slice(REQUIRED_SERVICE_PHOTOS, REQUIRED_SERVICE_PHOTOS * 2) ?? [];
+      const { beforePhotos: existingBefore, afterPhotos: existingAfter } = getJobPhotoArrays(job);
+      const currentBefore = existingBefore.map(p => p.url);
+      const currentAfter = existingAfter.map(p => p.url);
       const nextBefore = kind === "before" ? [...currentBefore, secureUrl] : currentBefore;
       const nextAfter = kind === "after" ? [...currentAfter, secureUrl] : currentAfter;
       const nextProof = [...nextBefore, ...nextAfter];

@@ -33,6 +33,42 @@ export type StaffJob = {
 /** Required geo-tagged photos per phase for car wash & other on-site services */
 export const REQUIRED_SERVICE_PHOTOS = 3;
 
+/** Split proofPhotoUrls into before/after geo photo arrays (supports partial uploads). */
+export function parseProofPhotos(proof: string[] | null | undefined): {
+  beforePhotos: GeoTaggedPhoto[];
+  afterPhotos: GeoTaggedPhoto[];
+} {
+  const urls = proof ?? [];
+  const toPhoto = (url: string): GeoTaggedPhoto => ({ url, latitude: 0, longitude: 0 });
+  return {
+    beforePhotos: urls.slice(0, REQUIRED_SERVICE_PHOTOS).map(toPhoto),
+    afterPhotos: urls.slice(REQUIRED_SERVICE_PHOTOS, REQUIRED_SERVICE_PHOTOS * 2).map(toPhoto),
+  };
+}
+
+/** Resolved before/after photo arrays for a job (bookings + executions). */
+export function getJobPhotoArrays(job: StaffJob): {
+  beforePhotos: GeoTaggedPhoto[];
+  afterPhotos: GeoTaggedPhoto[];
+} {
+  if (job.beforePhotos?.length || job.afterPhotos?.length) {
+    return {
+      beforePhotos: job.beforePhotos ?? [],
+      afterPhotos: job.afterPhotos ?? [],
+    };
+  }
+  if (job.proofPhotoUrls?.length) {
+    return parseProofPhotos(job.proofPhotoUrls);
+  }
+  const beforePhotos: GeoTaggedPhoto[] = job.beforePhotoUrl
+    ? [{ url: job.beforePhotoUrl, latitude: 0, longitude: 0 }]
+    : [];
+  const afterPhotos: GeoTaggedPhoto[] = job.afterPhotoUrl
+    ? [{ url: job.afterPhotoUrl, latitude: 0, longitude: 0 }]
+    : [];
+  return { beforePhotos, afterPhotos };
+}
+
 export function isDailyCleanJob(job: Pick<StaffJob, "taskType" | "serviceType">) {
   const task = (job.taskType ?? "").toLowerCase();
   const svc = (job.serviceType ?? "").toLowerCase();
@@ -54,25 +90,10 @@ export function partitionJobsByCategory(jobs: StaffJob[]) {
 }
 
 export function countJobPhotos(job: StaffJob) {
-  if (job.beforePhotos?.length || job.afterPhotos?.length) {
-    return {
-      before: job.beforePhotos?.length ?? 0,
-      after: job.afterPhotos?.length ?? 0,
-    };
-  }
-  const proof = job.proofPhotoUrls ?? [];
-  if (proof.length >= REQUIRED_SERVICE_PHOTOS * 2) {
-    return { before: REQUIRED_SERVICE_PHOTOS, after: REQUIRED_SERVICE_PHOTOS };
-  }
-  if (proof.length > 0) {
-    return {
-      before: Math.min(proof.length, REQUIRED_SERVICE_PHOTOS),
-      after: Math.max(0, proof.length - REQUIRED_SERVICE_PHOTOS),
-    };
-  }
+  const { beforePhotos, afterPhotos } = getJobPhotoArrays(job);
   return {
-    before: job.beforePhotoUrl ? 1 : 0,
-    after: job.afterPhotoUrl ? 1 : 0,
+    before: beforePhotos.length,
+    after: afterPhotos.length,
   };
 }
 

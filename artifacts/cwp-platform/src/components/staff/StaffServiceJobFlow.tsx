@@ -8,6 +8,7 @@ import {
   REQUIRED_SERVICE_PHOTOS,
   countJobPhotos,
   canCompleteOtherServiceJob,
+  getJobPhotoArrays,
 } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 
@@ -96,6 +97,7 @@ export function StaffServiceJobFlow({
   const isLocating = locatingJobId === job.id;
   const isUploading = uploadingJobId === job.id;
   const { before, after } = countJobPhotos(job);
+  const { beforePhotos, afterPhotos } = getJobPhotoArrays(job);
   const addressLine = job.area ? `${job.area}, ${job.address}` : job.address ?? undefined;
   const isExecution = job.source === "execution";
   const beforeDone = before >= REQUIRED_SERVICE_PHOTOS;
@@ -212,7 +214,6 @@ export function StaffServiceJobFlow({
   }
 
   if (onSiteForBefore) {
-    const beforePhotos = job.beforePhotos ?? [];
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
@@ -249,7 +250,6 @@ export function StaffServiceJobFlow({
   }
 
   if (onSiteForAfter) {
-    const afterPhotos = job.afterPhotos ?? [];
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">

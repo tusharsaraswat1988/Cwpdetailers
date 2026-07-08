@@ -60,8 +60,17 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
     };
   }, [selectedJobKey, jobs.loadingToday, jobs.today]);
 
+  async function refreshSelectedJob(job: StaffJob) {
+    const refreshed = await jobs.refetchToday();
+    const match = refreshed.find(j => staffJobKey(j) === staffJobKey(job));
+    if (!match) return;
+    const enriched = await jobs.loadJobWithPhotos(match);
+    setSelectedJob(enriched);
+  }
+
   async function handleTransitionJob(jobId: number, toStatus: string, job?: StaffJob) {
     await jobs.transitionJob(jobId, toStatus, job);
+    if (job) await refreshSelectedJob(job);
     if (fromWalkIn && toStatus === "completed") {
       setSelectedJob(null);
       onSelectJob(null);
@@ -86,7 +95,15 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
 
   const mutations = {
     transitionJob: handleTransitionJob,
-    uploadGeoPhoto: jobs.uploadGeoPhoto,
+    uploadGeoPhoto: async (
+      job: StaffJob,
+      kind: "before" | "after",
+      file: File,
+      photoIndex: number,
+    ) => {
+      await jobs.uploadGeoPhoto(job, kind, file, photoIndex);
+      await refreshSelectedJob(job);
+    },
     uploadingJobId: jobs.uploadingJobId,
     uploadingPhotoIndex: jobs.uploadingPhotoIndex,
     locatingJobId: jobs.locatingJobId,
