@@ -3,8 +3,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Navigation, Loader2 } from "lucide-react";
+import { MapPin, Navigation, Loader2, ExternalLink } from "lucide-react";
 import type { LocationValue, SavedLocation } from "@/features/master-data/api";
+import { isGoogleMapsConfigured, mapsViewUrl } from "@/lib/maps";
+import { GoogleMapPicker } from "@/components/shared/GoogleMapPicker";
 
 const LOCATION_LABELS = ["Home", "Office", "Factory", "Solar Site", "Other"];
 
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function LocationPicker({ value, onChange, savedLocations, onSaveNew, required, className }: Props) {
+  const mapsEnabled = isGoogleMapsConfigured();
   const [mode, setMode] = useState<"saved" | "new">(savedLocations?.length ? "saved" : "new");
   const [selectedSaved, setSelectedSaved] = useState("");
   const [address, setAddress] = useState(value?.address ?? "");
@@ -71,6 +74,14 @@ export function LocationPicker({ value, onChange, savedLocations, onSaveNew, req
     }
   };
 
+  const handleMapChange = (loc: LocationValue) => {
+    setAddress(loc.address);
+    setLat(loc.latitude.toString());
+    setLng(loc.longitude.toString());
+    setPlaceId(loc.placeId ?? "");
+    onChange(loc);
+  };
+
   return (
     <div className={`space-y-3 ${className ?? ""}`}>
       <div className="flex items-center gap-2">
@@ -92,18 +103,30 @@ export function LocationPicker({ value, onChange, savedLocations, onSaveNew, req
       )}
 
       {mode === "saved" && savedLocations && savedLocations.length > 0 ? (
-        <Select value={selectedSaved} onValueChange={handleSavedSelect}>
-          <SelectTrigger data-testid="select-saved-location">
-            <SelectValue placeholder="Choose a saved location" />
-          </SelectTrigger>
-          <SelectContent>
-            {savedLocations.map(loc => (
-              <SelectItem key={loc.id} value={String(loc.id)}>
-                {loc.label} — {loc.address.slice(0, 40)}{loc.address.length > 40 ? "…" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="space-y-2">
+          <Select value={selectedSaved} onValueChange={handleSavedSelect}>
+            <SelectTrigger data-testid="select-saved-location">
+              <SelectValue placeholder="Choose a saved location" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedLocations.map(loc => (
+                <SelectItem key={loc.id} value={String(loc.id)}>
+                  {loc.label} — {loc.address.slice(0, 40)}{loc.address.length > 40 ? "…" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {value && (
+            <a
+              href={mapsViewUrl(value.latitude, value.longitude)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <ExternalLink size={11} /> View on Google Maps
+            </a>
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
           {onSaveNew && (
@@ -117,34 +140,56 @@ export function LocationPicker({ value, onChange, savedLocations, onSaveNew, req
               </Select>
             </div>
           )}
-          <div>
-            <Label>Address</Label>
-            <Input
-              className="mt-1"
-              value={address}
-              onChange={e => { setAddress(e.target.value); emitChange(e.target.value, lat, lng, placeId); }}
-              placeholder="Full address with landmark"
-              data-testid="input-location-address"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Latitude</Label>
-              <Input className="mt-1" value={lat} onChange={e => { setLat(e.target.value); emitChange(address, e.target.value, lng, placeId); }} data-testid="input-location-lat" />
-            </div>
-            <div>
-              <Label>Longitude</Label>
-              <Input className="mt-1" value={lng} onChange={e => { setLng(e.target.value); emitChange(address, lat, e.target.value, placeId); }} data-testid="input-location-lng" />
-            </div>
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground">Google Place ID (optional)</Label>
-            <Input className="mt-1" value={placeId} onChange={e => { setPlaceId(e.target.value); emitChange(address, lat, lng, e.target.value); }} placeholder="ChIJ..." />
-          </div>
-          <Button type="button" variant="outline" size="sm" onClick={useCurrentLocation} disabled={locating} className="gap-1.5">
-            {locating ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
-            Use current location
-          </Button>
+
+          {mapsEnabled ? (
+            <GoogleMapPicker value={value} onChange={handleMapChange} />
+          ) : (
+            <>
+              <div>
+                <Label>Address</Label>
+                <Input
+                  className="mt-1"
+                  value={address}
+                  onChange={e => { setAddress(e.target.value); emitChange(e.target.value, lat, lng, placeId); }}
+                  placeholder="Full address with landmark"
+                  data-testid="input-location-address"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Latitude</Label>
+                  <Input className="mt-1" value={lat} onChange={e => { setLat(e.target.value); emitChange(address, e.target.value, lng, placeId); }} data-testid="input-location-lat" />
+                </div>
+                <div>
+                  <Label>Longitude</Label>
+                  <Input className="mt-1" value={lng} onChange={e => { setLng(e.target.value); emitChange(address, lat, e.target.value, placeId); }} data-testid="input-location-lng" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Google Place ID (optional)</Label>
+                <Input className="mt-1" value={placeId} onChange={e => { setPlaceId(e.target.value); emitChange(address, lat, lng, e.target.value); }} placeholder="ChIJ..." />
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={useCurrentLocation} disabled={locating} className="gap-1.5">
+                {locating ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
+                Use current location
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Set <code className="text-[10px]">VITE_GOOGLE_MAPS_API_KEY</code> for map pin &amp; address search.
+              </p>
+            </>
+          )}
+
+          {value && (
+            <a
+              href={mapsViewUrl(value.latitude, value.longitude)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <ExternalLink size={11} /> Preview in Google Maps
+            </a>
+          )}
+
           {onSaveNew && address && lat && lng && (
             <Button
               type="button"

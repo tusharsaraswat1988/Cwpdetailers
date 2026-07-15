@@ -8,10 +8,11 @@ import { fetchWalkInDcmsStop } from "@/features/staff-walk-in/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine } from "lucide-react";
+import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine, Navigation, MapPin } from "lucide-react";
 import { extractClientExif, validateCameraFile, readFileAsDataUrl } from "../lib/cameraCapture";
 import { visitUploadErrorMessage } from "../lib/visitUploadError";
 import { getStaffLocation } from "@/lib/location";
+import { buildNavigateUrl } from "@/lib/maps";
 import { PlateScanFlow, type PlateScanMeta } from "../components/PlateScanFlow";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ type RouteStop = {
   todayStatus: "pending" | "completed" | "missed" | "rejected";
   remainingCleanings: number;
   remainingWashes?: number;
+  location?: { latitude: number; longitude: number; radiusMeters: number } | null;
 };
 
 const statusLabel: Record<string, string> = {
@@ -208,6 +210,23 @@ export function StaffDailyRouteSimplified() {
               {statusLabel[current.todayStatus]}
             </Badge>
           </div>
+
+          {current.location && (
+            <a
+              href={buildNavigateUrl({
+                latitude: current.location.latitude,
+                longitude: current.location.longitude,
+              })}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-2 h-11 rounded-xl border border-primary/30 bg-primary/5 text-sm font-medium text-primary"
+              data-testid={`dcms-navigate-${current.subscriptionId}`}
+            >
+              <Navigation size={15} />
+              Navigate to stop
+              <MapPin size={12} className="opacity-60" />
+            </a>
+          )}
 
           {current.todayStatus === "pending" ? (
             <Button

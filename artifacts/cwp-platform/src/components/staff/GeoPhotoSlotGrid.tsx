@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { resolveMediaUrl } from "@/lib/media-url";
 import type { GeoTaggedPhoto } from "@/lib/staff-jobs";
 import { REQUIRED_SERVICE_PHOTOS } from "@/lib/staff-jobs";
+import { mapsViewUrl } from "@/lib/maps";
 
 type Props = {
   label: string;
@@ -35,6 +36,19 @@ export function GeoPhotoSlotGrid({
         {slots.map((photo, index) => {
           const isUploading = uploadingIndex === index;
           if (photo) {
+            const hasCoords =
+              Number.isFinite(photo.latitude) &&
+              Number.isFinite(photo.longitude) &&
+              !(photo.latitude === 0 && photo.longitude === 0);
+            const badge = (
+              <div className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1 flex items-center gap-1">
+                <CheckCircle size={10} className="text-green-400 shrink-0" />
+                <span className="text-[9px] text-white truncate">
+                  <MapPin size={8} className="inline mr-0.5" />
+                  Geo tagged
+                </span>
+              </div>
+            );
             return (
               <div
                 key={`${photo.url}-${index}`}
@@ -45,13 +59,20 @@ export function GeoPhotoSlotGrid({
                   alt={`${label} ${index + 1}`}
                   className="h-full w-full object-cover"
                 />
-                <div className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1 flex items-center gap-1">
-                  <CheckCircle size={10} className="text-green-400 shrink-0" />
-                  <span className="text-[9px] text-white truncate">
-                    <MapPin size={8} className="inline mr-0.5" />
-                    Geo tagged
-                  </span>
-                </div>
+                {hasCoords ? (
+                  <a
+                    href={mapsViewUrl(photo.latitude, photo.longitude)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block"
+                    title="Open capture location on Google Maps"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {badge}
+                  </a>
+                ) : (
+                  badge
+                )}
               </div>
             );
           }

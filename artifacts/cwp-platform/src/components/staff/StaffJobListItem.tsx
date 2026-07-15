@@ -3,7 +3,7 @@ import { MapPin, Phone, ChevronRight, Navigation } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import type { StaffJob } from "@/lib/staff-jobs";
 import { jobAmount } from "@/lib/staff-jobs";
-import { buildNavigateUrl } from "@/features/master-data/api";
+import { buildNavigateUrl, canNavigateTo } from "@/lib/maps";
 
 interface Props {
   job: StaffJob;
@@ -43,7 +43,7 @@ export function StaffJobListItem({ job, compact, showAmount, linkToDashboard }: 
         </div>
       </div>
 
-      {!compact && (job.customerPhone || job.address) && (
+      {!compact && (job.customerPhone || canNavigateTo(job)) && (
         <div className="flex gap-2 mt-3">
           {job.customerPhone && (
             <a
@@ -55,7 +55,7 @@ export function StaffJobListItem({ job, compact, showAmount, linkToDashboard }: 
               Call
             </a>
           )}
-          {(job.address || job.locationLat) && (
+          {canNavigateTo(job) && (
             <a
               href={buildNavigateUrl(job)}
               target="_blank"

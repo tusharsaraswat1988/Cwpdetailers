@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { resolveMediaUrl } from "@/lib/media-url";
 import { format } from "date-fns";
 import { Link } from "wouter";
+import { ExternalLink } from "lucide-react";
+import { mapsViewUrl } from "@/lib/maps";
 
 export default function CustomerDcmsHistoryPage() {
   const now = new Date();
@@ -50,8 +52,15 @@ export default function CustomerDcmsHistoryPage() {
                     <p className="font-medium">{format(new Date(row.visit.visitTime), "dd MMM yyyy, hh:mm a")}</p>
                     <p className="text-sm text-muted-foreground">Staff: {row.staffName}</p>
                     <p className="text-xs text-muted-foreground">{row.visit.visitType} · {row.vehicleNumber}</p>
-                    {row.visit.latitude != null && (
-                      <p className="text-xs text-muted-foreground">Location verified</p>
+                    {row.visit.latitude != null && row.visit.longitude != null && (
+                      <a
+                        href={mapsViewUrl(row.visit.latitude, row.visit.longitude)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-0.5"
+                      >
+                        <ExternalLink size={11} /> Location verified · View on map
+                      </a>
                     )}
                   </div>
                 </CardContent>

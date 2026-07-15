@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Upload, Users } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
 import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shared";
@@ -44,12 +44,21 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
 
-  const { data, isLoading } = useListCustomers(
-    { search: search || undefined },
-    { query: { queryKey: getListCustomersQueryKey({ search: search || undefined }) } },
-  );
+  const listParams = search.trim() ? { search: search.trim() } : undefined;
+  const listQueryKey = getListCustomersQueryKey(listParams);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+  const { data, isLoading, refetch } = useListCustomers(listParams, {
+    query: {
+      queryKey: listQueryKey,
+      // Always refresh when opening this page so customers created elsewhere show up
+      refetchOnMount: "always",
+    },
+  });
+
+  const refreshList = async () => {
+    await qc.invalidateQueries({ queryKey: ["/api/customers"] });
+    await refetch();
+  };
 
   const columns: Column<Row>[] = [
     {
@@ -123,8 +132,8 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
               <QuickCreateCustomerForm
                 customerBasePath={basePath}
                 onCreated={() => {
-                  invalidate();
                   setOpen(false);
+                  void refreshList();
                 }}
               />
             </DialogContent>

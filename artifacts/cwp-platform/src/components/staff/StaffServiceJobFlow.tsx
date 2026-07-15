@@ -1,5 +1,5 @@
 import { resolveMediaUrl } from "@/lib/media-url";
-import { MapPin, Phone, ArrowRight, CheckCircle, Loader2, Route, ClipboardCheck } from "lucide-react";
+import { MapPin, Phone, ArrowRight, CheckCircle, Loader2, Route, ClipboardCheck, Navigation } from "lucide-react";
 import { useEffect, useState } from "react";
 import { format, parseISO, isValid } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   getJobPhotoArrays,
 } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
+import { buildNavigateUrl, canNavigateTo } from "@/lib/maps";
 
 type Mutations = Pick<
   ReturnType<typeof useStaffJobsData>,
@@ -31,7 +32,7 @@ interface Props extends Mutations {
 }
 
 function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: string | undefined }) {
-  if (!job.customerPhone && !addressLine) return null;
+  if (!job.customerPhone && !canNavigateTo(job) && !addressLine) return null;
   return (
     <div className="flex gap-2">
       {job.customerPhone && (
@@ -43,15 +44,15 @@ function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: s
           <Phone size={15} className="text-green-600" /> Call
         </a>
       )}
-      {addressLine && (
+      {canNavigateTo(job) && (
         <a
-          href={`https://maps.google.com/?q=${encodeURIComponent(addressLine)}`}
+          href={buildNavigateUrl(job)}
           target="_blank"
           rel="noreferrer"
           className="flex-1 flex items-center justify-center gap-2 h-11 rounded-xl border border-primary/30 bg-primary/5 text-sm font-medium text-primary"
           data-testid={`job-navigate-${job.id}`}
         >
-          <MapPin size={15} /> Navigate
+          <Navigation size={15} /> Navigate
         </a>
       )}
     </div>

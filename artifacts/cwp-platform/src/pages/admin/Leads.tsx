@@ -269,6 +269,7 @@ export default function AdminLeads() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["leadStats"] });
+      qc.invalidateQueries({ queryKey: ["/api/customers"] });
       setShowConvert(false);
       setDetailId(null);
       const customerId = data.customer?.id;

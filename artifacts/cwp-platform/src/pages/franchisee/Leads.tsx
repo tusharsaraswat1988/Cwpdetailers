@@ -114,6 +114,7 @@ export default function FranchiseeLeads() {
     mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => convertLead(id, body),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["franchisee-leads"] });
+      qc.invalidateQueries({ queryKey: ["/api/customers"] });
       setShowConvert(false);
       setDetailId(null);
       const customerId = data.customer?.id;

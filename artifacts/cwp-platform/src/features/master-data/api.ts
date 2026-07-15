@@ -214,17 +214,4 @@ export function useMasterMutations(entity: MasterEntity) {
   };
 }
 
-export function buildMapsUrl(lat: number, lng: number, address?: string) {
-  if (lat && lng) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-  }
-  return `https://maps.google.com/?q=${encodeURIComponent(address ?? "")}`;
-}
-
-export function buildNavigateUrl(job: { locationLat?: number | null; locationLng?: number | null; address?: string | null; area?: string | null }) {
-  if (job.locationLat != null && job.locationLng != null) {
-    return buildMapsUrl(job.locationLat, job.locationLng);
-  }
-  const full = [job.area, job.address].filter(Boolean).join(", ");
-  return `https://maps.google.com/?q=${encodeURIComponent(full)}`;
-}
+export { buildMapsUrl, buildNavigateUrl, mapsViewUrl, canNavigateTo } from "@/lib/maps";

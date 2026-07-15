@@ -15,9 +15,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Car, Sun, Loader2, Plus, MapPin, CheckCircle2 } from "lucide-react";
+import { Car, Sun, Loader2, Plus, MapPin, CheckCircle2, ExternalLink } from "lucide-react";
 import { VehicleReferencePhotoEditor } from "@/components/shared/VehicleReferencePhotoEditor";
 import { vehiclePhotosFromRecord } from "@/components/shared/VehicleReferencePhotos";
+import { mapsViewUrl } from "@/lib/maps";
 
 export default function MyAssets() {
   const qc = useQueryClient();
@@ -110,7 +111,23 @@ export default function MyAssets() {
                         <p className="font-medium text-sm">{v.make} {v.model} {v.year ? `(${v.year})` : ""}</p>
                         <p className="text-xs text-muted-foreground">{v.registrationNumber} · {v.color}</p>
                         {(v as { serviceAddress?: string; locationComplete?: boolean }).locationComplete ? (
-                          <p className="text-xs text-green-600 flex items-center gap-1 mt-1"><CheckCircle2 size={10} /> Location set</p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+                            <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 size={10} /> Location set</p>
+                            {(v as { serviceLat?: number | null; serviceLng?: number | null }).serviceLat != null &&
+                              (v as { serviceLng?: number | null }).serviceLng != null && (
+                              <a
+                                href={mapsViewUrl(
+                                  (v as { serviceLat: number }).serviceLat,
+                                  (v as { serviceLng: number }).serviceLng,
+                                )}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-primary inline-flex items-center gap-1 hover:underline"
+                              >
+                                <ExternalLink size={10} /> Map
+                              </a>
+                            )}
+                          </div>
                         ) : (
                           <p className="text-xs text-amber-600 flex items-center gap-1 mt-1"><MapPin size={10} /> Location required before booking</p>
                         )}
@@ -194,6 +211,20 @@ export default function MyAssets() {
                     <div key={s.id} className="bg-card border border-border rounded-xl p-4" data-testid={`asset-solar-${s.id}`}>
                       <p className="font-medium text-sm">{s.address}</p>
                       <p className="text-xs text-muted-foreground">{s.panelCount} panels</p>
+                      {(s as { serviceLat?: number | null; serviceLng?: number | null }).serviceLat != null &&
+                        (s as { serviceLng?: number | null }).serviceLng != null && (
+                        <a
+                          href={mapsViewUrl(
+                            (s as { serviceLat: number }).serviceLat,
+                            (s as { serviceLng: number }).serviceLng,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-primary inline-flex items-center gap-1 mt-1 hover:underline"
+                        >
+                          <ExternalLink size={10} /> View on map
+                        </a>
+                      )}
                     </div>
                   ))
                 )}

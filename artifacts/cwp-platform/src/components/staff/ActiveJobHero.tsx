@@ -1,4 +1,4 @@
-import { MapPin, Phone } from "lucide-react";
+import { MapPin, Phone, Navigation } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { StaffJobActions } from "@/components/staff/StaffJobActions";
 import { StaffServiceJobFlow } from "@/components/staff/StaffServiceJobFlow";
@@ -6,6 +6,7 @@ import { isOtherServiceJob } from "@/lib/staff-jobs";
 import { resolveMediaUrl } from "@/lib/media-url";
 import type { StaffJob } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
+import { buildNavigateUrl, canNavigateTo } from "@/lib/maps";
 
 type Mutations = Pick<
   ReturnType<typeof useStaffJobsData>,
@@ -74,15 +75,15 @@ export function ActiveJobHero({ job, ...actions }: Props) {
               Call
             </a>
           )}
-          {job.address && (
+          {canNavigateTo(job) && (
             <a
-              href={`https://maps.google.com/?q=${encodeURIComponent(addressLine ?? job.address ?? "")}`}
+              href={buildNavigateUrl(job)}
               target="_blank"
               rel="noreferrer"
               className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
               data-testid={`hero-navigate-${job.id}`}
             >
-              <MapPin size={16} className="text-blue-500" />
+              <Navigation size={16} className="text-blue-500" />
               Navigate
             </a>
           )}

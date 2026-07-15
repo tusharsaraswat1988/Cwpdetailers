@@ -5,7 +5,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { Calendar, Clock, MapPin, User } from "lucide-react";
+import { Calendar, Clock, MapPin, User, Navigation } from "lucide-react";
+import { buildNavigateUrl, canNavigateTo } from "@/lib/maps";
 
 function formatDateHeader(dateStr: string) {
   const date = new Date(dateStr + "T00:00:00");
@@ -107,6 +108,25 @@ export default function StaffSchedule() {
                                 <MapPin size={11} className="shrink-0" />
                                 <span className="truncate">{b.address}</span>
                               </div>
+                            )}
+                            {canNavigateTo({
+                              address: b.address,
+                              locationLat: b.locationLat,
+                              locationLng: b.locationLng,
+                            }) && (
+                              <a
+                                href={buildNavigateUrl({
+                                  address: b.address,
+                                  locationLat: b.locationLat,
+                                  locationLng: b.locationLng,
+                                })}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <Navigation size={11} /> Navigate
+                              </a>
                             )}
                           </div>
                           <div className="text-right flex-shrink-0 space-y-1">

@@ -8,10 +8,11 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { Calendar, Star, Image } from "lucide-react";
+import { Calendar, Star, Image, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { Button } from "@/components/ui/button";
+import { mapsViewUrl } from "@/lib/maps";
 
 function monthLabel(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -119,6 +120,19 @@ export default function CustomerHistory() {
                                   {b.scheduledDate}{b.scheduledTime ? ` at ${b.scheduledTime}` : ""}
                                 </p>
                                 {b.staffName && <p className="text-xs text-muted-foreground">by {b.staffName}</p>}
+                                {b.address && (
+                                  <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]">{b.address}</p>
+                                )}
+                                {(b.locationLat != null && b.locationLng != null) && (
+                                  <a
+                                    href={mapsViewUrl(b.locationLat, b.locationLng)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-0.5"
+                                  >
+                                    <ExternalLink size={10} /> View location
+                                  </a>
+                                )}
                               </div>
                             </div>
                             <div className="text-right shrink-0">

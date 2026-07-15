@@ -78,9 +78,7 @@ export function toLocationPayload(coords: StaffGpsCoords) {
   };
 }
 
-export function mapsLink(lat: number, lng: number) {
-  return `https://www.google.com/maps?q=${lat},${lng}`;
-}
+export { mapsViewUrl as mapsLink } from "@/lib/maps";
 
 export async function parseApiLocationError(res: Response): Promise<string> {
   try {
