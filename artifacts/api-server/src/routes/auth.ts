@@ -6,7 +6,7 @@ import {
   sessionsTable,
   authPendingGoogleTable,
 } from "@workspace/db";
-import { eq, and, gt, or, isNull } from "drizzle-orm";
+import { eq, and, gt, or, isNull, sql } from "drizzle-orm";
 import { generateToken, hashToken, optionalAuth, requireAuth, getRolePermissions } from "../middlewares/auth";
 import { hashPassword, verifyPasswordWithUpgrade } from "../lib/passwords";
 import {
@@ -53,6 +53,8 @@ import {
   findCustomerByEmail,
   findCustomerForGooglePhoneLink,
   linkGoogleAuthToExistingCustomer,
+  assertGooglePhoneOkForCustomerSignup,
+  assertGoogleEmailOkForCustomerSignup,
 } from "../lib/googleCustomerLink";
 import { ensureCustomerLoginUser, findCustomerByPhone } from "../lib/customerAccount";
 import { findUserByLoginIdentifier } from "../lib/userLookup";
@@ -145,7 +147,17 @@ router.post("/auth/google", async (req, res) => {
 
     if (!user && normalizedEmail) {
       user = (
-        await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail)).limit(1)
+        await db
+          .select()
+          .from(usersTable)
+          .where(
+            and(
+              sql`${usersTable.email} IS NOT NULL`,
+              sql`TRIM(${usersTable.email}) <> ''`,
+              sql`LOWER(TRIM(${usersTable.email})) = ${normalizedEmail}`,
+            ),
+          )
+          .limit(1)
       )[0];
     }
 
@@ -164,8 +176,13 @@ router.post("/auth/google", async (req, res) => {
 
     if (user) {
       if (!isRoleAllowedForPortal(user.role, portal)) {
-        const msg = "This account cannot sign in here. Use the correct portal.";
-        return res.status(403).json({ error: msg });
+        if (user.role === "staff") {
+          return res.status(403).json({
+            error:
+              "This Google account belongs to a staff member. Use the Staff portal with your phone number and password.",
+          });
+        }
+        return res.status(403).json({ error: portalMismatchMessage(portal) });
       }
       if (!user.isActive) return res.status(401).json({ error: "Account suspended" });
 
@@ -187,6 +204,12 @@ router.post("/auth/google", async (req, res) => {
       const token = await issueSession(user.id, req);
       setSessionCookie(res, token, portal);
       return res.json({ token, user: toSafeUser(user) });
+    }
+
+    // No customer user yet — still block if this Google email is a staff identity.
+    const emailGuard = await assertGoogleEmailOkForCustomerSignup(normalizedEmail);
+    if (!emailGuard.ok) {
+      return res.status(emailGuard.status).json(emailGuard.body);
     }
 
     const linkToken = generateOpaqueToken();
@@ -256,6 +279,14 @@ router.post("/auth/google/complete", async (req, res) => {
     const normalizedEmail = pending.email.toLowerCase().trim();
     await cleanupIncompleteGoogleCustomers(pending.googleId, phoneResult.value, normalizedEmail);
 
+    const phoneGuard = await assertGooglePhoneOkForCustomerSignup(
+      phoneResult.value,
+      normalizedEmail,
+    );
+    if (!phoneGuard.ok) {
+      return res.status(phoneGuard.status).json(phoneGuard.body);
+    }
+
     const existingCustomer = await findCustomerForGooglePhoneLink(
       phoneResult.value,
       normalizedEmail,
@@ -265,6 +296,7 @@ router.post("/auth/google/complete", async (req, res) => {
         chosenPassword,
       });
       const token = await issueSession(linkedUser.id, req);
+      setSessionCookie(res, token, "customer");
       return res.json({ token, user: toSafeUser(linkedUser) });
     }
 

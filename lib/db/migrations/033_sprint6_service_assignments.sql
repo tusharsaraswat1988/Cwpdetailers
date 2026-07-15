@@ -70,7 +70,11 @@ BEGIN
   END IF;
 END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS service_assignments_pending_unique ON service_assignments(pending_assignment_id);
+CREATE UNIQUE INDEX IF NOT EXISTS service_assignments_pending_task_unique
+  ON service_assignments(pending_assignment_id, task_type);
+-- NOTE: do not recreate service_assignments_pending_unique (one-row-per-pending).
+-- Split task types (daily_cleaning + car_wash) need multiple rows per pending job.
+DROP INDEX IF EXISTS service_assignments_pending_unique;
 CREATE INDEX IF NOT EXISTS idx_service_assignments_status ON service_assignments(status);
 CREATE INDEX IF NOT EXISTS idx_service_assignments_staff ON service_assignments(assigned_staff_id);
 CREATE INDEX IF NOT EXISTS idx_service_assignments_location ON service_assignments(service_location_id);

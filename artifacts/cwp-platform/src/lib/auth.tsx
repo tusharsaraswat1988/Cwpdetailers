@@ -138,13 +138,8 @@ async function validateStoredSession(
       try {
         const res = await fetchAuthMe(portal, attemptToken);
 
-        if (res.status === 401) {
-          if (retry + 1 < SESSION_VALIDATE_RETRIES) {
-            await sleep(SESSION_VALIDATE_RETRY_MS * (retry + 1));
-            continue;
-          }
-          break;
-        }
+        // 401 = definitive "no session for this portal" — do not retry.
+        if (res.status === 401) break;
 
         if (res.ok) {
           const fresh = normalizeAuthUser(await res.json());

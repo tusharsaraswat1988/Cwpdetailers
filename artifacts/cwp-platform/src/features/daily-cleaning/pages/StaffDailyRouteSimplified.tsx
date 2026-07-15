@@ -42,7 +42,7 @@ export function StaffDailyRouteSimplified() {
   const walkInSubscriptionId = params.get("subscriptionId");
   const walkInVisitType = params.get("visitType") === "wash" ? "wash" : "cleaning";
 
-  const { data, isLoading, refetch } = useStaffDailyRoute({ enabled: !walkInMode });
+  const { data, isLoading, isError, error, refetch } = useStaffDailyRoute(undefined, { enabled: !walkInMode });
   const walkInStopQuery = useQuery({
     queryKey: ["walk-in-dcms-stop", walkInSubscriptionId, walkInVisitType],
     queryFn: () => fetchWalkInDcmsStop(Number(walkInSubscriptionId), walkInVisitType),
@@ -140,6 +140,19 @@ export function StaffDailyRouteSimplified() {
 
   if (walkInMode ? walkInStopQuery.isLoading : isLoading) {
     return <p className="text-sm text-muted-foreground py-8 text-center">Route load ho rahi hai…</p>;
+  }
+
+  if (!walkInMode && isError) {
+    return (
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
+        <p className="text-sm text-destructive">
+          {(error as Error)?.message || "Daily route load nahi ho payi."}
+        </p>
+        <Button variant="outline" size="sm" onClick={() => void refetch()}>
+          Dobara try karein
+        </Button>
+      </div>
+    );
   }
 
   if (walkInMode && walkInStopQuery.isError) {

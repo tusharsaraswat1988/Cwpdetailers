@@ -4,6 +4,7 @@ import type { Request } from "express";
 import { tenantFilters } from "../middlewares/tenantScope";
 import { hashPassword } from "./passwords";
 import { assertContactIdentityAvailable } from "./contactIdentity";
+import { findUserByPhone } from "./userLookup";
 import { authProviderAfterPasswordSet } from "./userPassword";
 
 const PHONE_MATCH = (phone: string) =>
@@ -103,7 +104,11 @@ export async function ensureCustomerLoginUser(
 
     if (linked) {
       if (linked.role !== "customer") {
-        throw new Error("This mobile number is registered to a different account type.");
+        throw new Error(
+          linked.role === "staff"
+            ? "This mobile number belongs to a staff account. Use the Staff portal to sign in."
+            : "This mobile number is registered to a different account type.",
+        );
       }
       if (!linked.isActive) throw new Error("Account suspended");
       if (options.googleId && linked.googleId && linked.googleId !== options.googleId) {
@@ -145,15 +150,15 @@ export async function ensureCustomerLoginUser(
     }
   }
 
-  const [phoneUser] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.phone, customer.phone))
-    .limit(1);
+  const phoneUser = await findUserByPhone(customer.phone);
 
   if (phoneUser) {
     if (phoneUser.role !== "customer" || !phoneUser.isActive) {
-      throw new Error("This mobile number is registered to a different account type.");
+      throw new Error(
+        phoneUser.role === "staff"
+          ? "This mobile number belongs to a staff account. Use the Staff portal to sign in."
+          : "This mobile number is registered to a different account type.",
+      );
     }
 
     await db

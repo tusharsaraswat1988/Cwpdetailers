@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGoogleAuth } from "@workspace/api-client-react";
 import type { AuthResponse } from "@workspace/api-client-react";
@@ -33,7 +33,6 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
   const { toast } = useToast();
   const [googlePending, setGooglePending] = useState(false);
   const [phoneLink, setPhoneLink] = useState<GooglePhoneLink | null>(null);
-  const [pendingGoogleAuth, setPendingGoogleAuth] = useState<AuthResponse | null>(null);
 
   const redirectAfterAuth = useCallback(
     (role: AuthResponse["user"]["role"]) => {
@@ -69,6 +68,11 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
     [completeAuth, portal, toast],
   );
 
+  const handleAuthSuccessRef = useRef(handleAuthSuccess);
+  useEffect(() => {
+    handleAuthSuccessRef.current = handleAuthSuccess;
+  }, [handleAuthSuccess]);
+
   const googleMutation = useGoogleAuth({
     mutation: {
       onSuccess: (data) => {
@@ -81,7 +85,8 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
           });
           return;
         }
-        setPendingGoogleAuth(data as AuthResponse);
+        // Existing account matched and session issued — sign in immediately.
+        handleAuthSuccessRef.current(data as AuthResponse);
       },
       onError: (err: unknown) => {
         setGooglePending(false);
@@ -102,28 +107,14 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
     [googleMutation, portal],
   );
 
-  const confirmGoogleAuth = useCallback(() => {
-    if (!pendingGoogleAuth) return;
-    const data = pendingGoogleAuth;
-    setPendingGoogleAuth(null);
-    handleAuthSuccess(data);
-  }, [handleAuthSuccess, pendingGoogleAuth]);
-
-  const declineGoogleAuth = useCallback(() => {
-    setPendingGoogleAuth(null);
-  }, []);
-
   const clearPhoneLink = useCallback(() => setPhoneLink(null), []);
 
   return {
     googlePending,
     phoneLink,
-    pendingGoogleAuth,
     clearPhoneLink,
     handleGoogleToken,
     handleAuthSuccess,
-    confirmGoogleAuth,
-    declineGoogleAuth,
     googleDisabled: googlePending || googleMutation.isPending,
   };
 }

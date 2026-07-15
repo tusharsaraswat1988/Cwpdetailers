@@ -6,7 +6,7 @@ export const AUTH_PORTAL_HEADER = "x-auth-portal";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin", "manager"]);
 const STAFF_ROLES = new Set(["staff"]);
-const CUSTOMER_ROLES = new Set(["customer", "staff"]);
+const CUSTOMER_ROLES = new Set(["customer"]);
 const FRANCHISEE_ROLES = new Set(["franchisee"]);
 
 export function isAuthPortal(value: unknown): value is AuthPortal {

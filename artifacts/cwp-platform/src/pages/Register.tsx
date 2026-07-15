@@ -58,12 +58,9 @@ export default function Register() {
   const {
     googlePending,
     phoneLink,
-    pendingGoogleAuth,
     clearPhoneLink,
     handleGoogleToken,
     handleAuthSuccess,
-    confirmGoogleAuth,
-    declineGoogleAuth,
     googleDisabled,
   } = useAuthFlow("customer");
 
@@ -242,7 +239,6 @@ export default function Register() {
 
       <AuthGoogleDialogs
         phoneLink={phoneLink}
-        pendingGoogleAuth={pendingGoogleAuth}
         onPhoneLinkSuccess={data => {
           trackAuthEvent("google_success", { method: "google", portal: "customer" });
           trackAuthEvent("registration_completed", { method: "google", portal: "customer" });
@@ -250,12 +246,6 @@ export default function Register() {
           handleAuthSuccess(data);
         }}
         onPhoneLinkClose={clearPhoneLink}
-        onConfirmGoogle={() => {
-          trackAuthEvent("google_success", { method: "google", portal: "customer" });
-          trackAuthEvent("login_completed", { method: "google", portal: "customer" });
-          confirmGoogleAuth();
-        }}
-        onDeclineGoogle={declineGoogleAuth}
       />
     </AuthLayout>
   );

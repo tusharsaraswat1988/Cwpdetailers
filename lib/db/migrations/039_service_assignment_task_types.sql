@@ -39,6 +39,7 @@ SET task_type = 'daily_cleaning'
 FROM customer_contracts cc
 WHERE se.contract_id = cc.id AND cc.product_line = 'daily_cleaning' AND se.task_type = 'one_time_service';
 
+-- Ensure legacy one-row-per-pending unique cannot come back (033 used to create it).
 DROP INDEX IF EXISTS service_assignments_pending_unique;
 CREATE UNIQUE INDEX IF NOT EXISTS service_assignments_pending_task_unique
   ON service_assignments(pending_assignment_id, task_type);

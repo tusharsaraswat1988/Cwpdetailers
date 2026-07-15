@@ -92,6 +92,15 @@ router.post("/assignments/:pendingId/assign", async (req, res) => {
     return res.status(201).json(result);
   } catch (e) {
     const msg = (e as Error).message;
+    if (/service_assignments_pending_unique|duplicate key.*pending_assignment/i.test(msg)) {
+      return res.status(409).json({
+        error:
+          "This job already has a staff assignment row. For Daily Clean + Wash plans, both task types need separate staff — retry after refreshing the page.",
+      });
+    }
+    if (/duplicate key/i.test(msg)) {
+      return res.status(409).json({ error: "This task is already assigned for this job" });
+    }
     const status = msg.includes("not found") ? 404 : msg.includes("already") ? 409 : 400;
     return res.status(status).json({ error: msg });
   }

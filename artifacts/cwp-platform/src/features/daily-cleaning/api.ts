@@ -289,9 +289,9 @@ export function useCustomerDcmsGallery(filters?: Record<string, string | number>
 }
 
 export function useStaffDailyRoute(date?: string, opts?: { enabled?: boolean }) {
-  const qs = date ? `?date=${date}` : "";
+  const qs = date ? `?date=${encodeURIComponent(date)}` : "";
   return useQuery({
-    queryKey: ["dcms", "staff", "daily-route", date],
+    queryKey: ["dcms", "staff", "daily-route", date ?? "today"],
     queryFn: () => dcmsFetch<{ date: string; stops: unknown[] }>(`/daily-cleaning/staff/daily-route${qs}`),
     enabled: opts?.enabled ?? true,
   });

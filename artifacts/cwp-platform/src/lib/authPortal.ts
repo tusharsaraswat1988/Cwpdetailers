@@ -9,7 +9,7 @@ const LEGACY_USER_KEY = "cwp_user";
 
 const ADMIN_ROLES = new Set<UserRole>(["admin", "superadmin", "manager"]);
 const STAFF_ROLES = new Set<UserRole>(["staff"]);
-const CUSTOMER_ROLES = new Set<UserRole>(["customer", "staff"]);
+const CUSTOMER_ROLES = new Set<UserRole>(["customer"]);
 const FRANCHISEE_ROLES = new Set<UserRole>(["franchisee"]);
 
 export function resolveAuthPortal(pathname?: string): AuthPortal {
