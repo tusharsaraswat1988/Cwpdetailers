@@ -8,6 +8,8 @@ export type OtpSession = {
   phone: string;
   maskedPhone?: string;
   name?: string;
+  /** Collected at signup; sent with OTP verify so later logins skip SMS. */
+  password?: string;
 };
 
 type AuthFlowState = {

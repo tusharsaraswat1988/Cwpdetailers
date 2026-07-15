@@ -135,6 +135,9 @@ export function useCatalogServices() {
   return useQuery({
     queryKey: ["catalog", "services"],
     queryFn: () => masterFetch<CatalogService[]>("/catalog/services"),
+    // Catalog browse is public; don't hammer the API on permission races.
+    retry: false,
+    staleTime: 60_000,
   });
 }
 

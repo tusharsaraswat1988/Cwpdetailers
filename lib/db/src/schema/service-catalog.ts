@@ -111,6 +111,16 @@ export const catalogPackageEntitlementsTable = pgTable("catalog_package_entitlem
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+/** Add-ons bundled with a catalog package (from service catalog). */
+export const catalogPackageAddonsTable = pgTable("catalog_package_addons", {
+  id: serial("id").primaryKey(),
+  packageId: integer("package_id").notNull(),
+  addonId: integer("addon_id").notNull(),
+  extraPrice: numeric("extra_price", { precision: 10, scale: 2 }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 /** Runtime customer entitlements (credits from packages/AMC) */
 export const customerEntitlementsTable = pgTable("customer_entitlements", {
   id: serial("id").primaryKey(),
@@ -195,6 +205,7 @@ export const insertHomepageSectionSchema = createInsertSchema(homepageSectionsTa
 export type CatalogSetting = typeof catalogSettingsTable.$inferSelect;
 export type ServiceAddon = typeof serviceAddonsTable.$inferSelect;
 export type CatalogPackage = typeof catalogPackagesTable.$inferSelect;
+export type CatalogPackageAddon = typeof catalogPackageAddonsTable.$inferSelect;
 export type CustomerEntitlement = typeof customerEntitlementsTable.$inferSelect;
 export type HomepageSection = typeof homepageSectionsTable.$inferSelect;
 export type SolarPricingSlab = typeof solarPricingSlabsTable.$inferSelect;

@@ -149,8 +149,8 @@ export const GoogleAuthCompleteBody = zod.object({
   phone: zod.string(),
   password: zod
     .string()
-    .optional()
-    .describe("Optional password to enable phone sign-in"),
+    .min(6)
+    .describe("Required password so the customer can sign in with phone later without SMS"),
 });
 
 /**
@@ -262,7 +262,10 @@ export const VerifyAuthOtpBody = zod.object({
   code: zod.string(),
   purpose: zod.enum(["login", "signup"]),
   name: zod.string().optional(),
-  password: zod.string().optional(),
+  password: zod
+    .string()
+    .optional()
+    .describe("Required for signup — enables password login without future SMS OTPs"),
   email: zod.string().optional(),
   city: zod.string().optional(),
   branchId: zod.number().optional(),

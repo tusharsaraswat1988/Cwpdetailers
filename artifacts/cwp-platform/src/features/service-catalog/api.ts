@@ -37,12 +37,23 @@ export type AdminService = {
   addonCount?: number;
 };
 
+export type CatalogPackageAddon = {
+  id: number;
+  packageId: number;
+  addonId: number;
+  extraPrice?: string | null;
+  sortOrder: number;
+  addonName: string;
+  addonBasePrice: string;
+};
+
 export type CatalogPackage = {
   id: number; name: string; slug: string; price: string; validityDays: number;
   description?: string | null;
   features?: string[]; tag?: string; isHighlighted: boolean; showOnHomepage?: boolean;
   cityId?: number;
   entitlements?: Array<{ id: number; serviceId: number; entitlementType: string; creditCount: number }>;
+  addons?: CatalogPackageAddon[];
 };
 
 export type HomepagePlanCard = {
@@ -61,9 +72,19 @@ export type HomepagePlanCard = {
   scopeLabel?: string | null;
 };
 
+export type ServiceAddonLink = {
+  linkId: number;
+  serviceId: number | null;
+  serviceName: string | null;
+};
+
 export type ServiceAddon = {
   id: number; name: string; slug: string; basePrice: string; description?: string;
   isActive: boolean; linkId?: number; durationMinutes?: number;
+  gstRate?: string;
+  pricingType?: "inclusive" | "exclusive";
+  links?: ServiceAddonLink[];
+  linkCount?: number;
 };
 
 export type SolarSlab = {
@@ -114,19 +135,27 @@ export function useCatalogPackages(citySlug?: string) {
   });
 }
 
-export function useCatalogAddons(serviceId?: number) {
+export function useCatalogAddons(serviceId?: number, opts?: { includeInactive?: boolean; withLinks?: boolean }) {
+  const qs = new URLSearchParams();
+  if (serviceId) qs.set("serviceId", String(serviceId));
+  if (opts?.includeInactive) qs.set("includeInactive", "true");
+  if (opts?.withLinks) qs.set("withLinks", "true");
+  const query = qs.toString();
   return useQuery({
-    queryKey: ["catalog", "addons", serviceId ?? "all"],
-    queryFn: () => catalogFetch<ServiceAddon[]>(`/catalog/addons${serviceId ? `?serviceId=${serviceId}` : ""}`),
+    queryKey: ["catalog", "addons", serviceId ?? "all", opts?.includeInactive ?? false, opts?.withLinks ?? false],
+    queryFn: () => catalogFetch<ServiceAddon[]>(`/catalog/addons${query ? `?${query}` : ""}`),
   });
+}
+
+function invalidateAddonQueries(qc: ReturnType<typeof useQueryClient>, serviceId?: number) {
+  qc.invalidateQueries({ queryKey: ["catalog", "addons"] });
+  qc.invalidateQueries({ queryKey: ["admin", "services"] });
+  if (serviceId != null) qc.invalidateQueries({ queryKey: ["catalog", "addons", serviceId] });
 }
 
 export function useServiceAddonMutations(serviceId: number) {
   const qc = useQueryClient();
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["catalog", "addons", serviceId] });
-    qc.invalidateQueries({ queryKey: ["admin", "services"] });
-  };
+  const invalidate = () => invalidateAddonQueries(qc, serviceId);
   return {
     create: useMutation({
       mutationFn: (data: { name: string; basePrice: string; description?: string; durationMinutes?: number }) =>
@@ -145,6 +174,48 @@ export function useServiceAddonMutations(serviceId: number) {
     update: useMutation({
       mutationFn: ({ id, ...data }: { id: number } & Record<string, unknown>) =>
         catalogFetch<ServiceAddon>(`/catalog/addons/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+    unlink: useMutation({
+      mutationFn: (linkId: number) =>
+        catalogFetch(`/catalog/addon-links/${linkId}`, { method: "DELETE" }),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+export function useCatalogAddonMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => invalidateAddonQueries(qc);
+  return {
+    create: useMutation({
+      mutationFn: (data: {
+        name: string;
+        basePrice: string;
+        description?: string;
+        durationMinutes?: number;
+        serviceIds?: number[];
+        isActive?: boolean;
+      }) =>
+        catalogFetch<ServiceAddon>("/catalog/addons", {
+          method: "POST",
+          body: JSON.stringify({
+            ...data,
+            pricingType: "inclusive",
+            gstRate: "18",
+            isActive: data.isActive ?? true,
+          }),
+        }),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: ({ id, ...data }: { id: number } & Record<string, unknown>) =>
+        catalogFetch<ServiceAddon>(`/catalog/addons/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    }),
+    link: useMutation({
+      mutationFn: (data: { addonId: number; serviceId: number }) =>
+        catalogFetch("/catalog/addon-links", { method: "POST", body: JSON.stringify(data) }),
       onSuccess: invalidate,
     }),
     unlink: useMutation({

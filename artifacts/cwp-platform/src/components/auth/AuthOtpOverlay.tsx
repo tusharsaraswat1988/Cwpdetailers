@@ -23,6 +23,7 @@ export function AuthOtpOverlay({ open, session, onSuccess, onClose }: AuthOtpOve
       maskedPhone={session.maskedPhone}
       purpose={session.purpose}
       name={session.name}
+      password={session.password}
       onSuccess={onSuccess}
       onChangeNumber={onClose}
     />

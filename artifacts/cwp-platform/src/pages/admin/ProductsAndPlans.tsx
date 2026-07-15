@@ -12,15 +12,16 @@ import {
   useHomepageSections, useCatalogSettings, useSaveCatalogSettings,
 } from "@/features/service-catalog/api";
 import { ServicesTab } from "@/features/service-catalog/components/ServicesTab";
+import { AddonsTab } from "@/features/service-catalog/components/AddonsTab";
 import { PackagesTab } from "@/features/products/components/PackagesTab";
 import { SolarCatalogPanel } from "@/features/service-catalog/components/SolarCatalogPanel";
 import { DcmsPlansPanel } from "@/features/products/components/DcmsPlansPanel";
 import { useToast } from "@/hooks/use-toast";
-import { Wrench, Sun, Home, Sparkles } from "lucide-react";
+import { Wrench, Sun, Home, Sparkles, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TAB_VALUES = [
-  "wash-services", "wash-packages", "daily-cleaning", "solar", "homepage", "advanced",
+  "wash-services", "wash-packages", "daily-cleaning", "solar", "addons", "homepage", "advanced",
 ] as const;
 
 type TabValue = typeof TAB_VALUES[number];
@@ -98,7 +99,7 @@ export default function ProductsAndPlansPage() {
           <Tabs value={tab} className="space-y-5">
             <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
-                Revenue lines
+                Services Type
               </p>
               <div className="flex flex-wrap gap-1">
                 <button
@@ -133,6 +134,16 @@ export default function ProductsAndPlansPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => goTab("addons")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 text-xs sm:text-sm px-3 py-2 rounded-md",
+                    tab === "addons" ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
+                  )}
+                >
+                  <Layers size={14} /> Add-ons
+                </button>
+                <button
+                  type="button"
                   onClick={() => goTab("advanced")}
                   className={cn(
                     "inline-flex items-center gap-1.5 text-xs sm:text-sm px-3 py-2 rounded-md",
@@ -152,7 +163,7 @@ export default function ProductsAndPlansPage() {
                       carWashSub === "services" ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
                     )}
                   >
-                    Services
+                    One Time Services
                   </button>
                   <button
                     type="button"
@@ -194,6 +205,13 @@ export default function ProductsAndPlansPage() {
                 Solar cleaning products — one-time cleaning, 6-month plan, and 12-month plan.
               </p>
               <SolarCatalogPanel />
+            </TabsContent>
+
+            <TabsContent value="addons">
+              <p className="text-xs text-muted-foreground mb-3">
+                Create shared add-ons and link them to one-time services. Bundle the same catalog into wash packages and daily cleaning plans.
+              </p>
+              <AddonsTab />
             </TabsContent>
 
             <TabsContent value="advanced">

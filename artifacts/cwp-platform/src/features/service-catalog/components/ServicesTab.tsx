@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useServiceCategories } from "@/features/master-data/api";
 import {
   useAdminServices, useServiceMutations, type AdminService,
@@ -16,7 +17,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useCatalogGovernance } from "@/lib/catalogGovernance";
 import { ServiceAddonsSection } from "@/features/service-catalog/components/ServiceAddonsSection";
-import { Plus, Pencil, Trash2, Wrench, IndianRupee, Clock, Puzzle } from "lucide-react";
+import { ImageDropzone } from "@/components/shared/ImageDropzone";
+import { resolveMediaUrl } from "@/lib/media-url";
+import { Plus, Pencil, Trash2, Wrench, IndianRupee, Clock, Puzzle, ChevronDown } from "lucide-react";
 
 type RevenueLine = "car_wash" | "solar";
 
@@ -71,6 +74,78 @@ function serviceToForm(s: AdminService) {
   };
 }
 
+function ServiceCard({
+  svc,
+  hqEditor,
+  onEdit,
+  onDelete,
+}: {
+  svc: AdminService;
+  hqEditor: boolean;
+  onEdit: (svc: AdminService) => void;
+  onDelete: (svc: AdminService) => void;
+}) {
+  const inactive = svc.isActive === false;
+  return (
+    <div className={`border rounded-xl p-4 space-y-3 ${inactive ? "opacity-60" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        {svc.imageUrl ? (
+          <img
+            src={resolveMediaUrl(svc.imageUrl)}
+            alt=""
+            className="w-12 h-12 rounded-lg object-cover border border-border shrink-0"
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <Wrench size={14} className="text-primary" />
+          </div>
+        )}
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onEdit(svc)}>
+            <Pencil size={13} />
+          </Button>
+          {hqEditor && (
+            <Button
+              variant="ghost" size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+              onClick={() => onDelete(svc)}
+            >
+              <Trash2 size={13} />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="font-semibold text-sm">{svc.name}</h3>
+        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+          {svc.shortDescription || svc.description || "—"}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-1">
+        {inactive && <Badge variant="destructive" className="text-xs">Inactive</Badge>}
+        {(svc.addonCount ?? 0) > 0 && (
+          <Badge variant="outline" className="text-xs gap-0.5">
+            <Puzzle size={10} />{svc.addonCount} extra{svc.addonCount !== 1 ? "s" : ""}
+          </Badge>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex items-center gap-1 font-semibold text-primary">
+          <IndianRupee size={13} />{Number(svc.basePrice).toLocaleString("en-IN")}
+        </span>
+        {svc.durationMinutes && (
+          <span className="flex items-center gap-1 text-muted-foreground text-xs">
+            <Clock size={12} />{svc.durationMinutes} min
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ServicesTab({ revenueLine }: Props) {
   const { toast } = useToast();
   const { hqEditor, availabilityOnly } = useCatalogGovernance();
@@ -81,10 +156,19 @@ export function ServicesTab({ revenueLine }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminService | null>(null);
   const [form, setForm] = useState(emptyForm());
+  const [inactiveOpen, setInactiveOpen] = useState(false);
 
   const filtered = useMemo(
     () => (services ?? []).filter(s => matchesRevenueLine(s, revenueLine)),
     [services, revenueLine],
+  );
+  const activeServices = useMemo(
+    () => filtered.filter(s => s.isActive !== false),
+    [filtered],
+  );
+  const inactiveServices = useMemo(
+    () => filtered.filter(s => s.isActive === false),
+    [filtered],
   );
 
   const defaultCategoryId = resolveCategoryId(categories, revenueLine);
@@ -187,7 +271,7 @@ export function ServicesTab({ revenueLine }: Props) {
           </Button>
         )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         {isLoading ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
@@ -195,61 +279,52 @@ export function ServicesTab({ revenueLine }: Props) {
         ) : filtered.length === 0 ? (
           <p className="text-muted-foreground text-sm text-center py-8">No services yet. Add your first service.</p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map(svc => (
-              <div
-                key={svc.id}
-                className={`border rounded-xl p-4 space-y-3 ${!svc.isActive ? "opacity-60" : ""}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    <Wrench size={14} className="text-primary" />
-                  </div>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(svc)}>
-                      <Pencil size={13} />
-                    </Button>
-                    {hqEditor && (
-                      <Button
-                        variant="ghost" size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleDelete(svc)}
-                      >
-                        <Trash2 size={13} />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-semibold text-sm">{svc.name}</h3>
-                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-                    {svc.shortDescription || svc.description || "—"}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-1">
-                  {!svc.isActive && <Badge variant="destructive" className="text-xs">Inactive</Badge>}
-                  {(svc.addonCount ?? 0) > 0 && (
-                    <Badge variant="outline" className="text-xs gap-0.5">
-                      <Puzzle size={10} />{svc.addonCount} extra{svc.addonCount !== 1 ? "s" : ""}
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1 font-semibold text-primary">
-                    <IndianRupee size={13} />{Number(svc.basePrice).toLocaleString("en-IN")}
-                  </span>
-                  {svc.durationMinutes && (
-                    <span className="flex items-center gap-1 text-muted-foreground text-xs">
-                      <Clock size={12} />{svc.durationMinutes} min
-                    </span>
-                  )}
-                </div>
+          <>
+            {activeServices.length === 0 ? (
+              <p className="text-muted-foreground text-sm text-center py-8">
+                No active services. Open Hidden below to reactivate one.
+              </p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {activeServices.map(svc => (
+                  <ServiceCard
+                    key={svc.id}
+                    svc={svc}
+                    hqEditor={hqEditor}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+
+            {inactiveServices.length > 0 && (
+              <Collapsible open={inactiveOpen} onOpenChange={setInactiveOpen}>
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors">
+                  <span>
+                    Hidden ({inactiveServices.length} inactive)
+                  </span>
+                  <ChevronDown
+                    size={16}
+                    className={`shrink-0 transition-transform ${inactiveOpen ? "rotate-180" : ""}`}
+                  />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3">
+                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {inactiveServices.map(svc => (
+                      <ServiceCard
+                        key={svc.id}
+                        svc={svc}
+                        hqEditor={hqEditor}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </>
         )}
       </CardContent>
 
@@ -315,10 +390,11 @@ export function ServicesTab({ revenueLine }: Props) {
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="mt-1" rows={3} />
             </div>
 
-            <div>
-              <Label>Image URL</Label>
-              <Input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} className="mt-1" placeholder="https://..." />
-            </div>
+            <ImageDropzone
+              value={form.imageUrl}
+              onChange={url => setForm(f => ({ ...f, imageUrl: url }))}
+              label="Service image"
+            />
             </>
             )}
 

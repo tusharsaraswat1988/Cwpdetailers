@@ -231,18 +231,21 @@ const PUBLIC_VIEW_RESOURCES = new Set(["services", "branches"]);
 
 export function requirePermission(resource: string, action: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      const allowAnonymous = READ_ACTIONS.has(action) && PUBLIC_VIEW_RESOURCES.has(resource);
-      if (!allowAnonymous) {
-        return res.status(401).json({ error: "Authentication required" });
+    // Public catalog reads (services/branches) — guests AND logged-in users.
+    // Previously only anonymous callers were allowed, so customers got 403 on
+    // the same endpoints the landing page could load without a session.
+    if (READ_ACTIONS.has(action) && PUBLIC_VIEW_RESOURCES.has(resource)) {
+      if (!req.user) {
+        req.scope = {
+          isSuperAdmin: false, companyId: null, branchIds: null,
+          franchiseeId: null, customerId: null, staffId: null,
+        };
       }
-      // Anonymous, narrow scope. Handlers treat null companyId as "public
-      // catalog" — only the explicit public_view resources can be read.
-      req.scope = {
-        isSuperAdmin: false, companyId: null, branchIds: null,
-        franchiseeId: null, customerId: null, staffId: null,
-      };
       return next();
+    }
+
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
     }
 
     // Align with client auth: admin/superadmin are not blocked by missing seed rows.

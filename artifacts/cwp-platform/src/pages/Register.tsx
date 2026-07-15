@@ -21,6 +21,10 @@ import { GoogleButton } from "@/components/auth/GoogleButton";
 import { AuthOtpOverlay } from "@/components/auth/AuthOtpOverlay";
 import { AuthGoogleDialogs } from "@/components/auth/AuthGoogleDialogs";
 import {
+  CreatePasswordFields,
+  validateCreatePassword,
+} from "@/components/auth/CreatePasswordFields";
+import {
   authFadeUp,
   authFormStagger,
   authGoogleButtonClass,
@@ -48,10 +52,13 @@ export default function Register() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const phoneReady = useMemo(() => isValidIndianMobileDigits(phone), [phone]);
   const nameReady = name.trim().length > 0;
-  const formReady = phoneReady && nameReady;
+  const passwordReady = validateCreatePassword(password, confirmPassword).ok;
+  const formReady = phoneReady && nameReady && passwordReady;
 
   const { otpSession, showOtp, setOtpSession, clearOtpSession } = useAuthFlowStore();
 
@@ -77,6 +84,7 @@ export default function Register() {
           phone: variables.data.phone,
           maskedPhone: data.maskedPhone,
           name: variables.data.name?.trim() ?? name.trim(),
+          password,
         });
       },
       onError: (err: unknown) => {
@@ -103,6 +111,12 @@ export default function Register() {
     setPhoneError(phoneResult.ok ? null : phoneResult.error);
     if (!phoneResult.ok) {
       toast({ title: phoneResult.error, variant: "destructive" });
+      return;
+    }
+
+    const pwResult = validateCreatePassword(password, confirmPassword);
+    if (!pwResult.ok) {
+      toast({ title: pwResult.error, variant: "destructive" });
       return;
     }
 
@@ -169,6 +183,15 @@ export default function Register() {
           className={authPhoneInputClass}
         />
 
+        <CreatePasswordFields
+          idPrefix="register"
+          password={password}
+          confirmPassword={confirmPassword}
+          onPasswordChange={setPassword}
+          onConfirmChange={setConfirmPassword}
+          disabled={pending}
+        />
+
         <Button
           type="submit"
           disabled={pending || !formReady}
@@ -184,6 +207,10 @@ export default function Register() {
             "Continue"
           )}
         </Button>
+
+        <p className="text-center text-white/25 text-[11px] leading-relaxed">
+          We&apos;ll send a one-time OTP to verify your number. After that, sign in with your password — no SMS needed.
+        </p>
       </form>
 
       <AuthDivider className="my-3.5" />

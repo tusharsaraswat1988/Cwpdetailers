@@ -330,7 +330,13 @@ export function DcmsPlansPanel({ embedded = false }: Props) {
               <Label>Add-ons (from catalog)</Label>
               <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
                 {form.addons.length === 0 ? (
-                  <p className="p-3 text-sm text-muted-foreground">No add-ons in catalog yet — create them under Services.</p>
+                  <p className="p-3 text-sm text-muted-foreground">
+                    No add-ons in catalog yet —{" "}
+                    <Link href="/admin/services?tab=addons" className="text-primary underline-offset-2 hover:underline">
+                      create them in Add-ons
+                    </Link>
+                    .
+                  </p>
                 ) : form.addons.map(a => (
                   <div key={a.addonId} className="p-3 space-y-2">
                     <label className="flex items-center justify-between gap-2 cursor-pointer">

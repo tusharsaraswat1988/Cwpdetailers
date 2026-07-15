@@ -49,6 +49,7 @@ const PENDING = [
   "043_auth_otp_codes.sql",
   "044_branding_settings_bms.sql",
   "045_branding_theme_defaults.sql",
+  "046_catalog_package_addons.sql",
 ];
 
 async function main() {

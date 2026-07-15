@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,10 +80,15 @@ export function ServiceAddonsSection({ serviceId, serviceName }: Props) {
 
   return (
     <div className="rounded-lg border p-4 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-sm font-medium">Add-ons</p>
-          <p className="text-xs text-muted-foreground">Optional extras customers can add when booking this service</p>
+          <p className="text-xs text-muted-foreground">
+            Optional extras for this service.{" "}
+            <Link href="/admin/services?tab=addons" className="text-primary underline-offset-2 hover:underline">
+              Manage all add-ons
+            </Link>
+          </p>
         </div>
         {!showForm && (
           <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(true)}>

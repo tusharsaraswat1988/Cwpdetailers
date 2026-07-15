@@ -16,7 +16,7 @@ import {
   serviceCategoriesTable,
   citiesTable,
 } from "@workspace/db";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { listHomepagePlans } from "../lib/catalog/homepagePlans";
 import { resolveCatalogPricing, resolveCityId } from "../lib/catalog/pricingEngine";
 import { tenantStamp } from "../middlewares/tenantScope";
@@ -27,6 +27,13 @@ import {
   getReminderHookCandidates,
   refreshEntitlementStatuses,
 } from "../lib/catalog/entitlementEngine";
+import {
+  getPackageAddons,
+  getPackageAddonsForPackages,
+  replacePackageAddons,
+  resolvePackageAddonPrice,
+  type PackageAddonInput,
+} from "../lib/catalog/packageAddonService";
 
 const router = Router();
 
@@ -122,7 +129,7 @@ router.delete("/catalog/solar-slabs/:id", async (req, res) => {
 // ─── Addons ──────────────────────────────────────────────────────────────────
 
 router.get("/catalog/addons", async (req, res) => {
-  const { serviceId, categoryId } = req.query as Record<string, string>;
+  const { serviceId, categoryId, includeInactive, withLinks } = req.query as Record<string, string>;
   if (serviceId || categoryId) {
     const links = await db.select({
       addon: serviceAddonsTable,
@@ -132,28 +139,103 @@ router.get("/catalog/addons", async (req, res) => {
       .innerJoin(serviceAddonsTable, eq(serviceAddonLinksTable.addonId, serviceAddonsTable.id))
       .where(and(
         eq(serviceAddonLinksTable.isActive, true),
-        eq(serviceAddonsTable.isActive, true),
+        includeInactive === "true" ? undefined : eq(serviceAddonsTable.isActive, true),
         serviceId ? eq(serviceAddonLinksTable.serviceId, parseInt(serviceId)) : undefined,
         categoryId ? eq(serviceAddonLinksTable.serviceCategoryId, parseInt(categoryId)) : undefined,
       ));
     return res.json(links.map(l => ({ ...l.addon, linkId: l.linkId })));
   }
+
   const data = await db.select().from(serviceAddonsTable)
-    .where(eq(serviceAddonsTable.isActive, true))
-    .orderBy(asc(serviceAddonsTable.sortOrder));
-  return res.json(data);
+    .where(includeInactive === "true" ? undefined : eq(serviceAddonsTable.isActive, true))
+    .orderBy(asc(serviceAddonsTable.sortOrder), asc(serviceAddonsTable.id));
+
+  if (withLinks !== "true") return res.json(data);
+
+  const addonIds = data.map(a => a.id);
+  if (!addonIds.length) return res.json(data.map(a => ({ ...a, links: [], linkCount: 0 })));
+
+  const linkRows = await db
+    .select({
+      linkId: serviceAddonLinksTable.id,
+      addonId: serviceAddonLinksTable.addonId,
+      serviceId: serviceAddonLinksTable.serviceId,
+      serviceName: servicesTable.name,
+    })
+    .from(serviceAddonLinksTable)
+    .leftJoin(servicesTable, eq(serviceAddonLinksTable.serviceId, servicesTable.id))
+    .where(and(
+      eq(serviceAddonLinksTable.isActive, true),
+      inArray(serviceAddonLinksTable.addonId, addonIds),
+    ));
+
+  const linksByAddon = new Map<number, Array<{ linkId: number; serviceId: number | null; serviceName: string | null }>>();
+  for (const row of linkRows) {
+    const list = linksByAddon.get(row.addonId) ?? [];
+    list.push({ linkId: row.linkId, serviceId: row.serviceId, serviceName: row.serviceName });
+    linksByAddon.set(row.addonId, list);
+  }
+
+  return res.json(data.map(a => {
+    const links = linksByAddon.get(a.id) ?? [];
+    return { ...a, links, linkCount: links.length };
+  }));
+});
+
+router.get("/catalog/addons/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const [addon] = await db.select().from(serviceAddonsTable).where(eq(serviceAddonsTable.id, id)).limit(1);
+  if (!addon) return res.status(404).json({ error: "Not found" });
+
+  const linkRows = await db
+    .select({
+      linkId: serviceAddonLinksTable.id,
+      serviceId: serviceAddonLinksTable.serviceId,
+      serviceName: servicesTable.name,
+      isActive: serviceAddonLinksTable.isActive,
+    })
+    .from(serviceAddonLinksTable)
+    .leftJoin(servicesTable, eq(serviceAddonLinksTable.serviceId, servicesTable.id))
+    .where(and(
+      eq(serviceAddonLinksTable.addonId, id),
+      eq(serviceAddonLinksTable.isActive, true),
+    ));
+
+  return res.json({
+    ...addon,
+    links: linkRows.map(l => ({
+      linkId: l.linkId,
+      serviceId: l.serviceId,
+      serviceName: l.serviceName,
+    })),
+    linkCount: linkRows.length,
+  });
 });
 
 router.post("/catalog/addons", async (req, res) => {
   try {
-    const { serviceId, serviceCategoryId, ...addonData } = req.body;
+    const { serviceId, serviceCategoryId, serviceIds, ...addonData } = req.body;
     const body = { ...addonData, slug: addonData.slug ?? slugify(addonData.name) };
     const [row] = await db.insert(serviceAddonsTable).values(body).returning();
-    if (serviceId || serviceCategoryId) {
+
+    const ids: number[] = Array.isArray(serviceIds)
+      ? serviceIds.map((n: unknown) => Number(n)).filter((n: number) => Number.isFinite(n))
+      : [];
+    if (serviceId) ids.push(Number(serviceId));
+
+    for (const sid of [...new Set(ids)]) {
       await db.insert(serviceAddonLinksTable).values({
         addonId: row.id,
-        serviceId: serviceId ?? null,
-        serviceCategoryId: serviceCategoryId ?? null,
+        serviceId: sid,
+        serviceCategoryId: null,
+        isActive: true,
+      });
+    }
+    if (serviceCategoryId && !ids.length) {
+      await db.insert(serviceAddonLinksTable).values({
+        addonId: row.id,
+        serviceId: null,
+        serviceCategoryId,
         isActive: true,
       });
     }
@@ -167,8 +249,43 @@ router.post("/catalog/addons", async (req, res) => {
 router.patch("/catalog/addons/:id", (req, res) => genericUpdate(serviceAddonsTable, req, res));
 
 router.post("/catalog/addon-links", async (req, res) => {
-  const [row] = await db.insert(serviceAddonLinksTable).values(req.body).returning();
-  return res.status(201).json(row);
+  try {
+    const { addonId, serviceId, serviceCategoryId } = req.body as {
+      addonId?: number;
+      serviceId?: number | null;
+      serviceCategoryId?: number | null;
+    };
+    if (!addonId || (!serviceId && !serviceCategoryId)) {
+      return res.status(400).json({ error: "addonId and serviceId (or serviceCategoryId) required" });
+    }
+
+    const existing = await db.select().from(serviceAddonLinksTable)
+      .where(and(
+        eq(serviceAddonLinksTable.addonId, addonId),
+        serviceId ? eq(serviceAddonLinksTable.serviceId, serviceId) : undefined,
+        serviceCategoryId ? eq(serviceAddonLinksTable.serviceCategoryId, serviceCategoryId) : undefined,
+      ))
+      .limit(1);
+
+    if (existing[0]) {
+      const [row] = await db.update(serviceAddonLinksTable)
+        .set({ isActive: true })
+        .where(eq(serviceAddonLinksTable.id, existing[0].id))
+        .returning();
+      return res.json(row);
+    }
+
+    const [row] = await db.insert(serviceAddonLinksTable).values({
+      addonId,
+      serviceId: serviceId ?? null,
+      serviceCategoryId: serviceCategoryId ?? null,
+      isActive: true,
+    }).returning();
+    return res.status(201).json(row);
+  } catch (err) {
+    req.log.error({ err }, "Create addon link error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.delete("/catalog/addon-links/:id", async (req, res) => {
@@ -179,6 +296,17 @@ router.delete("/catalog/addon-links/:id", async (req, res) => {
 });
 
 // ─── Packages ────────────────────────────────────────────────────────────────
+
+function normalizePackageAddons(raw: unknown): PackageAddonInput[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((a: any, i: number) => ({
+      addonId: Number(a.addonId),
+      extraPrice: a.extraPrice != null && a.extraPrice !== "" ? String(a.extraPrice) : null,
+      sortOrder: a.sortOrder ?? i,
+    }))
+    .filter(a => Number.isFinite(a.addonId));
+}
 
 router.get("/catalog/packages", async (req, res) => {
   const { cityId, citySlug, status, homepage } = req.query as Record<string, string>;
@@ -195,13 +323,15 @@ router.get("/catalog/packages", async (req, res) => {
     .where(and(...conditions))
     .orderBy(asc(catalogPackagesTable.sortOrder));
 
-  const withEntitlements = await Promise.all(packages.map(async (pkg) => {
+  const addonsByPkg = await getPackageAddonsForPackages(packages.map(p => p.id));
+
+  const withExtras = await Promise.all(packages.map(async (pkg) => {
     const items = await db.select().from(catalogPackageEntitlementsTable)
       .where(eq(catalogPackageEntitlementsTable.packageId, pkg.id))
       .orderBy(asc(catalogPackageEntitlementsTable.sortOrder));
-    return { ...pkg, entitlements: items };
+    return { ...pkg, entitlements: items, addons: addonsByPkg.get(pkg.id) ?? [] };
   }));
-  return res.json(withEntitlements);
+  return res.json(withExtras);
 });
 
 router.get("/catalog/packages/:id", async (req, res) => {
@@ -210,16 +340,59 @@ router.get("/catalog/packages/:id", async (req, res) => {
   if (!pkg) return res.status(404).json({ error: "Not found" });
   const items = await db.select().from(catalogPackageEntitlementsTable)
     .where(eq(catalogPackageEntitlementsTable.packageId, id));
-  return res.json({ ...pkg, entitlements: items });
+  const addons = await getPackageAddons(id);
+  return res.json({ ...pkg, entitlements: items, addons });
 });
 
 router.post("/catalog/packages", async (req, res) => {
-  const body = { ...req.body, slug: req.body.slug ?? slugify(req.body.name) };
-  const [row] = await db.insert(catalogPackagesTable).values(body).returning();
-  return res.status(201).json(row);
+  try {
+    const { addons: rawAddons, ...rest } = req.body;
+    const addons = normalizePackageAddons(rawAddons);
+    const addonPrice = await resolvePackageAddonPrice(addons);
+    const basePrice = Number(rest.price ?? 0);
+    const body = {
+      ...rest,
+      slug: rest.slug ?? slugify(rest.name),
+      price: (basePrice + addonPrice).toFixed(2),
+    };
+    const [row] = await db.insert(catalogPackagesTable).values(body).returning();
+    if (addons.length) await replacePackageAddons(row.id, addons);
+    const savedAddons = await getPackageAddons(row.id);
+    return res.status(201).json({ ...row, addons: savedAddons });
+  } catch (err) {
+    req.log.error({ err }, "Create package error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-router.patch("/catalog/packages/:id", (req, res) => genericUpdate(catalogPackagesTable, req, res));
+router.patch("/catalog/packages/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { addons: rawAddons, ...rest } = req.body;
+    const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date() };
+    delete updateData.id;
+    delete updateData.createdAt;
+
+    if (rawAddons !== undefined) {
+      const addons = normalizePackageAddons(rawAddons);
+      const addonPrice = await resolvePackageAddonPrice(addons);
+      const basePrice = Number(rest.price ?? 0);
+      updateData.price = (basePrice + addonPrice).toFixed(2);
+      await replacePackageAddons(id, addons);
+    }
+
+    const [row] = await db.update(catalogPackagesTable)
+      .set(updateData)
+      .where(eq(catalogPackagesTable.id, id))
+      .returning();
+    if (!row) return res.status(404).json({ error: "Not found" });
+    const addons = await getPackageAddons(id);
+    return res.json({ ...row, addons });
+  } catch (err) {
+    req.log.error({ err }, "Update package error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.post("/catalog/packages/:id/entitlements", async (req, res) => {
   const packageId = parseInt(req.params.id);

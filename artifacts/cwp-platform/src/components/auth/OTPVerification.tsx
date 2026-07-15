@@ -25,6 +25,8 @@ type OTPVerificationProps = {
   maskedPhone?: string;
   purpose: AuthFlowPurpose;
   name?: string;
+  /** Required for signup — enables password login without future SMS. */
+  password?: string;
   onSuccess: (data: AuthResponse) => void;
   onChangeNumber: () => void;
   autoStartTimer?: boolean;
@@ -34,6 +36,7 @@ export function OTPVerification({
   phone,
   purpose,
   name,
+  password,
   onSuccess,
   onChangeNumber,
   autoStartTimer = true,
@@ -91,6 +94,15 @@ export function OTPVerification({
 
   const submitOtp = (code: string) => {
     if (code.length !== 6 || pending || submittingRef.current) return;
+    if (purpose === "signup" && (!password || password.length < 6)) {
+      setInlineError("Password is missing. Go back and create a password, then request a new OTP.");
+      toast({
+        title: "Password required",
+        description: "Go back, create a password, and continue signup again.",
+        variant: "destructive",
+      });
+      return;
+    }
     submittingRef.current = true;
     setInlineError(null);
     verifyMutation.mutate({
@@ -98,7 +110,12 @@ export function OTPVerification({
         phone,
         code,
         purpose,
-        ...(purpose === "signup" ? { name: name?.trim() } : {}),
+        ...(purpose === "signup"
+          ? {
+              name: name?.trim(),
+              password,
+            }
+          : {}),
       },
     });
   };
@@ -136,7 +153,9 @@ export function OTPVerification({
           {displayPhone}
         </p>
         <p className="text-white/30 text-xs leading-relaxed max-w-[16rem] mx-auto">
-          We&apos;ll send a one-time verification code to your mobile number.
+          {purpose === "signup"
+            ? "Enter the OTP to verify your number and finish creating your account."
+            : "Enter the one-time code sent to your mobile number."}
           <br />
           No spam. No promotional messages.
         </p>

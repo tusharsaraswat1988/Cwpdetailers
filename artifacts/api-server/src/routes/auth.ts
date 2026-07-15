@@ -251,12 +251,9 @@ router.post("/auth/google/complete", async (req, res) => {
     const phoneResult = parseRequiredMobile(phone);
     if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
 
-    let chosenPassword: string | null = null;
-    if (rawPassword != null && String(rawPassword).trim() !== "") {
-      const pwCheck = validateNewPassword(rawPassword);
-      if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
-      chosenPassword = pwCheck.value;
-    }
+    const pwCheck = validateNewPassword(rawPassword);
+    if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
+    const chosenPassword = pwCheck.value;
 
     const tokenHash = hashOpaqueToken(linkToken);
     const now = new Date();
@@ -303,10 +300,8 @@ router.post("/auth/google/complete", async (req, res) => {
     const identityCheck = await assertContactIdentityAvailable(phoneResult.value, normalizedEmail);
     if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
 
-    const passwordHash = chosenPassword
-      ? await hashPassword(chosenPassword)
-      : await hashPassword(generateOpaqueToken());
-    const authProvider = chosenPassword ? "hybrid" : "google";
+    const passwordHash = await hashPassword(chosenPassword);
+    const authProvider = "hybrid";
 
     const result = await db.transaction(async (tx) => {
       const [user] = await tx
@@ -669,15 +664,10 @@ router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000),
     const identityCheck = await assertContactIdentityAvailable(phoneResult.value, emailResult.value);
     if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
 
-    let passwordHash: string | null = null;
-    let authProvider = "otp";
-
-    if (password != null && String(password).trim() !== "") {
-      const pwCheck = validateNewPassword(password);
-      if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
-      passwordHash = await hashPassword(pwCheck.value);
-      authProvider = "local";
-    }
+    const pwCheck = validateNewPassword(password);
+    if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
+    const passwordHash = await hashPassword(pwCheck.value);
+    const authProvider = "local";
 
     const [user] = await db.insert(usersTable).values({
       name: signupName,

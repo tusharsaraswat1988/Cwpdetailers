@@ -105,8 +105,8 @@ export interface GoogleNeedsPhoneResponse {
 export interface GoogleCompleteBody {
   linkToken: string;
   phone: string;
-  /** Optional password to enable phone sign-in */
-  password?: string;
+  /** Required password so the customer can sign in with phone later without SMS */
+  password: string;
 }
 
 export interface SetPasswordBody {

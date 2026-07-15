@@ -6,6 +6,7 @@ export { GoogleButton } from "./GoogleButton";
 export { OTPVerification } from "./OTPVerification";
 export { AuthOtpOverlay } from "./AuthOtpOverlay";
 export { PasswordLogin } from "./PasswordLogin";
+export { CreatePasswordFields, validateCreatePassword } from "./CreatePasswordFields";
 export { PasswordSetupNudge } from "./PasswordSetupNudge";
 export { AuthGoogleDialogs } from "./AuthGoogleDialogs";
 export { GoogleSignInButton } from "./GoogleSignInButton";

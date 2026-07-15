@@ -1908,8 +1908,9 @@ components:
           type: string
         password:
           type: string
-          description: Optional password to enable phone sign-in
-      required: [linkToken, phone]
+          description: Required password so the customer can sign in with phone later without SMS
+          minLength: 6
+      required: [linkToken, phone, password]
 
     SetPasswordBody:
       type: object
@@ -1978,6 +1979,8 @@ components:
           type: string
         password:
           type: string
+          description: Required for signup — enables password login without future SMS OTPs
+          minLength: 6
         email:
           type: string
         city:

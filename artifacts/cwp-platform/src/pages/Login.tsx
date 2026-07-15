@@ -45,7 +45,7 @@ export default function Login() {
 
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [showPasswordLogin, setShowPasswordLogin] = useState(false);
+  const [showOtpLogin, setShowOtpLogin] = useState(false);
 
   const { otpSession, showOtp, setOtpSession, clearOtpSession } = useAuthFlowStore();
 
@@ -84,7 +84,7 @@ export default function Login() {
     },
   });
 
-  const handleContinue = (e: React.FormEvent) => {
+  const handleOtpContinue = (e: React.FormEvent) => {
     e.preventDefault();
 
     const phoneResult = submitMobile(phone);
@@ -120,12 +120,12 @@ export default function Login() {
 
   return (
     <AuthLayout testId="login-page">
-      <AuthHeader title="Welcome back" />
+      <AuthHeader
+        title="Welcome back"
+        subtitle="Sign in with your password — OTP only if you need it"
+      />
 
-      <form
-        onSubmit={handleContinue}
-        className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}
-      >
+      <div className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}>
         <PhoneInput
           id="login-phone"
           data-testid="input-phone"
@@ -142,22 +142,12 @@ export default function Login() {
           className={authPhoneInputClass}
         />
 
-        <Button
-          type="submit"
-          disabled={pending || !phoneReady}
-          className={authPrimaryButtonClass}
-          data-testid="btn-continue-login"
-        >
-          {sendOtpMutation.isPending ? (
-            <>
-              <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
-              Sending OTP...
-            </>
-          ) : (
-            "Continue"
-          )}
-        </Button>
-      </form>
+        <PasswordLogin
+          phone={phone}
+          onSuccess={handlePasswordSuccess}
+          disabled={googlePending}
+        />
+      </div>
 
       <AuthDivider className="my-3.5" />
 
@@ -191,41 +181,55 @@ export default function Login() {
       <div className={cn(authFadeUp, "delay-300")}>
         <button
           type="button"
-          onClick={() => setShowPasswordLogin(v => !v)}
+          onClick={() => setShowOtpLogin(v => !v)}
           className="w-full flex items-center justify-center gap-2 text-white/40 hover:text-white/65 text-sm font-normal py-1.5 min-h-[44px] transition-colors duration-200"
-          data-testid="btn-toggle-password-login"
-          aria-expanded={showPasswordLogin}
-          aria-controls="password-login-panel"
+          data-testid="btn-toggle-otp-login"
+          aria-expanded={showOtpLogin}
+          aria-controls="otp-login-panel"
         >
-          {showPasswordLogin ? "Password login" : "Use password instead"}
+          {showOtpLogin ? "OTP login" : "Sign in with OTP instead"}
           <ChevronDown
             size={15}
-            className={cn("transition-transform duration-300 ease-out", showPasswordLogin && "rotate-180")}
+            className={cn("transition-transform duration-300 ease-out", showOtpLogin && "rotate-180")}
             aria-hidden
           />
         </button>
 
         <div
-          id="password-login-panel"
+          id="otp-login-panel"
           className={cn(
             "grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
-            showPasswordLogin ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+            showOtpLogin ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
           )}
-          aria-hidden={!showPasswordLogin}
+          aria-hidden={!showOtpLogin}
         >
           <div className="overflow-hidden">
-            <div
+            <form
+              onSubmit={handleOtpContinue}
               className={cn(
-                "pt-3 transition-opacity duration-300",
-                showPasswordLogin ? "opacity-100" : "opacity-0",
+                "pt-3 space-y-3 transition-opacity duration-300",
+                showOtpLogin ? "opacity-100" : "opacity-0",
               )}
             >
-              <PasswordLogin
-                phone={phone}
-                onSuccess={handlePasswordSuccess}
-                disabled={googlePending}
-              />
-            </div>
+              <p className="text-white/30 text-xs text-center leading-relaxed">
+                Use OTP if you haven&apos;t set a password yet, or can&apos;t remember it.
+              </p>
+              <Button
+                type="submit"
+                disabled={pending || !phoneReady}
+                className={authPrimaryButtonClass}
+                data-testid="btn-continue-login-otp"
+              >
+                {sendOtpMutation.isPending ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
+                    Sending OTP...
+                  </>
+                ) : (
+                  "Send OTP"
+                )}
+              </Button>
+            </form>
           </div>
         </div>
       </div>

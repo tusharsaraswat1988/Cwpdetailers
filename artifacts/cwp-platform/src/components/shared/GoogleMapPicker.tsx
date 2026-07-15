@@ -13,9 +13,11 @@ type Props = {
   value: LocationValue | null;
   onChange: (loc: LocationValue) => void;
   className?: string;
+  /** Tailwind height class for the map canvas. Default h-56; use h-40 in sheets. */
+  mapHeightClass?: string;
 };
 
-export function GoogleMapPicker({ value, onChange, className }: Props) {
+export function GoogleMapPicker({ value, onChange, className, mapHeightClass = "h-56" }: Props) {
   const mapElRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const mapsRef = useRef<GoogleMapsNamespace | null>(null);
@@ -210,7 +212,7 @@ export function GoogleMapPicker({ value, onChange, className }: Props) {
       />
       <div
         ref={mapElRef}
-        className="h-56 w-full rounded-xl border border-border overflow-hidden bg-muted"
+        className={`${mapHeightClass} w-full rounded-xl border border-border overflow-hidden bg-muted`}
         data-testid="google-map-picker"
       />
       {!ready && !error && (

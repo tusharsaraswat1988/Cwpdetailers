@@ -31,7 +31,8 @@ const CATALOG_PUBLIC_GET_PREFIXES = [
   "/catalog/settings",
   "/catalog/self-booking/check",
   "/catalog/city-content",
-  "/catalog/services/",
+  "/catalog/services",
+  "/catalog/plans",
 ];
 
 function emptyPublicScope(req: Request) {
@@ -141,9 +142,11 @@ export function guardMasterDataRoutes() {
       return requirePermission("masters", action)(req, res, next);
     }
 
+    // Public browse catalog — guests AND logged-in customers (no catalog:view RBAC).
+    // Writes still require catalog permission (admin).
     if (path.startsWith("/catalog/services") || path.startsWith("/catalog/plans")) {
-      if (method === "GET" && !req.user) {
-        emptyPublicScope(req);
+      if (method === "GET") {
+        if (!req.user) emptyPublicScope(req);
         return next();
       }
       return requirePermission("catalog", action)(req, res, next);
