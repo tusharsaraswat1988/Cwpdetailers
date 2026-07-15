@@ -127,9 +127,19 @@ export function ContractCreatedStep({ draft, result, billing, onBookAnother }: P
         </CardContent>
       </Card>
 
-      <Button onClick={onBookAnother} data-testid="book-another-service">
-        Book another service
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={onBookAnother} data-testid="book-another-service">
+          Book another service
+        </Button>
+        {draft.customer?.id && (
+          <Link href={`/admin/bookings?customerId=${draft.customer.id}`}>
+            <Button variant="outline">View this customer&apos;s bookings</Button>
+          </Link>
+        )}
+        <Link href="/admin/assign-services">
+          <Button variant="outline">Go to Assign Service</Button>
+        </Link>
+      </div>
     </div>
   );
 }

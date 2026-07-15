@@ -2,9 +2,12 @@ import { useState } from "react";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { useCustomerDcmsGallery } from "../api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { format } from "date-fns";
 import { Link } from "wouter";
+import { ImageOff } from "lucide-react";
 
 export default function CustomerDcmsGalleryPage() {
   const now = new Date();
@@ -40,7 +43,11 @@ export default function CustomerDcmsGalleryPage() {
           </Select>
         </div>
 
-        {isLoading ? <p className="text-muted-foreground">Loading...</p> : (
+        {isLoading ? (
+          <div className="grid grid-cols-2 gap-2">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}
+          </div>
+        ) : (
           <div className="grid grid-cols-2 gap-2">
             {photos?.map(row => (
               <div key={row.visit.id} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
@@ -56,7 +63,11 @@ export default function CustomerDcmsGalleryPage() {
                 </div>
               </div>
             ))}
-            {photos?.length === 0 && <p className="col-span-2 text-muted-foreground">No photos yet</p>}
+            {photos?.length === 0 && (
+              <div className="col-span-2">
+                <EmptyState icon={<ImageOff size={20} />} title="No photos yet" description="Visit proof photos will appear here" />
+              </div>
+            )}
           </div>
         )}
       </div>

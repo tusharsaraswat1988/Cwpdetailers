@@ -12,7 +12,7 @@ import { submitMobile } from "@/lib/contactForm";
 import { getAuthErrorMessage } from "@/lib/authErrorMessages";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useBranding } from "@/lib/branding";
-import { Loader2, Shield } from "lucide-react";
+import { AlertCircle, Loader2, Shield } from "lucide-react";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin", "manager"]);
 
@@ -24,34 +24,34 @@ export default function AdminLogin() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [capsLockOn, setCapsLockOn] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const loginMutation = useLogin({
     mutation: {
       onSuccess: (data: AuthResponse) => {
         const role = data.user.role;
         if (!ADMIN_ROLES.has(role)) {
-          toast({
-            title: "Access denied",
-            description: "This portal is for administrators only.",
-            variant: "destructive",
-          });
+          const message = "This portal is for administrators only.";
+          setFormError(message);
+          toast({ title: "Access denied", description: message, variant: "destructive" });
           return;
         }
+        setFormError(null);
         login(data.user, data.token);
         setLocation("/admin/dashboard");
       },
       onError: (err: unknown) => {
-        toast({
-          title: "Login failed",
-          description: getAuthErrorMessage(err, "Invalid credentials. Check your phone number and password."),
-          variant: "destructive",
-        });
+        const message = getAuthErrorMessage(err, "Invalid credentials. Check your phone number and password.");
+        setFormError(message);
+        toast({ title: "Login failed", description: message, variant: "destructive" });
       },
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     const phoneResult = submitMobile(phone);
     setPhoneError(phoneResult.ok ? null : phoneResult.error);
     if (!phoneResult.ok) {
@@ -87,6 +87,16 @@ export default function AdminLogin() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {formError && (
+              <div
+                className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 flex items-start gap-2"
+                role="alert"
+                data-testid="admin-login-error"
+              >
+                <AlertCircle size={15} className="text-destructive shrink-0 mt-0.5" aria-hidden />
+                <p className="text-destructive text-sm leading-snug">{formError}</p>
+              </div>
+            )}
             <div className="[&_label]:text-amber-200/75 [&_.text-muted-foreground]:text-amber-200/40">
               <PhoneInput
                 id="admin-phone"
@@ -105,11 +115,21 @@ export default function AdminLogin() {
                 id="admin-password"
                 data-testid="input-admin-password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={e => {
+                  setPassword(e.target.value);
+                  if (formError) setFormError(null);
+                }}
+                onKeyUp={e => setCapsLockOn(e.getModifierState("CapsLock"))}
+                onBlur={() => setCapsLockOn(false)}
                 placeholder="••••••••"
                 containerClassName="mt-1.5"
                 className="bg-amber-950/30 border-amber-500/25 text-amber-50 placeholder:text-amber-200/25 focus-visible:border-amber-400 focus-visible:ring-amber-400/30"
               />
+              {capsLockOn && (
+                <p className="text-amber-300/80 text-xs mt-1.5" role="status">
+                  Caps Lock is on
+                </p>
+              )}
             </div>
             <Button
               type="submit"

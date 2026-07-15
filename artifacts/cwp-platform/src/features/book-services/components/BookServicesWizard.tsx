@@ -33,19 +33,60 @@ type Props = {
   initialCustomer?: CustomerSearchValue | null;
 };
 
+const DRAFT_STORAGE_KEY = "cwp:book-services:draft";
+
+function loadSavedDraft(): { draft: BookServicesDraft; stepIndex: number } | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.draft) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function BookServicesWizard({ initialCustomer = null }: Props) {
   const qc = useQueryClient();
   const reactivateCustomer = useUpdateCustomer();
-  const [stepIndex, setStepIndex] = useState(() => (initialCustomer ? 1 : 0));
-  const [draft, setDraft] = useState<BookServicesDraft>(() => ({
+  const saved = useMemo(() => (initialCustomer ? null : loadSavedDraft()), [initialCustomer]);
+  const [stepIndex, setStepIndex] = useState(() => saved?.stepIndex ?? (initialCustomer ? 1 : 0));
+  const [draft, setDraft] = useState<BookServicesDraft>(() => saved?.draft ?? {
     ...EMPTY_BOOK_SERVICES_DRAFT,
     customer: initialCustomer,
-  }));
+  });
+  const [restoredNotice, setRestoredNotice] = useState(!!saved?.draft?.customer);
   const [stepError, setStepError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [contractResult, setContractResult] = useState<ServiceContractResult | null>(null);
   const [billingResult, setBillingResult] = useState<ContractBillingResult | null>(null);
+
+  // Autosave in-progress draft so admins don't lose work on an accidental refresh or nav.
+  useEffect(() => {
+    if (contractResult) return;
+    try {
+      if (draft.customer) {
+        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ draft, stepIndex }));
+      } else {
+        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      }
+    } catch {
+      // storage unavailable (private mode / quota) — safe to ignore, autosave is best-effort
+    }
+  }, [draft, stepIndex, contractResult]);
+
+  // Warn before an accidental tab close / navigation while a booking is in progress.
+  useEffect(() => {
+    if (!draft.customer || contractResult) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [draft.customer, contractResult]);
 
   const catalogServiceId = draft.service?.kind === "service"
     ? draft.service.catalogServiceId ?? draft.service.id
@@ -162,6 +203,11 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       }
       const result = await createServiceContract(draft, addonList);
       const billing = await createContractBilling(result.registryId, draft.billingAction);
+      try {
+        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
       setContractResult(result);
       setBillingResult(billing);
       if (draft.customer?.id) {
@@ -178,6 +224,11 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
   }, [draft, addonList, qc]);
 
   const resetWizard = useCallback(() => {
+    try {
+      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
     setDraft({
       ...EMPTY_BOOK_SERVICES_DRAFT,
       customer: initialCustomer,
@@ -187,6 +238,19 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     setBillingResult(null);
     setCreateError(null);
     setStepError(null);
+    setRestoredNotice(false);
+  }, [initialCustomer]);
+
+  const discardSavedDraft = useCallback(() => {
+    try {
+      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    setDraft({ ...EMPTY_BOOK_SERVICES_DRAFT, customer: initialCustomer });
+    setStepIndex(initialCustomer ? 1 : 0);
+    setStepError(null);
+    setRestoredNotice(false);
   }, [initialCustomer]);
 
   const stepContent = useMemo(() => {
@@ -282,6 +346,19 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
 
   return (
     <div className="space-y-6" data-testid="book-services-wizard">
+      {restoredNotice && (
+        <Alert>
+          <AlertDescription className="flex items-center justify-between gap-3 text-sm">
+            <span>Resumed your in-progress booking for {draft.customer?.name ?? "this customer"}.</span>
+            <Button type="button" variant="ghost" size="sm" onClick={discardSavedDraft} className="h-7 shrink-0">
+              Start fresh instead
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      <p className="text-sm font-medium text-muted-foreground" aria-live="polite">
+        Step {stepIndex + 1} of {WIZARD_STEPS.length}: {currentStep.label}
+      </p>
       <nav aria-label="Booking steps" className="overflow-x-auto">
         <ol className="flex gap-1 min-w-max pb-1">
           {WIZARD_STEPS.map((step, i) => {

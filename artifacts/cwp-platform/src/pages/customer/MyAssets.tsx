@@ -19,6 +19,9 @@ import { Car, Sun, Loader2, Plus, MapPin, CheckCircle2, ExternalLink } from "luc
 import { VehicleReferencePhotoEditor } from "@/components/shared/VehicleReferencePhotoEditor";
 import { vehiclePhotosFromRecord } from "@/components/shared/VehicleReferencePhotos";
 import { mapsViewUrl } from "@/lib/maps";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 
 export default function MyAssets() {
   const qc = useQueryClient();
@@ -68,15 +71,23 @@ export default function MyAssets() {
   });
 
   if (scopeLoading) {
-    return <CustomerLayout><div className="p-6 flex justify-center"><Loader2 className="animate-spin" /></div></CustomerLayout>;
+    return (
+      <CustomerLayout>
+        <div className="space-y-3">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+        </div>
+      </CustomerLayout>
+    );
   }
 
   if (missingCustomerLink || customerId == null) {
     return (
       <CustomerLayout>
-        <div className="p-6 max-w-md mx-auto text-center space-y-2">
+        <div className="max-w-md mx-auto text-center space-y-2 py-12">
           <p className="font-semibold">Account not linked</p>
-          <p className="text-sm text-muted-foreground">Your login is not linked to a customer profile.</p>
+          <NoCustomerProfileMessage />
         </div>
       </CustomerLayout>
     );
@@ -101,9 +112,14 @@ export default function MyAssets() {
 
           <TabsContent value="vehicles" className="space-y-4 mt-4">
             <div className="space-y-2">
-              {loadingVehicles ? <Loader2 className="animate-spin mx-auto" /> :
+              {loadingVehicles ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-20 w-full rounded-xl" />
+                  <Skeleton className="h-20 w-full rounded-xl" />
+                </div>
+              ) :
                 (vehicles ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No vehicles yet. Add your first car below.</p>
+                  <EmptyState icon={<Car size={20} />} title="No vehicles yet" description="Add your first car below to start booking" />
                 ) : (
                   (vehicles ?? []).map(v => (
                     <div key={v.id} className="bg-card border border-border rounded-xl p-4 space-y-3" data-testid={`asset-vehicle-${v.id}`}>
@@ -203,9 +219,13 @@ export default function MyAssets() {
 
           <TabsContent value="solar" className="space-y-4 mt-4">
             <div className="space-y-2">
-              {loadingSolar ? <Loader2 className="animate-spin mx-auto" /> :
+              {loadingSolar ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-16 w-full rounded-xl" />
+                </div>
+              ) :
                 (solarSites ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No solar sites yet.</p>
+                  <EmptyState icon={<Sun size={20} />} title="No solar sites yet" description="Add your first site below to start booking" />
                 ) : (
                   (solarSites ?? []).map(s => (
                     <div key={s.id} className="bg-card border border-border rounded-xl p-4" data-testid={`asset-solar-${s.id}`}>

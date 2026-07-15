@@ -13,6 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +58,7 @@ export default function AdminBookings() {
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [customerFilter, setCustomerFilter] = useState<string | undefined>(undefined);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const limit = 15;
 
   useEffect(() => {
@@ -181,14 +186,19 @@ export default function AdminBookings() {
         )}
 
         <FilterBar>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40" data-testid="select-booking-status">
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setOffset(0); }}>
+            <SelectTrigger className="w-40" aria-label="Filter bookings by status" data-testid="select-booking-status">
               <SelectValue placeholder="Filter status" />
             </SelectTrigger>
             <SelectContent>
               {statusFilters.map(s => <SelectItem key={s} value={s}>{s === "all" ? "All Statuses" : s.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase())}</SelectItem>)}
             </SelectContent>
           </Select>
+          {statusFilter !== "all" && (
+            <Button variant="ghost" size="sm" onClick={() => { setStatusFilter("all"); setOffset(0); }}>
+              Reset
+            </Button>
+          )}
         </FilterBar>
 
         <DataTable
@@ -196,19 +206,27 @@ export default function AdminBookings() {
           rows={data?.data as B[] | undefined}
           isLoading={isLoading}
           rowKey={r => r.id}
-          emptyTitle="No bookings found"
-          emptyDescription="Try a different status filter."
+          onRowClick={b => setDetailBooking(b)}
+          rowLabel={b => `View booking #${b.id} for ${b.customerName ?? "customer"}`}
+          caption="List of service bookings with customer, service, staff, schedule, status and amount"
+          emptyTitle={statusFilter !== "all" ? `No ${statusFilter.replace(/_/g, " ")} bookings` : "No bookings found"}
+          emptyDescription={statusFilter !== "all" ? "Try a different status filter, or reset filters to see all bookings." : "Bookings created via the booking wizard will show up here."}
+          emptyAction={statusFilter !== "all" ? <Button size="sm" variant="outline" onClick={() => { setStatusFilter("all"); setOffset(0); }}>Reset filter</Button> : undefined}
         />
 
-        {(data?.total ?? 0) > limit && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Showing {offset + 1}–{Math.min(offset + limit, data?.total ?? 0)} of {data?.total}</span>
+        <div className="flex items-center justify-between text-sm" aria-live="polite">
+          <span className="text-muted-foreground">
+            {(data?.total ?? 0) > 0
+              ? `Showing ${offset + 1}–${Math.min(offset + limit, data?.total ?? 0)} of ${data?.total}`
+              : ""}
+          </span>
+          {(data?.total ?? 0) > limit && (
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={offset === 0} data-testid="btn-prev-page"><ChevronLeft size={14} /></Button>
-              <Button variant="outline" size="sm" onClick={() => setOffset(o => o + limit)} disabled={offset + limit >= (data?.total ?? 0)} data-testid="btn-next-page"><ChevronRight size={14} /></Button>
+              <Button variant="outline" size="sm" onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={offset === 0} aria-label="Previous page" data-testid="btn-prev-page"><ChevronLeft size={14} /></Button>
+              <Button variant="outline" size="sm" onClick={() => setOffset(o => o + limit)} disabled={offset + limit >= (data?.total ?? 0)} aria-label="Next page" data-testid="btn-next-page"><ChevronRight size={14} /></Button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Detail Drawer */}
@@ -288,21 +306,21 @@ export default function AdminBookings() {
               <TabsContent value="actions" className="space-y-3 mt-4">
                 <Can resource="bookings" action="edit">
                   {detailBooking.status === "scheduled" && (
-                    <Button className="w-full" size="sm" onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "en_route" } })}>
-                      <Route size={14} className="mr-2" /> En Route
+                    <Button className="w-full" size="sm" disabled={transitionMutation.isPending} onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "en_route" } })}>
+                      {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Route size={14} className="mr-2" />} En Route
                     </Button>
                   )}
                   {detailBooking.status === "en_route" && (
-                    <Button className="w-full" size="sm" onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "in_progress" } })}>
-                      <CheckCircle size={14} className="mr-2" /> Start Job
+                    <Button className="w-full" size="sm" disabled={transitionMutation.isPending} onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "in_progress" } })}>
+                      {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <CheckCircle size={14} className="mr-2" />} Start Job
                     </Button>
                   )}
                   {detailBooking.status === "in_progress" && (
-                    <Button className="w-full bg-green-600 hover:bg-green-700 text-white" size="sm" onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "completed" } })}>
-                      <CheckCircle size={14} className="mr-2" /> Mark Complete
+                    <Button className="w-full bg-green-600 hover:bg-green-700 text-white" size="sm" disabled={transitionMutation.isPending} onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "completed" } })}>
+                      {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <CheckCircle size={14} className="mr-2" />} Mark Complete
                     </Button>
                   )}
-                  <Button variant="outline" className="w-full" size="sm" onClick={() => setShowReschedule(true)}>
+                  <Button variant="outline" className="w-full" size="sm" onClick={() => { setRescheduleDate(""); setRescheduleReason(""); setShowReschedule(true); }}>
                     <Calendar size={14} className="mr-2" /> Reschedule
                   </Button>
                   <Link href="/admin/assign-services" className="block">
@@ -311,8 +329,8 @@ export default function AdminBookings() {
                     </Button>
                   </Link>
                   {detailBooking.status !== "cancelled" && detailBooking.status !== "completed" && (
-                    <Button variant="destructive" className="w-full" size="sm" onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "cancelled", reason: "Cancelled by admin" } })}>
-                      <XCircle size={14} className="mr-2" /> Cancel
+                    <Button variant="destructive" className="w-full" size="sm" onClick={() => setShowCancelConfirm(true)}>
+                      <XCircle size={14} className="mr-2" /> Cancel booking
                     </Button>
                   )}
                 </Can>
@@ -322,17 +340,53 @@ export default function AdminBookings() {
         </Dialog>
       )}
 
+      {/* Cancel confirmation — prevents accidental destructive action */}
+      <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark booking #{detailBooking?.id} as cancelled and notify the customer. This action cannot be undone from here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep booking</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={transitionMutation.isPending}
+              onClick={() => {
+                if (!detailBooking) return;
+                transitionMutation.mutate(
+                  { id: detailBooking.id, data: { toStatus: "cancelled", reason: "Cancelled by admin" } },
+                  { onSuccess: () => setShowCancelConfirm(false) },
+                );
+              }}
+            >
+              {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : null} Yes, cancel booking
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Reschedule Dialog */}
       <Dialog open={showReschedule} onOpenChange={setShowReschedule}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Reschedule Booking</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Reschedule Booking</DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
-            <Input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} />
-            <Textarea placeholder="Reason (optional)" value={rescheduleReason} onChange={e => setRescheduleReason(e.target.value)} />
+            <div className="space-y-1.5">
+              <label htmlFor="reschedule-date" className="text-sm font-medium text-foreground">New date</label>
+              <Input id="reschedule-date" type="date" min={new Date().toISOString().slice(0, 10)} value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} required aria-required="true" />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="reschedule-reason" className="text-sm font-medium text-foreground">Reason (optional)</label>
+              <Textarea id="reschedule-reason" placeholder="e.g. Customer requested a later slot" value={rescheduleReason} onChange={e => setRescheduleReason(e.target.value)} />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReschedule(false)}>Cancel</Button>
-            <Button onClick={() => rescheduleMutation.mutate({ id: detailBooking?.id ?? 0, data: { scheduledDate: rescheduleDate, reason: rescheduleReason } })} disabled={!rescheduleDate}>
+            <Button onClick={() => rescheduleMutation.mutate({ id: detailBooking?.id ?? 0, data: { scheduledDate: rescheduleDate, reason: rescheduleReason } })} disabled={!rescheduleDate || rescheduleMutation.isPending}>
               {rescheduleMutation.isPending ? <Loader2 className="animate-spin mr-2" size={14} /> : null} Reschedule
             </Button>
           </DialogFooter>

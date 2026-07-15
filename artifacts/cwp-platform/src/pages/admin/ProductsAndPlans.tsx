@@ -70,22 +70,31 @@ export default function ProductsAndPlansPage() {
   const carWashSub: "services" | "packages" = tab === "wash-packages" ? "packages" : "services";
 
   const isHomepage = tab === "homepage";
+  const isAdvanced = tab === "advanced";
+  const isSetupView = isHomepage || isAdvanced;
+
+  const pageTitle = isHomepage
+    ? "Homepage CMS"
+    : isAdvanced
+      ? "Catalog GST Defaults"
+      : "Service Catalog";
+  const pageDescription = isHomepage
+    ? "Website marketing content — hero, testimonials, and public homepage sections. Most branches rarely need this."
+    : isAdvanced
+      ? "Default tax settings applied when HQ creates new catalog items. Separate from company Invoice & GST identity."
+      : `What ${branding.brandName} sells — three revenue lines. Prices are set by HQ; branches choose what to offer when booking.`;
 
   return (
     <AdminLayout>
       <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto">
         <PageActionHeader
-          title={isHomepage ? "Homepage CMS" : "Service Catalog"}
-          description={
-            isHomepage
-              ? "Website marketing content — hero, testimonials, and public homepage sections. Most branches rarely need this."
-              : `What ${branding.brandName} sells — three revenue lines. Prices are set by HQ; branches choose what to offer when booking.`
-          }
-          primaryAction={{
-            label: isHomepage ? "Back to catalog" : "Add car wash service",
-            href: isHomepage ? "/admin/services?tab=wash-services" : "/admin/services?tab=wash-services",
+          title={pageTitle}
+          description={pageDescription}
+          primaryAction={isSetupView ? {
+            label: "Back to catalog",
+            href: "/admin/services?tab=wash-services",
             testId: "catalog-primary-cta",
-          }}
+          } : undefined}
         />
 
         {isHomepage ? (
@@ -95,86 +104,116 @@ export default function ProductsAndPlansPage() {
               Edit homepage content only when updating your public website.
             </CardContent>
           </Card>
-        ) : (
-          <Tabs value={tab} className="space-y-5">
-            <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
-                Services Type
-              </p>
-              <div className="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  onClick={() => goTab(carWashSub === "packages" ? "wash-packages" : "wash-services")}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-xs sm:text-sm px-3 py-2 rounded-md",
-                    isCarWashTab(tab) ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
-                  )}
+        ) : null}
+
+        {isAdvanced ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">GST defaults</CardTitle>
+              <CardDescription>Default tax settings applied to new catalog items (HQ).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 max-w-md">
+              <div>
+                <Label>Default GST mode</Label>
+                <Select
+                  value={String((settings as { defaultPricingType?: string })?.defaultPricingType ?? "inclusive")}
+                  onValueChange={v => saveSettings.mutate({ defaultPricingType: v }, {
+                    onSuccess: () => toast({ title: "Settings saved" }),
+                    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+                  })}
                 >
-                  <Wrench size={14} /> Car Wash
-                </button>
-                <button
-                  type="button"
-                  onClick={() => goTab("daily-cleaning")}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-xs sm:text-sm px-3 py-2 rounded-md",
-                    tab === "daily-cleaning" ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
-                  )}
-                >
-                  <Sparkles size={14} /> Daily Cleaning
-                </button>
-                <button
-                  type="button"
-                  onClick={() => goTab("solar")}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-xs sm:text-sm px-3 py-2 rounded-md",
-                    tab === "solar" ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
-                  )}
-                >
-                  <Sun size={14} /> Solar Cleaning
-                </button>
-                <button
-                  type="button"
-                  onClick={() => goTab("addons")}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-xs sm:text-sm px-3 py-2 rounded-md",
-                    tab === "addons" ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
-                  )}
-                >
-                  <Layers size={14} /> Add-ons
-                </button>
-                <button
-                  type="button"
-                  onClick={() => goTab("advanced")}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-xs sm:text-sm px-3 py-2 rounded-md",
-                    tab === "advanced" ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
-                  )}
-                >
-                  Advanced (GST)
-                </button>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inclusive">Inclusive</SelectItem>
+                    <SelectItem value="exclusive">Exclusive</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              <div>
+                <Label>Default GST rate (%)</Label>
+                <Input
+                  className="mt-1"
+                  type="number"
+                  defaultValue={String((settings as { defaultGstRate?: number })?.defaultGstRate ?? 18)}
+                  onBlur={e => saveSettings.mutate({ defaultGstRate: parseFloat(e.target.value) }, {
+                    onSuccess: () => toast({ title: "Settings saved" }),
+                  })}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {!isSetupView ? (
+          <Tabs value={tab} className="space-y-4">
+            <div
+              className="rounded-xl border border-border bg-card/50 p-3 sm:p-4 space-y-3"
+              role="tablist"
+              aria-label="Revenue line"
+            >
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { target: "wash-services" as TabValue, active: isCarWashTab(tab), icon: Wrench, label: "Car Wash" },
+                    { target: "daily-cleaning" as TabValue, active: tab === "daily-cleaning", icon: Sparkles, label: "Daily Cleaning" },
+                    { target: "solar" as TabValue, active: tab === "solar", icon: Sun, label: "Solar Cleaning" },
+                    { target: "addons" as TabValue, active: tab === "addons", icon: Layers, label: "Add-ons" },
+                  ]
+                ).map(({ target, active, icon: Icon, label }) => (
+                  <button
+                    key={target}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => goTab(target === "wash-services" && carWashSub === "packages" ? "wash-packages" : target)}
+                    className={cn(
+                      "inline-flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg min-h-10 transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                      active
+                        ? "bg-primary text-secondary font-semibold shadow-sm"
+                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <Icon size={15} className="shrink-0" /> {label}
+                  </button>
+                ))}
+              </div>
+
               {isCarWashTab(tab) && (
-                <div className="flex gap-1 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => goTab("wash-services")}
-                    className={cn(
-                      "text-xs px-3 py-1.5 rounded-md",
-                      carWashSub === "services" ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
-                    )}
+                <div className="flex items-center gap-2 pl-1 pt-1 border-t border-border/60 -mx-3 sm:-mx-4 px-3 sm:px-4 pb-0">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70 mr-1 shrink-0">
+                    Car Wash:
+                  </span>
+                  <div
+                    className="inline-flex rounded-md bg-muted/60 p-0.5 gap-0.5"
+                    role="tablist"
+                    aria-label="Car wash view"
                   >
-                    One Time Services
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => goTab("wash-packages")}
-                    className={cn(
-                      "text-xs px-3 py-1.5 rounded-md",
-                      carWashSub === "packages" ? "bg-primary text-secondary font-medium" : "bg-muted/60 text-muted-foreground",
-                    )}
-                  >
-                    Packages
-                  </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={carWashSub === "services"}
+                      onClick={() => goTab("wash-services")}
+                      className={cn(
+                        "text-xs px-3 py-1.5 rounded-[5px] font-medium min-h-8 transition-colors",
+                        carWashSub === "services" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      One Time Services
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={carWashSub === "packages"}
+                      onClick={() => goTab("wash-packages")}
+                      className={cn(
+                        "text-xs px-3 py-1.5 rounded-[5px] font-medium min-h-8 transition-colors",
+                        carWashSub === "packages" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Packages
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -213,46 +252,8 @@ export default function ProductsAndPlansPage() {
               </p>
               <AddonsTab />
             </TabsContent>
-
-            <TabsContent value="advanced">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">GST defaults</CardTitle>
-                  <CardDescription>Default tax settings applied to new catalog items (HQ).</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 max-w-md">
-                  <div>
-                    <Label>Default GST mode</Label>
-                    <Select
-                      value={String((settings as { defaultPricingType?: string })?.defaultPricingType ?? "inclusive")}
-                      onValueChange={v => saveSettings.mutate({ defaultPricingType: v }, {
-                        onSuccess: () => toast({ title: "Settings saved" }),
-                        onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-                      })}
-                    >
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inclusive">Inclusive</SelectItem>
-                        <SelectItem value="exclusive">Exclusive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Default GST rate (%)</Label>
-                    <Input
-                      className="mt-1"
-                      type="number"
-                      defaultValue={String((settings as { defaultGstRate?: number })?.defaultGstRate ?? 18)}
-                      onBlur={e => saveSettings.mutate({ defaultGstRate: parseFloat(e.target.value) }, {
-                        onSuccess: () => toast({ title: "Settings saved" }),
-                      })}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
-        )}
+        ) : null}
 
         {isHomepage && (
           <div className="grid gap-4">

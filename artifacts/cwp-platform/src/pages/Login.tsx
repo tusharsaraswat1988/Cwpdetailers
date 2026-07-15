@@ -28,7 +28,7 @@ import {
   authPhoneInputClass,
   authPrimaryButtonClass,
 } from "@/components/auth/authStyles";
-import { ArrowRight, ChevronDown, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowRight, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function usePhoneFromQuery() {
@@ -46,6 +46,7 @@ export default function Login() {
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [showOtpLogin, setShowOtpLogin] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
 
   const { otpSession, showOtp, setOtpSession, clearOtpSession } = useAuthFlowStore();
 
@@ -56,6 +57,8 @@ export default function Login() {
     handleGoogleToken,
     handleAuthSuccess,
     googleDisabled,
+    authError,
+    clearAuthError,
   } = useAuthFlow("customer");
 
   const phoneReady = useMemo(() => isValidIndianMobileDigits(phone), [phone]);
@@ -67,6 +70,7 @@ export default function Login() {
   const sendOtpMutation = useSendAuthOtp({
     mutation: {
       onSuccess: (data, variables) => {
+        setOtpError(null);
         trackAuthEvent("otp_sent", { method: "otp", portal: "customer" });
         setOtpSession({
           purpose: "login",
@@ -75,17 +79,17 @@ export default function Login() {
         });
       },
       onError: (err: unknown) => {
-        toast({
-          title: "Verification required",
-          description: getAuthErrorMessage(err),
-          variant: "destructive",
-        });
+        const message = getAuthErrorMessage(err);
+        setOtpError(message);
+        toast({ title: "Verification required", description: message, variant: "destructive" });
       },
     },
   });
 
   const handleOtpContinue = (e: React.FormEvent) => {
     e.preventDefault();
+    setOtpError(null);
+    if (authError) clearAuthError();
 
     const phoneResult = submitMobile(phone);
     setPhoneError(phoneResult.ok ? null : phoneResult.error);
@@ -125,6 +129,17 @@ export default function Login() {
         subtitle="Sign in with your password — OTP only if you need it"
       />
 
+      {authError && (
+        <div
+          className={cn("rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2 mb-3", authFadeUp)}
+          role="alert"
+          data-testid="login-auth-error"
+        >
+          <AlertCircle size={14} className="text-destructive shrink-0 mt-0.5" aria-hidden />
+          <p className="text-destructive text-sm leading-snug">{authError}</p>
+        </div>
+      )}
+
       <div className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}>
         <PhoneInput
           id="login-phone"
@@ -135,7 +150,10 @@ export default function Login() {
           hideHint
           deferValidationUntilComplete
           value={phone}
-          onChange={setPhone}
+          onChange={next => {
+            setPhone(next);
+            if (authError) clearAuthError();
+          }}
           error={phoneError}
           onErrorChange={setPhoneError}
           autoComplete="tel"
@@ -214,6 +232,16 @@ export default function Login() {
               <p className="text-white/30 text-xs text-center leading-relaxed">
                 Use OTP if you haven&apos;t set a password yet, or can&apos;t remember it.
               </p>
+              {otpError && (
+                <div
+                  className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2"
+                  role="alert"
+                  data-testid="login-otp-error"
+                >
+                  <AlertCircle size={14} className="text-destructive shrink-0 mt-0.5" aria-hidden />
+                  <p className="text-destructive text-sm leading-snug">{otpError}</p>
+                </div>
+              )}
               <Button
                 type="submit"
                 disabled={pending || !phoneReady}

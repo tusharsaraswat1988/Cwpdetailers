@@ -14,6 +14,7 @@ import {
 import { Link } from "wouter";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { useBranding } from "@/lib/branding";
+import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 
 export default function CustomerWallet() {
   const branding = useBranding();
@@ -38,6 +39,13 @@ export default function CustomerWallet() {
     queryFn: () => fetchWalletTransactions(customerId!, 50),
     enabled: customerId != null,
   });
+
+  const { data: supervisorData } = useQuery({
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "customer-supervisor"],
+    queryFn: staffEcosystemApi.getCustomerSupervisorContact,
+    enabled: customerId != null,
+  });
+  const supervisor = supervisorData?.supervisor;
 
   const isLoading = summaryLoading || walletLoading || txLoading;
   const pendingDues = summary?.pendingDues ?? 0;
@@ -115,33 +123,46 @@ export default function CustomerWallet() {
         )}
 
         {/* Recharge info */}
-        <Card className="bg-muted/30" data-testid="wallet-recharge-info">
-          <CardContent className="p-4 space-y-3">
-            <p className="font-medium text-sm">Recharge your wallet</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              To add funds, contact {branding.brandName} via WhatsApp or call. We accept cash, UPI, and bank transfer.
-              Your balance is credited after payment confirmation.
-            </p>
-            <div className="flex gap-2">
-              <a
-                href="tel:+919999999999"
-                className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
-                data-testid="wallet-call-cwp"
-              >
-                <Phone size={15} className="text-green-600" /> Call {branding.brandName}
-              </a>
-              <a
-                href="https://wa.me/919999999999"
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
-                data-testid="wallet-whatsapp-cwp"
-              >
-                <MessageCircle size={15} className="text-green-600" /> WhatsApp
-              </a>
-            </div>
-          </CardContent>
-        </Card>
+        {(() => {
+          const contactPhone = supervisor?.phone ?? branding.supportPhone;
+          const contactLabel = supervisor?.name ?? branding.brandName;
+          const digits = contactPhone ? (contactPhone.replace(/\D/g, "").startsWith("91") ? contactPhone.replace(/\D/g, "") : `91${contactPhone.replace(/\D/g, "")}`) : null;
+          return (
+            <Card className="bg-muted/30" data-testid="wallet-recharge-info">
+              <CardContent className="p-4 space-y-3">
+                <p className="font-medium text-sm">Recharge your wallet</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  To add funds, contact {contactLabel} via WhatsApp or call. We accept cash, UPI, and bank transfer.
+                  Your balance is credited after payment confirmation.
+                </p>
+                {contactPhone ? (
+                  <div className="flex gap-2">
+                    <a
+                      href={`tel:${contactPhone}`}
+                      className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+                      data-testid="wallet-call-cwp"
+                    >
+                      <Phone size={15} className="text-green-600" /> Call {contactLabel}
+                    </a>
+                    <a
+                      href={`https://wa.me/${digits}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+                      data-testid="wallet-whatsapp-cwp"
+                    >
+                      <MessageCircle size={15} className="text-green-600" /> WhatsApp
+                    </a>
+                  </div>
+                ) : (
+                  <Link href="/customer/complaints">
+                    <Button variant="outline" size="sm" className="w-full">Contact support</Button>
+                  </Link>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* Transactions */}
         <div>

@@ -33,6 +33,9 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
   const { toast } = useToast();
   const [googlePending, setGooglePending] = useState(false);
   const [phoneLink, setPhoneLink] = useState<GooglePhoneLink | null>(null);
+  /** Persists the last Google/portal sign-in failure beyond the toast's lifetime. */
+  const [authError, setAuthError] = useState<string | null>(null);
+  const clearAuthError = useCallback(() => setAuthError(null), []);
 
   const redirectAfterAuth = useCallback(
     (role: AuthResponse["user"]["role"]) => {
@@ -56,13 +59,12 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
     (data: AuthResponse) => {
       const allowed = PORTAL_ALLOWED_ROLES[portal];
       if (!allowed.includes(data.user.role)) {
-        toast({
-          title: "Access denied",
-          description: "This sign-in method is not available for your account type.",
-          variant: "destructive",
-        });
+        const message = "This sign-in method is not available for your account type.";
+        setAuthError(message);
+        toast({ title: "Access denied", description: message, variant: "destructive" });
         return;
       }
+      setAuthError(null);
       completeAuth(data);
     },
     [completeAuth, portal, toast],
@@ -90,17 +92,16 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
       },
       onError: (err: unknown) => {
         setGooglePending(false);
-        toast({
-          title: "Google sign-in failed",
-          description: getAuthErrorMessage(err, "Could not sign in with Google."),
-          variant: "destructive",
-        });
+        const message = getAuthErrorMessage(err, "Could not sign in with Google.");
+        setAuthError(message);
+        toast({ title: "Google sign-in failed", description: message, variant: "destructive" });
       },
     },
   });
 
   const handleGoogleToken = useCallback(
     (idToken: string) => {
+      setAuthError(null);
       setGooglePending(true);
       googleMutation.mutate({ data: { idToken, portal } });
     },
@@ -116,6 +117,8 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
     handleGoogleToken,
     handleAuthSuccess,
     googleDisabled: googlePending || googleMutation.isPending,
+    authError,
+    clearAuthError,
   };
 }
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useServiceCategories } from "@/features/master-data/api";
 import {
   useAdminServices, useServiceMutations, type AdminService,
@@ -19,7 +20,11 @@ import { useCatalogGovernance } from "@/lib/catalogGovernance";
 import { ServiceAddonsSection } from "@/features/service-catalog/components/ServiceAddonsSection";
 import { ImageDropzone } from "@/components/shared/ImageDropzone";
 import { resolveMediaUrl } from "@/lib/media-url";
-import { Plus, Pencil, Trash2, Wrench, IndianRupee, Clock, Puzzle, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Plus, Pencil, Trash2, Wrench, IndianRupee, Clock, Puzzle, ChevronDown,
+  Search, EyeOff, PackageSearch,
+} from "lucide-react";
 
 type RevenueLine = "car_wash" | "solar";
 
@@ -74,6 +79,40 @@ function serviceToForm(s: AdminService) {
   };
 }
 
+function IconActionButton({
+  label,
+  variant = "ghost",
+  onClick,
+  children,
+}: {
+  label: string;
+  variant?: "ghost" | "destructive-ghost";
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={label}
+          onClick={onClick}
+          className={cn(
+            "h-8 w-8 text-muted-foreground",
+            variant === "destructive-ghost" && "hover:text-destructive hover:bg-destructive/10",
+            variant === "ghost" && "hover:text-foreground hover:bg-muted",
+          )}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function ServiceCard({
   svc,
   hqEditor,
@@ -87,60 +126,72 @@ function ServiceCard({
 }) {
   const inactive = svc.isActive === false;
   return (
-    <div className={`border rounded-xl p-4 space-y-3 ${inactive ? "opacity-60" : ""}`}>
-      <div className="flex items-start justify-between gap-2">
+    <div
+      className={cn(
+        "group relative border rounded-xl p-4 flex flex-col gap-3 bg-card transition-all",
+        "hover:border-primary/40 hover:shadow-md",
+        inactive && "border-dashed bg-muted/20",
+      )}
+    >
+      <div className="flex items-start gap-3">
         {svc.imageUrl ? (
           <img
             src={resolveMediaUrl(svc.imageUrl)}
             alt=""
-            className="w-12 h-12 rounded-lg object-cover border border-border shrink-0"
+            className={cn("w-14 h-14 rounded-lg object-cover border border-border shrink-0", inactive && "grayscale opacity-70")}
           />
         ) : (
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <Wrench size={14} className="text-primary" />
+          <div className={cn(
+            "w-14 h-14 rounded-lg flex items-center justify-center shrink-0",
+            inactive ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
+          )}>
+            <Wrench size={20} />
           </div>
         )}
-        <div className="flex gap-1">
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onEdit(svc)}>
-            <Pencil size={13} />
-          </Button>
+
+        <div className="flex-1 min-w-0 pt-0.5">
+          <h3 className="font-semibold text-sm leading-snug truncate">{svc.name}</h3>
+          <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+            {svc.shortDescription || svc.description || "No description added"}
+          </p>
+        </div>
+
+        <div className="flex gap-0.5 -mt-1 -mr-1 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+          <IconActionButton label="Edit service" onClick={() => onEdit(svc)}>
+            <Pencil size={14} />
+          </IconActionButton>
           {hqEditor && (
-            <Button
-              variant="ghost" size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={() => onDelete(svc)}
-            >
-              <Trash2 size={13} />
-            </Button>
+            <IconActionButton label="Hide service" variant="destructive-ghost" onClick={() => onDelete(svc)}>
+              <Trash2 size={14} />
+            </IconActionButton>
           )}
         </div>
       </div>
 
-      <div>
-        <h3 className="font-semibold text-sm">{svc.name}</h3>
-        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-          {svc.shortDescription || svc.description || "—"}
-        </p>
-      </div>
+      {(inactive || (svc.addonCount ?? 0) > 0) && (
+        <div className="flex flex-wrap gap-1.5">
+          {inactive && (
+            <Badge variant="outline" className="text-xs gap-1 border-muted-foreground/30 text-muted-foreground">
+              <EyeOff size={10} /> Hidden from booking
+            </Badge>
+          )}
+          {(svc.addonCount ?? 0) > 0 && (
+            <Badge variant="outline" className="text-xs gap-1">
+              <Puzzle size={10} />{svc.addonCount} extra{svc.addonCount !== 1 ? "s" : ""}
+            </Badge>
+          )}
+        </div>
+      )}
 
-      <div className="flex flex-wrap gap-1">
-        {inactive && <Badge variant="destructive" className="text-xs">Inactive</Badge>}
-        {(svc.addonCount ?? 0) > 0 && (
-          <Badge variant="outline" className="text-xs gap-0.5">
-            <Puzzle size={10} />{svc.addonCount} extra{svc.addonCount !== 1 ? "s" : ""}
-          </Badge>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-1 font-semibold text-primary">
-          <IndianRupee size={13} />{Number(svc.basePrice).toLocaleString("en-IN")}
+      <div className="flex items-center justify-between text-sm pt-2 mt-auto border-t border-border/60">
+        <span className="flex items-center gap-0.5 font-bold text-primary text-base pt-2">
+          <IndianRupee size={14} />{Number(svc.basePrice).toLocaleString("en-IN")}
         </span>
-        {svc.durationMinutes && (
-          <span className="flex items-center gap-1 text-muted-foreground text-xs">
+        {svc.durationMinutes ? (
+          <span className="flex items-center gap-1 text-muted-foreground text-xs pt-2">
             <Clock size={12} />{svc.durationMinutes} min
           </span>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -157,19 +208,30 @@ export function ServicesTab({ revenueLine }: Props) {
   const [editing, setEditing] = useState<AdminService | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [inactiveOpen, setInactiveOpen] = useState(false);
+  const [query, setQuery] = useState("");
 
   const filtered = useMemo(
     () => (services ?? []).filter(s => matchesRevenueLine(s, revenueLine)),
     [services, revenueLine],
   );
+  const searched = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return filtered;
+    return filtered.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      (s.shortDescription ?? "").toLowerCase().includes(q) ||
+      (s.description ?? "").toLowerCase().includes(q),
+    );
+  }, [filtered, query]);
   const activeServices = useMemo(
-    () => filtered.filter(s => s.isActive !== false),
-    [filtered],
+    () => searched.filter(s => s.isActive !== false),
+    [searched],
   );
   const inactiveServices = useMemo(
-    () => filtered.filter(s => s.isActive === false),
-    [filtered],
+    () => searched.filter(s => s.isActive === false),
+    [searched],
   );
+  const showSearch = filtered.length > 6;
 
   const defaultCategoryId = resolveCategoryId(categories, revenueLine);
   const defaultPricingModel = revenueLine === "solar" ? "solar_slab" as const : "vehicle_matrix" as const;
@@ -256,9 +318,16 @@ export function ServicesTab({ revenueLine }: Props) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <CardTitle>Services</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Services
+            {filtered.length > 0 && (
+              <span className="text-xs font-normal text-muted-foreground">
+                &middot; {activeServices.length} active{inactiveServices.length > 0 ? `, ${inactiveServices.length} hidden` : ""}
+              </span>
+            )}
+          </CardTitle>
           <CardDescription>
             {revenueLine === "solar"
               ? "One-time solar cleaning product"
@@ -266,18 +335,49 @@ export function ServicesTab({ revenueLine }: Props) {
           </CardDescription>
         </div>
         {hqEditor && (
-          <Button size="sm" onClick={openCreate}>
+          <Button size="sm" onClick={openCreate} className="shrink-0">
             <Plus size={14} className="mr-1" />Add service
           </Button>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
+        {showSearch && (
+          <div className="relative max-w-sm">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search services..."
+              className="pl-8 h-9"
+            />
+          </div>
+        )}
+
         {isLoading ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-muted-foreground text-sm text-center py-8">No services yet. Add your first service.</p>
+          <div className="flex flex-col items-center gap-2 text-center py-10">
+            <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center">
+              <Wrench size={18} className="text-muted-foreground" />
+            </div>
+            <p className="text-sm font-medium">No services yet</p>
+            <p className="text-xs text-muted-foreground max-w-xs">
+              {hqEditor ? "Add your first service so branches can start booking it." : "HQ hasn't added any services to this catalog yet."}
+            </p>
+            {hqEditor && (
+              <Button size="sm" variant="outline" className="mt-1" onClick={openCreate}>
+                <Plus size={14} className="mr-1" />Add service
+              </Button>
+            )}
+          </div>
+        ) : searched.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 text-center py-10">
+            <PackageSearch size={28} className="text-muted-foreground" />
+            <p className="text-sm font-medium">No matches for "{query}"</p>
+            <Button size="sm" variant="ghost" onClick={() => setQuery("")}>Clear search</Button>
+          </div>
         ) : (
           <>
             {activeServices.length === 0 ? (
@@ -300,8 +400,9 @@ export function ServicesTab({ revenueLine }: Props) {
 
             {inactiveServices.length > 0 && (
               <Collapsible open={inactiveOpen} onOpenChange={setInactiveOpen}>
-                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors">
-                  <span>
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-muted/30 px-3.5 py-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+                  <span className="flex items-center gap-2 font-medium">
+                    <EyeOff size={14} />
                     Hidden ({inactiveServices.length} inactive)
                   </span>
                   <ChevronDown

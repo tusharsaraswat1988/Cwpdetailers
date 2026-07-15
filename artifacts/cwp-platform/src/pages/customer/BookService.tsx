@@ -17,6 +17,7 @@ import {
 } from "@/features/service-catalog/api";
 import { ServiceAddressRow } from "@/components/shared/ServiceAddressRow";
 import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
+import { QuickAddAssetSheet } from "@/components/shared/QuickAddAssetSheet";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +134,7 @@ export default function BookService() {
   const [bookingLocation, setBookingLocation] = useState<LocationValue | null>(null);
   const [addressSheetOpen, setAddressSheetOpen] = useState(false);
   const [locationTouched, setLocationTouched] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const { value: form, setValue: setForm, clearDraft, restoredFromDraft } = useFormDraft(
     "customer-booking-form",
     defaultBookingForm,
@@ -471,25 +473,21 @@ export default function BookService() {
           <div className="space-y-4" data-testid="booking-step-asset">
             {needsVehicle && !hasVehicle && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm">
-                <p className="font-medium text-amber-800">Add a vehicle first</p>
-                <p className="text-muted-foreground mt-1">Register your car in My Assets, then come back to book.</p>
-                <Link href="/customer/assets">
-                  <Button size="sm" variant="outline" className="gap-1 mt-3">
-                    Go to My Assets <ArrowRight size={12} />
-                  </Button>
-                </Link>
+                <p className="font-medium text-amber-800">Add your first vehicle</p>
+                <p className="text-muted-foreground mt-1">Takes less than a minute — you won't lose your booking progress.</p>
+                <Button size="sm" className="gap-1 mt-3" onClick={() => setQuickAddOpen(true)} data-testid="btn-quickadd-open-vehicle">
+                  Add vehicle <ArrowRight size={12} />
+                </Button>
               </div>
             )}
 
             {needsSolar && !hasSolar && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm">
-                <p className="font-medium text-amber-800">Add a solar site first</p>
-                <p className="text-muted-foreground mt-1">Add your site in My Assets, then come back to book.</p>
-                <Link href="/customer/assets">
-                  <Button size="sm" variant="outline" className="gap-1 mt-3">
-                    Go to My Assets <ArrowRight size={12} />
-                  </Button>
-                </Link>
+                <p className="font-medium text-amber-800">Add your first solar site</p>
+                <p className="text-muted-foreground mt-1">Takes less than a minute — you won't lose your booking progress.</p>
+                <Button size="sm" className="gap-1 mt-3" onClick={() => setQuickAddOpen(true)} data-testid="btn-quickadd-open-solar">
+                  Add solar site <ArrowRight size={12} />
+                </Button>
               </div>
             )}
 
@@ -520,6 +518,14 @@ export default function BookService() {
                     )}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setQuickAddOpen(true)}
+                  className="w-full rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
+                  data-testid="btn-quickadd-another-vehicle"
+                >
+                  + Add another vehicle
+                </button>
               </div>
             )}
 
@@ -545,6 +551,14 @@ export default function BookService() {
                     <p className="text-xs text-muted-foreground mt-0.5">{s.panelCount} panels</p>
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setQuickAddOpen(true)}
+                  className="w-full rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
+                  data-testid="btn-quickadd-another-solar"
+                >
+                  + Add another solar site
+                </button>
               </div>
             )}
 
@@ -706,6 +720,18 @@ export default function BookService() {
           </div>
         </div>
       )}
+
+      <QuickAddAssetSheet
+        open={quickAddOpen}
+        onOpenChange={setQuickAddOpen}
+        customerId={customerId!}
+        kind={isSolar ? "solar" : "vehicle"}
+        onCreated={(id) => {
+          setLocationTouched(false);
+          if (isSolar) setForm(f => ({ ...f, solarSiteId: String(id) }));
+          else setForm(f => ({ ...f, vehicleId: String(id) }));
+        }}
+      />
 
       <AddressPickerSheet
         open={addressSheetOpen}

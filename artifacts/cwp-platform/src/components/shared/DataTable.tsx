@@ -16,13 +16,15 @@ interface DataTableProps<T> {
   isLoading?: boolean;
   rowKey: (row: T) => string | number;
   onRowClick?: (row: T) => void;
+  rowLabel?: (row: T) => string;
+  caption?: string;
   emptyTitle?: string;
   emptyDescription?: string;
   emptyAction?: ReactNode;
 }
 
 export function DataTable<T>({
-  columns, rows, isLoading, rowKey, onRowClick,
+  columns, rows, isLoading, rowKey, onRowClick, rowLabel, caption,
   emptyTitle = "Nothing here yet", emptyDescription, emptyAction,
 }: DataTableProps<T>) {
   const cols = columns.length;
@@ -30,10 +32,11 @@ export function DataTable<T>({
     <div className="rounded-xl border border-border bg-card overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm" data-testid="data-table">
+          {caption && <caption className="sr-only">{caption}</caption>}
           <thead className="bg-muted text-muted-foreground">
             <tr>
               {columns.map(c => (
-                <th key={c.key} className={`px-4 py-3 font-medium text-left ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""}`}>
+                <th key={c.key} scope="col" className={`px-4 py-3 font-medium text-left ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""}`}>
                   {c.header}
                 </th>
               ))}
@@ -53,7 +56,11 @@ export function DataTable<T>({
                 <tr
                   key={rowKey(r)}
                   onClick={onRowClick ? () => onRowClick(r) : undefined}
-                  className={`border-t border-border ${onRowClick ? "hover:bg-muted/50 cursor-pointer" : ""}`}
+                  onKeyDown={onRowClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRowClick(r); } } : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  role={onRowClick ? "button" : undefined}
+                  aria-label={onRowClick && rowLabel ? rowLabel(r) : undefined}
+                  className={`border-t border-border ${onRowClick ? "hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset" : ""}`}
                   data-testid="data-row"
                 >
                   {columns.map(c => (

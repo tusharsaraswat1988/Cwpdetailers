@@ -8,8 +8,8 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { Calendar, Star, Image, ExternalLink } from "lucide-react";
-import { Link } from "wouter";
+import { Calendar, Star, Image, ExternalLink, ChevronRight } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { Button } from "@/components/ui/button";
 import { mapsViewUrl } from "@/lib/maps";
@@ -22,6 +22,7 @@ function monthLabel(dateStr: string) {
 export default function CustomerHistory() {
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
   const { data, isLoading, isError, refetch } = useListBookings(
     { customerId: String(customerId ?? "") } as any,
@@ -108,7 +109,15 @@ export default function CustomerHistory() {
                     {grouped[month].map(b => {
                       const photos = photoUrls(b);
                       return (
-                        <div key={b.id} className="bg-card border border-border rounded-xl p-4" data-testid={`history-booking-${b.id}`}>
+                        <div
+                          key={b.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => navigate(`/customer/bookings/${b.id}`)}
+                          onKeyDown={e => { if (e.key === "Enter") navigate(`/customer/bookings/${b.id}`); }}
+                          className="bg-card border border-border rounded-xl p-4 cursor-pointer transition-colors hover:border-primary/40 active:bg-muted/40"
+                          data-testid={`history-booking-${b.id}`}
+                        >
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-3">
                               <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -128,6 +137,7 @@ export default function CustomerHistory() {
                                     href={mapsViewUrl(b.locationLat, b.locationLng)}
                                     target="_blank"
                                     rel="noreferrer"
+                                    onClick={e => e.stopPropagation()}
                                     className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-0.5"
                                   >
                                     <ExternalLink size={10} /> View location
@@ -135,17 +145,20 @@ export default function CustomerHistory() {
                                 )}
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              {/* QW-03: StatusBadge */}
-                              <StatusBadge status={b.status ?? "scheduled"} />
-                              {b.amount && <p className="text-sm font-semibold mt-1">₹{Number(b.amount).toLocaleString("en-IN")}</p>}
-                              {b.rating && (
-                                <div className="flex items-center justify-end gap-0.5 mt-1">
-                                  {Array.from({ length: b.rating }).map((_, i) => (
-                                    <Star key={i} size={10} fill="currentColor" className="text-primary" />
-                                  ))}
-                                </div>
-                              )}
+                            <div className="text-right shrink-0 flex items-start gap-1.5">
+                              <div>
+                                {/* QW-03: StatusBadge */}
+                                <StatusBadge status={b.status ?? "scheduled"} />
+                                {b.amount && <p className="text-sm font-semibold mt-1">₹{Number(b.amount).toLocaleString("en-IN")}</p>}
+                                {b.rating && (
+                                  <div className="flex items-center justify-end gap-0.5 mt-1">
+                                    {Array.from({ length: b.rating }).map((_, i) => (
+                                      <Star key={i} size={10} fill="currentColor" className="text-primary" />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <ChevronRight size={16} className="text-muted-foreground/50 mt-1 shrink-0" />
                             </div>
                           </div>
 
@@ -155,21 +168,21 @@ export default function CustomerHistory() {
                               <Image size={12} className="text-muted-foreground shrink-0" />
                               <div className="flex items-center gap-2 flex-wrap">
                                 {b.beforePhotoUrl && (
-                                  <button onClick={() => setLightboxUrl(resolveMediaUrl(b.beforePhotoUrl!))} className="text-center group">
+                                  <button onClick={e => { e.stopPropagation(); setLightboxUrl(resolveMediaUrl(b.beforePhotoUrl!)); }} className="text-center group">
                                     <img src={resolveMediaUrl(b.beforePhotoUrl)} alt="Before"
                                       className="w-20 h-20 rounded-lg object-cover border border-border group-hover:opacity-80 transition-opacity cursor-pointer" />
                                     <p className="text-[9px] text-muted-foreground mt-0.5">Before</p>
                                   </button>
                                 )}
                                 {b.afterPhotoUrl && (
-                                  <button onClick={() => setLightboxUrl(resolveMediaUrl(b.afterPhotoUrl!))} className="text-center group">
+                                  <button onClick={e => { e.stopPropagation(); setLightboxUrl(resolveMediaUrl(b.afterPhotoUrl!)); }} className="text-center group">
                                     <img src={resolveMediaUrl(b.afterPhotoUrl)} alt="After"
                                       className="w-20 h-20 rounded-lg object-cover border border-border group-hover:opacity-80 transition-opacity cursor-pointer" />
                                     <p className="text-[9px] text-muted-foreground mt-0.5">After</p>
                                   </button>
                                 )}
                                 {((b.proofPhotoUrls as string[] | null) ?? []).slice(0, 2).map((url: string, idx: number) => (
-                                  <button key={idx} onClick={() => setLightboxUrl(resolveMediaUrl(url))} className="group">
+                                  <button key={idx} onClick={e => { e.stopPropagation(); setLightboxUrl(resolveMediaUrl(url)); }} className="group">
                                     <img src={resolveMediaUrl(url)} alt=""
                                       className="w-20 h-20 rounded-lg object-cover border border-border group-hover:opacity-80 transition-opacity cursor-pointer" />
                                   </button>

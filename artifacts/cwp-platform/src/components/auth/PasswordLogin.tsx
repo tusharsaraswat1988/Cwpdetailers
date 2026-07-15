@@ -16,7 +16,7 @@ import {
   authLinkClass,
   authPrimaryButtonClass,
 } from "@/components/auth/authStyles";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type PasswordLoginProps = {
@@ -37,16 +37,18 @@ export function PasswordLogin({
   const { toast } = useToast();
   const [password, setPassword] = useState("");
   const [capsLockOn, setCapsLockOn] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const loginMutation = useLogin({
     mutation: {
-      onSuccess,
+      onSuccess: (data: AuthResponse) => {
+        setFormError(null);
+        onSuccess(data);
+      },
       onError: (err: unknown) => {
-        toast({
-          title: "Sign-in failed",
-          description: getAuthErrorMessage(err, "Incorrect mobile number or password."),
-          variant: "destructive",
-        });
+        const message = getAuthErrorMessage(err, "Incorrect mobile number or password.");
+        setFormError(message);
+        toast({ title: "Sign-in failed", description: message, variant: "destructive" });
       },
     },
   });
@@ -54,6 +56,7 @@ export function PasswordLogin({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginMutation.isPending) return;
+    setFormError(null);
 
     const phoneResult = submitMobile(phone);
     if (!phoneResult.ok) {
@@ -80,6 +83,16 @@ export function PasswordLogin({
 
   return (
     <form onSubmit={handleSubmit} className={cn("space-y-3", className)} data-testid="password-login">
+      {formError && (
+        <div
+          className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2"
+          role="alert"
+          data-testid="password-login-error"
+        >
+          <AlertCircle size={14} className="text-destructive shrink-0 mt-0.5" aria-hidden />
+          <p className="text-destructive text-sm leading-snug">{formError}</p>
+        </div>
+      )}
       <div>
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="password-login-password" className={authLabelClass}>
@@ -96,7 +109,10 @@ export function PasswordLogin({
           id="password-login-password"
           data-testid="input-password"
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={e => {
+            setPassword(e.target.value);
+            if (formError) setFormError(null);
+          }}
           onKeyUp={e => setCapsLockOn(e.getModifierState("CapsLock"))}
           onBlur={() => setCapsLockOn(false)}
           placeholder="Enter your password"

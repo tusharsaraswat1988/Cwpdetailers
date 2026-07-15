@@ -22,12 +22,6 @@ async function fetchWalletTransactions(customerId: number) {
   return res.json();
 }
 
-async function fetchWalletSummary(customerId: number) {
-  const res = await fetch(`/api/customers/${customerId}/wallet`, { credentials: "include" });
-  if (!res.ok) return null;
-  return res.json();
-}
-
 export default function CustomerDashboard() {
   const branding = useBranding();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
@@ -49,12 +43,6 @@ export default function CustomerDashboard() {
   const { data: walletTx } = useQuery({
     queryKey: ["customer-wallet-tx", customerId],
     queryFn: () => fetchWalletTransactions(customerId!),
-    enabled: customerId != null,
-  });
-
-  const { data: walletSummary } = useQuery({
-    queryKey: ["customer-wallet-summary", customerId],
-    queryFn: () => fetchWalletSummary(customerId!),
     enabled: customerId != null,
   });
 
@@ -120,8 +108,8 @@ export default function CustomerDashboard() {
                     {upcomingBooking.scheduledTime ? ` · ${upcomingBooking.scheduledTime}` : ""}
                   </p>
                 </div>
-                <Link href="/customer/history">
-                  <Button size="sm" variant="outline" className="w-full h-11">
+                <Link href={`/customer/bookings/${upcomingBooking.id}`}>
+                  <Button size="sm" variant="outline" className="w-full h-11" data-testid="btn-view-upcoming-booking">
                     View details <ArrowRight size={14} className="ml-1" />
                   </Button>
                 </Link>

@@ -658,6 +658,45 @@ router.post("/bookings/:id/reschedule", async (req, res) => {
   }
 });
 
+const SELF_CANCELLABLE_STATUSES = new Set(["pending", "confirmed", "scheduled", "rescheduled"]);
+
+/**
+ * Narrow, safe self-service cancellation for customers (and staff/admin).
+ * Unlike the generic PATCH endpoint, this only ever sets status→cancelled
+ * and only when the booking hasn't already progressed to en_route/in_progress/
+ * completed, so a customer can't use it to tamper with other booking fields.
+ */
+router.post("/bookings/:id/cancel", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { reason } = req.body as { reason?: string };
+    const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
+    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Booking not found" });
+    if (!SELF_CANCELLABLE_STATUSES.has(existing.status)) {
+      return res.status(400).json({ error: "This booking can no longer be cancelled" });
+    }
+
+    const [booking] = await db.update(bookingsTable).set({
+      status: "cancelled",
+      cancellationReason: reason ?? null,
+      updatedAt: new Date(),
+    }).where(eq(bookingsTable.id, id)).returning();
+
+    await logEvent(id, "status_change", {
+      fromStatus: existing.status,
+      toStatus: "cancelled",
+      body: reason ?? "Cancelled by customer",
+      actorId: req.user?.id ?? req.scope?.staffId,
+      actorName: req.user?.name ?? "system",
+    });
+
+    return res.json(booking);
+  } catch (err) {
+    req.log.error({ err }, "Cancel booking error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.post("/bookings/:id/regenerate-occurrences", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

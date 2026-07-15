@@ -11,6 +11,7 @@ import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, History, Camera, ArrowRight, Pause } from "lucide-react";
 import { CustomerVisitFeedback } from "../components/CustomerVisitFeedback";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type DcmsStats = {
   subscriptionId?: number;
@@ -95,7 +96,12 @@ export default function CustomerDailyCleaningPage() {
           />
         )}
 
-        {isLoading ? <p className="text-muted-foreground">Loading...</p> : !stats ? (
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-28 w-full rounded-xl" />
+            <Skeleton className="h-11 w-full rounded-xl" />
+          </div>
+        ) : !stats ? (
           <Card><CardContent className="p-6 text-center text-muted-foreground">No active daily cleaning subscription</CardContent></Card>
         ) : (
           <>

@@ -33,6 +33,7 @@ import {
   ClipboardCheck,
   Archive,
   Home,
+  Percent,
 } from "lucide-react";
 
 export type AdminNavPermission = { resource: string; action: string };
@@ -242,6 +243,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { id: "push-logs", href: "/admin/push-logs", label: "Push Delivery Log", icon: BellRing, perm: { resource: "notifications", action: "view" } },
       { id: "brand", href: "/admin/settings/brand", label: "Branding", icon: Palette, perm: { resource: "settings", action: "view" } },
       { id: "invoice_billing", href: "/admin/settings/invoice-billing", label: "Invoice & GST", icon: Receipt, perm: { resource: "invoices", action: "view" } },
+      {
+        id: "catalog-gst",
+        href: "/admin/services?tab=advanced",
+        label: "Catalog GST Defaults",
+        icon: Percent,
+        perm: { resource: "services", action: "view" },
+      },
       { id: "business", href: "/admin/settings/business", label: "Business Info", icon: Info, perm: { resource: "settings", action: "view" } },
       { id: "seo", href: "/admin/settings/seo", label: "SEO Management", icon: Search, perm: { resource: "settings", action: "view" } },
       { id: "system", href: "/admin/settings/system", label: "System Status", icon: Activity, perm: { resource: "settings", action: "view" } },
@@ -285,7 +293,17 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
   if (item.id === "homepage-cms") {
     return location.includes("tab=homepage");
   }
+  if (item.id === "catalog-gst") {
+    return location.includes("tab=advanced") || location.includes("tab=settings");
+  }
   if (item.id === "services") {
+    if (
+      location.includes("tab=homepage")
+      || location.includes("tab=advanced")
+      || location.includes("tab=settings")
+    ) {
+      return false;
+    }
     const path = location.split("?")[0]!;
     return path === "/admin/services" || path === "/admin/products" || path === "/admin/catalog";
   }

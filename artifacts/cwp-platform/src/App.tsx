@@ -69,6 +69,7 @@ import CustomerDashboard from "@/pages/customer/Dashboard";
 import BookService from "@/pages/customer/BookService";
 import MyAssets from "@/pages/customer/MyAssets";
 import CustomerHistory from "@/pages/customer/History";
+import BookingDetail from "@/pages/customer/BookingDetail";
 import CustomerInvoices from "@/pages/customer/Invoices";
 import CustomerComplaints from "@/pages/customer/Complaints";
 import CustomerWallet from "@/pages/customer/Wallet";
@@ -226,6 +227,7 @@ function Router() {
       <Route path="/customer/bookings" component={() => <ProtectedRoute component={BookService} roles={["customer"]} />} />
       <Route path="/customer/assets" component={() => <ProtectedRoute component={MyAssets} roles={["customer"]} />} />
       <Route path="/customer/history" component={() => <ProtectedRoute component={CustomerHistory} roles={["customer"]} />} />
+      <Route path="/customer/bookings/:id" component={() => <ProtectedRoute component={BookingDetail} roles={["customer"]} />} />
       <Route path="/customer/invoices" component={() => <ProtectedRoute component={CustomerInvoices} roles={["customer"]} />} />
       <Route path="/customer/complaints" component={() => <ProtectedRoute component={CustomerComplaints} roles={["customer"]} />} />
       <Route path="/customer/daily-cleaning/history" component={() => <ProtectedRoute component={CustomerDcmsHistoryPage} roles={["customer"]} />} />

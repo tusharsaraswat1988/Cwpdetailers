@@ -120,6 +120,7 @@ router.use(
     { match: /\/transition$/, method: "POST", action: "edit" },
     { match: /\/proof$/, method: "POST", action: "edit" },
     { match: /\/reschedule$/, method: "POST", action: "edit" },
+    { match: /\/cancel$/, method: "POST", action: "edit" },
     { match: /\/regenerate-occurrences$/, method: "POST", action: "edit" },
   ], [], "/bookings"),
   bookingsRouter,

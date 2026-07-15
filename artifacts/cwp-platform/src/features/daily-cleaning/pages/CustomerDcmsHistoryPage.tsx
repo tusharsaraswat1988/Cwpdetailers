@@ -3,10 +3,12 @@ import CustomerLayout from "@/components/layout/CustomerLayout";
 import { useCustomerDcmsVisits } from "../api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { format } from "date-fns";
 import { Link } from "wouter";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, CalendarClock } from "lucide-react";
 import { mapsViewUrl } from "@/lib/maps";
 
 export default function CustomerDcmsHistoryPage() {
@@ -40,7 +42,11 @@ export default function CustomerDcmsHistoryPage() {
           </Select>
         </div>
 
-        {isLoading ? <p className="text-muted-foreground">Loading...</p> : (
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+          </div>
+        ) : (
           <div className="space-y-3">
             {visits?.map(row => (
               <Card key={row.visit.id}>
@@ -66,7 +72,13 @@ export default function CustomerDcmsHistoryPage() {
                 </CardContent>
               </Card>
             ))}
-            {visits?.length === 0 && <p className="text-muted-foreground">No visits for this period</p>}
+            {visits?.length === 0 && (
+              <EmptyState
+                icon={<CalendarClock size={20} />}
+                title="No visits for this period"
+                description="Try a different month or year above"
+              />
+            )}
           </div>
         )}
       </div>

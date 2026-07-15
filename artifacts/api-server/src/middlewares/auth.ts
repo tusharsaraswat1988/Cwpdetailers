@@ -89,6 +89,13 @@ function isCustomerSelfService(req: Request): boolean {
     return true;
   }
 
+  // Self-service cancel/reschedule of their own booking. Ownership itself is
+  // still enforced downstream by rowInScope() against the loaded booking row,
+  // so this only widens *which* customers reach that check, not what they can touch.
+  if (method === "POST" && /^\/bookings\/\d+\/(cancel|reschedule)$/.test(path)) {
+    return true;
+  }
+
   return false;
 }
 
