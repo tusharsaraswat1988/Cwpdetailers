@@ -9,7 +9,7 @@ import { FileText, Download, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { InvoicePdfButton } from "@/features/billing/components/InvoicePdfButton";
-import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
+import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 
 export default function CustomerInvoices() {
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
@@ -63,8 +63,8 @@ export default function CustomerInvoices() {
               title="No invoices yet"
               description="Invoices for your services will appear here"
               action={
-                <Link href="/customer/bookings">
-                  <Button size="sm" variant="outline">Book a Service</Button>
+                <Link href={CUSTOMER_ROUTES.schedule}>
+                  <Button size="sm" variant="outline">Schedule a Service</Button>
                 </Link>
               }
             />

@@ -32,6 +32,10 @@ import {
 } from "./contractRegistry";
 import { tenantStamp } from "../../middlewares/tenantScope";
 import type { Request } from "express";
+import {
+  assertServiceabilitySuccess,
+  validateServiceabilityForBooking,
+} from "../serviceability";
 
 export type CreateServiceContractBody = {
   customerId: number;
@@ -139,6 +143,17 @@ async function createOneTimeContract(
   const lat = location.latitude ?? 0;
   const lng = location.longitude ?? 0;
 
+  const serviceability = await validateServiceabilityForBooking({
+    customerId: body.customerId,
+    address,
+    locationLat: lat,
+    locationLng: lng,
+    placeId: location.placeId ?? null,
+    serviceId,
+    cityName: location.city ?? null,
+  });
+  assertServiceabilitySuccess(serviceability);
+
   const [booking] = await db.insert(bookingsTable).values({
     customerId: body.customerId,
     serviceLocationId: body.serviceLocationId,
@@ -153,6 +168,7 @@ async function createOneTimeContract(
     locationLat: lat,
     locationLng: lng,
     placeId: location.placeId ?? undefined,
+    cityId: serviceability.resolvedCityId ?? undefined,
     status: "scheduled",
     amount: amount.toFixed(2),
     addonIds: body.addonIds ?? [],

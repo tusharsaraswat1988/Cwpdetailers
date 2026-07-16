@@ -12,6 +12,21 @@ import { captureBookingTransitionLocation } from "../lib/staffLocation/bookingLo
 import { handleLocationError } from "../lib/staffLocation/locationService";
 import { notifyStaffJobAssigned } from "../lib/push/staffJobNotify";
 import { isDailyCleanCatalogServiceName } from "../lib/dcms/dailyCleanCatalogGuard";
+import {
+  serviceabilityBlockedLogPayload,
+  serviceabilityHttpBody,
+  SERVICEABILITY_HTTP_STATUS,
+} from "../lib/serviceability";
+import {
+  bookingCapability,
+  BookingCoverageError,
+  BookingValidationError,
+  resolveBookingTraceId,
+  bookingTimelineService,
+  mapLegacyTransitionToPlatform,
+  resolvePlatformStatus,
+  buildBookingTraceContext,
+} from "../lib/booking";
 
 const router = Router();
 
@@ -334,37 +349,104 @@ router.post("/bookings", async (req, res) => {
       }
     }
 
-    const values = tenantStamp(req, {
-      customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId,
-      branchId: resolvedBranchId,
-      scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng,
-      placeId, savedLocationId, notes,
-      amount: resolvedAmount,
-      recurrenceRule,
-      entitlementId: resolvedEntitlementId,
-      addonIds: Array.isArray(addonIds) ? addonIds : [],
-      cityId: resolvedCityId,
-      status: initialStatus,
-    });
-    const [booking] = await db.insert(bookingsTable).values(values as any).returning();
+    const traceId = resolveBookingTraceId(req.headers["x-trace-id"] ?? req.headers["x-request-id"]);
+    const tenantValues = tenantStamp(req, {});
 
-    const { tryReactivateLegacyCustomer } = await import("../lib/customerReactivation");
-    const reactivation = await tryReactivateLegacyCustomer(customerId, "booking", { type: "booking", id: booking.id });
+    try {
+      const createResult = await bookingCapability.createBooking({
+        customerId,
+        vehicleId,
+        solarSiteId,
+        subscriptionId,
+        serviceId,
+        staffId,
+        branchId: resolvedBranchId,
+        companyId: tenantValues.companyId,
+        franchiseeId: tenantValues.franchiseeId,
+        scheduledDate,
+        scheduledTime,
+        serviceType,
+        address,
+        area,
+        locationLat,
+        locationLng,
+        placeId,
+        savedLocationId,
+        addressId: req.body.addressId,
+        notes,
+        amount: resolvedAmount,
+        recurrenceRule,
+        entitlementId: resolvedEntitlementId,
+        addonIds: Array.isArray(addonIds) ? addonIds : [],
+        cityId: resolvedCityId,
+        citySlug,
+        cityName: typeof area === "string" ? area : undefined,
+        status: initialStatus,
+        initialPlatformStatus: initialStatus === "pending" ? "DRAFT" : "VALIDATED",
+      }, {
+        traceId,
+        requestId: String(req.id ?? req.headers["x-request-id"] ?? traceId),
+        requestSource: "post_bookings",
+        logger: req.log,
+      });
 
-    if (initialStatus !== "cancelled") {
-      const { bridgeLegacyBookingToContractAndQueue } = await import("../lib/assignments/enqueueAdapters");
-      let serviceName: string | null = null;
-      if (serviceId) {
-        const [svc] = await db.select({ name: servicesTable.name }).from(servicesTable)
-          .where(eq(servicesTable.id, serviceId)).limit(1);
-        serviceName = svc?.name ?? null;
+      const booking = createResult.booking;
+      if (!resolvedCityId && createResult.coverage?.resolvedCityId) {
+        resolvedCityId = createResult.coverage.resolvedCityId;
       }
-      await bridgeLegacyBookingToContractAndQueue(booking, serviceName);
-    }
 
-    return res.status(201).json({ ...booking, reactivated: reactivation.reactivated });
+      const { tryReactivateLegacyCustomer } = await import("../lib/customerReactivation");
+      const reactivation = await tryReactivateLegacyCustomer(customerId, "booking", { type: "booking", id: booking.id });
+
+      if (initialStatus !== "cancelled") {
+        const { bridgeLegacyBookingToContractAndQueue } = await import("../lib/assignments/enqueueAdapters");
+        let serviceName: string | null = null;
+        if (serviceId) {
+          const [svc] = await db.select({ name: servicesTable.name }).from(servicesTable)
+            .where(eq(servicesTable.id, serviceId)).limit(1);
+          serviceName = svc?.name ?? null;
+        }
+        await bridgeLegacyBookingToContractAndQueue(booking, serviceName);
+      }
+
+      return res.status(201).json({
+        ...booking,
+        reactivated: reactivation.reactivated,
+        bookingContext: createResult.bookingContext,
+        platformStatus: booking.platformStatus,
+        addressSnapshotId: createResult.addressSnapshotId,
+        addressIdentityId: createResult.addressIdentityId,
+        coverageValidationId: createResult.coverageValidationId,
+        confidenceScore: createResult.confidenceScore,
+      });
+    } catch (err) {
+      if (err instanceof BookingCoverageError) {
+        req.log.warn(
+          serviceabilityBlockedLogPayload(err.coverage, { customerId, serviceId: serviceId ?? null }),
+          "Booking blocked by serviceability validation",
+        );
+        return res.status(SERVICEABILITY_HTTP_STATUS).json(serviceabilityHttpBody(err.coverage));
+      }
+      if (err instanceof BookingValidationError) {
+        return res.status(400).json({ error: err.message, code: err.code, details: err.details });
+      }
+      throw err;
+    }
   } catch (err) {
     req.log.error({ err }, "Create booking error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/bookings/:id/timeline", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const booking = await getBookingWithScope(req, id);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    const timeline = await bookingCapability.getTimeline(id);
+    return res.json({ bookingId: id, timeline });
+  } catch (err) {
+    req.log.error({ err }, "Get booking timeline error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -497,7 +579,23 @@ router.post("/bookings/:id/transition", async (req, res) => {
       throw locErr;
     }
 
-    const updateData: Record<string, unknown> = { status: toStatus, updatedAt: new Date() };
+    const fromPlatform = resolvePlatformStatus(existing.status, existing.platformStatus ?? undefined);
+    const toPlatform = mapLegacyTransitionToPlatform(toStatus);
+    const trace = buildBookingTraceContext({
+      traceId: resolveBookingTraceId(req.headers["x-trace-id"] ?? req.headers["x-request-id"]),
+      requestId: String(req.id ?? req.headers["x-request-id"] ?? ""),
+      bookingId: id,
+      customerId: existing.customerId,
+      addressIdentityId: existing.addressIdentityId ?? undefined,
+      addressSnapshotId: existing.addressSnapshotId ?? undefined,
+      coverageValidationId: existing.coverageValidationId ?? undefined,
+    });
+
+    const updateData: Record<string, unknown> = {
+      status: toStatus,
+      platformStatus: toPlatform,
+      updatedAt: new Date(),
+    };
     if (toStatus === "in_progress") updateData.startedAt = new Date();
     if (toStatus === "completed") updateData.completedAt = new Date();
 
@@ -562,6 +660,12 @@ router.post("/bookings/:id/transition", async (req, res) => {
           branchId: fullBooking.branchId,
         }).catch((err) => req.log.error({ err, bookingId: id }, "Completion notification failed"));
 
+        void bookingTimelineService.recordTransition(
+          id, trace, fromPlatform, toPlatform,
+          { actorId: req.user?.id ?? req.scope?.staffId ?? undefined, actorName: req.user?.name ?? "system", description: reason },
+          req.log,
+        );
+
         return res.json(booking);
       } catch (err) {
         throw err;
@@ -592,6 +696,12 @@ router.post("/bookings/:id/transition", async (req, res) => {
         }).catch((err) => req.log.error({ err, bookingId: id }, "Confirmation notification failed"));
       }
 
+      void bookingTimelineService.recordTransition(
+        id, trace, fromPlatform, toPlatform,
+        { actorId: req.user?.id ?? req.scope?.staffId ?? undefined, actorName: req.user?.name ?? "system", description: reason },
+        req.log,
+      );
+
       return res.json(booking);
     }
 
@@ -604,6 +714,12 @@ router.post("/bookings/:id/transition", async (req, res) => {
       actorName: req.user?.name ?? "system",
       ...eventLocation,
     });
+
+    void bookingTimelineService.recordTransition(
+      id, trace, fromPlatform, toPlatform,
+      { actorId: req.user?.id ?? req.scope?.staffId ?? undefined, actorName: req.user?.name ?? "system", description: reason },
+      req.log,
+    );
 
     return res.json(booking);
   } catch (err) {

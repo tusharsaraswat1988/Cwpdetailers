@@ -153,9 +153,9 @@ export default function CustomerServices() {
               {isLoading ? "" : `${active.length} active plan${active.length !== 1 ? "s" : ""}`}
             </p>
           </div>
-          <Link href="/customer/bookings">
+          <Link href="/customer/schedule">
             <Button size="sm" className="gap-1 shrink-0">
-              Book <ArrowRight size={14} />
+              Schedule <ArrowRight size={14} />
             </Button>
           </Link>
         </div>
@@ -170,10 +170,10 @@ export default function CustomerServices() {
           <EmptyState
             icon={<CreditCard size={20} />}
             title="No active services"
-            description="Book a daily wash, package, or solar AMC to get started"
+            description="Schedule a daily wash, package, or solar AMC to get started"
             action={
-              <Link href="/customer/bookings">
-                <Button>Book a Service</Button>
+              <Link href="/customer/schedule">
+                <Button>Schedule a Service</Button>
               </Link>
             }
           />
@@ -192,13 +192,13 @@ export default function CustomerServices() {
               <section data-testid="services-paused-section">
                 <div className="flex items-center gap-2 mb-2">
                   <Pause size={14} className="text-amber-600" />
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700">Paused — low balance</h2>
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700">Paused — no visits remaining</h2>
                 </div>
                 <div className="space-y-3">
                   {paused.map(sub => <SubscriptionCard key={sub.id} sub={sub} accent="amber" />)}
                 </div>
-                <Link href="/customer/wallet" className="block mt-3">
-                  <Button variant="outline" size="sm" className="w-full">Recharge wallet</Button>
+                <Link href="/customer/plans" className="block mt-3">
+                  <Button variant="outline" size="sm" className="w-full">Renew Plan</Button>
                 </Link>
               </section>
             )}

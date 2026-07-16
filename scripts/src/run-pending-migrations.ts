@@ -50,6 +50,7 @@ const PENDING = [
   "044_branding_settings_bms.sql",
   "045_branding_theme_defaults.sql",
   "046_catalog_package_addons.sql",
+  "047_addresses.sql",
 ];
 
 async function main() {

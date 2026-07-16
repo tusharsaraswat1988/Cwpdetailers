@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { History, FileText, Car, AlertCircle, ChevronRight, Loader2, Save, KeyRound } from "lucide-react";
+import { History, FileText, Car, AlertCircle, ChevronRight, Loader2, Save, KeyRound, ClipboardList } from "lucide-react";
 import { Link } from "wouter";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -18,13 +18,14 @@ import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosys
 import { submitMobile } from "@/lib/contactForm";
 import { useToast } from "@/hooks/use-toast";
 import { getApiErrorMessage } from "@/lib/apiError";
-import { clearRememberedPhone, hasRememberedPhone } from "@/lib/rememberPhone";
+import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 
 const accountLinks = [
-  { href: "/customer/history", label: "Service History", description: "Past bookings & photos", icon: History },
-  { href: "/customer/invoices", label: "Invoices", description: "Bills & payments due", icon: FileText },
-  { href: "/customer/assets", label: "Vehicles & Solar", description: "Manage your assets", icon: Car },
-  { href: "/customer/complaints", label: "Support", description: "File or track complaints", icon: AlertCircle },
+  { href: CUSTOMER_ROUTES.plans, label: "My Plans", description: "Active plans & remaining services", icon: ClipboardList },
+  { href: CUSTOMER_ROUTES.serviceHistory, label: "Service History", description: "Past services & photos", icon: History },
+  { href: CUSTOMER_ROUTES.invoices, label: "Invoices", description: "Bills & payments due", icon: FileText },
+  { href: CUSTOMER_ROUTES.assets, label: "My Vehicles & Solar Sites", description: "Manage your assets", icon: Car },
+  { href: CUSTOMER_ROUTES.support, label: "Support", description: "File or track complaints", icon: AlertCircle },
 ];
 
 type CustomerProfile = {

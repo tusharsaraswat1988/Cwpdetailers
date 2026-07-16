@@ -16,6 +16,12 @@ import {
   previewContractBilling,
 } from "../lib/billing/contractBillingService";
 import { mapBillingError } from "../lib/billing/billingErrors";
+import {
+  ServiceabilityValidationError,
+  serviceabilityHttpBody,
+  SERVICEABILITY_HTTP_STATUS,
+  serviceabilityBlockedLogPayload,
+} from "../lib/serviceability";
 
 const router = Router();
 
@@ -31,6 +37,17 @@ router.post("/service-contracts", requireAuth, async (req, res) => {
     const result = await createServiceContract(req, body, userId);
     return res.status(201).json(result);
   } catch (err) {
+    if (err instanceof ServiceabilityValidationError) {
+      req.log.warn(
+        serviceabilityBlockedLogPayload(err.result, {
+          customerId: (req.body as CreateServiceContractBody)?.customerId,
+          serviceId: (req.body as CreateServiceContractBody)?.catalogServiceId
+            ?? (req.body as CreateServiceContractBody)?.selectionId,
+        }),
+        "Booking blocked by serviceability validation",
+      );
+      return res.status(SERVICEABILITY_HTTP_STATUS).json(serviceabilityHttpBody(err.result));
+    }
     const message = err instanceof Error ? err.message : "Contract creation failed";
     req.log.error({ err }, "Create service contract error");
     return res.status(400).json({ error: message });

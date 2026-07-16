@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import coverageRouter from "./coverage";
 import authRouter from "./auth";
 import contactRouter from "./contact";
 import customersRouter from "./customers";
@@ -37,16 +38,19 @@ import pushRouter from "./push";
 import operationsRouter from "./operations";
 import migrationRouter from "./migration";
 import serviceLocationsRouter from "./service-locations";
+import addressesRouter from "./addresses";
 import assetsRouter from "./assets";
 import serviceContractsRouter from "./service-contracts";
 import assignmentsRouter from "./assignments";
 import serviceExecutionsRouter from "./service-executions";
+import bookingPlatformRouter from "./booking-platform";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
 
 // Public / always-on
 router.use(healthRouter);
+router.use(coverageRouter);
 router.use(communicationsWebhooksRouter);
 router.use(authRouter);
 router.use(contactRouter);
@@ -61,6 +65,7 @@ router.use(
   customersRouter,
 );
 router.use(guardResource("customers"), assetsRouter);
+router.use(guardResource("customers"), addressesRouter);
 router.use(guardResource("customers"), serviceLocationsRouter);
 router.use(
   guardResource("customers", [
@@ -124,6 +129,13 @@ router.use(
     { match: /\/regenerate-occurrences$/, method: "POST", action: "edit" },
   ], [], "/bookings"),
   bookingsRouter,
+);
+router.use(
+  guardResource("bookings", [
+    { match: /\/booking-platform\//, method: "GET", action: "view" },
+    { match: /\/booking-platform\//, method: "POST", action: "view" },
+  ]),
+  bookingPlatformRouter,
 );
 // Walk-in must be registered before staff CRUD guards — dedicated guard, not staff:create.
 router.use(guardWalkInRoutes(), staffWalkInRouter);

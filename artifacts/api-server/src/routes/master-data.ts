@@ -11,6 +11,7 @@ import {
 import { eq, and, ilike, or, sql, asc } from "drizzle-orm";
 import { rowInScope } from "../middlewares/tenantScope";
 import { resolveVehiclePricing, getVehicleModelDetails } from "../lib/dynamicPricing";
+import { invalidateCoverageCacheForMasterUpdate } from "../lib/coverage";
 
 const router = Router();
 
@@ -40,7 +41,7 @@ async function genericList<T extends { isActive?: boolean }>(
   }
 }
 
-async function genericCreate(table: any, req: any, res: any, required: string[]) {
+async function genericCreate(table: any, req: any, res: any, required: string[], onMutated?: () => void) {
   try {
     for (const f of required) {
       if (req.body[f] === undefined || req.body[f] === "") {
@@ -49,6 +50,7 @@ async function genericCreate(table: any, req: any, res: any, required: string[])
     }
     const rows = await db.insert(table).values(req.body).returning();
     const row = Array.isArray(rows) ? rows[0] : rows;
+    onMutated?.();
     return res.status(201).json(row);
   } catch (err) {
     req.log.error({ err }, "Create error");
@@ -56,7 +58,7 @@ async function genericCreate(table: any, req: any, res: any, required: string[])
   }
 }
 
-async function genericUpdate(table: any, req: any, res: any) {
+async function genericUpdate(table: any, req: any, res: any, onMutated?: () => void) {
   try {
     const id = parseInt(req.params.id);
     const updateData = { ...req.body, updatedAt: new Date() };
@@ -64,6 +66,7 @@ async function genericUpdate(table: any, req: any, res: any) {
     delete updateData.createdAt;
     const [row] = await db.update(table).set(updateData).where(eq(table.id, id)).returning();
     if (!row) return res.status(404).json({ error: "Not found" });
+    onMutated?.();
     return res.json(row);
   } catch (err) {
     req.log.error({ err }, "Update error");
@@ -71,10 +74,11 @@ async function genericUpdate(table: any, req: any, res: any) {
   }
 }
 
-async function genericDelete(table: any, req: any, res: any) {
+async function genericDelete(table: any, req: any, res: any, onMutated?: () => void) {
   try {
     const id = parseInt(req.params.id);
     await db.update(table).set({ isActive: false, updatedAt: new Date() }).where(eq(table.id, id));
+    onMutated?.();
     return res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Delete error");
@@ -221,9 +225,12 @@ router.get("/masters/cities", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-router.post("/masters/cities", (req, res) => genericCreate(citiesTable, req, res, ["stateId", "name", "slug"]));
-router.patch("/masters/cities/:id", (req, res) => genericUpdate(citiesTable, req, res));
-router.delete("/masters/cities/:id", (req, res) => genericDelete(citiesTable, req, res));
+router.post("/masters/cities", (req, res) =>
+  genericCreate(citiesTable, req, res, ["stateId", "name", "slug"], () => invalidateCoverageCacheForMasterUpdate("cities")));
+router.patch("/masters/cities/:id", (req, res) =>
+  genericUpdate(citiesTable, req, res, () => invalidateCoverageCacheForMasterUpdate("cities")));
+router.delete("/masters/cities/:id", (req, res) =>
+  genericDelete(citiesTable, req, res, () => invalidateCoverageCacheForMasterUpdate("cities")));
 
 router.get("/masters/service-areas", async (req, res) => {
   try {
@@ -251,9 +258,12 @@ router.get("/masters/service-areas", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-router.post("/masters/service-areas", (req, res) => genericCreate(serviceAreasTable, req, res, ["cityId", "name"]));
-router.patch("/masters/service-areas/:id", (req, res) => genericUpdate(serviceAreasTable, req, res));
-router.delete("/masters/service-areas/:id", (req, res) => genericDelete(serviceAreasTable, req, res));
+router.post("/masters/service-areas", (req, res) =>
+  genericCreate(serviceAreasTable, req, res, ["cityId", "name"], () => invalidateCoverageCacheForMasterUpdate("service_areas")));
+router.patch("/masters/service-areas/:id", (req, res) =>
+  genericUpdate(serviceAreasTable, req, res, () => invalidateCoverageCacheForMasterUpdate("service_areas")));
+router.delete("/masters/service-areas/:id", (req, res) =>
+  genericDelete(serviceAreasTable, req, res, () => invalidateCoverageCacheForMasterUpdate("service_areas")));
 
 router.get("/masters/pincodes", async (req, res) => {
   try {
@@ -285,9 +295,14 @@ router.get("/masters/pincodes", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-router.post("/masters/pincodes", (req, res) => genericCreate(pincodesTable, req, res, ["serviceAreaId", "pincode"]));
-router.patch("/masters/pincodes/:id", (req, res) => genericUpdate(pincodesTable, req, res));
-router.delete("/masters/pincodes/:id", (req, res) => genericDelete(pincodesTable, req, res));
+router.post("/masters/pincodes", (req, res) =>
+  genericCreate(pincodesTable, req, res, ["serviceAreaId", "pincode"], () => {
+    invalidateCoverageCacheForMasterUpdate("pincodes", { pincode: req.body?.pincode });
+  }));
+router.patch("/masters/pincodes/:id", (req, res) =>
+  genericUpdate(pincodesTable, req, res, () => invalidateCoverageCacheForMasterUpdate("pincodes")));
+router.delete("/masters/pincodes/:id", (req, res) =>
+  genericDelete(pincodesTable, req, res, () => invalidateCoverageCacheForMasterUpdate("pincodes")));
 
 router.get("/masters/pincodes/lookup/:pincode", async (req, res) => {
   try {

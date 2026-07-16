@@ -17,6 +17,7 @@
     "migrate:catalog": "tsx ./src/run-migration.ts 008_service_catalog.sql",
     "migrate:legacy": "tsx ./src/run-migration.ts 009_legacy_migration.sql",
     "migrate:pending": "tsx ./src/run-pending-migrations.ts",
+    "migrate:legacy-addresses": "pnpm --filter @workspace/api-server run migrate:legacy-addresses",
     "migrate:gst": "tsx ./src/run-migration.ts 028_gst_invoicing.sql",
     "migrate:dcms-plans": "tsx ./src/migrate-dcms-plans.ts",
     "prune:dcms-plans": "tsx ./src/prune-dcms-plans.ts",

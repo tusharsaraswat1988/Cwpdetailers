@@ -20,10 +20,12 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { mapsViewUrl } from "@/lib/maps";
 import { useToast } from "@/hooks/use-toast";
+import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { moduleError } from "@/lib/moduleErrors";
 import {
   ArrowLeft, Calendar, Clock, MapPin, User, Star, ExternalLink,
   CheckCircle2, XCircle, CalendarClock, Image as ImageIcon, Loader2,
+  Car, MessageCircle,
 } from "lucide-react";
 
 const CANCELLABLE_STATUSES = new Set(["pending", "confirmed", "scheduled", "rescheduled"]);
@@ -97,7 +99,7 @@ export default function BookingDetail() {
     onSuccess: () => {
       invalidateAll();
       setCancelOpen(false);
-      toast({ title: "Booking cancelled" });
+      toast({ title: "Scheduled service cancelled" });
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
@@ -107,7 +109,7 @@ export default function BookingDetail() {
       onSuccess: () => {
         invalidateAll();
         setRescheduleOpen(false);
-        toast({ title: "Booking rescheduled" });
+        toast({ title: "Scheduled service rescheduled" });
       },
       onError: (err: { response?: { data?: { error?: string } } }) =>
         toast({ title: err?.response?.data?.error ?? moduleError("bookings", "save"), variant: "destructive" }),
@@ -131,7 +133,7 @@ export default function BookingDetail() {
   if (!Number.isFinite(bookingId)) {
     return (
       <CustomerLayout>
-        <ErrorState title="Invalid booking" description="This booking link looks incorrect." />
+        <ErrorState title="Invalid link" description="This scheduled service link looks incorrect." />
       </CustomerLayout>
     );
   }
@@ -140,7 +142,7 @@ export default function BookingDetail() {
     <CustomerLayout>
       <div className="max-w-lg mx-auto space-y-5 pb-8">
         <button
-          onClick={() => navigate("/customer/history")}
+          onClick={() => navigate(CUSTOMER_ROUTES.serviceHistory)}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           data-testid="btn-back-to-history"
         >
@@ -155,7 +157,7 @@ export default function BookingDetail() {
           </div>
         ) : isError || !booking ? (
           <ErrorState
-            title="Couldn't load this booking"
+            title="Couldn't load this scheduled service"
             description="It may have been removed, or you don't have access to it."
             onRetry={() => refetch()}
           />
@@ -171,12 +173,33 @@ export default function BookingDetail() {
                   pulse={booking.status === "in_progress" || booking.status === "en_route"}
                 />
               </div>
-              <p className="text-muted-foreground text-sm mt-1">Booking #{booking.id}</p>
+              <p className="text-muted-foreground text-sm mt-1">Request #{booking.id}</p>
             </div>
 
-            {/* Key details */}
+            <Card>
+              <CardContent className="p-4 space-y-3 text-sm">
+                <h2 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Current status</h2>
+                <div className="flex items-center justify-between">
+                  <StatusBadge
+                    status={booking.status}
+                    pulse={booking.status === "in_progress" || booking.status === "en_route"}
+                  />
+                  {booking.status === "pending" && (
+                    <span className="text-xs text-muted-foreground">Awaiting CWP confirmation</span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardContent className="p-4 space-y-3">
+                <h2 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Service details</h2>
+                {booking.vehicleInfo && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Car size={15} className="text-primary shrink-0" />
+                    <span>{booking.vehicleInfo}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-3 text-sm">
                   <Calendar size={15} className="text-primary shrink-0" />
                   <span>{booking.scheduledDate}</span>
@@ -288,39 +311,48 @@ export default function BookingDetail() {
               </div>
             )}
 
-            {/* Actions */}
+            {/* Actions — placeholders for future self-serve */}
             {(canCancel || canReschedule) && (
-              <div className="flex gap-2 pt-2">
-                {canReschedule && (
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-11 gap-1.5"
-                    onClick={() => {
-                      setNewDate(booking.scheduledDate);
-                      setNewTime(booking.scheduledTime ?? "09:00");
-                      setRescheduleOpen(true);
-                    }}
-                    data-testid="btn-open-reschedule"
-                  >
-                    <CalendarClock size={15} /> Reschedule
-                  </Button>
-                )}
-                {canCancel && (
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-11 gap-1.5 text-destructive hover:text-destructive"
-                    onClick={() => setCancelOpen(true)}
-                    data-testid="btn-open-cancel"
-                  >
-                    <XCircle size={15} /> Cancel booking
-                  </Button>
-                )}
+              <div className="space-y-2 pt-2">
+                <p className="text-xs text-muted-foreground text-center">Need to change this visit? Contact CWP or use the options below.</p>
+                <div className="flex gap-2">
+                  {canReschedule && (
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-11 gap-1.5"
+                      onClick={() => {
+                        setNewDate(booking.scheduledDate);
+                        setNewTime(booking.scheduledTime ?? "09:00");
+                        setRescheduleOpen(true);
+                      }}
+                      data-testid="btn-open-reschedule"
+                    >
+                      <CalendarClock size={15} /> Reschedule
+                    </Button>
+                  )}
+                  {canCancel && (
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-11 gap-1.5 text-destructive hover:text-destructive"
+                      onClick={() => setCancelOpen(true)}
+                      data-testid="btn-open-cancel"
+                    >
+                      <XCircle size={15} /> Cancel
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 
+            <Link href={CUSTOMER_ROUTES.support} className="block">
+              <Button variant="ghost" className="w-full h-11 gap-2" data-testid="scheduled-service-support">
+                <MessageCircle size={16} /> Support
+              </Button>
+            </Link>
+
             {!canCancel && !canReschedule && booking.status !== "completed" && booking.status !== "cancelled" && (
               <p className="text-xs text-muted-foreground text-center">
-                This booking is already in progress and can no longer be changed here.
+                This scheduled service is already in progress and can no longer be changed here.
               </p>
             )}
           </>
@@ -331,7 +363,7 @@ export default function BookingDetail() {
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancel this booking?</DialogTitle>
+            <DialogTitle>Cancel this scheduled service?</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <Label>Reason (optional)</Label>
@@ -343,7 +375,7 @@ export default function BookingDetail() {
             />
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setCancelOpen(false)}>Keep booking</Button>
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>Keep service</Button>
             <Button
               variant="destructive"
               disabled={cancelMutation.isPending}
@@ -361,7 +393,7 @@ export default function BookingDetail() {
       <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reschedule booking</DialogTitle>
+            <DialogTitle>Reschedule service</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>

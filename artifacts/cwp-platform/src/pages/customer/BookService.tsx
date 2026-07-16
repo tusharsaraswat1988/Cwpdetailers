@@ -1,144 +1,120 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import {
   useCreateBooking, getListBookingsQueryKey,
   useListVehicles, getListVehiclesQueryKey,
   useListSolarSites, getListSolarSitesQueryKey,
+  useListSubscriptions, getListSubscriptionsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccountScope } from "@/lib/account-scope";
 import { computeSolarCleaningPrice } from "@/lib/solar-pricing";
 import {
   useCatalogServices, useSavedLocations, useCreateSavedLocation,
-  usePricingQuote, type LocationValue, type SavedLocation,
+  usePricingQuote, type LocationValue, type CatalogService,
 } from "@/features/master-data/api";
 import {
-  useCatalogAddons, useCatalogPricingQuote, useSelfBookingCheck,
+  useCatalogPricingQuote, useSelfBookingCheck,
 } from "@/features/service-catalog/api";
-import { ServiceAddressRow } from "@/components/shared/ServiceAddressRow";
 import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
 import { QuickAddAssetSheet } from "@/components/shared/QuickAddAssetSheet";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useFormDraft } from "@/hooks/useFormDraft";
 import { moduleError } from "@/lib/moduleErrors";
-import { Loader2, CheckCircle, Car, Sun, ArrowRight, ArrowLeft, Check } from "lucide-react";
-import { motion } from "framer-motion";
+import { Loader2, ArrowRight, ArrowLeft } from "lucide-react";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
+import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { cn } from "@/lib/utils";
+import {
+  type CustomerPlan, type RawSubscription,
+} from "@/lib/customer-plans";
+import { checkCoverage } from "@/lib/coverage-client";
+import { buildAvailableDates, firstAvailableDate, slotsForDate } from "@/lib/schedule-slots";
+import {
+  parseScheduleEntryParams,
+  resolveBookingAddressForEntry,
+  resolveScheduleEntryContext,
+} from "@/lib/schedule-entry";
+import {
+  type ScheduleAsset, type ScheduleStep, type PlanMode,
+  plansForAsset, countAssets, resolveActiveStep, nextStep, prevStep,
+  filterServicesForCoverage, stepTitle, inferPlanMode, shouldSkipStep,
+} from "@/lib/schedule-journey";
+import { ScheduleStepProgress } from "@/components/schedule/ScheduleStepProgress";
+import { ScheduleAssetStep } from "@/components/schedule/ScheduleAssetStep";
+import { SchedulePlanStep } from "@/components/schedule/SchedulePlanStep";
+import { ScheduleServiceStep } from "@/components/schedule/ScheduleServiceStep";
+import { ScheduleDateStep } from "@/components/schedule/ScheduleDateStep";
+import { ScheduleTimeStep } from "@/components/schedule/ScheduleTimeStep";
+import { ScheduleReviewStep } from "@/components/schedule/ScheduleReviewStep";
+import { ScheduleSuccessScreen } from "@/components/schedule/ScheduleSuccessScreen";
+import { loadSelectedAddress, saveSelectedAddress } from "@/lib/selected-address";
 
-type BookingStep = "service" | "asset" | "schedule";
-
-const defaultBookingForm = {
-  serviceId: "",
-  serviceCategorySlug: "",
-  scheduledDate: "",
-  scheduledTime: "09:00",
-  notes: "",
-  vehicleId: "",
-  solarSiteId: "",
-};
-
-type AssetWithLocation = {
+type VehicleRow = {
   id: number;
+  make?: string;
+  model?: string;
+  registrationNumber?: string;
   serviceAddress?: string | null;
+  address?: string | null;
   serviceLat?: number | null;
   serviceLng?: number | null;
   placeId?: string | null;
   locationComplete?: boolean;
-  address?: string | null;
+  vehicleModelId?: number;
 };
 
-function locationFromAsset(asset: AssetWithLocation | undefined): LocationValue | null {
-  if (!asset) return null;
-  const lat = asset.serviceLat;
-  const lng = asset.serviceLng;
-  const address = (asset.serviceAddress ?? asset.address ?? "").trim();
-  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng) || !address) {
-    return null;
-  }
-  return { address, latitude: lat, longitude: lng, placeId: asset.placeId ?? undefined };
+type SolarRow = {
+  id: number;
+  address?: string;
+  panelCount?: number;
+  serviceLat?: number | null;
+  serviceLng?: number | null;
+  placeId?: string | null;
+};
+
+function locationFromRecord(row: VehicleRow | SolarRow, kind: "vehicle" | "solar"): LocationValue | null {
+  const address = kind === "vehicle"
+    ? ((row as VehicleRow).serviceAddress ?? (row as VehicleRow).address ?? "").trim()
+    : ((row as SolarRow).address ?? "").trim();
+  const lat = row.serviceLat;
+  const lng = row.serviceLng;
+  if (!address || lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { address, latitude: lat, longitude: lng, placeId: row.placeId ?? undefined };
 }
 
-function locationFromSaved(loc: SavedLocation | undefined): LocationValue | null {
-  if (!loc) return null;
-  return {
-    address: loc.address,
-    latitude: loc.latitude,
-    longitude: loc.longitude,
-    placeId: loc.placeId,
-  };
-}
-
-function BookingStepProgress({
-  step,
-  assetLabel,
-}: {
-  step: BookingStep;
-  assetLabel: string;
-}) {
-  const steps: { id: BookingStep; label: string }[] = [
-    { id: "service", label: "Service" },
-    { id: "asset", label: assetLabel },
-    { id: "schedule", label: "Schedule" },
-  ];
-  const activeIndex = steps.findIndex(s => s.id === step);
-
-  return (
-    <div className="flex items-center gap-1.5" data-testid="booking-step-progress">
-      {steps.map((s, i) => {
-        const done = i < activeIndex;
-        const active = i === activeIndex;
-        return (
-          <div key={s.id} className="flex items-center gap-1.5 min-w-0 flex-1">
-            <div
-              className={cn(
-                "flex items-center gap-1.5 min-w-0 rounded-full px-2.5 py-1 text-xs font-medium border",
-                active && "border-primary bg-primary/10 text-primary",
-                done && "border-green-500/40 bg-green-500/10 text-green-800",
-                !active && !done && "border-border text-muted-foreground",
-              )}
-            >
-              <span
-                className={cn(
-                  "w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0",
-                  active && "bg-primary text-secondary",
-                  done && "bg-green-600 text-white",
-                  !active && !done && "bg-muted",
-                )}
-              >
-                {done ? <Check size={11} /> : i + 1}
-              </span>
-              <span className="truncate">{s.label}</span>
-            </div>
-            {i < steps.length - 1 && (
-              <div className={cn("h-px w-2 shrink-0", done ? "bg-green-500/50" : "bg-border")} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+function enrichAsset(
+  asset: ScheduleAsset,
+  vehicles: VehicleRow[],
+  solarSites: SolarRow[],
+): ScheduleAsset {
+  const row = asset.kind === "vehicle"
+    ? vehicles.find(v => v.id === asset.id)
+    : solarSites.find(s => s.id === asset.id);
+  if (!row) return asset;
+  return { ...asset, location: locationFromRecord(row, asset.kind) };
 }
 
 export default function BookService() {
+  const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
-  const [success, setSuccess] = useState(false);
-  const [step, setStep] = useState<BookingStep>("service");
-  const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
+
+  const [step, setStep] = useState<ScheduleStep>("asset");
+  const [asset, setAsset] = useState<ScheduleAsset | null>(null);
+  const [planMode, setPlanMode] = useState<PlanMode | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<CustomerPlan | null>(null);
+  const [serviceId, setServiceId] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
+  const [notes, setNotes] = useState("");
   const [bookingLocation, setBookingLocation] = useState<LocationValue | null>(null);
   const [addressSheetOpen, setAddressSheetOpen] = useState(false);
-  const [locationTouched, setLocationTouched] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const { value: form, setValue: setForm, clearDraft, restoredFromDraft } = useFormDraft(
-    "customer-booking-form",
-    defaultBookingForm,
-  );
+  const [successId, setSuccessId] = useState<number | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   const { data: catalogServices, isLoading: servicesLoading, isError: servicesError, refetch: refetchServices } = useCatalogServices();
   const { data: vehicles } = useListVehicles({ customerId: customerId ?? 0 }, {
@@ -150,150 +126,308 @@ export default function BookService() {
   const { data: savedLocations } = useSavedLocations(customerId ?? undefined);
   const createSavedLoc = useCreateSavedLocation();
 
-  const serviceCategories = useMemo(() => {
-    const cats = new Map<string, { slug: string; name: string }>();
-    for (const s of catalogServices ?? []) {
-      const slug = s.categorySlug ?? s.category;
-      if (!cats.has(slug)) cats.set(slug, { slug, name: s.categoryName ?? slug.replace(/-/g, " ") });
-    }
-    return Array.from(cats.values());
-  }, [catalogServices]);
+  const { data: subsData } = useListSubscriptions(
+    { customerId: String(customerId ?? "") } as Parameters<typeof useListSubscriptions>[0],
+    {
+      query: {
+        queryKey: getListSubscriptionsQueryKey({ customerId: String(customerId ?? "") } as Parameters<typeof getListSubscriptionsQueryKey>[0]),
+        enabled: customerId != null,
+      },
+    },
+  );
 
-  const filteredServices = useMemo(() => {
-    if (!form.serviceCategorySlug) return catalogServices ?? [];
-    return (catalogServices ?? []).filter(s =>
-      (s.categorySlug ?? s.category) === form.serviceCategorySlug ||
-      s.category === form.serviceCategorySlug.replace(/-/g, "_"),
+  const vehicleRows = (vehicles ?? []) as VehicleRow[];
+  const solarRows = (solarSites ?? []) as SolarRow[];
+  const rawSubs = (subsData?.data ?? []) as RawSubscription[];
+  const assetPlans = useMemo(() => plansForAsset(rawSubs, asset), [rawSubs, asset]);
+  const assetCount = countAssets(vehicleRows, solarRows);
+
+  const selectedVehicle = asset?.kind === "vehicle" ? vehicleRows.find(v => v.id === asset.id) : undefined;
+  const selectedSolar = asset?.kind === "solar" ? solarRows.find(s => s.id === asset.id) : undefined;
+
+  const { data: coverage, isLoading: coverageLoading, refetch: refetchCoverage } = useQuery({
+    queryKey: ["schedule", "coverage", customerId, bookingLocation?.address, bookingLocation?.latitude],
+    queryFn: () => checkCoverage({
+      customerId: customerId ?? undefined,
+      address: bookingLocation!.address,
+      locationLat: bookingLocation!.latitude,
+      locationLng: bookingLocation!.longitude,
+      placeId: bookingLocation!.placeId,
+      serviceId: serviceId ? parseInt(serviceId) : undefined,
+    }),
+    enabled: customerId != null && bookingLocation != null && step !== "asset" && step !== "plan",
+    staleTime: 30_000,
+  });
+
+  const availableServices = useMemo(() => {
+    if (!catalogServices || !asset) return [];
+    return filterServicesForCoverage(
+      catalogServices as CatalogService[],
+      coverage?.availableServices,
+      asset.kind,
     );
-  }, [catalogServices, form.serviceCategorySlug]);
+  }, [catalogServices, coverage, asset]);
 
-  const selectedService = filteredServices.find(s => String(s.id) === form.serviceId);
-  const selectedVehicle = (vehicles ?? []).find(v => String(v.id) === form.vehicleId) as AssetWithLocation | undefined;
-  const selectedSolar = (solarSites ?? []).find(s => String(s.id) === form.solarSiteId) as
-    | (AssetWithLocation & { panelCount?: number })
-    | undefined;
+  const selectedService = availableServices.find(s => String(s.id) === serviceId)
+    ?? (catalogServices as CatalogService[] | undefined)?.find(s => String(s.id) === serviceId);
 
-  const isSolar = form.serviceCategorySlug === "solar-cleaning" || selectedService?.category === "solar_cleaning";
-  const needsVehicle = !isSolar && form.serviceCategorySlug !== "";
-  const needsSolar = isSolar;
-  const assetLabel = isSolar ? "Site" : "Vehicle";
+  const { data: selfBooking } = useSelfBookingCheck(
+    customerId ?? undefined,
+    serviceId ? parseInt(serviceId) : undefined,
+  );
 
   const { data: pricingQuoteLegacy } = usePricingQuote(
-    form.serviceId ? parseInt(form.serviceId) : undefined,
-    (selectedVehicle as { vehicleModelId?: number } | undefined)?.vehicleModelId,
+    serviceId ? parseInt(serviceId) : undefined,
+    selectedVehicle?.vehicleModelId,
   );
   const { data: catalogQuote } = useCatalogPricingQuote({
-    serviceId: form.serviceId ? parseInt(form.serviceId) : undefined,
-    vehicleModelId: (selectedVehicle as { vehicleModelId?: number } | undefined)?.vehicleModelId,
+    serviceId: serviceId ? parseInt(serviceId) : undefined,
+    vehicleModelId: selectedVehicle?.vehicleModelId,
     panelCount: selectedSolar?.panelCount,
     citySlug: "varanasi",
   });
   const pricingQuote = catalogQuote ?? pricingQuoteLegacy;
 
-  const { data: serviceAddons } = useCatalogAddons(form.serviceId ? parseInt(form.serviceId) : undefined);
-  const { data: selfBooking } = useSelfBookingCheck(
-    customerId ?? undefined,
-    form.serviceId ? parseInt(form.serviceId) : undefined,
-  );
-
-  const addonTotal = (serviceAddons ?? [])
-    .filter(a => selectedAddonIds.includes(a.id))
-    .reduce((sum, a) => sum + Number(a.basePrice), 0);
-
+  const coveredByPlan = Boolean(planMode === "plan" && selfBooking?.eligible);
   const estimatedPrice = useMemo(() => {
-    if (selfBooking?.eligible) return addonTotal;
-    let base: number | null = null;
-    if (isSolar && selectedSolar?.panelCount != null) base = computeSolarCleaningPrice(selectedSolar.panelCount);
-    else if (pricingQuote) base = Number((pricingQuote as { amount?: number }).amount ?? 0);
-    else if (selectedService) base = Number(selectedService.basePrice);
-    if (base == null) return null;
-    return base + addonTotal;
-  }, [isSolar, selectedSolar, pricingQuote, selectedService, addonTotal, selfBooking?.eligible]);
+    if (coveredByPlan) return 0;
+    if (asset?.kind === "solar" && selectedSolar?.panelCount != null) {
+      return computeSolarCleaningPrice(selectedSolar.panelCount);
+    }
+    if (pricingQuote) return Number((pricingQuote as { amount?: number }).amount ?? 0);
+    if (selectedService) return Number(selectedService.basePrice);
+    return null;
+  }, [coveredByPlan, asset, selectedSolar, pricingQuote, selectedService]);
 
-  const hasVehicle = (vehicles ?? []).length > 0;
-  const hasSolar = (solarSites ?? []).length > 0;
-
-  // Prefill from saved default once (unless user already chose / draft restored with location later)
-  useEffect(() => {
-    if (locationTouched || bookingLocation) return;
-    const defaultSaved =
-      savedLocations?.find(l => l.isDefault) ??
-      (savedLocations?.length === 1 ? savedLocations[0] : undefined);
-    const fromSaved = locationFromSaved(defaultSaved);
-    if (fromSaved) setBookingLocation(fromSaved);
-  }, [savedLocations, bookingLocation, locationTouched]);
-
-  // Prefill / update from selected asset location when user hasn't manually set address via sheet
-  useEffect(() => {
-    if (locationTouched) return;
-    const fromAsset = locationFromAsset(isSolar ? selectedSolar : selectedVehicle);
-    if (fromAsset) setBookingLocation(fromAsset);
-  }, [selectedVehicle, selectedSolar, isSolar, locationTouched]);
+  const dateOptions = useMemo(() => buildAvailableDates(14), []);
+  const timeSlots = useMemo(
+    () => (scheduledDate ? slotsForDate(scheduledDate) : []),
+    [scheduledDate],
+  );
 
   const createMutation = useCreateBooking({
     mutation: {
-      onSuccess: async () => {
+      onSuccess: (data) => {
         qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
-        await clearDraft();
-        setSuccess(true);
-        toast({ title: "Booking confirmed!" });
+        setSuccessId(data.id);
+        toast({ title: "Request received" });
       },
-      onError: (err: { response?: { data?: { error?: string } } }) =>
-        toast({ title: err?.response?.data?.error ?? moduleError("bookings", "save"), variant: "destructive" }),
+      onError: (err: { response?: { data?: { error?: string; message?: string } } }) =>
+        toast({
+          title: err?.response?.data?.message ?? err?.response?.data?.error ?? moduleError("bookings", "save"),
+          variant: "destructive",
+        }),
     },
   });
 
-  const today = new Date().toISOString().split("T")[0];
+  const applyAutoSkips = useCallback(() => {
+    const ctx = {
+      assetCount,
+      asset,
+      eligiblePlanCount: assetPlans.length,
+      planMode,
+      selectedPlan,
+      serviceCount: availableServices.length,
+      serviceSelected: Boolean(serviceId),
+      dateSelected: Boolean(scheduledDate),
+      timeSelected: Boolean(scheduledTime),
+    };
+    return resolveActiveStep(ctx);
+  }, [assetCount, asset, assetPlans.length, planMode, selectedPlan, availableServices.length, serviceId, scheduledDate, scheduledTime]);
 
-  const canContinueService = Boolean(form.serviceCategorySlug && (isSolar || form.serviceId));
-  const canContinueAsset =
-    (needsVehicle && form.vehicleId) ||
-    (needsSolar && form.solarSiteId);
-  const canSubmit =
-    form.scheduledDate &&
-    bookingLocation &&
-    (!needsVehicle || form.vehicleId) &&
-    (!needsSolar || form.solarSiteId) &&
-    (!isSolar ? form.serviceId : true);
+  // Initialize from URL / hints / single asset (unified entry context)
+  useEffect(() => {
+    if (initialized || customerId == null) return;
 
-  const missingHint = !bookingLocation
-    ? "Add where we should arrive"
-    : !form.scheduledDate
-      ? "Pick a date for the visit"
-      : null;
+    const entry = resolveScheduleEntryContext({
+      params: parseScheduleEntryParams(window.location.search),
+      customerId,
+      vehicles: vehicleRows,
+      solarSites: solarRows,
+      subscriptions: rawSubs,
+    });
 
-  const resetBooking = () => {
-    setSuccess(false);
-    setForm(defaultBookingForm);
-    setBookingLocation(null);
-    setLocationTouched(false);
-    setSelectedAddonIds([]);
-    setStep("service");
+    if (entry.redirectDailyCleaning) {
+      navigate("/customer/daily-cleaning");
+      return;
+    }
+
+    if (entry.asset) setAsset(entry.asset);
+    if (entry.planMode) setPlanMode(entry.planMode);
+    if (entry.selectedPlan) setSelectedPlan(entry.selectedPlan);
+    if (entry.address) setBookingLocation(entry.address);
+    setInitialized(true);
+  }, [initialized, customerId, vehicleRows, solarRows, rawSubs, navigate]);
+
+  // Resolve address when asset selected
+  useEffect(() => {
+    if (!asset || !customerId) return;
+    const enriched = enrichAsset(asset, vehicleRows, solarRows);
+    if (enriched.location !== asset.location) {
+      setAsset(enriched);
+    }
+    const resolved = resolveBookingAddressForEntry({
+      asset: enriched,
+      selectedAddress: loadSelectedAddress(customerId),
+    });
+    if (resolved) setBookingLocation(resolved);
+  }, [asset?.id, asset?.kind, vehicleRows, solarRows, customerId]);
+
+  // Auto plan mode when asset known
+  useEffect(() => {
+    if (!asset || planMode != null) return;
+    if (assetPlans.length === 1) {
+      const plan = assetPlans[0];
+      if (plan.isDailyCleaning) {
+        navigate("/customer/daily-cleaning");
+        return;
+      }
+      setSelectedPlan(plan);
+      setPlanMode("plan");
+    } else if (assetPlans.length === 0) {
+      setPlanMode("one_time");
+    }
+  }, [asset, assetPlans, planMode, navigate]);
+
+  // Auto-select single service
+  useEffect(() => {
+    if (step !== "service" || serviceId) return;
+    if (availableServices.length === 1) {
+      setServiceId(String(availableServices[0].id));
+    } else if (asset?.kind === "solar" && availableServices.length > 0 && !serviceId) {
+      const solarSvc = availableServices.find(s => s.category === "solar_cleaning") ?? availableServices[0];
+      setServiceId(String(solarSvc.id));
+    }
+  }, [step, availableServices, serviceId, asset]);
+
+  // Auto date/time
+  useEffect(() => {
+    if (!scheduledDate) {
+      const first = firstAvailableDate(dateOptions);
+      if (first && step !== "asset" && step !== "plan" && asset && serviceId) setScheduledDate(first);
+    }
+  }, [scheduledDate, dateOptions, step, asset, serviceId]);
+
+  useEffect(() => {
+    if (scheduledDate && !scheduledTime) {
+      const slots = slotsForDate(scheduledDate);
+      if (slots.length === 1) setScheduledTime(slots[0]);
+      else if (slots.length > 0 && !slots.includes(scheduledTime)) setScheduledTime(slots[0]);
+    }
+  }, [scheduledDate, scheduledTime]);
+
+  // Auto-advance past skippable steps after initialization
+  useEffect(() => {
+    if (!initialized) return;
+    const target = applyAutoSkips();
+    setStep(prev => {
+      const order: ScheduleStep[] = ["asset", "plan", "service", "date", "time", "review"];
+      return order.indexOf(target) > order.indexOf(prev) ? target : prev;
+    });
+  }, [initialized, asset?.id, planMode, selectedPlan?.id, serviceId, scheduledDate, scheduledTime, applyAutoSkips]);
+
+  const goNext = () => {
+    const n = nextStep(step);
+    if (n) setStep(n);
   };
 
-  const confirmBooking = () => {
-    if (!bookingLocation || !customerId) return;
-    const serviceType = isSolar ? "solar_cleaning" : (selectedService?.category ?? "car_wash");
+  const goBack = () => {
+    const p = prevStep(step);
+    if (p) setStep(p);
+  };
+
+  const canContinue = useMemo(() => {
+    switch (step) {
+      case "asset": return asset != null;
+      case "plan": return planMode != null && (planMode === "one_time" || selectedPlan != null);
+      case "service": return Boolean(serviceId) && (coverage?.success !== false);
+      case "date": return Boolean(scheduledDate);
+      case "time": return Boolean(scheduledTime);
+      case "review": return Boolean(bookingLocation && asset && serviceId && scheduledDate && scheduledTime);
+      default: return false;
+    }
+  }, [step, asset, planMode, selectedPlan, serviceId, coverage, scheduledDate, scheduledTime, bookingLocation]);
+
+  const handleAssetSelect = (next: ScheduleAsset) => {
+    setAsset(enrichAsset(next, vehicleRows, solarRows));
+    setPlanMode(null);
+    setSelectedPlan(null);
+    setServiceId("");
+  };
+
+  const handleSelectPlan = (plan: CustomerPlan) => {
+    if (plan.isDailyCleaning) {
+      navigate("/customer/daily-cleaning");
+      return;
+    }
+    setSelectedPlan(plan);
+    setPlanMode("plan");
+    setServiceId("");
+  };
+
+  const submitRequest = () => {
+    if (!bookingLocation || !customerId || !asset || !scheduledDate) return;
+    const serviceType = asset.kind === "solar"
+      ? "solar_cleaning"
+      : (selectedService?.category ?? "car_wash");
     createMutation.mutate({
       data: {
         customerId,
-        serviceId: form.serviceId ? parseInt(form.serviceId) : undefined,
-        vehicleId: form.vehicleId ? parseInt(form.vehicleId) : undefined,
-        solarSiteId: form.solarSiteId ? parseInt(form.solarSiteId) : undefined,
+        serviceId: serviceId ? parseInt(serviceId) : undefined,
+        vehicleId: asset.kind === "vehicle" ? asset.id : undefined,
+        solarSiteId: asset.kind === "solar" ? asset.id : undefined,
         serviceType: serviceType as "car_wash" | "detailing" | "solar_cleaning" | "pickup_drop",
-        scheduledDate: form.scheduledDate,
-        scheduledTime: form.scheduledTime,
-        notes: form.notes || undefined,
+        scheduledDate,
+        scheduledTime,
+        notes: notes || undefined,
         address: bookingLocation.address,
         locationLat: bookingLocation.latitude,
         locationLng: bookingLocation.longitude,
         placeId: bookingLocation.placeId,
         citySlug: "varanasi",
-        addonIds: selectedAddonIds.length ? selectedAddonIds : undefined,
         entitlementId: selfBooking?.eligible ? selfBooking.entitlementId : undefined,
       } as Parameters<typeof createMutation.mutate>[0]["data"],
     });
+    saveSelectedAddress(customerId, {
+      ...bookingLocation,
+      assetId: asset.id,
+      assetType: asset.kind,
+      assetLabel: asset.subtitle || asset.name,
+    });
   };
+
+  const resetFlow = () => {
+    setSuccessId(null);
+    setStep("asset");
+    setAsset(null);
+    setPlanMode(null);
+    setSelectedPlan(null);
+    setServiceId("");
+    setScheduledDate("");
+    setScheduledTime("");
+    setNotes("");
+    setBookingLocation(null);
+    setInitialized(false);
+  };
+
+  const skipCtx = useMemo(() => ({
+    assetCount,
+    asset,
+    eligiblePlanCount: assetPlans.length,
+    planMode,
+    selectedPlan,
+    serviceCount: availableServices.length,
+    serviceSelected: Boolean(serviceId),
+    dateSelected: Boolean(scheduledDate),
+    timeSelected: Boolean(scheduledTime),
+  }), [assetCount, asset, assetPlans.length, planMode, selectedPlan, availableServices.length, serviceId, scheduledDate, scheduledTime]);
+
+  const hiddenSteps: ScheduleStep[] = useMemo(() => {
+    const hidden: ScheduleStep[] = [];
+    if (shouldSkipStep("asset", skipCtx)) hidden.push("asset");
+    if (shouldSkipStep("plan", skipCtx)) hidden.push("plan");
+    return hidden;
+  }, [skipCtx]);
 
   if (scopeLoading) {
     return <CustomerLayout><div className="p-6"><Loader2 className="animate-spin" /></div></CustomerLayout>;
@@ -310,413 +444,143 @@ export default function BookService() {
     );
   }
 
-  if (success) {
+  if (successId != null) {
     return (
       <CustomerLayout>
-        <div className="flex flex-col items-center justify-center py-20 px-4">
-          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm text-center">
-            <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mb-6 mx-auto">
-              <CheckCircle size={40} className="text-green-500" />
-            </div>
-            <h2 className="font-display font-bold text-2xl mb-2">Booking Confirmed!</h2>
-            <p className="text-muted-foreground mb-8">Our technician will reach you at the scheduled time.</p>
-            <div className="flex flex-col gap-3">
-              <Button onClick={resetBooking} className="w-full h-11 bg-primary text-secondary hover:bg-primary/90">
-                Book Another Service
-              </Button>
-              <Link href="/customer/history"><Button variant="outline" className="w-full h-11">View My Bookings</Button></Link>
-            </div>
-          </motion.div>
-        </div>
+        <ScheduleSuccessScreen requestId={successId} onScheduleAnother={resetFlow} />
       </CustomerLayout>
     );
   }
 
-  const stepTitle =
-    step === "service"
-      ? "What do you need?"
-      : step === "asset"
-        ? (isSolar ? "Which solar site?" : "Which car?")
-        : "When should we come?";
+  const coverageError = coverage && !coverage.success && step === "service"
+    ? coverage.message
+    : servicesError
+      ? "Could not load services. Check your connection."
+      : null;
 
   return (
     <CustomerLayout>
       <div
         className={cn(
           "max-w-lg mx-auto space-y-5",
-          step === "schedule" && "pb-[calc(var(--bottom-nav-height)+5.5rem)]",
+          step === "review" && "pb-[calc(var(--bottom-nav-height)+5.5rem)]",
         )}
+        data-testid="schedule-page"
       >
-        <div className="space-y-3">
+        <header className="space-y-3">
           <div>
-            <h1 className="font-display font-bold text-2xl">Book a Service</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">{stepTitle}</p>
-            {restoredFromDraft && (
-              <p className="text-xs text-muted-foreground mt-2 bg-muted/40 rounded-md px-3 py-2 inline-block">
-                Restored your previous booking draft.
-              </p>
-            )}
+            <h1 className="font-display font-bold text-2xl">Schedule</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">{stepTitle(step, asset?.kind)}</p>
           </div>
-          <BookingStepProgress step={step} assetLabel={assetLabel} />
-        </div>
+          <ScheduleStepProgress step={step} hiddenSteps={hiddenSteps} />
+        </header>
 
-        {step === "service" && (
-          <div className="space-y-4" data-testid="booking-step-service">
-            {servicesLoading && (
-              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Loader2 size={16} className="animate-spin" /> Loading services…
-              </div>
-            )}
+        {step === "asset" && (
+          <ScheduleAssetStep
+            vehicles={vehicleRows}
+            solarSites={solarRows}
+            selected={asset}
+            onSelect={handleAssetSelect}
+          />
+        )}
 
-            {servicesError && (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-3">
-                <p className="font-medium text-destructive">Couldn’t load services</p>
-                <p className="text-muted-foreground">Check your connection and try again.</p>
-                <Button size="sm" variant="outline" onClick={() => void refetchServices()}>
-                  Retry
-                </Button>
-              </div>
-            )}
+        {step === "plan" && asset && (
+          <SchedulePlanStep
+            eligiblePlans={assetPlans}
+            selectedPlan={selectedPlan}
+            planMode={planMode}
+            onSelectPlan={handleSelectPlan}
+            onSelectOneTime={() => { setPlanMode("one_time"); setSelectedPlan(null); setServiceId(""); }}
+          />
+        )}
 
-            {!servicesLoading && !servicesError && serviceCategories.length === 0 && (
-              <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                No bookable services are available yet. Please check back soon or contact support.
-              </div>
-            )}
+        {step === "service" && asset && (
+          <ScheduleServiceStep
+            services={availableServices}
+            selectedId={serviceId}
+            onSelect={setServiceId}
+            loading={servicesLoading || coverageLoading}
+            error={coverageError}
+            onRetry={() => { void refetchServices(); void refetchCoverage(); }}
+            coveredByPlan={coveredByPlan}
+          />
+        )}
 
-            <div className="grid grid-cols-2 gap-3">
-              {serviceCategories.map(cat => (
-                <button
-                  key={cat.slug}
-                  type="button"
-                  onClick={() => {
-                    setForm(f => ({
-                      ...f,
-                      serviceCategorySlug: cat.slug,
-                      serviceId: "",
-                      vehicleId: "",
-                      solarSiteId: "",
-                    }));
-                    setSelectedAddonIds([]);
-                  }}
-                  data-testid={`type-${cat.slug}`}
-                  className={cn(
-                    "p-4 rounded-xl border text-left transition-all",
-                    form.serviceCategorySlug === cat.slug
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/30",
-                  )}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    {cat.slug.includes("solar")
-                      ? <Sun size={14} className="text-primary" />
-                      : <Car size={14} className="text-primary" />}
-                    <span className="font-medium text-sm capitalize">{cat.name}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
+        {step === "date" && (
+          <ScheduleDateStep
+            dates={dateOptions}
+            selected={scheduledDate}
+            onSelect={d => { setScheduledDate(d); setScheduledTime(""); }}
+          />
+        )}
 
-            {form.serviceCategorySlug && !isSolar && (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold">Choose a service</p>
-                {filteredServices.map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, serviceId: String(s.id) }))}
-                    data-testid={`service-card-${s.id}`}
-                    className={cn(
-                      "w-full rounded-xl border p-4 text-left transition-all",
-                      form.serviceId === String(s.id)
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/30",
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm">{s.name}</p>
-                        {s.description && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{s.description}</p>
-                        )}
-                      </div>
-                      <p className="text-sm font-semibold text-primary shrink-0">
-                        from ₹{Number(s.basePrice).toLocaleString("en-IN")}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-                {filteredServices.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No services in this category yet.</p>
-                )}
-              </div>
-            )}
+        {step === "time" && (
+          <ScheduleTimeStep
+            slots={timeSlots}
+            selected={scheduledTime}
+            onSelect={setScheduledTime}
+          />
+        )}
 
-            {isSolar && form.serviceCategorySlug && (
-              <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                Solar cleaning price is based on your site&apos;s panel count. Continue to pick your site.
-              </div>
-            )}
+        {step === "review" && asset && bookingLocation && selectedService && (
+          <ScheduleReviewStep
+            asset={asset}
+            address={bookingLocation}
+            planMode={planMode ?? inferPlanMode(assetPlans.length)}
+            plan={selectedPlan}
+            serviceName={selectedService.name}
+            date={scheduledDate}
+            time={scheduledTime}
+            notes={notes}
+            onNotesChange={setNotes}
+            onChangeAddress={() => setAddressSheetOpen(true)}
+            estimatedPrice={estimatedPrice}
+            coveredByPlan={coveredByPlan}
+          />
+        )}
 
+        <div className="flex gap-2 pt-1">
+          {step !== "asset" && (
+            <Button type="button" variant="outline" className="h-11" onClick={goBack} data-testid="schedule-back">
+              <ArrowLeft size={16} className="mr-1" /> Back
+            </Button>
+          )}
+          {step !== "review" ? (
             <Button
-              className="w-full h-11"
-              disabled={!canContinueService}
-              onClick={() => setStep("asset")}
-              data-testid="btn-booking-continue-service"
+              className="flex-1 h-11"
+              disabled={!canContinue}
+              onClick={goNext}
+              data-testid="schedule-continue"
             >
               Continue <ArrowRight size={16} className="ml-1" />
             </Button>
-          </div>
-        )}
-
-        {step === "asset" && (
-          <div className="space-y-4" data-testid="booking-step-asset">
-            {needsVehicle && !hasVehicle && (
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm">
-                <p className="font-medium text-amber-800">Add your first vehicle</p>
-                <p className="text-muted-foreground mt-1">Takes less than a minute — you won't lose your booking progress.</p>
-                <Button size="sm" className="gap-1 mt-3" onClick={() => setQuickAddOpen(true)} data-testid="btn-quickadd-open-vehicle">
-                  Add vehicle <ArrowRight size={12} />
-                </Button>
-              </div>
-            )}
-
-            {needsSolar && !hasSolar && (
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm">
-                <p className="font-medium text-amber-800">Add your first solar site</p>
-                <p className="text-muted-foreground mt-1">Takes less than a minute — you won't lose your booking progress.</p>
-                <Button size="sm" className="gap-1 mt-3" onClick={() => setQuickAddOpen(true)} data-testid="btn-quickadd-open-solar">
-                  Add solar site <ArrowRight size={12} />
-                </Button>
-              </div>
-            )}
-
-            {needsVehicle && hasVehicle && (
-              <div className="space-y-2">
-                {(vehicles ?? []).map(v => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => {
-                      setForm(f => ({ ...f, vehicleId: String(v.id) }));
-                      setLocationTouched(false);
-                    }}
-                    data-testid={`vehicle-card-${v.id}`}
-                    className={cn(
-                      "w-full rounded-xl border p-4 text-left transition-all",
-                      form.vehicleId === String(v.id)
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/30",
-                    )}
-                  >
-                    <p className="font-medium text-sm">{v.make} {v.model}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{v.registrationNumber}</p>
-                    {(v as AssetWithLocation).locationComplete ? (
-                      <p className="text-xs text-green-700 mt-1">Location saved</p>
-                    ) : (
-                      <p className="text-xs text-amber-700 mt-1">You can set address on the next step</p>
-                    )}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setQuickAddOpen(true)}
-                  className="w-full rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
-                  data-testid="btn-quickadd-another-vehicle"
-                >
-                  + Add another vehicle
-                </button>
-              </div>
-            )}
-
-            {needsSolar && hasSolar && (
-              <div className="space-y-2">
-                {(solarSites ?? []).map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => {
-                      setForm(f => ({ ...f, solarSiteId: String(s.id) }));
-                      setLocationTouched(false);
-                    }}
-                    data-testid={`solar-card-${s.id}`}
-                    className={cn(
-                      "w-full rounded-xl border p-4 text-left transition-all",
-                      form.solarSiteId === String(s.id)
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/30",
-                    )}
-                  >
-                    <p className="font-medium text-sm">{s.address}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{s.panelCount} panels</p>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setQuickAddOpen(true)}
-                  className="w-full rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
-                  data-testid="btn-quickadd-another-solar"
-                >
-                  + Add another solar site
-                </button>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11"
-                onClick={() => setStep("service")}
-                data-testid="btn-booking-back-asset"
-              >
-                <ArrowLeft size={16} className="mr-1" /> Back
-              </Button>
-              <Button
-                className="flex-1 h-11"
-                disabled={!canContinueAsset}
-                onClick={() => setStep("schedule")}
-                data-testid="btn-booking-continue-asset"
-              >
-                Continue <ArrowRight size={16} className="ml-1" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {step === "schedule" && (
-          <div className="space-y-4" data-testid="booking-step-schedule">
-            <ServiceAddressRow
-              value={bookingLocation}
-              onChangeClick={() => setAddressSheetOpen(true)}
-            />
-
-            {selfBooking?.eligible && (
-              <div className="bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3 text-sm">
-                <p className="font-medium text-green-800">Package visit available</p>
-                <p className="text-muted-foreground">
-                  {selfBooking.remainingCredits} credits left
-                </p>
-              </div>
-            )}
-
-            {(serviceAddons ?? []).length > 0 && (
-              <div>
-                <Label>Add-ons (optional)</Label>
-                <div className="mt-2 space-y-2">
-                  {(serviceAddons ?? []).map(addon => (
-                    <label key={addon.id} className="flex items-center gap-2 text-sm border rounded-lg p-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedAddonIds.includes(addon.id)}
-                        onChange={e => setSelectedAddonIds(ids =>
-                          e.target.checked ? [...ids, addon.id] : ids.filter(x => x !== addon.id),
-                        )}
-                      />
-                      <span className="flex-1">{addon.name}</span>
-                      <span className="font-medium">₹{addon.basePrice}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  min={today}
-                  value={form.scheduledDate}
-                  onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))}
-                  className="mt-1"
-                  data-testid="input-date"
-                />
-              </div>
-              <div>
-                <Label>Time</Label>
-                <Input
-                  type="time"
-                  value={form.scheduledTime}
-                  onChange={e => setForm(f => ({ ...f, scheduledTime: e.target.value }))}
-                  className="mt-1"
-                  data-testid="input-time"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label>Notes (optional)</Label>
-              <Input
-                value={form.notes}
-                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="Gate code, parking tip, etc."
-                className="mt-1"
-                data-testid="input-notes"
-              />
-            </div>
-
-            {estimatedPrice != null && (
-              <div className="bg-muted/50 rounded-lg px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Estimated price</span>
-                  <span className="font-semibold text-primary" data-testid="estimated-price">
-                    ₹{estimatedPrice.toLocaleString("en-IN")}
-                  </span>
-                </div>
-                {pricingQuote && (pricingQuote as { vehicleCategory?: string }).vehicleCategory && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Based on {(pricingQuote as { vehicleCategory?: string }).vehicleCategory}
-                    {(pricingQuote as { seatCategory?: string }).seatCategory
-                      ? ` · ${(pricingQuote as { seatCategory?: string }).seatCategory}`
-                      : ""}
-                  </p>
-                )}
-                {selfBooking?.eligible && (
-                  <p className="text-xs text-green-700 mt-1">Service covered by your active package</p>
-                )}
-              </div>
-            )}
-
+          ) : (
             <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11"
-              onClick={() => setStep("asset")}
-              data-testid="btn-booking-back-schedule"
+              className="flex-1 h-11 font-semibold"
+              disabled={!canContinue || createMutation.isPending}
+              onClick={submitRequest}
+              data-testid="schedule-request"
             >
-              <ArrowLeft size={16} className="mr-1" /> Back
+              {createMutation.isPending ? (
+                <><Loader2 size={14} className="animate-spin mr-2" />Submitting…</>
+              ) : (
+                "Request Service"
+              )}
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {step === "schedule" && (
-        <div className="fixed inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 bottom-[var(--bottom-nav-height)]">
-          <div className="max-w-lg mx-auto px-4 py-3 space-y-2">
-            {missingHint && (
-              <p className="text-xs text-amber-700 text-center" data-testid="booking-missing-hint">
-                {missingHint}
-              </p>
-            )}
-            <div className="flex items-center gap-3">
-              {estimatedPrice != null && (
-                <div className="shrink-0">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</p>
-                  <p className="font-semibold text-primary">₹{estimatedPrice.toLocaleString("en-IN")}</p>
-                </div>
-              )}
-              <Button
-                data-testid="btn-confirm-booking"
-                disabled={!canSubmit || createMutation.isPending}
-                onClick={confirmBooking}
-                className="flex-1 h-12 bg-primary text-secondary hover:bg-primary/90 font-semibold"
-              >
-                {createMutation.isPending
-                  ? <><Loader2 size={14} className="animate-spin mr-2" />Booking...</>
-                  : "Confirm booking"}
-              </Button>
-            </div>
+      {step === "review" && (
+        <div className="fixed inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur bottom-[var(--bottom-nav-height)] md:hidden">
+          <div className="max-w-lg mx-auto px-4 py-3">
+            <Button
+              className="w-full h-12 font-semibold"
+              disabled={!canContinue || createMutation.isPending}
+              onClick={submitRequest}
+            >
+              Request Service
+            </Button>
           </div>
         </div>
       )}
@@ -724,12 +588,14 @@ export default function BookService() {
       <QuickAddAssetSheet
         open={quickAddOpen}
         onOpenChange={setQuickAddOpen}
-        customerId={customerId!}
-        kind={isSolar ? "solar" : "vehicle"}
+        customerId={customerId}
+        kind={asset?.kind === "solar" ? "solar" : "vehicle"}
         onCreated={(id) => {
-          setLocationTouched(false);
-          if (isSolar) setForm(f => ({ ...f, solarSiteId: String(id) }));
-          else setForm(f => ({ ...f, vehicleId: String(id) }));
+          if (asset?.kind === "solar") {
+            setAsset(a => a ? { ...a, id } : a);
+          } else {
+            setAsset(a => a ? { ...a, id, kind: "vehicle" } : a);
+          }
         }}
       />
 
@@ -740,10 +606,11 @@ export default function BookService() {
         savedLocations={savedLocations}
         onSelect={loc => {
           setBookingLocation(loc);
-          setLocationTouched(true);
+          if (customerId) saveSelectedAddress(customerId, loc);
+          void refetchCoverage();
         }}
         onSaveNew={(label, loc) => createSavedLoc.mutate({
-          customerId: customerId!,
+          customerId,
           label,
           address: loc.address,
           latitude: loc.latitude,
