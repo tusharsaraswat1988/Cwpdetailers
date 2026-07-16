@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, text, numeric, date, timestamp, pgEnum, json, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, numeric, date, timestamp, pgEnum, json, doublePrecision, jsonb } from "drizzle-orm/pg-core";
+import { bookingPlatformStatusEnum } from "./booking-platform";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -32,6 +33,9 @@ export const bookingsTable = pgTable("bookings", {
   locationLng: doublePrecision("location_lng"),
   placeId: text("place_id"),
   savedLocationId: integer("saved_location_id"),
+  addressSnapshotId: integer("address_snapshot_id"),
+  addressIdentityId: integer("address_identity_id"),
+  addressId: integer("address_id"),
   notes: text("notes"),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
@@ -48,6 +52,11 @@ export const bookingsTable = pgTable("bookings", {
   addonIds: json("addon_ids").$type<number[]>().default([]),
   recurrenceRule: text("recurrence_rule"),
   parentBookingId: integer("parent_booking_id"),
+  platformStatus: bookingPlatformStatusEnum("platform_status").default("DRAFT"),
+  coverageStatus: text("coverage_status"),
+  coverageValidationId: text("coverage_validation_id"),
+  confidenceScore: doublePrecision("confidence_score"),
+  locationContextSnapshot: jsonb("location_context_snapshot").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

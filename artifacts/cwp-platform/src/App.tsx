@@ -73,7 +73,11 @@ import BookingDetail from "@/pages/customer/BookingDetail";
 import CustomerInvoices from "@/pages/customer/Invoices";
 import CustomerComplaints from "@/pages/customer/Complaints";
 import CustomerWallet from "@/pages/customer/Wallet";
-import CustomerServices from "@/pages/customer/Services";
+import CustomerMyPlans from "@/pages/customer/MyPlans";
+import PlanDetail from "@/pages/customer/PlanDetail";
+import {
+  RedirectToPlans, RedirectToSchedule, RedirectBookingsIdToSchedule,
+} from "@/pages/customer/CustomerRouteRedirects";
 import CustomerAccount from "@/pages/customer/Account";
 
 import StaffPortalRouter from "@/components/layout/StaffPortalRouter";
@@ -219,17 +223,24 @@ function Router() {
       <Route path="/admin/legal" component={() => <ProtectedRoute component={LegalCMS} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin" component={AdminRoot} />
 
-      {/* Customer */}
+      {/* Customer — IA v1.0 frozen (see docs/CUSTOMER_IA_FREEZE_v1.md) */}
       <Route path="/customer/dashboard" component={() => <ProtectedRoute component={CustomerDashboard} roles={["customer"]} />} />
-      <Route path="/customer/wallet" component={() => <ProtectedRoute component={CustomerWallet} roles={["customer"]} />} />
-      <Route path="/customer/services" component={() => <ProtectedRoute component={CustomerServices} roles={["customer"]} />} />
-      <Route path="/customer/account" component={() => <ProtectedRoute component={CustomerAccount} roles={["customer"]} />} />
-      <Route path="/customer/bookings" component={() => <ProtectedRoute component={BookService} roles={["customer"]} />} />
+      <Route path="/customer/plans/:id" component={() => <ProtectedRoute component={PlanDetail} roles={["customer"]} />} />
+      <Route path="/customer/plans" component={() => <ProtectedRoute component={CustomerMyPlans} roles={["customer"]} />} />
+      <Route path="/customer/schedule/:id" component={() => <ProtectedRoute component={BookingDetail} roles={["customer"]} />} />
+      <Route path="/customer/schedule" component={() => <ProtectedRoute component={BookService} roles={["customer"]} />} />
       <Route path="/customer/assets" component={() => <ProtectedRoute component={MyAssets} roles={["customer"]} />} />
+      <Route path="/customer/account" component={() => <ProtectedRoute component={CustomerAccount} roles={["customer"]} />} />
       <Route path="/customer/history" component={() => <ProtectedRoute component={CustomerHistory} roles={["customer"]} />} />
-      <Route path="/customer/bookings/:id" component={() => <ProtectedRoute component={BookingDetail} roles={["customer"]} />} />
       <Route path="/customer/invoices" component={() => <ProtectedRoute component={CustomerInvoices} roles={["customer"]} />} />
-      <Route path="/customer/complaints" component={() => <ProtectedRoute component={CustomerComplaints} roles={["customer"]} />} />
+      <Route path="/customer/support" component={() => <ProtectedRoute component={CustomerComplaints} roles={["customer"]} />} />
+      {/* Legacy route aliases */}
+      <Route path="/customer/wallet" component={() => <ProtectedRoute component={CustomerWallet} roles={["customer"]} />} />
+      <Route path="/customer/services" component={() => <ProtectedRoute component={RedirectToPlans} roles={["customer"]} />} />
+      <Route path="/customer/bookings/:id" component={() => <ProtectedRoute component={RedirectBookingsIdToSchedule} roles={["customer"]} />} />
+      <Route path="/customer/bookings" component={() => <ProtectedRoute component={RedirectToSchedule} roles={["customer"]} />} />
+      <Route path="/customer/book" component={() => <ProtectedRoute component={RedirectToSchedule} roles={["customer"]} />} />
+      <Route path="/customer/complaints" component={() => <ProtectedRoute component={() => <Redirect to="/customer/support" />} roles={["customer"]} />} />
       <Route path="/customer/daily-cleaning/history" component={() => <ProtectedRoute component={CustomerDcmsHistoryPage} roles={["customer"]} />} />
       <Route path="/customer/daily-cleaning/gallery" component={() => <ProtectedRoute component={CustomerDcmsGalleryPage} roles={["customer"]} />} />
       <Route path="/customer/daily-cleaning" component={() => <ProtectedRoute component={CustomerDailyCleaningPage} roles={["customer"]} />} />

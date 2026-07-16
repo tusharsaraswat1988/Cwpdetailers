@@ -15,6 +15,14 @@ import {
   applyOptionalMobileField,
   normalizeIndianMobile,
 } from "../lib/contactFields";
+import {
+  assertServiceabilitySuccess,
+  ServiceabilityValidationError,
+  serviceabilityBlockedLogPayload,
+  serviceabilityHttpBody,
+  SERVICEABILITY_HTTP_STATUS,
+  validateServiceabilityForBooking,
+} from "../lib/serviceability";
 
 const router = Router();
 
@@ -503,6 +511,19 @@ router.post("/leads/:id/convert", async (req, res) => {
         () => ({}), // servicesTable has no tenant cols in this schema; all services are global per tenant
       );
       if (!service) return res.status(404).json({ error: "Service not found" });
+
+      const { address: leadAddress, locationLat, locationLng, area } = req.body as Record<string, unknown>;
+      const serviceability = await validateServiceabilityForBooking({
+        customerId,
+        serviceId: sid,
+        address: typeof leadAddress === "string" ? leadAddress : lead.address ?? lead.city ?? null,
+        locationLat: locationLat != null ? Number(locationLat) : null,
+        locationLng: locationLng != null ? Number(locationLng) : null,
+        cityName: typeof area === "string" ? area : lead.city ?? null,
+        citySlug: typeof req.body.citySlug === "string" ? req.body.citySlug : null,
+      });
+      assertServiceabilitySuccess(serviceability);
+
       const bookingValues = tenantStamp(req, {
         customerId: customerId,
         serviceId: sid,
@@ -510,6 +531,10 @@ router.post("/leads/:id/convert", async (req, res) => {
         serviceType: service?.category as any || "car_wash",
         status: "pending" as const,
         amount: amount ? String(amount) : null,
+        address: typeof leadAddress === "string" ? leadAddress : lead.address ?? undefined,
+        locationLat: locationLat != null ? Number(locationLat) : undefined,
+        locationLng: locationLng != null ? Number(locationLng) : undefined,
+        cityId: serviceability.resolvedCityId ?? undefined,
       });
       const [booking] = await db.insert(bookingsTable).values(bookingValues as typeof bookingsTable.$inferInsert).returning();
       result.booking = booking;
@@ -568,6 +593,13 @@ router.post("/leads/:id/convert", async (req, res) => {
 
     return res.json({ success: true, leadId: id, ...result });
   } catch (err) {
+    if (err instanceof ServiceabilityValidationError) {
+      req.log.warn(
+        serviceabilityBlockedLogPayload(err.result, { customerId: (req.body as { customerId?: number })?.customerId }),
+        "Booking blocked by serviceability validation",
+      );
+      return res.status(SERVICEABILITY_HTTP_STATUS).json(serviceabilityHttpBody(err.result));
+    }
     req.log.error({ err }, "Convert lead error");
     return res.status(500).json({ error: "Internal server error" });
   }

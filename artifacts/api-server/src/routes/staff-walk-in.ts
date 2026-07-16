@@ -7,6 +7,11 @@ import {
   resolveWalkInJob,
   type WalkInServiceKind,
 } from "../lib/staff/walkInService";
+import {
+  ServiceabilityValidationError,
+  serviceabilityHttpBody,
+  SERVICEABILITY_HTTP_STATUS,
+} from "../lib/serviceability";
 
 const router = Router();
 
@@ -117,6 +122,9 @@ router.post("/staff/walk-in/resolve", async (req, res) => {
 
     return res.json(result);
   } catch (e) {
+    if (e instanceof ServiceabilityValidationError) {
+      return res.status(SERVICEABILITY_HTTP_STATUS).json(serviceabilityHttpBody(e.result));
+    }
     return res.status(400).json({ error: (e as Error).message });
   }
 });

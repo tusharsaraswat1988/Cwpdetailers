@@ -28,6 +28,10 @@ import { findEligibleEntitlement } from "../catalog/entitlementEngine";
 import { tenantStamp } from "../../middlewares/tenantScope";
 import { recordStaffLocation } from "../staffLocation/locationService";
 import { dayBoundsIST } from "../dcms/dateUtils";
+import {
+  assertServiceabilitySuccess,
+  validateServiceabilityForBooking,
+} from "../serviceability";
 
 export type WalkInServiceKind = "car_wash" | "solar_clean" | "daily_clean" | "daily_wash";
 
@@ -644,6 +648,16 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
   const isDraft = consumedFrom === "draft" || input.forceDraft === true;
   const initialStatus = isDraft ? "pending" as const : "scheduled" as const;
 
+  const serviceability = await validateServiceabilityForBooking({
+    customerId: input.customerId,
+    address: loc.address,
+    locationLat: loc.locationLat,
+    locationLng: loc.locationLng,
+    serviceId: serviceId ?? null,
+    cityName: loc.area ?? null,
+  });
+  assertServiceabilitySuccess(serviceability);
+
   const values = tenantStamp(req, {
     customerId: input.customerId,
     vehicleId: loc.vehicleId ?? input.vehicleId ?? null,
@@ -666,6 +680,7 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
     amount: entitlementId ? "0" : null,
     entitlementId,
     status: initialStatus,
+    cityId: serviceability.resolvedCityId ?? null,
   });
 
   const [booking] = await db.insert(bookingsTable).values(values as never).returning();

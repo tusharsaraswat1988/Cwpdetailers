@@ -12,7 +12,7 @@ import { Calendar, Star, Image, ExternalLink, ChevronRight } from "lucide-react"
 import { Link, useLocation } from "wouter";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { Button } from "@/components/ui/button";
-import { mapsViewUrl } from "@/lib/maps";
+import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 
 function monthLabel(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -71,7 +71,7 @@ export default function CustomerHistory() {
           <div>
             <h1 className="font-display font-bold text-2xl">Service History</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              {isLoading ? "" : `${data?.total ?? 0} total service${(data?.total ?? 0) !== 1 ? "s" : ""}`}
+              {isLoading ? "" : `${data?.total ?? 0} service${(data?.total ?? 0) !== 1 ? "s" : ""} used`}
             </p>
           </div>
 
@@ -88,8 +88,8 @@ export default function CustomerHistory() {
               title="No services yet"
               description="Your completed services will appear here"
               action={
-                <Link href="/customer/bookings">
-                  <Button size="sm">Book a Service</Button>
+                <Link href={CUSTOMER_ROUTES.schedule}>
+                  <Button size="sm">Schedule a Service</Button>
                 </Link>
               }
             />
@@ -113,8 +113,8 @@ export default function CustomerHistory() {
                           key={b.id}
                           role="button"
                           tabIndex={0}
-                          onClick={() => navigate(`/customer/bookings/${b.id}`)}
-                          onKeyDown={e => { if (e.key === "Enter") navigate(`/customer/bookings/${b.id}`); }}
+                          onClick={() => navigate(CUSTOMER_ROUTES.scheduledServiceDetail(b.id))}
+                          onKeyDown={e => { if (e.key === "Enter") navigate(CUSTOMER_ROUTES.scheduledServiceDetail(b.id)); }}
                           className="bg-card border border-border rounded-xl p-4 cursor-pointer transition-colors hover:border-primary/40 active:bg-muted/40"
                           data-testid={`history-booking-${b.id}`}
                         >

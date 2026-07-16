@@ -34,6 +34,7 @@ import {
   resolvePackageAddonPrice,
   type PackageAddonInput,
 } from "../lib/catalog/packageAddonService";
+import { invalidateCoverageCacheForMasterUpdate } from "../lib/coverage";
 
 const router = Router();
 
@@ -94,10 +95,29 @@ router.post("/catalog/city-availability", async (req, res) => {
     target: [serviceCityAvailabilityTable.serviceId, serviceCityAvailabilityTable.cityId],
     set: { basePriceOverride, isActive: isActive ?? true, updatedAt: new Date() },
   }).returning();
+  invalidateCoverageCacheForMasterUpdate("service_availability", { cityId: Number(cityId) });
   return res.status(201).json(row);
 });
 
-router.patch("/catalog/city-availability/:id", (req, res) => genericUpdate(serviceCityAvailabilityTable, req, res));
+router.patch("/catalog/city-availability/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(serviceCityAvailabilityTable)
+      .where(eq(serviceCityAvailabilityTable.id, id)).limit(1);
+    const updateData = { ...req.body, updatedAt: new Date() };
+    delete updateData.id;
+    delete updateData.createdAt;
+    const [row] = await db.update(serviceCityAvailabilityTable).set(updateData)
+      .where(eq(serviceCityAvailabilityTable.id, id)).returning();
+    if (!row) return res.status(404).json({ error: "Not found" });
+    const cityId = row.cityId ?? existing?.cityId;
+    if (cityId) invalidateCoverageCacheForMasterUpdate("service_availability", { cityId });
+    return res.json(row);
+  } catch (err) {
+    req.log.error({ err }, "Update error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // ─── Solar Slabs ─────────────────────────────────────────────────────────────
 

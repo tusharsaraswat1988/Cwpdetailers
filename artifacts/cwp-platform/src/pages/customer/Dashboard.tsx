@@ -1,259 +1,168 @@
-import { useAccountScope } from "@/lib/account-scope";
-import { useGetCustomerSummary, getGetCustomerSummaryQueryKey, useListSubscriptions, getListSubscriptionsQueryKey } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
-import CustomerLayout from "@/components/layout/CustomerLayout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, ArrowRight, ArrowDownLeft, ArrowUpRight } from "lucide-react";
-import { Link } from "wouter";
-import { motion } from "framer-motion";
-import { ActivityFeed } from "@/components/shared/ActivityFeed";
-import { CompletionRing } from "@/components/shared/CompletionRing";
-import { StatusBadge } from "@/components/shared/StatusBadge";
-import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
-import { useBranding } from "@/lib/branding";
-import { DcmsHomeCard } from "@/features/daily-cleaning/pages/CustomerDailyCleaningPage";
-import { PasswordSetupNudge } from "@/components/auth/PasswordSetupNudge";
-
-async function fetchWalletTransactions(customerId: number) {
-  const res = await fetch(`/api/customers/${customerId}/wallet/transactions?limit=5`, { credentials: "include" });
-  if (!res.ok) return { data: [] };
-  return res.json();
-}
-
-export default function CustomerDashboard() {
-  const branding = useBranding();
-  const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
-
-  const { data: summary, isLoading } = useGetCustomerSummary(customerId ?? 0, {
-    query: {
-      queryKey: getGetCustomerSummaryQueryKey(customerId ?? 0),
-      enabled: customerId != null,
-    }
-  });
-
-  const { data: subs } = useListSubscriptions({ customerId: String(customerId ?? "") } as any, {
-    query: {
-      queryKey: getListSubscriptionsQueryKey({ customerId: String(customerId ?? "") } as any),
-      enabled: customerId != null,
-    }
-  });
-
-  const { data: walletTx } = useQuery({
-    queryKey: ["customer-wallet-tx", customerId],
-    queryFn: () => fetchWalletTransactions(customerId!),
-    enabled: customerId != null,
-  });
-
-  if (scopeLoading) {
-    return (
-      <CustomerLayout>
-        <div className="p-6"><Skeleton className="h-8 w-48" /></div>
-      </CustomerLayout>
-    );
-  }
-
-  if (missingCustomerLink || customerId == null) {
-    return (
-      <CustomerLayout>
-        <div className="p-6 max-w-md mx-auto text-center space-y-2">
-          <p className="font-semibold">Account not linked</p>
-          <NoCustomerProfileMessage />
-        </div>
-      </CustomerLayout>
-    );
-  }
-
-  const upcomingBooking = (summary?.recentBookings ?? []).find(
-    (b: { status?: string }) => b.status === "scheduled" || b.status === "en_route" || b.status === "in_progress",
-  );
-
-  const activityItems = (summary?.recentBookings ?? []).slice(0, 5).map((b: { id: number; serviceType?: string; scheduledDate?: string; status?: string }) => ({
-    id: b.id,
-    icon: Calendar,
-    iconColor: "text-primary",
-    title: (b.serviceType ?? "Service").replace(/_/g, " "),
-    subtitle: b.status?.replace(/_/g, " "),
-    timestamp: b.scheduledDate,
-  }));
-
-  const statChips = [
-    { label: "Wallet", value: `₹${(summary?.walletBalance ?? 0).toLocaleString("en-IN")}`, color: "text-green-600" },
-    { label: "Active Plans", value: String(summary?.activeSubscriptions ?? 0), color: "text-primary" },
-    { label: "Due", value: `₹${(summary?.pendingDues ?? 0).toLocaleString("en-IN")}`, color: "text-amber-600" },
-  ];
-
-  return (
-    <CustomerLayout>
-      <div className="space-y-5">
-        <PasswordSetupNudge />
-        {/* Next service hero */}
-        {isLoading ? (
-          <Skeleton className="h-36 w-full rounded-2xl" />
-        ) : upcomingBooking ? (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-card overflow-hidden" data-testid="next-service-hero">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Next Service</p>
-                  <StatusBadge status={upcomingBooking.status ?? "scheduled"} pulse={upcomingBooking.status === "in_progress" || upcomingBooking.status === "en_route"} />
-                </div>
-                <div>
-                  <p className="font-display font-bold text-lg capitalize leading-tight">
-                    {(upcomingBooking.serviceType ?? "Service").replace(/_/g, " ")}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {upcomingBooking.scheduledDate}
-                    {upcomingBooking.scheduledTime ? ` · ${upcomingBooking.scheduledTime}` : ""}
-                  </p>
-                </div>
-                <Link href={`/customer/bookings/${upcomingBooking.id}`}>
-                  <Button size="sm" variant="outline" className="w-full h-11" data-testid="btn-view-upcoming-booking">
-                    View details <ArrowRight size={14} className="ml-1" />
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ) : (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="border-dashed" data-testid="no-upcoming-hero">
-              <CardContent className="p-4 text-center space-y-3">
-                <p className="font-medium text-sm">No upcoming services</p>
-                <p className="text-xs text-muted-foreground">Book your next wash or cleaning in one tap</p>
-                <Link href="/customer/bookings">
-                  <Button className="w-full h-11">Book a Service</Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Compact stat chips */}
-        <div className="grid grid-cols-3 gap-2">
-          {statChips.map((chip) => (
-            <div key={chip.label} className="rounded-xl border border-border bg-card p-3 text-center" data-testid={`stat-chip-${chip.label.toLowerCase()}`}>
-              {isLoading ? (
-                <Skeleton className="h-5 w-12 mx-auto mb-1" />
-              ) : (
-                <p className={`font-display font-bold text-base tabular-nums ${chip.color}`}>{chip.value}</p>
-              )}
-              <p className="text-[10px] text-muted-foreground mt-0.5">{chip.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Wallet */}
-        <div>
-          <h2 className="font-semibold text-base mb-3">Wallet</h2>
-          <Card data-testid="customer-wallet-section">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">Current balance</p>
-                  <p className="text-xl font-bold text-green-600">
-                    ₹{(summary?.walletBalance ?? 0).toLocaleString("en-IN")}
-                  </p>
-                </div>
-                <p className="text-xs text-muted-foreground max-w-[160px] text-right">
-                  Contact {branding.brandName} to recharge your wallet (cash / UPI / bank transfer)
-                </p>
-              </div>
-              {(walletTx?.data ?? []).length > 0 && (
-                <div className="border-t border-border pt-3 space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Recent transactions</p>
-                  {(walletTx?.data ?? []).map((tx: any) => (
-                    <div key={tx.id} className="flex items-center justify-between text-sm" data-testid={`wallet-tx-${tx.id}`}>
-                      <div className="flex items-center gap-2">
-                        {tx.type === "credit" ? (
-                          <ArrowDownLeft size={14} className="text-green-500" />
-                        ) : (
-                          <ArrowUpRight size={14} className="text-red-400" />
-                        )}
-                        <div>
-                          <span className="capitalize font-medium">{tx.type}</span>
-                          <p className="text-xs text-muted-foreground">
-                            {tx.reference?.replace(/_/g, " ") ?? "—"} · {new Date(tx.createdAt).toLocaleDateString("en-IN")}
-                          </p>
-                        </div>
-                      </div>
-                      <span className={tx.type === "credit" ? "text-green-600 font-medium" : "text-red-500 font-medium"}>
-                        {tx.type === "credit" ? "+" : "-"}₹{Number(tx.amount).toLocaleString("en-IN")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Daily Cleaning (DCMS) */}
-        <DcmsHomeCard />
-
-        {/* Active subscriptions */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-base">Active Plans</h2>
-            <Link href="/customer/history" className="text-primary text-sm hover:underline flex items-center gap-1">
-              View history <ArrowRight size={13} />
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {(subs?.data ?? []).filter(s => s.status === "active" || s.status === "paused").slice(0, 3).map(sub => (
-              <Card key={sub.id} data-testid={`sub-card-${sub.id}`}>
-                <CardContent className="p-4 flex items-center gap-4">
-                  {sub.totalServices != null && (
-                    <CompletionRing
-                      value={sub.totalServices - (sub.servicesRemaining ?? 0)}
-                      max={sub.totalServices}
-                      size={48}
-                      label="done"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm capitalize">{sub.type?.replace(/_/g, " ")}</p>
-                    <p className="text-xs text-muted-foreground truncate">{sub.serviceName} · Expires {sub.endDate}</p>
-                    {sub.nextDueDate && <p className="text-xs text-muted-foreground">Next due: {sub.nextDueDate}</p>}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <StatusBadge status={sub.status ?? "active"} />
-                    {Number(sub.dueAmount) > 0 && (
-                      <p className="text-xs text-destructive mt-1">₹{Number(sub.dueAmount).toLocaleString("en-IN")} due</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {(subs?.data ?? []).filter(s => s.status === "active" || s.status === "paused").length === 0 && (
-              <div className="text-center py-8 bg-card rounded-xl border border-border">
-                <p className="text-muted-foreground text-sm mb-3">No active subscriptions</p>
-                <Link href="/customer/bookings">
-                  <Button size="sm" className="bg-primary text-secondary hover:bg-primary/90">Book a Service</Button>
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Recent activity feed */}
-        {activityItems.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-semibold text-base">Recent Activity</h2>
-              <Link href="/customer/history" className="text-primary text-xs hover:underline flex items-center gap-1">
-                See all <ArrowRight size={12} />
-              </Link>
-            </div>
-            <Card>
-              <CardContent className="p-4 pt-2">
-                <ActivityFeed items={activityItems} />
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </div>
-    </CustomerLayout>
-  );
-}
+import { useMemo } from "react";
+import {
+  useGetCustomerSummary,
+  getGetCustomerSummaryQueryKey,
+  useListSubscriptions,
+  getListSubscriptionsQueryKey,
+  useListVehicles,
+  getListVehiclesQueryKey,
+  useListSolarSites,
+  getListSolarSitesQueryKey,
+} from "@workspace/api-client-react";
+import { useAccountScope } from "@/lib/account-scope";
+import { useSavedLocations } from "@/features/master-data/api";
+import { useSelectedAddress } from "@/hooks/use-selected-address";
+import CustomerLayout from "@/components/layout/CustomerLayout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
+import { PasswordSetupNudge } from "@/components/auth/PasswordSetupNudge";
+import { usePendingFeedback } from "@/features/daily-cleaning/api";
+import { buildHomeDashboard } from "@/lib/home-dashboard";
+import type { RawSubscription } from "@/lib/customer-plans";
+import { CurrentAddressBar } from "@/components/home/CurrentAddressBar";
+import { OperationalHero } from "@/components/home/OperationalHero";
+import { AdaptivePrimaryCta } from "@/components/home/AdaptivePrimaryCta";
+import { CurrentPlanWidget } from "@/components/home/CurrentPlanWidget";
+import { HomeBelowFold } from "@/components/home/HomeBelowFold";
+
+/** Above-fold block max height — primary content fits one viewport without scroll. */
+const ABOVE_FOLD_MAX = "calc(100dvh - var(--app-bar-height) - var(--bottom-nav-height) - 2rem)";
+
+type VehicleRow = {
+  id: number;
+  registrationNumber?: string;
+  make?: string;
+  model?: string;
+  serviceAddress?: string | null;
+  address?: string | null;
+  serviceLat?: number | null;
+  serviceLng?: number | null;
+  placeId?: string | null;
+};
+
+type SolarRow = {
+  id: number;
+  address?: string;
+  serviceLat?: number | null;
+  serviceLng?: number | null;
+  placeId?: string | null;
+};
+
+export default function CustomerDashboard() {
+  const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
+
+  const { data: summary, isLoading: summaryLoading } = useGetCustomerSummary(customerId ?? 0, {
+    query: {
+      queryKey: getGetCustomerSummaryQueryKey(customerId ?? 0),
+      enabled: customerId != null,
+    },
+  });
+
+  const { data: subs, isLoading: subsLoading } = useListSubscriptions(
+    { customerId: String(customerId ?? "") } as Parameters<typeof useListSubscriptions>[0],
+    {
+      query: {
+        queryKey: getListSubscriptionsQueryKey({ customerId: String(customerId ?? "") } as Parameters<typeof getListSubscriptionsQueryKey>[0]),
+        enabled: customerId != null,
+      },
+    },
+  );
+
+  const { data: vehicles } = useListVehicles(
+    { customerId: customerId ?? 0 },
+    { query: { queryKey: getListVehiclesQueryKey({ customerId: customerId ?? 0 }), enabled: customerId != null } },
+  );
+
+  const { data: solarSites } = useListSolarSites(
+    { customerId: customerId ?? 0 },
+    { query: { queryKey: getListSolarSitesQueryKey({ customerId: customerId ?? 0 }), enabled: customerId != null } },
+  );
+
+  const { data: savedLocations } = useSavedLocations(customerId ?? undefined);
+  const { data: pendingFeedback } = usePendingFeedback();
+
+  const vehicleRows = (vehicles ?? []) as VehicleRow[];
+  const solarRows = (solarSites ?? []) as SolarRow[];
+
+  const addressContext = useMemo(() => ({
+    recentBookings: summary?.recentBookings,
+    vehicles: vehicleRows,
+    solarSites: solarRows,
+    savedLocations,
+  }), [summary?.recentBookings, vehicleRows, solarRows, savedLocations]);
+
+  const { selected, selectLocation, savedLocations: saved } = useSelectedAddress(customerId, addressContext);
+
+  const dashboard = useMemo(() => {
+    if (customerId == null) return null;
+    return buildHomeDashboard({
+      recentBookings: summary?.recentBookings,
+      pendingDues: summary?.pendingDues,
+      subscriptions: (subs?.data ?? []) as RawSubscription[],
+      hasPendingFeedback: (pendingFeedback?.length ?? 0) > 0,
+      vehicles: vehicleRows,
+      solarSites: solarRows,
+      selectedAddress: selected,
+    });
+  }, [customerId, summary, subs, pendingFeedback, vehicleRows, solarRows, selected]);
+
+  const loading = summaryLoading || subsLoading;
+
+  if (scopeLoading) {
+    return (
+      <CustomerLayout>
+        <Skeleton className="h-48 w-full rounded-xl" />
+      </CustomerLayout>
+    );
+  }
+
+  if (missingCustomerLink || customerId == null) {
+    return (
+      <CustomerLayout>
+        <div className="max-w-md mx-auto text-center space-y-2 py-12">
+          <p className="font-semibold">Account not linked</p>
+          <NoCustomerProfileMessage />
+        </div>
+      </CustomerLayout>
+    );
+  }
+
+  return (
+    <CustomerLayout>
+      <div className="flex flex-col min-h-0">
+        <section
+          className="flex flex-col gap-2 shrink-0 overflow-hidden"
+          style={{ maxHeight: ABOVE_FOLD_MAX }}
+          data-testid="home-above-fold"
+          aria-label="Today's service overview"
+        >
+          {loading || !dashboard ? (
+            <>
+              <Skeleton className="h-14 rounded-xl" />
+              <Skeleton className="h-[4.5rem] rounded-xl" />
+              <Skeleton className="h-11 rounded-xl" />
+              <Skeleton className="h-[4.5rem] rounded-xl" />
+            </>
+          ) : (
+            <>
+              <CurrentAddressBar
+                address={dashboard.currentAddress}
+                selected={selected}
+                savedLocations={saved}
+                onSelectAddress={selectLocation}
+              />
+              <OperationalHero hero={dashboard.hero} />
+              <AdaptivePrimaryCta cta={dashboard.cta} />
+              <CurrentPlanWidget plan={dashboard.primaryPlan} />
+            </>
+          )}
+        </section>
+
+        <div className="mt-4 border-t border-border pt-3 shrink-0">
+          <PasswordSetupNudge />
+          {dashboard && <HomeBelowFold actionQueue={dashboard.actionQueue} />}
+        </div>
+      </div>
+    </CustomerLayout>
+  );
+}
