@@ -585,7 +585,7 @@ router.get("/customers/:id/contracts", async (req, res) => {
     }
     const { syncCustomerContracts, listCustomerContracts } = await import("../lib/contracts/contractRegistry");
     await syncCustomerContracts(id);
-    const contracts = await listCustomerContracts(id);
+    const contracts = await listCustomerContracts(id, req);
     return res.json({ customerId: id, contracts });
   } catch (err) {
     req.log.error({ err }, "Customer contracts error");

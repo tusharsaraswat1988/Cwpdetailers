@@ -127,7 +127,7 @@ async function createOneTimeContract(
   const serviceId = body.catalogServiceId ?? body.selectionId;
   const [svc] = await db.select().from(servicesTable).where(eq(servicesTable.id, serviceId)).limit(1);
   if (!svc) throw new Error("Service not found");
-  const { isDailyCleanCatalogServiceName } = await import("../dcms/dailyCleanCatalogGuard");
+  const { isDailyCleanCatalogServiceName } = await import("@workspace/validation");
   if (isDailyCleanCatalogServiceName(svc.name)) {
     throw new Error("Daily cleaning monthly plans must be selected as a Plan — not as a one-time catalog service.");
   }
@@ -359,6 +359,7 @@ async function createCreditsPackageContract(
   body: CreateServiceContractBody,
   asset: NonNullable<Awaited<ReturnType<typeof getAssetDetail>>>,
   performedBy: number,
+  tenant: { companyId?: number | null; franchiseeId?: number | null; branchId?: number | null },
 ): Promise<ServiceContractResult> {
   const [pkg] = await db.select().from(catalogPackagesTable)
     .where(eq(catalogPackagesTable.id, body.selectionId))
@@ -389,11 +390,14 @@ async function createCreditsPackageContract(
     ))
     .limit(1);
 
-  if (registry?.id && body.paymentTerms) {
+  if (registry?.id) {
     const [existing] = await db.select().from(customerContractsTable)
       .where(eq(customerContractsTable.id, registry.id)).limit(1);
     if (existing) {
       await db.update(customerContractsTable).set({
+        companyId: tenant.companyId ?? existing.companyId,
+        franchiseeId: tenant.franchiseeId ?? existing.franchiseeId,
+        branchId: tenant.branchId ?? existing.branchId,
         summaryJson: {
           ...(existing.summaryJson as Record<string, unknown>),
           paymentTerms: body.paymentTerms,
@@ -468,26 +472,38 @@ export async function createServiceContract(
       }
       return createRecurringSolarAmcContract(body, asset, performedBy, tenant);
     case "contract_credits":
-      return createCreditsPackageContract(body, asset, performedBy);
+      return createCreditsPackageContract(body, asset, performedBy, tenant);
     default:
       throw new Error(`Unsupported fulfillment mode: ${fulfillment.mode}`);
   }
 }
 
-export async function getServiceContract(registryId: number) {
+export async function getServiceContract(registryId: number, req?: Request) {
   const rows = await db.select().from(customerContractsTable)
     .where(eq(customerContractsTable.id, registryId))
     .limit(1);
-  return rows[0] ?? null;
+  const row = rows[0] ?? null;
+  if (!row) return null;
+  if (req) {
+    const { rowInScope } = await import("../../middlewares/tenantScope");
+    if (!rowInScope(req, {
+      companyId: row.companyId,
+      branchId: row.branchId,
+      franchiseeId: row.franchiseeId,
+      customerId: row.customerId,
+    })) {
+      return null;
+    }
+  }
+  return row;
 }
 
 export async function updateContractStatus(
   registryId: number,
   status: "active" | "paused" | "completed" | "expired" | "cancelled" | "expiring",
+  req?: Request,
 ) {
-  const [existing] = await db.select().from(customerContractsTable)
-    .where(eq(customerContractsTable.id, registryId))
-    .limit(1);
+  const existing = await getServiceContract(registryId, req);
   if (!existing) throw new Error("Contract not found");
 
   await db.update(customerContractsTable)
@@ -511,7 +527,7 @@ export async function updateContractStatus(
       .where(eq(subscriptionsTable.id, existing.sourceId));
   }
 
-  return getServiceContract(registryId);
+  return getServiceContract(registryId, req);
 }
 
 export { listCustomerContracts };

@@ -117,7 +117,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       {
         id: "book-services",
         href: "/admin/book-services",
-        label: "Book Service",
+        label: "Create Service Request",
         icon: CalendarCheck,
         perm: { resource: "bookings", action: "view" },
       },

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requirePermission } from "../middlewares/auth";
 import { tenantStamp } from "../middlewares/tenantScope";
 import { isBookServicesContractsEnabled } from "../lib/contracts/featureFlag";
 import { isBookServicesBillingEnabled } from "../lib/billing/featureFlag";
@@ -58,7 +58,7 @@ router.get("/service-contracts/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid contract id" });
-    const row = await getServiceContract(id);
+    const row = await getServiceContract(id, req);
     if (!row) return res.status(404).json({ error: "Contract not found" });
     return res.json(row);
   } catch (err) {
@@ -74,6 +74,8 @@ router.get("/service-contracts/:id/billing-preview", requireAuth, async (req, re
     }
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid contract id" });
+    const row = await getServiceContract(id, req);
+    if (!row) return res.status(404).json({ error: "Contract not found" });
     const preview = await previewContractBilling(id);
     return res.json(preview);
   } catch (err) {
@@ -90,6 +92,8 @@ router.post("/service-contracts/:id/quotation", requireAuth, async (req, res) =>
     }
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid contract id" });
+    const row = await getServiceContract(id, req);
+    if (!row) return res.status(404).json({ error: "Contract not found" });
     const stamped = tenantStamp(req, {});
     const result = await createQuotationForContract(id, stamped);
     return res.status(201).json(result);
@@ -107,6 +111,8 @@ router.post("/service-contracts/:id/invoice", requireAuth, async (req, res) => {
     }
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid contract id" });
+    const row = await getServiceContract(id, req);
+    if (!row) return res.status(404).json({ error: "Contract not found" });
     const stamped = tenantStamp(req, {});
     const result = await createInvoiceForContract(id, stamped);
     return res.status(201).json(result);
@@ -125,7 +131,7 @@ router.patch("/service-contracts/:id/status", requireAuth, async (req, res) => {
     if (!status || !allowed.includes(status)) {
       return res.status(400).json({ error: `status must be one of: ${allowed.join(", ")}` });
     }
-    const updated = await updateContractStatus(id, status as "active");
+    const updated = await updateContractStatus(id, status as "active", req);
     return res.json(updated);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Status update failed";
@@ -134,16 +140,22 @@ router.patch("/service-contracts/:id/status", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/customers/:customerId/service-contracts", requireAuth, async (req, res) => {
-  try {
-    const customerId = parseInt(req.params.customerId, 10);
-    if (!Number.isFinite(customerId)) return res.status(400).json({ error: "Invalid customer id" });
-    const rows = await listCustomerContracts(customerId);
-    return res.json({ data: rows });
-  } catch (err) {
-    req.log.error({ err }, "List customer service contracts error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
+/** Explicit permission — this path is outside the /service-contracts guard prefix. */
+router.get(
+  "/customers/:customerId/service-contracts",
+  requireAuth,
+  requirePermission("bookings", "view"),
+  async (req, res) => {
+    try {
+      const customerId = parseInt(req.params.customerId, 10);
+      if (!Number.isFinite(customerId)) return res.status(400).json({ error: "Invalid customer id" });
+      const rows = await listCustomerContracts(customerId, req);
+      return res.json({ data: rows });
+    } catch (err) {
+      req.log.error({ err }, "List customer service contracts error");
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
 
 export default router;

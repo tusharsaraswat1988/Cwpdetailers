@@ -216,6 +216,9 @@ export async function syncContractFromEntitlement(ent: CustomerEntitlement, extr
   packageName?: string | null;
   serviceName?: string | null;
   contractType?: "contract_credits";
+  companyId?: number | null;
+  franchiseeId?: number | null;
+  branchId?: number | null;
 }) {
   const assetType = ent.solarSiteId ? "solar_site" as const
     : ent.vehicleId ? "vehicle" as const
@@ -246,9 +249,9 @@ export async function syncContractFromEntitlement(ent: CustomerEntitlement, extr
       remainingCredits: ent.remainingCredits,
       totalCredits: ent.totalCredits,
     },
-    companyId: null,
-    franchiseeId: null,
-    branchId: null,
+    companyId: extras?.companyId ?? null,
+    franchiseeId: extras?.franchiseeId ?? null,
+    branchId: extras?.branchId ?? null,
   });
 }
 
@@ -369,7 +372,18 @@ export async function countActiveContractsForTenant(req: Request): Promise<numbe
   return Number(row?.count ?? 0);
 }
 
-export async function listCustomerContracts(customerId: number): Promise<RegistryContractRow[]> {
+export async function listCustomerContracts(
+  customerId: number,
+  req?: Request,
+): Promise<RegistryContractRow[]> {
+  const scopeFilters = req
+    ? tenantFilters(req, {
+      companyCol: customerContractsTable.companyId,
+      branchCol: customerContractsTable.branchId,
+      franchiseeCol: customerContractsTable.franchiseeId,
+    })
+    : [];
+
   const rows = await db.select({
     contract: customerContractsTable,
     vehicleNumber: vehiclesTable.registrationNumber,
@@ -390,7 +404,10 @@ export async function listCustomerContracts(customerId: number): Promise<Registr
     .leftJoin(serviceLocationsTable, eq(customerContractsTable.serviceLocationId, serviceLocationsTable.id))
     .leftJoin(assetsTable, eq(customerContractsTable.registryAssetId, assetsTable.id))
     .leftJoin(servicesTable, eq(customerContractsTable.serviceId, servicesTable.id))
-    .where(eq(customerContractsTable.customerId, customerId))
+    .where(and(
+      eq(customerContractsTable.customerId, customerId),
+      ...scopeFilters,
+    ))
     .orderBy(desc(customerContractsTable.updatedAt));
 
   return rows.map(r => {

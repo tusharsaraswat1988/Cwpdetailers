@@ -97,6 +97,8 @@ router.use(
 router.use(
   guardResource("bookings", [
     { match: /\/service-contracts$/, method: "POST", action: "create" },
+    { match: /\/service-contracts\/\d+\/quotation$/, method: "POST", action: "create" },
+    { match: /\/service-contracts\/\d+\/invoice$/, method: "POST", action: "create" },
     { match: /\/service-contracts\/\d+\/status$/, method: "PATCH", action: "edit" },
   ], [], "/service-contracts"),
   serviceContractsRouter,

@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { useCatalogAddons } from "@/features/service-catalog/api";
@@ -9,6 +9,7 @@ import {
   computeDraftTotals,
   paymentTermsLabel,
   billingActionLabel,
+  requestSourceLabel,
 } from "../types";
 import { resolveFulfillmentHint, fulfillmentLabel } from "../api";
 
@@ -40,78 +41,104 @@ export function ReviewSummaryStep({
   const fulfillment = resolveFulfillmentHint(draft);
 
   const discountLabel = draft.discountType === "none"
-    ? "None"
+    ? null
     : draft.discountType === "percent"
-      ? `${draft.discountValue}% off`
-      : `₹${parseFloat(draft.discountValue || "0").toLocaleString("en-IN")} off`;
+      ? `${draft.discountValue}%`
+      : `₹${parseFloat(draft.discountValue || "0").toLocaleString("en-IN")}`;
 
   return (
-    <div className="space-y-4" data-testid="book-step-review">
+    <div className="space-y-5" data-testid="book-step-review">
       <div>
-        <h2 className="font-display font-semibold text-lg">Review and complete sale</h2>
+        <h2 className="font-display font-semibold text-lg">Ready to create this service request?</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Confirms the sale and creates your chosen bill. GST is calculated from the service catalog.
+          Review like an invoice. Creating the request opens quotation/billing and the assignment queue.
         </p>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Summary</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          <SummaryRow label="Customer" value={draft.customer ? `${draft.customer.name} · ${draft.customer.phone}` : "—"} />
-          <SummaryRow
-            label="Service address"
-            value={draft.location
-              ? `${draft.location.label}${draft.location.isDefault ? " (Primary)" : ""}${draft.location.city ? ` · ${draft.location.city}` : ""}`
-              : "—"}
-          />
-          {draft.location?.address && (
-            <p className="text-xs text-muted-foreground -mt-2 pl-0">{draft.location.address}</p>
-          )}
-          <SummaryRow
-            label="Vehicle / solar site"
-            value={draft.asset
-              ? `${draft.asset.label} (${draft.asset.assetType === "vehicle" ? "Vehicle" : "Solar site"})`
-              : "—"}
-          />
-          <SummaryRow
-            label="Service"
-            value={draft.service
-              ? `${draft.service.name} — ₹${draft.service.price.toLocaleString("en-IN")}`
-              : "—"}
-          />
-          {selectedAddons.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Add-ons</p>
-              <ul className="space-y-1">
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="bg-muted/40 px-4 py-3 border-b border-border flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Service request preview</p>
+            <p className="text-sm font-medium">{draft.service?.name ?? "—"}</p>
+          </div>
+          <Badge variant="outline">{fulfillmentLabel(fulfillment.mode)}</Badge>
+        </div>
+
+        <div className="divide-y divide-border text-sm">
+          <Section title="Customer">
+            <p className="font-medium">{draft.customer?.name ?? "—"}</p>
+            <p className="text-muted-foreground">{draft.customer?.phone}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Source: {requestSourceLabel(draft.requestSource)}
+            </p>
+            {draft.requestNotes.trim() && (
+              <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{draft.requestNotes}</p>
+            )}
+          </Section>
+
+          <Section title="Asset">
+            <p className="font-medium">{draft.asset?.label ?? "—"}</p>
+            <p className="text-muted-foreground">
+              {draft.asset?.assetType === "solar_site" ? "Solar site" : "Vehicle"}
+            </p>
+          </Section>
+
+          <Section title="Location">
+            <p className="font-medium">{draft.location?.label ?? "—"}</p>
+            {draft.location?.address && (
+              <p className="text-muted-foreground text-xs mt-0.5">{draft.location.address}</p>
+            )}
+            {draft.location?.city && (
+              <p className="text-muted-foreground text-xs">{draft.location.city}</p>
+            )}
+          </Section>
+
+          <Section title="Service">
+            <p className="font-medium">{draft.service?.name ?? "—"}</p>
+            {selectedAddons.length > 0 && (
+              <ul className="mt-2 space-y-1 text-muted-foreground">
                 {selectedAddons.map(a => (
                   <li key={a.id} className="flex justify-between gap-2">
-                    <span>{a.name}</span>
-                    <span>₹{parseFloat(a.basePrice).toLocaleString("en-IN")}</span>
+                    <span>+ {a.name}</span>
+                    <span className="tabular-nums">₹{parseFloat(a.basePrice).toLocaleString("en-IN")}</span>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-          <SummaryRow label="Sale type" value={fulfillmentLabel(fulfillment.mode)} />
-          <SummaryRow label="Discount" value={discountLabel} />
-          <SummaryRow label="Payment terms" value={paymentTermsLabel(draft.paymentTerms)} />
-          {draft.paymentTerms === "partial_advance" && (
-            <SummaryRow label="Advance" value={`${draft.partialAdvancePercent}% before service`} />
-          )}
+            )}
+          </Section>
 
-          <div className="border-t border-border pt-3 space-y-1">
-            <div className="flex justify-between text-muted-foreground">
-              <span>Estimated subtotal (pre-GST split)</span>
-              <span>₹{totals.estimatedTotal.toLocaleString("en-IN")}</span>
+          <Section title="Pricing">
+            <div className="space-y-1">
+              <Line label="Service" value={`₹${(draft.service?.price ?? 0).toLocaleString("en-IN")}`} />
+              {selectedAddons.length > 0 && (
+                <Line
+                  label="Add-ons"
+                  value={`₹${selectedAddons.reduce((s, a) => s + (parseFloat(a.basePrice) || 0), 0).toLocaleString("en-IN")}`}
+                />
+              )}
+              {discountLabel && <Line label="Discount" value={`− ${discountLabel}`} />}
+              <Line label="Estimated subtotal" value={`₹${totals.estimatedTotal.toLocaleString("en-IN")}`} strong />
+              <p className="text-xs text-muted-foreground pt-1">GST calculated on create.</p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Final GST breakdown appears after the booking and invoice are created.
+          </Section>
+
+          <Section title="Payment">
+            <p>{paymentTermsLabel(draft.paymentTerms)}</p>
+            {draft.paymentTerms === "partial_advance" && (
+              <p className="text-muted-foreground text-xs mt-0.5">
+                {draft.partialAdvancePercent}% advance before service
+              </p>
+            )}
+          </Section>
+
+          <Section title="Assignment preview">
+            <p className="text-muted-foreground">
+              After create, this request enters the Assign Service queue for dispatch.
+              Staff assignment happens in the next operational step — not here.
             </p>
-          </div>
-        </CardContent>
-      </Card>
+          </Section>
+        </div>
+      </div>
 
       <div className="space-y-2">
         <Label>Billing document</Label>
@@ -123,7 +150,7 @@ export function ReviewSummaryStep({
               onClick={() => onBillingActionChange?.(opt)}
               data-testid={`book-billing-${opt}`}
               className={cn(
-                "text-left border rounded-lg px-4 py-3 text-sm transition-colors",
+                "text-left border rounded-lg px-4 py-3 text-sm transition-colors min-h-11",
                 draft.billingAction === opt
                   ? "border-primary bg-primary/5 font-medium"
                   : "border-border hover:border-primary/40",
@@ -136,7 +163,7 @@ export function ReviewSummaryStep({
       </div>
 
       {createError && (
-        <p className="text-sm text-destructive" data-testid="book-create-error">{createError}</p>
+        <p className="text-sm text-destructive" data-testid="book-create-error" role="alert">{createError}</p>
       )}
 
       {onCreate && (
@@ -145,28 +172,37 @@ export function ReviewSummaryStep({
           onClick={onCreate}
           disabled={creating}
           data-testid="book-create-booking"
-          className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 w-full sm:w-auto"
+          className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 w-full min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {creating
-            ? "Creating…"
+            ? "Creating service request…"
             : draft.billingAction === "invoice"
-              ? "Create Service Booking & Invoice"
-              : "Create Service Booking & Quotation"}
+              ? "Create Service Request & Invoice"
+              : "Create Service Request"}
         </button>
       )}
 
       <Badge variant="outline" className="text-xs">
-        Booking → invoice → Assign Service queue
+        Request → quotation/invoice → Assign Service queue
       </Badge>
     </div>
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:justify-between gap-0.5 sm:gap-4">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className="font-medium text-right sm:text-left">{value}</span>
+    <div className="px-4 py-3 grid sm:grid-cols-[7rem_1fr] gap-1 sm:gap-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-0.5">{title}</p>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={cn("flex justify-between gap-3", strong && "font-semibold pt-1 border-t border-border/60")}>
+      <span className={strong ? undefined : "text-muted-foreground"}>{label}</span>
+      <span className="tabular-nums">{value}</span>
     </div>
   );
 }

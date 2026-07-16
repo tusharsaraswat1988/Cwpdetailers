@@ -1,4 +1,4 @@
-import type { BookServicesDraft } from "./types";
+import { buildRequestNotes, type BookServicesDraft } from "./types";
 
 export type FulfillmentMode = "one_time" | "contract_recurring" | "contract_credits";
 
@@ -98,6 +98,7 @@ export function draftToContractPayload(
     paymentTerms: draft.paymentTerms,
     partialAdvancePercent: draft.partialAdvancePercent || undefined,
     estimatedAmount,
+    notes: buildRequestNotes(draft),
   };
 }
 

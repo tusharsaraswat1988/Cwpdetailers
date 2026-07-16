@@ -19,6 +19,7 @@ import { submitMobile } from "@/lib/contactForm";
 import { useToast } from "@/hooks/use-toast";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
+import { clearRememberedPhone, hasRememberedPhone } from "@/lib/rememberPhone";
 
 const accountLinks = [
   { href: CUSTOMER_ROUTES.plans, label: "My Plans", description: "Active plans & remaining services", icon: ClipboardList },

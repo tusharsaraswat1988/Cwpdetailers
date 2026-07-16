@@ -2,6 +2,11 @@ import type { CustomerSearchValue } from "@/features/customers/components/Custom
 import type { CustomerServiceLocationRow } from "@/features/service-locations/api";
 import type { AssetListRow } from "@/features/assets/api";
 import type { ServiceAddon } from "@/features/service-catalog/api";
+import {
+  LEAD_SOURCE_LABELS,
+  LEAD_SOURCE_OPTIONS,
+  type LeadSource,
+} from "@/features/leads/constants";
 
 export type BookServiceKind = "service" | "package" | "plan";
 
@@ -18,8 +23,15 @@ export type PaymentTermsChoice = "full_advance" | "partial_advance" | "after_ser
 
 export type BillingActionChoice = "quotation" | "invoice";
 
+/** How the request entered the desk — same values as Postgres `lead_source`. */
+export type RequestSource = LeadSource;
+
+export const REQUEST_SOURCE_OPTIONS = LEAD_SOURCE_OPTIONS;
+
 export type BookServicesDraft = {
   customer: CustomerSearchValue | null;
+  requestSource: RequestSource;
+  requestNotes: string;
   location: CustomerServiceLocationRow | null;
   asset: AssetListRow | null;
   service: SelectedBookService | null;
@@ -33,6 +45,8 @@ export type BookServicesDraft = {
 
 export const EMPTY_BOOK_SERVICES_DRAFT: BookServicesDraft = {
   customer: null,
+  requestSource: "walk_in",
+  requestNotes: "",
   location: null,
   asset: null,
   service: null,
@@ -44,20 +58,26 @@ export const EMPTY_BOOK_SERVICES_DRAFT: BookServicesDraft = {
   billingAction: "quotation",
 };
 
+/**
+ * Service Advisor workflow:
+ * Who → What needs service → Where → What to sell → Pricing → Confirm request
+ */
 export const WIZARD_STEPS = [
-  { id: "customer", label: "Customer", short: "1" },
-  { id: "location", label: "Service Address", short: "2" },
-  { id: "asset", label: "Vehicle / Solar Site", short: "3" },
-  { id: "service", label: "Service", short: "4" },
-  { id: "addons", label: "Add-ons", short: "5" },
-  { id: "discount", label: "Discount", short: "6" },
-  { id: "payment", label: "Payment Terms", short: "7" },
-  { id: "review", label: "Review", short: "8" },
+  { id: "customer", label: "Customer", short: "1", question: "Who is requesting service?" },
+  { id: "asset", label: "Asset", short: "2", question: "What needs service today?" },
+  { id: "location", label: "Location", short: "3", question: "Where should CWP perform this service?" },
+  { id: "service", label: "Service", short: "4", question: "What would the customer like today?" },
+  { id: "pricing", label: "Pricing", short: "5", question: "What are we selling?" },
+  { id: "review", label: "Review", short: "6", question: "Ready to create this service request?" },
 ] as const;
 
 export type WizardStepId = typeof WIZARD_STEPS[number]["id"];
 
 export type AddonOption = ServiceAddon;
+
+export function requestSourceLabel(source: RequestSource): string {
+  return LEAD_SOURCE_LABELS[source] ?? source;
+}
 
 export function paymentTermsLabel(terms: PaymentTermsChoice): string {
   switch (terms) {
@@ -74,6 +94,13 @@ export function billingActionLabel(action: BillingActionChoice): string {
     case "invoice": return "Create invoice directly";
     default: return action;
   }
+}
+
+export function buildRequestNotes(draft: BookServicesDraft): string | undefined {
+  const parts: string[] = [];
+  parts.push(`Source: ${requestSourceLabel(draft.requestSource)}`);
+  if (draft.requestNotes.trim()) parts.push(draft.requestNotes.trim());
+  return parts.length ? parts.join("\n") : undefined;
 }
 
 export function computeDraftTotals(
@@ -103,16 +130,14 @@ export function computeDraftTotals(
 export function validateStep(step: WizardStepId, draft: BookServicesDraft): string | null {
   switch (step) {
     case "customer":
-      return draft.customer ? null : "Select a customer to continue.";
-    case "location":
-      return draft.location ? null : "Select a service address to continue.";
+      return draft.customer ? null : "Select or create a customer to continue.";
     case "asset":
-      return draft.asset ? null : "Select a vehicle or solar site to continue.";
+      return draft.asset ? null : "Select or register what needs service to continue.";
+    case "location":
+      return draft.location ? null : "Choose where CWP should perform this service.";
     case "service":
       return draft.service ? null : "Select a service, plan, or package to continue.";
-    case "addons":
-      return null;
-    case "discount":
+    case "pricing":
       if (draft.discountType === "percent" && draft.discountValue) {
         const pct = parseFloat(draft.discountValue);
         if (Number.isNaN(pct) || pct < 0 || pct > 100) return "Enter a discount between 0 and 100%.";
@@ -121,8 +146,6 @@ export function validateStep(step: WizardStepId, draft: BookServicesDraft): stri
         const flat = parseFloat(draft.discountValue);
         if (Number.isNaN(flat) || flat < 0) return "Enter a valid discount amount.";
       }
-      return null;
-    case "payment":
       if (draft.paymentTerms === "partial_advance") {
         const pct = parseFloat(draft.partialAdvancePercent);
         if (Number.isNaN(pct) || pct <= 0 || pct >= 100) return "Enter advance percentage between 1 and 99.";

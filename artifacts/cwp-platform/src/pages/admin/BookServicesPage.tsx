@@ -38,8 +38,8 @@ export default function BookServicesPage() {
     <AdminLayout>
       <div className="max-w-3xl mx-auto space-y-6 p-6">
         <PageActionHeader
-          title="Book Service"
-          description="Sell a service to a customer — pick who, where, what car or site, and what they are buying."
+          title="Create Service Request"
+          description="Operational entry for every CWP service — walk-in, phone, WhatsApp, or existing customer. Creates quotation, booking, and assignment queue entry."
           primaryAction={{
             label: "Leads & CRM",
             href: "/admin/leads",
@@ -49,10 +49,10 @@ export default function BookServicesPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">New service booking</CardTitle>
+            <CardTitle className="text-base">New service request</CardTitle>
             <CardDescription>
-              Walk through each step in order. You can add a service address or vehicle inline if the customer is new.
-              The final step creates the job, bill, and staff assignment queue entry.
+              Follow how a service advisor works: customer → asset → where we work → what to sell → pricing → confirm.
+              Create customers, assets, and locations inline without leaving this flow.
             </CardDescription>
           </CardHeader>
           <CardContent>

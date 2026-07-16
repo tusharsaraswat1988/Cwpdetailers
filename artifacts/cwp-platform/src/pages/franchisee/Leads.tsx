@@ -16,6 +16,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { submitMobile, submitOptionalMobile } from "@/lib/contactForm";
 import { ToastAction } from "@/components/ui/toast";
 import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
+import { LEAD_SOURCE_LABELS as SOURCE_LABEL } from "@/features/leads/constants";
 
 const CUSTOMER_BASE_PATH = "/franchisee/customers";
 
@@ -43,7 +44,6 @@ const PIPELINE: { status: LeadStatus; label: string; color: string; borderColor:
   { status: "subscription", label: "Subscription", color: "bg-emerald-500/10 text-emerald-400", borderColor: "border-emerald-500/30" },
   { status: "lost", label: "Lost", color: "bg-red-500/10 text-red-400", borderColor: "border-red-500/30" },
 ];
-const SOURCE_LABEL: Record<string, string> = { whatsapp: "WhatsApp", instagram: "Instagram", facebook: "Facebook", website: "Website", call: "Call", google: "Google", walk_in: "Walk-in", referral: "Referral" };
 const SUBSCRIPTION_TYPES: { value: string; label: string }[] = [
   { value: "monthly_wash", label: "Monthly Wash" }, { value: "solar_amc", label: "Solar AMC" }, { value: "detailing_plan", label: "Detailing Plan" },
 ];
