@@ -83,16 +83,12 @@ router.get("/staff", async (req, res) => {
       bankComplete: staffTable.bankComplete,
       addressComplete: staffTable.addressComplete,
       jobsCompletedThisMonth: sql<number>`(
-        SELECT COUNT(*) FROM bookings b
-        WHERE b.staff_id = ${staffTable.id}
-        AND b.status = 'completed'
-        AND DATE_TRUNC('month', b.scheduled_date::date) = DATE_TRUNC('month', NOW())
+        SELECT COUNT(*) FROM service_executions e
+        WHERE e.assigned_staff_id = ${staffTable.id}
+        AND e.status = 'completed'
+        AND DATE_TRUNC('month', e.scheduled_date::date) = DATE_TRUNC('month', NOW())
       )`,
-      rating: sql<number>`(
-        SELECT AVG(b.rating) FROM bookings b
-        WHERE b.staff_id = ${staffTable.id}
-        AND b.rating IS NOT NULL
-      )`,
+      rating: sql<number>`0`,
       createdAt: staffTable.createdAt,
     }).from(staffTable)
       .leftJoin(branchesTable, eq(staffTable.branchId, branchesTable.id))
@@ -286,9 +282,11 @@ router.get("/staff/:id", async (req, res) => {
       .leftJoin(branchesTable, eq(staffTable.branchId, branchesTable.id))
       .where(eq(staffTable.id, id));
 
-    const recentBookings = await db.select().from(bookingsTable)
-      .where(eq(bookingsTable.staffId, id))
-      .orderBy(desc(bookingsTable.createdAt)).limit(5);
+    // Phase 5.2: staffId removed from bookings — recent jobs via service_executions
+    const { serviceExecutionsTable } = await import("@workspace/db");
+    const recentBookings = await db.select().from(serviceExecutionsTable)
+      .where(eq(serviceExecutionsTable.assignedStaffId, id))
+      .orderBy(desc(serviceExecutionsTable.createdAt)).limit(5);
 
     const attendanceSummary = await db.select({
       status: attendanceTable.status,
@@ -452,33 +450,27 @@ router.get("/staff/:id/performance", async (req, res) => {
     const { month } = req.query as Record<string, string>;
     const monthFilter = month || new Date().toISOString().slice(0, 7);
 
-    const [jobsResult, ratingResult, attendanceResult, revenueResult] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
+    // Phase 5.2: staff/rating/amount removed from bookings — use executions; rating/revenue stub 0
+    const { serviceExecutionsTable } = await import("@workspace/db");
+    const [jobsResult, attendanceResult] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(serviceExecutionsTable)
         .where(and(
-          eq(bookingsTable.staffId, id),
-          eq(bookingsTable.status, "completed"),
-          sql`TO_CHAR(${bookingsTable.scheduledDate}::date, 'YYYY-MM') = ${monthFilter}`,
+          eq(serviceExecutionsTable.assignedStaffId, id),
+          eq(serviceExecutionsTable.status, "completed"),
+          sql`TO_CHAR(${serviceExecutionsTable.scheduledDate}::date, 'YYYY-MM') = ${monthFilter}`,
         )),
-      db.select({ avg: sql<number>`avg(rating)` }).from(bookingsTable)
-        .where(and(eq(bookingsTable.staffId, id), sql`rating IS NOT NULL`)),
       db.select({ count: sql<number>`count(*)` }).from(attendanceTable)
         .where(and(
           eq(attendanceTable.staffId, id),
           eq(attendanceTable.status, "present"),
           sql`TO_CHAR(${attendanceTable.date}::date, 'YYYY-MM') = ${monthFilter}`,
         )),
-      db.select({ total: sql<number>`sum(amount)` }).from(bookingsTable)
-        .where(and(
-          eq(bookingsTable.staffId, id),
-          eq(bookingsTable.status, "completed"),
-          sql`TO_CHAR(${bookingsTable.scheduledDate}::date, 'YYYY-MM') = ${monthFilter}`,
-        )),
     ]);
 
     const jobsCompleted = Number(jobsResult[0]?.count ?? 0);
-    const averageRating = Number(ratingResult[0]?.avg ?? 0);
+    const averageRating = 0;
     const attendanceDays = Number(attendanceResult[0]?.count ?? 0);
-    const revenueGenerated = Number(revenueResult[0]?.total ?? 0);
+    const revenueGenerated = 0;
     const efficiencyScore = Math.round((jobsCompleted * 0.4 + averageRating * 10 * 0.4 + attendanceDays * 0.2) * 10) / 10;
 
     return res.json({ staffId: id, staffName: staff.name, jobsCompleted, revenueGenerated, averageRating, attendanceDays, efficiencyScore, month: monthFilter });

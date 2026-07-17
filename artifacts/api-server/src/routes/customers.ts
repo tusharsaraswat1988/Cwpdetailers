@@ -614,10 +614,11 @@ router.get("/customers/:id/summary", async (req, res) => {
     const upcomingBookings = await db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
       .where(and(eq(bookingsTable.customerId, id), eq(bookingsTable.status, "confirmed")));
 
+    // Phase 5.2: completed is execution-owned — count this month's non-cancelled bookings
     const thisMonthBookings = await db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
       .where(and(
         eq(bookingsTable.customerId, id),
-        eq(bookingsTable.status, "completed"),
+        sql`${bookingsTable.status} <> 'cancelled'`,
         sql`DATE_TRUNC('month', ${bookingsTable.scheduledDate}::date) = DATE_TRUNC('month', NOW())`,
       ));
 

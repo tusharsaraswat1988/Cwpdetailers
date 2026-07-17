@@ -7,6 +7,25 @@ export const invoiceDocumentTypeEnum = pgEnum("invoice_document_type", ["tax_inv
 export const paymentMethodEnum = pgEnum("payment_method", ["cash", "upi", "card", "bank_transfer", "wallet", "razorpay"]);
 export const paymentStatusEnum = pgEnum("payment_status", ["pending", "completed", "failed", "refunded", "reversed"]);
 
+/** Phase 5.6 — commercial lifecycle (orthogonal to legacy invoice status). */
+export const invoiceCommercialStatusEnum = pgEnum("invoice_commercial_status", [
+  "draft",
+  "issued",
+  "payment_pending",
+  "paid",
+  "commercially_closed",
+  "voided",
+]);
+
+/** Phase 5.6 — how completed work maps to a commercial document. */
+export const invoiceBillingModeEnum = pgEnum("invoice_billing_mode", [
+  "subscription_visit",
+  "one_time",
+  "prepaid_fulfillment",
+  "manual",
+]);
+
+
 /** Line item with GST / SAC audit fields stored in JSON on the invoice row. */
 export type InvoiceItem = {
   description: string;
@@ -68,11 +87,20 @@ export const invoicesTable = pgTable("invoices", {
   bookingId: integer("booking_id"),
   quotationId: integer("quotation_id"),
   contractRegistryId: integer("contract_registry_id"),
+  /** Phase 5.6 — Job id (= service_executions.id). Idempotency key for job billing. */
+  executionId: integer("execution_id"),
   serviceLocationId: integer("service_location_id"),
   assetId: integer("asset_id"),
   serviceId: integer("service_id"),
   paymentTerms: text("payment_terms"),
+  billingMode: invoiceBillingModeEnum("billing_mode"),
+  commercialStatus: invoiceCommercialStatusEnum("commercial_status").notNull().default("draft"),
+  commerciallyClosedAt: timestamp("commercially_closed_at"),
+  voidedAt: timestamp("voided_at"),
+  voidReason: text("void_reason"),
+  entitlementConsumed: boolean("entitlement_consumed").notNull().default(false),
   items: json("items").$type<InvoiceItem[]>().notNull().default([]),
+
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   tax: numeric("tax", { precision: 10, scale: 2 }).notNull().default("0"),
   gstAmount: numeric("gst_amount", { precision: 10, scale: 2 }).notNull().default("0"),
@@ -129,3 +157,6 @@ export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type Invoice = typeof invoicesTable.$inferSelect;
 export type Payment = typeof paymentsTable.$inferSelect;
 export type InvoiceDocumentType = Invoice["documentType"];
+export type InvoiceCommercialStatus = Invoice["commercialStatus"];
+export type InvoiceBillingMode = NonNullable<Invoice["billingMode"]>;
+

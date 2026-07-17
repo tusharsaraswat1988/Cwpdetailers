@@ -49,7 +49,7 @@ export async function captureBookingTransitionLocation(
     longitude: location.longitude,
     accuracy: location.accuracy,
     bookingId: booking.id,
-    subscriptionId: booking.subscriptionId,
+    subscriptionId: null, // Phase 5.2: bookings.subscriptionId removed
     geoFenceVerified: needsGeofence ? geoResult!.geoFenceVerified : null,
     geoFenceRadiusMeters: needsGeofence ? geoResult!.geoFenceRadiusMeters : null,
     distanceMeters: needsGeofence ? geoResult!.distanceMeters : null,

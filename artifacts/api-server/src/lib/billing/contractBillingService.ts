@@ -157,7 +157,8 @@ async function buildBillingContext(registryId: number, tx?: Transaction): Promis
       if (!booking) throw new Error("Booking source record not found for contract");
 
       bookingId = booking.id;
-      const amount = parseFloat(booking.amount ?? "0");
+      // Phase 5.2: amount lives on contract summaryJson (not bookings)
+      const amount = parseFloat(String(summary.amount ?? "0"));
       if (amount <= 0) throw new Error("Contract has no billable amount");
 
       const [svc] = booking.serviceId

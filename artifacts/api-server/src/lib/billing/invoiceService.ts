@@ -80,6 +80,9 @@ export type CreateInvoiceInput = {
 
   contractRegistryId?: number | null;
 
+  /** Phase 5.6 — Job id (= service_executions.id) */
+  executionId?: number | null;
+
   serviceLocationId?: number | null;
 
   assetId?: number | null;
@@ -91,6 +94,13 @@ export type CreateInvoiceInput = {
   dueDate?: string | null;
 
   status?: Invoice["status"];
+
+  /** Phase 5.6 commercial lifecycle */
+  commercialStatus?: Invoice["commercialStatus"];
+
+  billingMode?: Invoice["billingMode"];
+
+  entitlementConsumed?: boolean;
 
   paidAmount?: number;
 
@@ -426,9 +436,18 @@ export async function createInvoice(input: CreateInvoiceInput, tx?: Transaction)
 
   if (documentType === "credit_note") status = "sent";
 
-  else if (balanceDue <= 0 && paid > 0) status = "paid";
+  else if (status !== "draft" && balanceDue <= 0 && paid > 0) status = "paid";
 
-  else if (balanceDue <= 0 && gst.totalAmount === 0) status = "paid";
+  else if (status !== "draft" && balanceDue <= 0 && gst.totalAmount === 0) status = "paid";
+
+  let commercialStatus = input.commercialStatus;
+  if (!commercialStatus) {
+    if (documentType === "credit_note") commercialStatus = "issued";
+    else if (status === "draft") commercialStatus = "draft";
+    else if (status === "cancelled") commercialStatus = "voided";
+    else if (status === "paid") commercialStatus = "commercially_closed";
+    else commercialStatus = "payment_pending";
+  }
 
 
 
@@ -506,6 +525,8 @@ export async function createInvoice(input: CreateInvoiceInput, tx?: Transaction)
 
     contractRegistryId: input.contractRegistryId ?? null,
 
+    executionId: input.executionId ?? null,
+
     serviceLocationId: input.serviceLocationId ?? null,
 
     assetId: input.assetId ?? null,
@@ -513,6 +534,12 @@ export async function createInvoice(input: CreateInvoiceInput, tx?: Transaction)
     serviceId: input.serviceId ?? null,
 
     paymentTerms: input.paymentTerms ?? null,
+
+    billingMode: input.billingMode ?? null,
+
+    commercialStatus,
+
+    entitlementConsumed: input.entitlementConsumed ?? false,
 
     items: gst.items,
 
@@ -568,9 +595,11 @@ export async function createInvoice(input: CreateInvoiceInput, tx?: Transaction)
 
     dueDate: input.dueDate ?? null,
 
-    issuedAt: new Date(),
+    issuedAt: status === "draft" ? null : new Date(),
 
-    paidAt: balanceDue <= 0 && documentType !== "credit_note" ? new Date() : null,
+    paidAt: status !== "draft" && balanceDue <= 0 && documentType !== "credit_note" ? new Date() : null,
+
+    commerciallyClosedAt: commercialStatus === "commercially_closed" ? new Date() : null,
 
   }).returning();
 
@@ -991,59 +1020,42 @@ export async function recordPayment(
 
 
 export async function maybeCreateInvoiceOnBookingComplete(
-
   booking: {
-
     id: number;
-
     customerId: number;
-
-    subscriptionId?: number | null;
-
-    entitlementId?: number | null;
-
+    contractRegistryId?: number | null;
     serviceId?: number | null;
-
-    amount?: string | null;
-
     serviceType?: string;
-
     companyId?: number | null;
-
     franchiseeId?: number | null;
-
     branchId?: number | null;
-
   },
-
-  extras?: { serviceName?: string | null },
-
+  extras?: { serviceName?: string | null; amount?: string | number | null },
   tx?: Transaction,
-
 ): Promise<Invoice | null> {
-
-  if (booking.entitlementId) return null;
-
-  if (booking.subscriptionId) return null;
-
-
-
   const existing = await findInvoiceByBookingId(booking.id, tx);
-
   if (existing) return null;
 
-
-
-  const amount = parseFloat(booking.amount ?? "0");
-
+  let amount = extras?.amount != null ? parseFloat(String(extras.amount)) : 0;
+  if (!amount || amount <= 0) {
+    const { customerContractsTable } = await import("@workspace/db");
+    const { eq, and } = await import("drizzle-orm");
+    const dbOrTx = tx ?? db;
+    const [contract] = booking.contractRegistryId
+      ? await dbOrTx.select().from(customerContractsTable)
+        .where(eq(customerContractsTable.id, booking.contractRegistryId)).limit(1)
+      : await dbOrTx.select().from(customerContractsTable)
+        .where(and(
+          eq(customerContractsTable.sourceSystem, "booking"),
+          eq(customerContractsTable.sourceId, booking.id),
+        )).limit(1);
+    const summary = (contract?.summaryJson ?? {}) as Record<string, unknown>;
+    amount = parseFloat(String(summary.amount ?? "0"));
+  }
   if (!amount || amount <= 0) return null;
 
-
-
   const description = extras?.serviceName
-
     ? `${extras.serviceName} · Booking #${booking.id}`
-
     : `${(booking.serviceType ?? "service").replace(/_/g, " ")} · Booking #${booking.id}`;
 
 

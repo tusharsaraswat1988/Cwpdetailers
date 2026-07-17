@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListInvoicesQueryKey } from "@workspace/api-client-react";
-import AdminLayout from "@/components/layout/AdminLayout";
-import { PageActionHeader } from "@/components/layout/PageActionHeader";
+import { PageTemplate } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Settings2 } from "lucide-react";
@@ -10,12 +9,12 @@ import { Link, useLocation } from "wouter";
 import { CreateInvoiceDialog } from "@/features/billing/components/CreateInvoiceDialog";
 import { RecordPaymentDialog } from "@/features/billing/components/RecordPaymentDialog";
 import { CustomerFilterBanner } from "@/features/billing/components/CustomerFilterBanner";
-import { InvoicesTab } from "@/features/billing/components/InvoicesTab";
 import { PaymentsTab } from "@/features/billing/components/PaymentsTab";
 import { QuotationsTab } from "@/features/billing/components/QuotationsTab";
 import { ExpensesTab } from "@/features/billing/components/ExpensesTab";
 import { DuesTab } from "@/features/billing/components/DuesTab";
 import { WalletAdjustmentsTab } from "@/features/billing/components/WalletAdjustmentsTab";
+import { CommercialOperationsCenter } from "@/features/commercial-billing/CommercialOperationsCenter";
 import {
   BILLING_TABS,
   BILLING_TAB_LABELS,
@@ -25,7 +24,7 @@ import {
 
 function buildBillingPath(tab: BillingTab, customerId?: string) {
   const params = new URLSearchParams();
-  if (tab !== "invoices") params.set("tab", tab);
+  if (tab !== "commercial") params.set("tab", tab);
   if (customerId) params.set("customerId", customerId);
   const qs = params.toString();
   return qs ? `/admin/billing?${qs}` : "/admin/billing";
@@ -70,74 +69,74 @@ export default function BillingFinancePage() {
     setLocation(buildBillingPath(next, customerFilter));
   };
 
+  const isCommercialTab = billingTab === "commercial";
+
   return (
-    <AdminLayout>
-      <div className="p-6 space-y-5">
-        <PageActionHeader
-          title="Billing & Finance"
-          description="Invoices, payments, dues, wallet, and expenses"
-          primaryAction={{
-            label: "Record payment",
-            onClick: () => setPayOpen(true),
-            testId: "billing-primary-cta",
-          }}
-          secondaryActions={
-            <>
-              <Link href="/admin/settings/invoice-billing">
-                <Button variant="outline" size="sm">
-                  <Settings2 size={15} className="mr-1.5" />Invoice & GST Settings
-                </Button>
-              </Link>
-              <Button variant="outline" data-testid="btn-create-invoice" onClick={() => setInvOpen(true)}>
-                <FileText size={15} className="mr-1.5" />Create Invoice
-              </Button>
-            </>
-          }
-        />
-        <CreateInvoiceDialog
-          open={invOpen}
-          onOpenChange={setInvOpen}
-          initialCustomerId={prefillCustomerId}
-          onCreated={() => {
-            qc.invalidateQueries({ queryKey: ["invoices"] });
-            qc.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-          }}
-        />
-        <RecordPaymentDialog open={payOpen} onOpenChange={setPayOpen} prefillCustomerId={prefillCustomerId} />
+    <PageTemplate
+      title="Billing & Finance"
+      description="Commercial Operations Center — ready-for-billing handoff, invoice lifecycle and collections, plus payments, quotations, expenses, dues and wallet."
+      breadcrumbs={[{ label: "Commercial" }, { label: "Billing & Finance" }]}
+      primaryAction={{
+        label: "Record payment",
+        onClick: () => setPayOpen(true),
+        testId: "billing-primary-cta",
+      }}
+      secondaryActions={
+        <>
+          <Link href="/admin/settings/invoice-billing">
+            <Button variant="outline" size="sm">
+              <Settings2 size={15} className="mr-1.5" />Invoice & GST Settings
+            </Button>
+          </Link>
+          <Button variant="outline" data-testid="btn-create-invoice" onClick={() => setInvOpen(true)}>
+            <FileText size={15} className="mr-1.5" />Create Invoice
+          </Button>
+        </>
+      }
+    >
+      <CreateInvoiceDialog
+        open={invOpen}
+        onOpenChange={setInvOpen}
+        initialCustomerId={prefillCustomerId}
+        onCreated={() => {
+          qc.invalidateQueries({ queryKey: ["invoices"] });
+          qc.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+        }}
+      />
+      <RecordPaymentDialog open={payOpen} onOpenChange={setPayOpen} prefillCustomerId={prefillCustomerId} />
 
-        {customerFilter && prefillCustomerId && (
-          <CustomerFilterBanner customerId={prefillCustomerId} onClear={clearCustomerFilter} />
-        )}
+      {customerFilter && prefillCustomerId && (
+        <CustomerFilterBanner customerId={prefillCustomerId} onClear={clearCustomerFilter} />
+      )}
 
-        <Tabs value={billingTab} onValueChange={handleTabChange}>
-          <TabsList className="flex flex-wrap h-auto gap-1">
-            {BILLING_TABS.map(tab => (
-              <TabsTrigger key={tab} value={tab} data-testid={`billing-tab-${tab}`}>
-                {BILLING_TAB_LABELS[tab]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+      <Tabs value={billingTab} onValueChange={handleTabChange}>
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          {BILLING_TABS.map(tab => (
+            <TabsTrigger key={tab} value={tab} data-testid={`billing-tab-${tab}`}>
+              {BILLING_TAB_LABELS[tab]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-          <TabsContent value="invoices" className="mt-4">
-            <InvoicesTab customerId={customerFilter} />
-          </TabsContent>
-          <TabsContent value="payments" className="mt-4">
-            <PaymentsTab customerId={customerFilter} />
-          </TabsContent>
-          <TabsContent value="quotations" className="mt-4">
-            <QuotationsTab customerId={customerFilter} prefillCustomerId={prefillCustomerId} />
-          </TabsContent>
-          <TabsContent value="expenses" className="mt-4">
-            <ExpensesTab />
-          </TabsContent>
-          <TabsContent value="dues" className="mt-4">
-            <DuesTab customerId={customerFilter} />
-          </TabsContent>
-          <TabsContent value="wallet-adjustments" className="mt-4">
-            <WalletAdjustmentsTab customerId={customerFilter} prefillCustomerId={prefillCustomerId} />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </AdminLayout>
+        <TabsContent value="commercial" className="mt-4">
+          {isCommercialTab && <CommercialOperationsCenter />}
+        </TabsContent>
+        <TabsContent value="payments" className="mt-4">
+          <PaymentsTab customerId={customerFilter} />
+        </TabsContent>
+        <TabsContent value="quotations" className="mt-4">
+          <QuotationsTab customerId={customerFilter} prefillCustomerId={prefillCustomerId} />
+        </TabsContent>
+        <TabsContent value="expenses" className="mt-4">
+          <ExpensesTab />
+        </TabsContent>
+        <TabsContent value="dues" className="mt-4">
+          <DuesTab customerId={customerFilter} />
+        </TabsContent>
+        <TabsContent value="wallet-adjustments" className="mt-4">
+          <WalletAdjustmentsTab customerId={customerFilter} prefillCustomerId={prefillCustomerId} />
+        </TabsContent>
+      </Tabs>
+    </PageTemplate>
   );
 }

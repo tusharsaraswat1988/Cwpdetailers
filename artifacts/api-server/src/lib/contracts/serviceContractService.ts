@@ -5,7 +5,6 @@
 
 import {
   db,
-  bookingsTable,
   subscriptionsTable,
   catalogPackagesTable,
   catalogPackageEntitlementsTable,
@@ -26,7 +25,6 @@ import {
   type CatalogSelectionKind,
 } from "./fulfillmentMode";
 import {
-  syncContractFromBooking,
   syncContractFromSubscription,
   listCustomerContracts,
 } from "./contractRegistry";
@@ -51,6 +49,7 @@ export type CreateServiceContractBody = {
   partialAdvancePercent?: string;
   startDate?: string;
   scheduledDate?: string;
+  scheduledTime?: string;
   notes?: string;
   estimatedAmount?: number;
 };
@@ -154,14 +153,40 @@ async function createOneTimeContract(
   });
   assertServiceabilitySuccess(serviceability);
 
-  const [booking] = await db.insert(bookingsTable).values({
+  const { createOneTimeContractRegistry, linkContractToBooking } = await import("./contractRegistry");
+  const { bookingCapability } = await import("../booking");
+  const { enqueuePendingFromLegacyBooking } = await import("../assignments/enqueueAdapters");
+
+  // 1) Contract first (commercial intent)
+  const registryId = await createOneTimeContractRegistry({
     customerId: body.customerId,
+    vehicleId: asset.vehicleId ?? null,
+    solarSiteId: asset.solarSiteId ?? null,
+    serviceLocationId: body.serviceLocationId,
+    registryAssetId: body.assetId,
+    serviceId,
+    serviceName: svc.name,
+    scheduledDate,
+    amount: amount.toFixed(2),
+    paymentTerms: body.paymentTerms,
+    discountType: body.discountType,
+    discountValue: body.discountValue,
+    companyId: tenant.companyId ?? null,
+    franchiseeId: tenant.franchiseeId ?? null,
+    branchId: tenant.branchId ?? null,
+  });
+
+  // 2) Booking Engine (schedule only)
+  const createResult = await bookingCapability.createBooking({
+    customerId: body.customerId,
+    contractRegistryId: registryId,
     serviceLocationId: body.serviceLocationId,
     assetId: body.assetId,
     vehicleId: asset.vehicleId ?? null,
     solarSiteId: asset.solarSiteId ?? null,
     serviceId,
     scheduledDate,
+    scheduledTime: body.scheduledTime ?? null,
     serviceType: mapBookingServiceType(asset.assetType, svc.category),
     address,
     area: location.city ?? undefined,
@@ -169,31 +194,34 @@ async function createOneTimeContract(
     locationLng: lng,
     placeId: location.placeId ?? undefined,
     cityId: serviceability.resolvedCityId ?? undefined,
-    status: "scheduled",
-    amount: amount.toFixed(2),
-    addonIds: body.addonIds ?? [],
     notes: body.notes ?? `Book Services — ${svc.name}`,
     companyId: tenant.companyId ?? null,
     franchiseeId: tenant.franchiseeId ?? null,
     branchId: tenant.branchId ?? null,
-  }).returning();
+    status: "scheduled",
+    skipCoverageValidation: true,
+  }, {
+    requestSource: "book_services_one_time",
+  });
 
-  const registryId = await syncContractFromBooking(booking!, {
-    serviceName: svc.name,
-    catalogRefKind: "service",
-    catalogRefId: serviceId,
-    paymentTerms: body.paymentTerms,
-    discountType: body.discountType,
-    discountValue: body.discountValue,
-    registryAssetId: body.assetId,
+  const booking = createResult.booking;
+
+  // 3) Link contract → booking (legacy source_id bridge)
+  await linkContractToBooking(registryId, booking.id, amount.toFixed(2));
+
+  // 4) Waiting assignment queue
+  await enqueuePendingFromLegacyBooking(booking.id);
+  await bookingCapability.markWaitingAssignment(booking.id, {
+    actorId: performedBy,
+    actorName: "Book Services",
   });
 
   return {
     contractType: "one_time",
     registryId,
     sourceSystem: "booking",
-    sourceId: booking!.id,
-    bookingId: booking!.id,
+    sourceId: booking.id,
+    bookingId: booking.id,
     productLine: "one_time_service",
     label: svc.name,
     status: "active",

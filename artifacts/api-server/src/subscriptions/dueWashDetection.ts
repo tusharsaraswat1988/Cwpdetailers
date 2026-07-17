@@ -47,14 +47,20 @@ export async function detectDueWashes(todayStr?: string): Promise<DueWashItem[]>
     const dueMs = new Date(`${dueDate}T12:00:00+05:30`).getTime();
     const daysOverdue = Math.max(0, Math.floor((todayMs - dueMs) / 86400000));
 
+    // Phase 5.2: bookings.subscriptionId removed — match by customer/vehicle + schedule status
+    const conditions = [
+      eq(bookingsTable.customerId, sub.customerId),
+      sql`${bookingsTable.scheduledDate}::text >= ${dueDate}`,
+      inArray(bookingsTable.status, ["draft", "scheduled", "confirmed", "waiting_assignment", "rescheduled"]),
+    ];
+    if (sub.vehicleId != null) {
+      conditions.push(eq(bookingsTable.vehicleId, sub.vehicleId));
+    }
+
     const [existing] = await db
       .select({ id: bookingsTable.id })
       .from(bookingsTable)
-      .where(and(
-        eq(bookingsTable.subscriptionId, sub.id),
-        sql`${bookingsTable.scheduledDate}::text >= ${dueDate}`,
-        inArray(bookingsTable.status, ["scheduled", "confirmed", "en_route", "in_progress"]),
-      ))
+      .where(and(...conditions))
       .limit(1);
 
     if (existing) continue;

@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { subscriptionsTable, bookingsTable, systemJobsTable, notificationsTable, customersTable } from "@workspace/db";
-import { eq, and, or, sql, lte, gte, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, or, sql, lte, gte, isNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
@@ -72,17 +72,8 @@ export async function recomputeNextDueDate(subscriptionId: number, tx?: Transact
   const [sub] = await ctx.select().from(subscriptionsTable).where(eq(subscriptionsTable.id, subscriptionId)).limit(1);
   if (!sub || !sub.frequencyDays) return;
 
-  const [lastBooking] = await ctx.select({ completedAt: bookingsTable.completedAt })
-    .from(bookingsTable)
-    .where(and(
-      eq(bookingsTable.subscriptionId, subscriptionId),
-      eq(bookingsTable.status, "completed"),
-      isNotNull(bookingsTable.completedAt),
-    ))
-    .orderBy(sql`${bookingsTable.completedAt} desc`)
-    .limit(1);
-
-  const baseDate = lastBooking?.completedAt ? new Date(lastBooking.completedAt) : new Date(sub.startDate);
+  // Phase 5.2: bookings no longer link via subscriptionId / completedAt — advance from startDate
+  const baseDate = new Date(sub.startDate);
   const nextDue = new Date(baseDate);
   nextDue.setDate(nextDue.getDate() + sub.frequencyDays);
 
@@ -122,55 +113,51 @@ async function resolveCustomerUserId(customerId: number): Promise<number | undef
 
 /**
  * Mark missed bookings. Bookings with status=scheduled and scheduled_date
- * past the grace period are marked missed, and notifications are created.
- * Also updates subscription status to missed if all active bookings are missed.
+ * past the grace period are cancelled (Phase 5.2: "missed" status removed).
+ * Subscription linkage via bookings.subscriptionId was dropped — subscription
+ * status is no longer updated from this path.
  */
 export async function markMissed() {
   const now = new Date();
   const todayStrYMD = getTodayIST(now);
 
-  // Find scheduled bookings whose scheduled_date has passed.
-  // Per-booking grace is applied via actual timestamp comparison below.
   const missedBookings = await db.select({
     id: bookingsTable.id,
-    subscriptionId: bookingsTable.subscriptionId,
     customerId: bookingsTable.customerId,
     scheduledDate: bookingsTable.scheduledDate,
     scheduledTime: bookingsTable.scheduledTime,
     branchId: bookingsTable.branchId,
     companyId: bookingsTable.companyId,
     franchiseeId: bookingsTable.franchiseeId,
-    graceMinutes: subscriptionsTable.graceMinutes,
   }).from(bookingsTable)
-    .leftJoin(subscriptionsTable, eq(bookingsTable.subscriptionId, subscriptionsTable.id))
     .where(and(
       eq(bookingsTable.status, "scheduled"),
       lte(bookingsTable.scheduledDate, todayStrYMD),
     ));
 
   let updated = 0;
-  const notifiedSubIds = new Set<number>();
+  const defaultGraceMins = 60;
 
   for (const b of missedBookings) {
-    const graceMins = b.graceMinutes ?? 60;
-    // Combine scheduledDate + scheduledTime as IST (+05:30) for accurate deadline
     const scheduledAt = new Date(`${b.scheduledDate}T${b.scheduledTime ?? "00:00"}:00+05:30`);
-    const graceDeadline = new Date(scheduledAt.getTime() + graceMins * 60 * 1000);
+    const graceDeadline = new Date(scheduledAt.getTime() + defaultGraceMins * 60 * 1000);
 
     if (now > graceDeadline) {
       await db.update(bookingsTable)
-        .set({ status: "missed", updatedAt: new Date() })
+        .set({
+          status: "cancelled",
+          cancellationReason: "missed_grace_exceeded",
+          updatedAt: new Date(),
+        })
         .where(eq(bookingsTable.id, b.id));
       updated++;
 
-      // Resolve customer userId for notification targeting
       const customerUserId = await resolveCustomerUserId(b.customerId);
 
-      // Create notification for customer (if linked to a user)
       if (customerUserId != null) {
         await db.insert(notificationsTable).values({
           title: "Missed service",
-          message: `Your booking #${b.id} was missed (scheduled ${b.scheduledDate} ${b.scheduledTime ?? ""}, grace ${graceMins}m).`,
+          message: `Your booking #${b.id} was missed (scheduled ${b.scheduledDate} ${b.scheduledTime ?? ""}, grace ${defaultGraceMins}m).`,
           type: "subscription_expiry",
           channel: "in_app",
           userId: customerUserId,
@@ -180,43 +167,16 @@ export async function markMissed() {
         });
       }
 
-      // Create notification for branch admin (company/branch scoped)
       if (b.companyId != null) {
         await db.insert(notificationsTable).values({
           title: "Missed service",
-          message: `Booking #${b.id} was missed (scheduled ${b.scheduledDate} ${b.scheduledTime ?? ""}, grace ${graceMins}m).`,
+          message: `Booking #${b.id} was missed (scheduled ${b.scheduledDate} ${b.scheduledTime ?? ""}, grace ${defaultGraceMins}m).`,
           type: "subscription_expiry",
           channel: "in_app",
           companyId: b.companyId,
           branchId: b.branchId ?? null,
           franchiseeId: b.franchiseeId ?? null,
         });
-      }
-
-      if (b.subscriptionId) notifiedSubIds.add(b.subscriptionId);
-    }
-  }
-
-  // Update subscription status to missed if any booking was missed
-  for (const subId of notifiedSubIds) {
-    const [activeBooking] = await db.select({ id: bookingsTable.id })
-      .from(bookingsTable)
-      .where(and(
-        eq(bookingsTable.subscriptionId, subId),
-        eq(bookingsTable.status, "scheduled"),
-      ))
-      .limit(1);
-
-    if (!activeBooking) {
-      // Only mark subscription as missed if it is currently active or expiring
-      const [sub] = await db.select({ status: subscriptionsTable.status })
-        .from(subscriptionsTable)
-        .where(eq(subscriptionsTable.id, subId))
-        .limit(1);
-      if (sub && (sub.status === "active" || sub.status === "expiring")) {
-        await db.update(subscriptionsTable)
-          .set({ status: "missed", updatedAt: new Date() })
-          .where(eq(subscriptionsTable.id, subId));
       }
     }
   }

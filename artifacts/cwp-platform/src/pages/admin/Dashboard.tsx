@@ -1,65 +1,14 @@
 import { useGetDashboardStats, getGetDashboardStatsQueryKey, useGetExpiringSoonSubscriptions, useGetSubscriptionHealth } from "@workspace/api-client-react";
-import AdminLayout from "@/components/layout/AdminLayout";
-import { PageActionHeader } from "@/components/layout/PageActionHeader";
+import { PageTemplate, KpiRow, ErrorState, type KpiItem } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, Users, CreditCard, AlertCircle, IndianRupee, Activity, Funnel, Clock, BarChart3, HeartPulse, Pause, Circle, ChevronDown, ClipboardCheck } from "lucide-react";
+import { TrendingUp, Users, CreditCard, AlertCircle, Activity, Clock, BarChart3, HeartPulse, Pause, Circle, ChevronDown, ClipboardCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
 import { Link } from "wouter";
 
 const COLORS = ["hsl(180,100%,40%)", "hsl(220,40%,60%)", "hsl(40,100%,50%)", "hsl(0,84%,60%)", "hsl(270,60%,60%)"];
-
-function StatCard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  color = "text-primary",
-  loading,
-  href,
-  prominent = false,
-}: {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon: typeof Activity;
-  color?: string;
-  loading?: boolean;
-  href?: string;
-  prominent?: boolean;
-}) {
-  const inner = (
-    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-      <Card
-        data-testid={`stat-card-${title.toLowerCase().replace(/\s+/g, "-")}`}
-        className={prominent ? "border-primary/30 shadow-sm" : undefined}
-      >
-        <CardContent className={prominent ? "p-6" : "p-5"}>
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{title}</p>
-              {loading ? <Skeleton className="h-7 w-24 mt-1.5" /> : (
-                <p className={`font-display font-bold ${prominent ? "text-3xl" : "text-2xl"} mt-1 ${color}`}>{value}</p>
-              )}
-              {subtitle && <p className="text-muted-foreground text-xs mt-1">{subtitle}</p>}
-            </div>
-            <div className={`rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 ${prominent ? "w-12 h-12" : "w-10 h-10"}`}>
-              <Icon size={prominent ? 22 : 18} className="text-primary" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-
-  if (href) {
-    return <Link href={href} className="block hover:opacity-95 transition-opacity">{inner}</Link>;
-  }
-  return inner;
-}
 
 async function fetchLeadStats(): Promise<{ total: number; converted: number; conversionRate: number; bySource: { source: string; count: number }[] }> {
   const res = await fetch("/api/leads/stats");
@@ -82,7 +31,7 @@ async function fetchOpsSummary(): Promise<{ pending: number }> {
 }
 
 export default function AdminDashboard() {
-  const { data: stats, isLoading } = useGetDashboardStats({ period: "month" }, { query: { queryKey: getGetDashboardStatsQueryKey({ period: "month" }) } });
+  const { data: stats, isLoading, isError, refetch } = useGetDashboardStats({ period: "month" }, { query: { queryKey: getGetDashboardStatsQueryKey({ period: "month" }) } });
   const { data: expiring } = useGetExpiringSoonSubscriptions();
   const { data: health } = useGetSubscriptionHealth();
   const { data: leadStats } = useQuery({ queryKey: ["leadStats"], queryFn: fetchLeadStats });
@@ -96,75 +45,82 @@ export default function AdminDashboard() {
 
   const pendingAssignments = opsSummary?.pending ?? 0;
 
+  const priorityKpis: KpiItem[] = [
+    {
+      id: "todays-jobs",
+      label: "Today's Jobs",
+      value: stats?.activeJobs ?? "--",
+      icon: Activity,
+      href: "/admin/service-updates",
+      prominent: true,
+    },
+    {
+      id: "pending-assignments",
+      label: "Pending Assignments",
+      value: pendingAssignments,
+      icon: ClipboardCheck,
+      href: "/admin/assign-services",
+      tone: pendingAssignments > 0 ? "warning" : "default",
+      prominent: true,
+    },
+    {
+      id: "collections-due",
+      label: "Collections Due",
+      value: fmt(stats?.pendingDuesTotal ?? 0),
+      icon: AlertCircle,
+      tone: "destructive",
+      subtitle: "Needs collection",
+      href: "/admin/billing?tab=dues",
+      prominent: true,
+    },
+    {
+      id: "open-complaints",
+      label: "Open Complaints",
+      value: stats?.openComplaints ?? "--",
+      icon: AlertCircle,
+      tone: "warning",
+      href: "/admin/complaints",
+      prominent: true,
+    },
+    {
+      id: "revenue-this-month",
+      label: "Revenue This Month",
+      value: fmt(stats?.monthRevenue ?? 0),
+      icon: TrendingUp,
+      subtitle: stats?.todayRevenue ? `Today: ${fmt(stats.todayRevenue)}` : undefined,
+      href: "/admin/billing",
+    },
+  ];
+
+  const secondaryKpis: KpiItem[] = [
+    { id: "active-customers", label: "Active Customers", value: stats?.totalCustomers ?? "--", icon: Users, href: "/admin/customers" },
+  ];
+
   return (
-    <AdminLayout>
-      <div className="p-6 space-y-6">
-        <PageActionHeader
-          title="Dashboard"
-          description="What needs your attention today"
-          primaryAction={{
-            label: "View today's jobs",
-            href: "/admin/service-updates",
-            testId: "dashboard-primary-cta",
-          }}
-        />
+    <PageTemplate
+      title="Dashboard"
+      description="What needs your attention today"
+      primaryAction={{
+        label: "View today's jobs",
+        href: "/admin/service-updates",
+        testId: "dashboard-primary-cta",
+      }}
+    >
+      <div className="text-right -mt-2">
+        <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}</p>
+      </div>
 
-        <div className="text-right -mt-2">
-          <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}</p>
-        </div>
+      {isError ? (
+        <ErrorState description="We couldn't load dashboard stats. Please try again." onRetry={() => refetch()} />
+      ) : (
+        <>
+          {/* Priority KPIs — founder order */}
+          <KpiRow items={priorityKpis} isLoading={isLoading} columns={5} />
+          <KpiRow items={secondaryKpis} isLoading={isLoading} columns={4} />
+        </>
+      )}
 
-        {/* Priority KPIs — founder order */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          <StatCard
-            title="Today's Jobs"
-            value={stats?.activeJobs ?? "--"}
-            icon={Activity}
-            loading={isLoading}
-            href="/admin/service-updates"
-            prominent
-          />
-          <StatCard
-            title="Pending Assignments"
-            value={pendingAssignments}
-            icon={ClipboardCheck}
-            loading={!opsSummary && isLoading}
-            href="/admin/assign-services"
-            color={pendingAssignments > 0 ? "text-amber-600" : "text-primary"}
-            prominent
-          />
-          <StatCard
-            title="Collections Due"
-            value={fmt(stats?.pendingDuesTotal ?? 0)}
-            icon={AlertCircle}
-            color="text-destructive"
-            loading={isLoading}
-            subtitle="Needs collection"
-            href="/admin/billing?tab=dues"
-            prominent
-          />
-          <StatCard
-            title="Open Complaints"
-            value={stats?.openComplaints ?? "--"}
-            icon={AlertCircle}
-            color="text-amber-500"
-            loading={isLoading}
-            href="/admin/complaints"
-            prominent
-          />
-          <StatCard
-            title="Revenue This Month"
-            value={fmt(stats?.monthRevenue ?? 0)}
-            icon={TrendingUp}
-            loading={isLoading}
-            subtitle={stats?.todayRevenue ? `Today: ${fmt(stats.todayRevenue)}` : undefined}
-            href="/admin/billing"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Active Customers" value={stats?.totalCustomers ?? "--"} icon={Users} loading={isLoading} href="/admin/customers" />
-        </div>
-
+      {!isError && (
         <Collapsible>
           <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full py-2">
             <ChevronDown size={16} className="transition-transform [[data-state=open]_&]:rotate-180" />
@@ -208,10 +164,14 @@ export default function AdminDashboard() {
               </Card>
             )}
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard title="Active Subscriptions" value={stats?.activeSubscriptions ?? "--"} icon={CreditCard} loading={isLoading} />
-              <StatCard title="Repeat Customer %" value={`${stats?.repeatCustomerPercent ?? 0}%`} icon={Users} loading={isLoading} />
-            </div>
+            <KpiRow
+              items={[
+                { id: "active-subscriptions", label: "Active Subscriptions", value: stats?.activeSubscriptions ?? "--", icon: CreditCard },
+                { id: "repeat-customer-percent", label: "Repeat Customer %", value: `${stats?.repeatCustomerPercent ?? 0}%`, icon: Users },
+              ]}
+              isLoading={isLoading}
+              columns={4}
+            />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <Card className="lg:col-span-2">
@@ -372,7 +332,7 @@ export default function AdminDashboard() {
             </div>
           </CollapsibleContent>
         </Collapsible>
-      </div>
-    </AdminLayout>
+      )}
+    </PageTemplate>
   );
 }

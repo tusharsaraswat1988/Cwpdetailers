@@ -14,15 +14,13 @@ import { buildBookingTraceContext } from "./correlation/BookingTraceContext";
 import { bookingDomainEventPublisher } from "./domain/events/EventPublisher";
 import { BOOKING_DOMAIN_VERSION, BOOKING_CAPABILITY_VERSION } from "./versioning";
 import {
-  validatePlatformTransition,
-  validateLegacyTransition,
-  canTransitionPlatform,
-  canTransitionLegacy,
-  resolvePlatformStatus,
-  resolveLegacyStatus,
-  mapLegacyTransitionToPlatform,
-  LEGACY_TO_PLATFORM,
-  PLATFORM_TO_LEGACY,
+  BOOKING_STATUSES,
+  BOOKING_TRANSITIONS,
+  SLOT_OCCUPYING_STATUSES,
+  validateTransition,
+  canTransition,
+  isTerminalStatus,
+  isActiveScheduleStatus,
   BookingStateMachineError,
 } from "./domain/stateMachine";
 import { businessRulesEngine } from "./businessRules/BusinessRulesEngine";
@@ -33,8 +31,8 @@ import type { CoverageResult } from "../coverage/CoverageTypes";
 
 describe("Booking Platform Versioning", () => {
   it("exports frozen version markers", () => {
-    expect(BOOKING_DOMAIN_VERSION).toBe("BookingDomainV1");
-    expect(BOOKING_CAPABILITY_VERSION).toBe("BookingCapabilityV1");
+    expect(BOOKING_DOMAIN_VERSION).toBe("BookingDomainV2");
+    expect(BOOKING_CAPABILITY_VERSION).toBe("BookingCapabilityV2");
     expect(bookingCapability.version).toBe(BOOKING_CAPABILITY_VERSION);
   });
 });
@@ -60,46 +58,41 @@ describe("BookingContext", () => {
         serviceType: "car_wash",
         scheduledDate: "2026-07-16",
         status: "scheduled",
-        platformStatus: "CONFIRMED",
       },
       correlation: trace,
     });
     expect(ctx.metadata.version).toBe(BOOKING_DOMAIN_VERSION);
-    expect(ctx.state.platformStatus).toBe("CONFIRMED");
-    expect(ctx.state.legacyStatus).toBe("scheduled");
+    expect(ctx.state.status).toBe("scheduled");
     expect(ctx.correlation.bookingOperationId).toBe(trace.bookingOperationId);
   });
 });
 
 describe("Booking State Machine", () => {
-  it("allows valid platform transitions", () => {
-    expect(canTransitionPlatform("DRAFT", "VALIDATED")).toBe(true);
-    expect(canTransitionPlatform("STARTED", "COMPLETED")).toBe(true);
-    expect(canTransitionPlatform("COMPLETED", "ARCHIVED")).toBe(true);
-    expect(canTransitionPlatform("COMPLETED", "REVIEW_PENDING")).toBe(true);
+  it("exposes schedule-only statuses", () => {
+    expect(BOOKING_STATUSES).toContain("draft");
+    expect(BOOKING_STATUSES).toContain("waiting_assignment");
+    expect(BOOKING_STATUSES).not.toContain("in_progress");
+    expect(SLOT_OCCUPYING_STATUSES).toContain("confirmed");
   });
 
-  it("rejects invalid platform transitions", () => {
-    expect(() => validatePlatformTransition("DRAFT", "COMPLETED")).toThrow(BookingStateMachineError);
+  it("allows valid schedule transitions", () => {
+    expect(canTransition("draft", "scheduled")).toBe(true);
+    expect(canTransition("scheduled", "confirmed")).toBe(true);
+    expect(canTransition("confirmed", "waiting_assignment")).toBe(true);
+    expect(canTransition("scheduled", "cancelled")).toBe(true);
+    expect(BOOKING_TRANSITIONS.waiting_assignment).toContain("rescheduled");
   });
 
-  it("preserves legacy transitions", () => {
-    expect(canTransitionLegacy("scheduled", "confirmed")).toBe(true);
-    expect(canTransitionLegacy("confirmed", "en_route")).toBe(true);
-    expect(() => validateLegacyTransition("completed", "confirmed")).toThrow(BookingStateMachineError);
+  it("rejects invalid transitions", () => {
+    expect(() => validateTransition("draft", "waiting_assignment")).toThrow(BookingStateMachineError);
+    expect(() => validateTransition("cancelled", "scheduled")).toThrow(BookingStateMachineError);
   });
 
-  it("maps legacy to platform status", () => {
-    expect(LEGACY_TO_PLATFORM.pending).toBe("DRAFT");
-    expect(LEGACY_TO_PLATFORM.en_route).toBe("TRAVELLING");
-    expect(LEGACY_TO_PLATFORM.in_progress).toBe("STARTED");
-    expect(PLATFORM_TO_LEGACY.TRAVELLING).toBe("en_route");
-  });
-
-  it("resolves platform status from legacy", () => {
-    expect(resolvePlatformStatus("en_route")).toBe("TRAVELLING");
-    expect(resolveLegacyStatus("TRAVELLING")).toBe("en_route");
-    expect(mapLegacyTransitionToPlatform("in_progress")).toBe("STARTED");
+  it("classifies terminal and active statuses", () => {
+    expect(isTerminalStatus("cancelled")).toBe(true);
+    expect(isTerminalStatus("confirmed")).toBe(false);
+    expect(isActiveScheduleStatus("waiting_assignment")).toBe(true);
+    expect(isActiveScheduleStatus("cancelled")).toBe(false);
   });
 });
 
@@ -133,7 +126,6 @@ describe("Business Rules Engine", () => {
       serviceType: "car_wash",
       scheduledDate: "2026-07-16",
       scheduledTime: "10:00",
-      amount: "500",
       coverageStatus: "AVAILABLE",
       trace: buildBookingTraceContext(),
     });
@@ -188,7 +180,7 @@ describe("Booking Domain Events", () => {
         version: BOOKING_DOMAIN_VERSION,
       },
       bookingContext: buildBookingContext({
-        booking: { id: 1, customerId: 1, serviceType: "car_wash", scheduledDate: "2026-07-16", status: "pending", platformStatus: "DRAFT" },
+        booking: { id: 1, customerId: 1, serviceType: "car_wash", scheduledDate: "2026-07-16", status: "draft" },
         correlation: trace,
       }),
     });
@@ -196,12 +188,11 @@ describe("Booking Domain Events", () => {
   });
 });
 
-describe("Backward Compatibility", () => {
-  it("maps all legacy statuses to platform statuses", () => {
-    const legacyStatuses = ["pending", "scheduled", "confirmed", "en_route", "in_progress", "completed", "cancelled", "rescheduled", "missed"];
-    for (const status of legacyStatuses) {
-      expect(LEGACY_TO_PLATFORM[status]).toBeTruthy();
-      expect(resolvePlatformStatus(status)).toBeTruthy();
+describe("Schedule-only status model", () => {
+  it("covers every BookingStatus in transitions map", () => {
+    for (const status of BOOKING_STATUSES) {
+      expect(BOOKING_TRANSITIONS[status]).toBeDefined();
+      expect(Array.isArray(BOOKING_TRANSITIONS[status])).toBe(true);
     }
   });
 });

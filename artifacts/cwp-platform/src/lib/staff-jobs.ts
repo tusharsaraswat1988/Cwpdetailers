@@ -102,16 +102,24 @@ export function countJobPhotos(job: StaffJob) {
 
 export function canCompleteOtherServiceJob(job: StaffJob) {
   const { before, after } = countJobPhotos(job);
-  return job.status === "in_progress" && before >= REQUIRED_SERVICE_PHOTOS && after >= REQUIRED_SERVICE_PHOTOS;
+  return (
+    (job.status === "in_progress" || job.status === "resumed")
+    && before >= REQUIRED_SERVICE_PHOTOS
+    && after >= REQUIRED_SERVICE_PHOTOS
+  );
 }
 
 export function staffJobKey(job: StaffJob) {
   return `${job.source ?? "booking"}-${job.id}`;
 }
 
+/** Map Field Execution statuses → staff UI job statuses. */
 const EXECUTION_STATUS_MAP: Record<string, string> = {
   scheduled: "scheduled",
+  ready_for_execution: "scheduled",
   started: "in_progress",
+  resumed: "in_progress",
+  paused: "paused",
   completed: "completed",
   cancelled: "cancelled",
   missed: "cancelled",
@@ -171,10 +179,10 @@ export function partitionStaffJobs(all: StaffJob[], todayList: StaffJob[]) {
   return { today: todayList, upcoming, done };
 }
 
-/** Active focus job: in-progress route first, else first scheduled today */
+/** Active focus job: in-progress / paused first, else first ready today */
 export function pickActiveJob(todayJobs: StaffJob[]): StaffJob | null {
   const active =
-    todayJobs.find(j => j.status === "en_route" || j.status === "in_progress") ??
+    todayJobs.find(j => j.status === "en_route" || j.status === "in_progress" || j.status === "paused") ??
     todayJobs.find(j => j.status === "scheduled");
   return active ?? null;
 }

@@ -491,11 +491,12 @@ async function seed() {
       { customerId: sunita.id, vehicleId: v3.id, serviceId: premiumWash.id, type: "monthly_wash", status: "active", startDate: today, endDate: endDate30, frequencyDays: 7, price: "2499", paidAmount: "0", dueAmount: "2499", nextServiceDate: today, branchId: varanasi.id, totalServices: 4, servicesUsed: 0, servicesRemaining: 4 },
     ]);
 
+    // Phase 5.2: schedule-only bookings — no staff/amount/rating/completedAt
     await db.insert(bookingsTable).values([
-      { customerId: arjun.id, vehicleId: v1.id, serviceId: basicWash.id, staffId: ravi.id, branchId: varanasi.id, scheduledDate: today, scheduledTime: "09:00", status: "scheduled", serviceType: "car_wash", amount: "299" },
-      { customerId: sunita.id, vehicleId: v3.id, serviceId: premiumWash.id, staffId: suresh.id, branchId: varanasi.id, scheduledDate: today, scheduledTime: "10:30", status: "in_progress", serviceType: "car_wash", amount: "599" },
-      { customerId: arjun.id, vehicleId: v2.id, serviceId: premiumWash.id, staffId: ravi.id, branchId: varanasi.id, scheduledDate: yesterday, scheduledTime: "16:00", status: "completed", serviceType: "car_wash", amount: "599", rating: 5, completedAt: new Date(Date.now() - 64800000) },
-      { customerId: rohit.id, vehicleId: v4.id, serviceId: basicWash.id, staffId: suresh.id, branchId: varanasi.id, scheduledDate: tomorrow, scheduledTime: "11:00", status: "confirmed", serviceType: "car_wash", amount: "299" },
+      { customerId: arjun.id, vehicleId: v1.id, serviceId: basicWash.id, branchId: varanasi.id, scheduledDate: today, scheduledTime: "09:00", status: "scheduled", serviceType: "car_wash", notes: "seed amount 299; staff ravi" },
+      { customerId: sunita.id, vehicleId: v3.id, serviceId: premiumWash.id, branchId: varanasi.id, scheduledDate: today, scheduledTime: "10:30", status: "waiting_assignment", serviceType: "car_wash", notes: "seed amount 599; staff suresh" },
+      { customerId: arjun.id, vehicleId: v2.id, serviceId: premiumWash.id, branchId: varanasi.id, scheduledDate: yesterday, scheduledTime: "16:00", status: "confirmed", serviceType: "car_wash", notes: "seed amount 599; rating 5" },
+      { customerId: rohit.id, vehicleId: v4.id, serviceId: basicWash.id, branchId: varanasi.id, scheduledDate: tomorrow, scheduledTime: "11:00", status: "confirmed", serviceType: "car_wash", notes: "seed amount 299; staff suresh" },
     ]);
 
     await db.insert(attendanceTable).values([

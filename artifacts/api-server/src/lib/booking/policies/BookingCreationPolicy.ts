@@ -1,11 +1,10 @@
 import { businessRulesEngine } from "../businessRules/BusinessRulesEngine";
 import { defaultBookingRules } from "../businessRules/rules";
-import type { BookingPolicy, BookingPolicyContext, PolicyResult } from "./types";
+import type { BookingPolicy, PolicyResult } from "./types";
 import type { CreateBookingInput } from "../types";
 
 export type CreationPolicyInput = CreateBookingInput & {
   coverageStatus?: string | null;
-  amount?: string | null;
 };
 
 export const bookingCreationPolicy: BookingPolicy<CreationPolicyInput, PolicyResult> = {
@@ -21,12 +20,11 @@ export const bookingCreationPolicy: BookingPolicy<CreationPolicyInput, PolicyRes
         serviceType: input.serviceType,
         scheduledDate: input.scheduledDate,
         scheduledTime: input.scheduledTime,
-        amount: input.amount,
         cityId: input.cityId,
         coverageStatus: input.coverageStatus,
         trace: ctx.trace,
       },
-      ["booking", "coverage", "pricing", "working_hours"],
+      ["booking", "coverage", "working_hours"],
       ctx.logger,
     );
     if (!evaluation.passed) {

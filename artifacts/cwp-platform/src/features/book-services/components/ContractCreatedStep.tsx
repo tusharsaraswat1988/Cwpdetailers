@@ -72,7 +72,7 @@ export function ContractCreatedStep({ draft, result, billing, onBookAnother }: P
             <Row
               label="Invoice"
               value={
-                <Link href="/admin/billing?tab=invoices" className="text-primary hover:underline">
+                <Link href="/admin/billing?tab=commercial" className="text-primary hover:underline">
                   {billing.invoiceNumber ?? `#${billing.invoiceId}`}
                 </Link>
               }

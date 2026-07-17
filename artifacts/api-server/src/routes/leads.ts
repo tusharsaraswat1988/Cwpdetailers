@@ -513,10 +513,13 @@ router.post("/leads/:id/convert", async (req, res) => {
       if (!service) return res.status(404).json({ error: "Service not found" });
 
       const { address: leadAddress, locationLat, locationLng, area } = req.body as Record<string, unknown>;
+      const addressStr = typeof leadAddress === "string"
+        ? leadAddress
+        : lead.city ?? null;
       const serviceability = await validateServiceabilityForBooking({
         customerId,
         serviceId: sid,
-        address: typeof leadAddress === "string" ? leadAddress : lead.address ?? lead.city ?? null,
+        address: addressStr,
         locationLat: locationLat != null ? Number(locationLat) : null,
         locationLng: locationLng != null ? Number(locationLng) : null,
         cityName: typeof area === "string" ? area : lead.city ?? null,
@@ -524,14 +527,15 @@ router.post("/leads/:id/convert", async (req, res) => {
       });
       assertServiceabilitySuccess(serviceability);
 
+      // Phase 5.2: schedule-only booking — no amount; draft instead of pending
       const bookingValues = tenantStamp(req, {
         customerId: customerId,
         serviceId: sid,
         scheduledDate,
         serviceType: service?.category as any || "car_wash",
-        status: "pending" as const,
-        amount: amount ? String(amount) : null,
-        address: typeof leadAddress === "string" ? leadAddress : lead.address ?? undefined,
+        status: "draft" as const,
+        notes: amount ? `Quoted amount: ${amount}` : null,
+        address: addressStr ?? undefined,
         locationLat: locationLat != null ? Number(locationLat) : undefined,
         locationLng: locationLng != null ? Number(locationLng) : undefined,
         cityId: serviceability.resolvedCityId ?? undefined,

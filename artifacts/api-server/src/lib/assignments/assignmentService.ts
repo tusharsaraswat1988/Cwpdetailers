@@ -1,9 +1,12 @@
 /**
- * Sprint 6 — unified manual assignment from pending_service_assignments queue.
+ * Phase 5.3 — Staff Assignment platform.
  *
- * pending_service_assignments is the long-term operational queue (Sprint 6 approved).
- * service_assignments records assignment only — execution is a separate domain (Sprint 7).
- * Does NOT assign staff directly on bookings/subscriptions/entitlements.
+ * Business question: "Who should perform this scheduled service?"
+ * Owns: work queue, assignment, reassignment, remove, timeline, notes, events.
+ * Does NOT own: booking schedule, route planning, attendance, execution, billing.
+ *
+ * pending_service_assignments remains the operational queue.
+ * service_assignments records who is assigned — phase ends at ready_for_execution.
  */
 
 import {
@@ -18,6 +21,7 @@ import {
   staffTable,
   serviceExecutionsTable,
   serviceExecutionNotesTable,
+  bookingsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray, type SQL } from "drizzle-orm";
 import type { Request } from "express";
@@ -29,6 +33,7 @@ import { getTodayIST } from "../../subscriptions/service";
 import { staffOperationalRoleError } from "../staffEcosystem/operationalRoles";
 import {
   type ServiceTaskType,
+  type TaskAssignmentInput,
   getRequiredTaskTypes,
   getRequiredTaskTypesForContract,
   roleSlugForTaskType,
@@ -36,7 +41,12 @@ import {
   defaultTaskTypeForProductLine,
 } from "./assignmentTaskTypes";
 import { assignStaff as assignDcmsStaff } from "../dcms/subscriptionService";
-
+import { assertStaffAssignable, assertStaffBranchMatch } from "./assignmentValidation";
+import {
+  assignmentDomainEventPublisher,
+  baseAssignmentEventFields,
+} from "./domainEvents";
+import { recordAssignmentTimeline, getAssignmentTimeline } from "./assignmentTimeline";
 export type AssignmentPriority = "normal" | "high";
 
 export type TaskAssignmentSlot = {
@@ -64,6 +74,15 @@ export type PendingAssignmentView = {
   priority: AssignmentPriority;
   createdAt: string;
   requiredTasks: TaskAssignmentSlot[];
+  /** Booking Engine read projection when source_system = booking (frozen; read-only). */
+  bookingId: number | null;
+  bookingStatus: string | null;
+  scheduledDate: string | null;
+  scheduledTime: string | null;
+  sourceSystem: string;
+  sourceId: number;
+  notes: string | null;
+  branchId: number | null;
 };
 
 export type AssignedServiceView = {
@@ -85,11 +104,12 @@ export type AssignedServiceView = {
   taskType: ServiceTaskType;
   taskTypeLabel: string;
   assignedAt: string;
-  status: "assigned";
+  status: "assigned" | "ready_for_execution";
+  bookingId: number | null;
+  notes: string | null;
 };
 
-export type { ServiceTaskType, TaskAssignmentInput } from "./assignmentTaskTypes";
-
+export type { ServiceTaskType, TaskAssignmentInput };
 const PRODUCT_LINE_LABELS: Record<string, string> = {
   daily_cleaning: "Daily Cleaning",
   wash_package: "Wash Package",
@@ -151,7 +171,7 @@ function resolveAssignmentTenant(
   return {
     companyId: pending.companyId ?? contract?.companyId ?? scope?.companyId ?? null,
     branchId: pending.branchId ?? contract?.branchId ?? branchFromScope,
-    franchiseeId: pending.franchiseId ?? contract?.franchiseeId ?? scope?.franchiseeId ?? null,
+    franchiseeId: pending.franchiseeId ?? contract?.franchiseeId ?? scope?.franchiseeId ?? null,
   };
 }
 
@@ -246,7 +266,10 @@ export async function listPendingAssignments(
     })
       .from(serviceAssignmentsTable)
       .innerJoin(staffTable, eq(serviceAssignmentsTable.assignedStaffId, staffTable.id))
-      .where(inArray(serviceAssignmentsTable.pendingAssignmentId, pendingIds))
+      .where(and(
+        inArray(serviceAssignmentsTable.pendingAssignmentId, pendingIds),
+        sql`${serviceAssignmentsTable.status} IN ('assigned', 'ready_for_execution')`,
+      ))
     : [];
 
   const assignmentsByPending = new Map<number, typeof assignmentRows>();
@@ -254,6 +277,35 @@ export async function listPendingAssignments(
     const list = assignmentsByPending.get(ar.assignment.pendingAssignmentId) ?? [];
     list.push(ar);
     assignmentsByPending.set(ar.assignment.pendingAssignmentId, list);
+  }
+
+  /** Read-only Booking Engine projection (Phase 5.2 frozen — no writes). */
+  const bookingSourceIds = rows
+    .filter(r => r.pending.sourceSystem === "booking")
+    .map(r => r.pending.sourceId);
+  const bookingById = new Map<number, {
+    id: number;
+    status: string;
+    scheduledDate: string;
+    scheduledTime: string | null;
+  }>();
+  if (bookingSourceIds.length) {
+    const bookingRows = await db.select({
+      id: bookingsTable.id,
+      status: bookingsTable.status,
+      scheduledDate: bookingsTable.scheduledDate,
+      scheduledTime: bookingsTable.scheduledTime,
+    })
+      .from(bookingsTable)
+      .where(inArray(bookingsTable.id, bookingSourceIds));
+    for (const b of bookingRows) {
+      bookingById.set(b.id, {
+        id: b.id,
+        status: b.status,
+        scheduledDate: String(b.scheduledDate),
+        scheduledTime: b.scheduledTime ?? null,
+      });
+    }
   }
 
   function buildTaskSlots(
@@ -275,25 +327,38 @@ export async function listPendingAssignments(
     });
   }
 
-  let result: PendingAssignmentView[] = rows.map(r => ({
-    id: r.pending.id,
-    contractId: r.pending.contractRegistryId,
-    customerId: r.pending.customerId,
-    customerName: r.customerName,
-    serviceLocationId: r.pending.serviceLocationId,
-    serviceLocationLabel: r.locationLabel,
-    serviceLocationType: r.locationType ?? null,
-    serviceLocationCity: r.locationCity ?? null,
-    assetId: r.pending.assetId,
-    assetLabel: r.assetLabel,
-    serviceId: r.pending.serviceId,
-    serviceName: nameByContract.get(r.pending.contractRegistryId)
-      ?? serviceTypeLabel(r.productLine),
-    serviceType: r.productLine,
-    priority: computePriority(r.pending.createdAt),
-    createdAt: r.pending.createdAt.toISOString(),
-    requiredTasks: buildTaskSlots(r.pending.id, r.productLine, r.summaryJson),
-  }));
+  let result: PendingAssignmentView[] = rows.map(r => {
+    const booking = r.pending.sourceSystem === "booking"
+      ? bookingById.get(r.pending.sourceId)
+      : undefined;
+    return {
+      id: r.pending.id,
+      contractId: r.pending.contractRegistryId,
+      customerId: r.pending.customerId,
+      customerName: r.customerName,
+      serviceLocationId: r.pending.serviceLocationId,
+      serviceLocationLabel: r.locationLabel,
+      serviceLocationType: r.locationType ?? null,
+      serviceLocationCity: r.locationCity ?? null,
+      assetId: r.pending.assetId,
+      assetLabel: r.assetLabel,
+      serviceId: r.pending.serviceId,
+      serviceName: nameByContract.get(r.pending.contractRegistryId)
+        ?? serviceTypeLabel(r.productLine),
+      serviceType: r.productLine,
+      priority: computePriority(r.pending.createdAt),
+      createdAt: r.pending.createdAt.toISOString(),
+      requiredTasks: buildTaskSlots(r.pending.id, r.productLine, r.summaryJson),
+      bookingId: booking?.id ?? (r.pending.sourceSystem === "booking" ? r.pending.sourceId : null),
+      bookingStatus: booking?.status ?? null,
+      scheduledDate: booking?.scheduledDate ?? null,
+      scheduledTime: booking?.scheduledTime ?? null,
+      sourceSystem: r.pending.sourceSystem,
+      sourceId: r.pending.sourceId,
+      notes: r.pending.notes ?? null,
+      branchId: r.pending.branchId ?? null,
+    };
+  });
 
   result = result.filter(r => r.requiredTasks.some(t => !t.staffId));
 
@@ -344,9 +409,41 @@ async function getUnassignedTaskTypes(
 ): Promise<ServiceTaskType[]> {
   const existing = await db.select({ taskType: serviceAssignmentsTable.taskType })
     .from(serviceAssignmentsTable)
-    .where(eq(serviceAssignmentsTable.pendingAssignmentId, pendingAssignmentId));
+    .where(and(
+      eq(serviceAssignmentsTable.pendingAssignmentId, pendingAssignmentId),
+      sql`${serviceAssignmentsTable.status} IN ('assigned', 'ready_for_execution')`,
+    ));
   const assigned = new Set(existing.map(r => r.taskType));
   return required.filter(t => !assigned.has(t));
+}
+
+function actorFromReq(req: Request): { actorId: number | null; actorName: string | null } {
+  return {
+    actorId: req.user?.id ?? null,
+    actorName: req.user?.name ?? req.user?.phone ?? null,
+  };
+}
+
+async function assertBookingAllowsAssignment(pending: {
+  sourceSystem: string;
+  sourceId: number;
+}): Promise<number | null> {
+  if (pending.sourceSystem !== "booking") return null;
+  const [booking] = await db.select({
+    id: bookingsTable.id,
+    status: bookingsTable.status,
+  })
+    .from(bookingsTable)
+    .where(eq(bookingsTable.id, pending.sourceId))
+    .limit(1);
+  if (!booking) throw new Error("Linked booking not found");
+  if (booking.status === "cancelled") {
+    throw new Error("Cannot assign staff — booking is cancelled");
+  }
+  if (booking.status !== "waiting_assignment" && booking.status !== "confirmed" && booking.status !== "scheduled") {
+    throw new Error(`Booking status "${booking.status}" does not allow assignment`);
+  }
+  return booking.id;
 }
 
 async function markPendingFullyAssigned(pendingId: number, contractId: number): Promise<void> {
@@ -368,6 +465,7 @@ export async function assignPendingServiceTasks(
   req: Request,
   pendingAssignmentId: number,
   tasks: TaskAssignmentInput[],
+  options?: { notes?: string | null },
 ): Promise<AssignedServiceView[]> {
   if (!tasks.length) throw new Error("At least one task assignment is required");
 
@@ -412,6 +510,9 @@ export async function assignPendingServiceTasks(
   );
 
   const tenant = resolveAssignmentTenant(req, pending, contract);
+  const bookingId = await assertBookingAllowsAssignment(pending);
+  const actor = actorFromReq(req);
+  const notes = options?.notes?.trim() || null;
 
   const results: AssignedServiceView[] = [];
   const performedBy = req.user?.id ?? 0;
@@ -423,17 +524,15 @@ export async function assignPendingServiceTasks(
         eq(serviceAssignmentsTable.taskType, taskType),
       ))
       .limit(1);
-    if (existing) {
+    if (existing && (existing.status === "assigned" || existing.status === "ready_for_execution")) {
       throw new Error(`${taskTypeLabel(taskType)} is already assigned for this job`);
     }
 
     const [staff] = await db.select().from(staffTable)
-      .where(and(eq(staffTable.id, staffId), eq(staffTable.isActive, true)))
+      .where(eq(staffTable.id, staffId))
       .limit(1);
-    if (!staff) throw new Error("Staff member not found or inactive");
-    if (staff.verificationStatus === "suspended") {
-      throw new Error("Staff member is suspended and cannot be assigned");
-    }
+    assertStaffAssignable(staff);
+    assertStaffBranchMatch(staff, tenant.branchId ?? pending.branchId);
 
     const requiredRole = roleSlugForTaskType(taskType);
     const roleErr = await staffOperationalRoleError(staff, requiredRole);
@@ -441,26 +540,50 @@ export async function assignPendingServiceTasks(
 
     const now = new Date();
 
-    const [assignment] = await db.insert(serviceAssignmentsTable).values({
-      pendingAssignmentId: pending.id,
-      customerId: pending.customerId,
-      serviceLocationId: pending.serviceLocationId,
-      assetId: pending.assetId,
-      contractId: pending.contractRegistryId,
-      serviceId: pending.serviceId,
-      assignedStaffId: staffId,
-      taskType,
-      assignedAt: now,
-      status: "assigned",
-      serviceLabel: serviceName,
-      productLine,
-      companyId: tenant.companyId,
-      franchiseeId: tenant.franchiseeId,
-      branchId: tenant.branchId,
-    }).returning();
+    let assignment = existing;
+    if (existing && existing.status === "removed") {
+      const [updated] = await db.update(serviceAssignmentsTable)
+        .set({
+          assignedStaffId: staffId,
+          assignedAt: now,
+          status: "ready_for_execution",
+          serviceLabel: serviceName,
+          productLine,
+          notes,
+          bookingId: bookingId ?? existing.bookingId,
+          companyId: tenant.companyId,
+          franchiseeId: tenant.franchiseeId,
+          branchId: tenant.branchId,
+          updatedAt: now,
+        })
+        .where(eq(serviceAssignmentsTable.id, existing.id))
+        .returning();
+      assignment = updated!;
+    } else {
+      const [inserted] = await db.insert(serviceAssignmentsTable).values({
+        pendingAssignmentId: pending.id,
+        customerId: pending.customerId,
+        serviceLocationId: pending.serviceLocationId,
+        assetId: pending.assetId,
+        contractId: pending.contractRegistryId,
+        serviceId: pending.serviceId,
+        bookingId,
+        assignedStaffId: staffId,
+        taskType,
+        assignedAt: now,
+        status: "ready_for_execution",
+        serviceLabel: serviceName,
+        productLine,
+        notes,
+        companyId: tenant.companyId,
+        franchiseeId: tenant.franchiseeId,
+        branchId: tenant.branchId,
+      }).returning();
+      assignment = inserted!;
+    }
 
     const executionId = await createScheduledExecutionForAssignment({
-      serviceAssignmentId: assignment!.id,
+      serviceAssignmentId: assignment.id,
       contractId: pending.contractRegistryId,
       customerId: pending.customerId,
       serviceLocationId: pending.serviceLocationId,
@@ -480,6 +603,41 @@ export async function assignPendingServiceTasks(
         // DCMS bridge is best-effort; unified assignment still succeeds
       }
     }
+
+    await recordAssignmentTimeline({
+      assignmentId: assignment.id,
+      pendingAssignmentId: pending.id,
+      eventType: "ASSIGNMENT_CREATED",
+      description: `${taskTypeLabel(taskType)} assigned to ${staff.name}`,
+      toStaffId: staffId,
+      actorId: actor.actorId,
+      actorName: actor.actorName,
+      notes,
+      metadata: { taskType, bookingId },
+    });
+    await recordAssignmentTimeline({
+      assignmentId: assignment.id,
+      pendingAssignmentId: pending.id,
+      eventType: "READY_FOR_EXECUTION",
+      description: "Assignment complete — ready for execution phase",
+      toStaffId: staffId,
+      actorId: actor.actorId,
+      actorName: actor.actorName,
+      metadata: { taskType },
+    });
+
+    const eventBase = baseAssignmentEventFields({
+      assignmentId: assignment.id,
+      pendingAssignmentId: pending.id,
+      contractId: pending.contractRegistryId,
+      customerId: pending.customerId,
+      staffId,
+      taskType,
+      bookingId,
+      actorId: actor.actorId,
+    });
+    assignmentDomainEventPublisher.publish({ ...eventBase, type: "AssignmentCreated", staffId });
+    assignmentDomainEventPublisher.publish({ ...eventBase, type: "AssignmentReadyForExecution", staffId });
 
     const [location] = pending.serviceLocationId
       ? await db.select({
@@ -509,7 +667,7 @@ export async function assignPendingServiceTasks(
     });
 
     results.push({
-      id: assignment!.id,
+      id: assignment.id,
       pendingAssignmentId: pending.id,
       contractId: pending.contractRegistryId,
       customerId: pending.customerId,
@@ -527,7 +685,9 @@ export async function assignPendingServiceTasks(
       taskType,
       taskTypeLabel: taskTypeLabel(taskType),
       assignedAt: now.toISOString(),
-      status: "assigned",
+      status: "ready_for_execution",
+      bookingId: bookingId ?? assignment.bookingId ?? null,
+      notes,
     });
   }
 
@@ -585,7 +745,7 @@ export async function recordSubstituteExecution(
     .where(and(
       eq(serviceAssignmentsTable.contractId, input.contractId),
       eq(serviceAssignmentsTable.taskType, input.taskType),
-      eq(serviceAssignmentsTable.status, "assigned"),
+      sql`${serviceAssignmentsTable.status} IN ('assigned', 'ready_for_execution')`,
     ))
     .orderBy(desc(serviceAssignmentsTable.assignedAt))
     .limit(1);
@@ -671,7 +831,7 @@ export async function listAssignedServices(
   },
 ): Promise<AssignedServiceView[]> {
   const conditions: SQL[] = [
-    eq(serviceAssignmentsTable.status, "assigned"),
+    sql`${serviceAssignmentsTable.status} IN ('assigned', 'ready_for_execution')`,
     ...tenantFilters(req, ASSIGNED_SCOPE),
   ];
 
@@ -727,7 +887,10 @@ export async function listAssignedServices(
     taskType: (r.assignment.taskType ?? "one_time_service") as ServiceTaskType,
     taskTypeLabel: taskTypeLabel((r.assignment.taskType ?? "one_time_service") as ServiceTaskType),
     assignedAt: r.assignment.assignedAt.toISOString(),
-    status: "assigned" as const,
+    status: (r.assignment.status === "ready_for_execution" ? "ready_for_execution" : "assigned") as
+      "assigned" | "ready_for_execution",
+    bookingId: r.assignment.bookingId ?? null,
+    notes: r.assignment.notes ?? null,
   }));
 }
 
@@ -759,6 +922,8 @@ export async function getAssignmentDetail(req: Request, assignmentId: number) {
     return null;
   }
 
+  const timeline = await getAssignmentTimeline(assignmentId);
+
   return {
     id: row.assignment.id,
     pendingAssignmentId: row.assignment.pendingAssignmentId,
@@ -779,5 +944,201 @@ export async function getAssignmentDetail(req: Request, assignmentId: number) {
     assignedAt: row.assignment.assignedAt.toISOString(),
     queuedAt: row.pendingCreatedAt?.toISOString() ?? null,
     status: row.assignment.status,
+    bookingId: row.assignment.bookingId ?? null,
+    notes: row.assignment.notes ?? null,
+    timeline: timeline.map(t => ({
+      id: t.id,
+      eventType: t.eventType,
+      title: t.title,
+      description: t.description,
+      fromStaffId: t.fromStaffId,
+      toStaffId: t.toStaffId,
+      actorId: t.actorId,
+      actorName: t.actorName,
+      notes: t.notes,
+      createdAt: t.createdAt.toISOString(),
+    })),
   };
+}
+
+export async function reassignAssignment(
+  req: Request,
+  assignmentId: number,
+  newStaffId: number,
+  options?: { notes?: string | null },
+): Promise<AssignedServiceView> {
+  const [assignment] = await db.select().from(serviceAssignmentsTable)
+    .where(eq(serviceAssignmentsTable.id, assignmentId))
+    .limit(1);
+
+  if (!assignment || !rowInScope(req, {
+    companyId: assignment.companyId,
+    branchId: assignment.branchId,
+    franchiseeId: assignment.franchiseeId,
+    customerId: assignment.customerId,
+  })) {
+    throw new Error("Assignment not found");
+  }
+  if (assignment.status === "removed") {
+    throw new Error("Cannot reassign a removed assignment — assign from the waiting queue instead");
+  }
+  if (assignment.assignedStaffId === newStaffId) {
+    throw new Error("New staff must be different from the current assignee");
+  }
+
+  const [staff] = await db.select().from(staffTable)
+    .where(eq(staffTable.id, newStaffId))
+    .limit(1);
+  assertStaffAssignable(staff);
+  assertStaffBranchMatch(staff, assignment.branchId);
+
+  const taskType = (assignment.taskType ?? "one_time_service") as ServiceTaskType;
+  const roleErr = await staffOperationalRoleError(staff, roleSlugForTaskType(taskType));
+  if (roleErr) throw new Error(roleErr);
+
+  const previousStaffId = assignment.assignedStaffId;
+  const actor = actorFromReq(req);
+  const notes = options?.notes?.trim() || null;
+  const now = new Date();
+
+  const [updated] = await db.update(serviceAssignmentsTable)
+    .set({
+      assignedStaffId: newStaffId,
+      assignedAt: now,
+      status: "ready_for_execution",
+      notes: notes ?? assignment.notes,
+      updatedAt: now,
+    })
+    .where(eq(serviceAssignmentsTable.id, assignmentId))
+    .returning();
+
+  await recordAssignmentTimeline({
+    assignmentId,
+    pendingAssignmentId: assignment.pendingAssignmentId,
+    eventType: "ASSIGNMENT_CHANGED",
+    description: `Reassigned ${taskTypeLabel(taskType)} to ${staff.name}`,
+    fromStaffId: previousStaffId,
+    toStaffId: newStaffId,
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    notes,
+  });
+
+  assignmentDomainEventPublisher.publish({
+    ...baseAssignmentEventFields({
+      assignmentId,
+      pendingAssignmentId: assignment.pendingAssignmentId,
+      contractId: assignment.contractId,
+      customerId: assignment.customerId,
+      staffId: newStaffId,
+      previousStaffId,
+      taskType,
+      bookingId: assignment.bookingId,
+      actorId: actor.actorId,
+    }),
+    type: "AssignmentChanged",
+    staffId: newStaffId,
+    previousStaffId,
+  });
+
+  const [customer] = await db.select({ name: customersTable.name }).from(customersTable)
+    .where(eq(customersTable.id, assignment.customerId)).limit(1);
+  const [location] = assignment.serviceLocationId
+    ? await db.select({
+      label: serviceLocationsTable.label,
+      locationType: serviceLocationsTable.locationType,
+      city: serviceLocationsTable.city,
+    }).from(serviceLocationsTable).where(eq(serviceLocationsTable.id, assignment.serviceLocationId)).limit(1)
+    : [undefined];
+  const [asset] = assignment.assetId
+    ? await db.select({ label: assetsTable.label }).from(assetsTable)
+      .where(eq(assetsTable.id, assignment.assetId)).limit(1)
+    : [null];
+
+  return {
+    id: updated!.id,
+    pendingAssignmentId: updated!.pendingAssignmentId,
+    contractId: updated!.contractId,
+    customerId: updated!.customerId,
+    customerName: customer?.name ?? "Customer",
+    serviceLocationId: updated!.serviceLocationId,
+    serviceLocationLabel: location?.label ?? null,
+    serviceLocationType: location?.locationType ?? null,
+    serviceLocationCity: location?.city ?? null,
+    assetId: updated!.assetId,
+    assetLabel: asset?.label ?? null,
+    assignedStaffId: newStaffId,
+    staffName: staff.name,
+    serviceName: updated!.serviceLabel ?? serviceTypeLabel(updated!.productLine),
+    serviceType: updated!.productLine ?? "service",
+    taskType,
+    taskTypeLabel: taskTypeLabel(taskType),
+    assignedAt: now.toISOString(),
+    status: "ready_for_execution",
+    bookingId: updated!.bookingId ?? null,
+    notes: updated!.notes ?? null,
+  };
+}
+
+export async function removeAssignment(
+  req: Request,
+  assignmentId: number,
+  options?: { notes?: string | null },
+): Promise<{ id: number; status: "removed" }> {
+  const [assignment] = await db.select().from(serviceAssignmentsTable)
+    .where(eq(serviceAssignmentsTable.id, assignmentId))
+    .limit(1);
+
+  if (!assignment || !rowInScope(req, {
+    companyId: assignment.companyId,
+    branchId: assignment.branchId,
+    franchiseeId: assignment.franchiseeId,
+    customerId: assignment.customerId,
+  })) {
+    throw new Error("Assignment not found");
+  }
+  if (assignment.status === "removed") {
+    throw new Error("Assignment is already removed");
+  }
+
+  const actor = actorFromReq(req);
+  const notes = options?.notes?.trim() || null;
+  const previousStaffId = assignment.assignedStaffId;
+  const now = new Date();
+
+  await db.update(serviceAssignmentsTable)
+    .set({ status: "removed", notes: notes ?? assignment.notes, updatedAt: now })
+    .where(eq(serviceAssignmentsTable.id, assignmentId));
+
+  await db.update(pendingServiceAssignmentsTable)
+    .set({ status: "pending", updatedAt: now })
+    .where(eq(pendingServiceAssignmentsTable.id, assignment.pendingAssignmentId));
+
+  await recordAssignmentTimeline({
+    assignmentId,
+    pendingAssignmentId: assignment.pendingAssignmentId,
+    eventType: "ASSIGNMENT_REMOVED",
+    description: "Assignment removed — job returned to waiting queue",
+    fromStaffId: previousStaffId,
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    notes,
+  });
+
+  assignmentDomainEventPublisher.publish({
+    ...baseAssignmentEventFields({
+      assignmentId,
+      pendingAssignmentId: assignment.pendingAssignmentId,
+      contractId: assignment.contractId,
+      customerId: assignment.customerId,
+      previousStaffId,
+      taskType: assignment.taskType ?? undefined,
+      bookingId: assignment.bookingId,
+      actorId: actor.actorId,
+    }),
+    type: "AssignmentRemoved",
+    previousStaffId,
+  });
+
+  return { id: assignmentId, status: "removed" };
 }

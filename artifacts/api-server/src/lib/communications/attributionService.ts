@@ -40,15 +40,14 @@ export async function processCampaignAttribution(campaignId?: number) {
       )).limit(1);
     if (existing) continue;
 
+    // Phase 5.2: bookings no longer store amount/completed — attribute via invoices only
     const [booking] = await db.select({
       id: bookingsTable.id,
-      amount: bookingsTable.amount,
     }).from(bookingsTable)
       .where(and(
         eq(bookingsTable.customerId, event.customerId),
         gte(bookingsTable.createdAt, event.sentAt),
         sql`${bookingsTable.createdAt} <= ${windowEnd}`,
-        eq(bookingsTable.status, "completed"),
       ))
       .orderBy(desc(bookingsTable.createdAt))
       .limit(1);
@@ -68,7 +67,7 @@ export async function processCampaignAttribution(campaignId?: number) {
 
     if (!booking && !invoice) continue;
 
-    const revenue = Number(invoice?.totalAmount ?? booking?.amount ?? 0);
+    const revenue = Number(invoice?.totalAmount ?? 0);
     if (revenue <= 0) continue;
 
     const [attr] = await db.insert(commCampaignAttributionTable).values({

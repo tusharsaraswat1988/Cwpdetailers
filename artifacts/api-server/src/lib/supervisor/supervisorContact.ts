@@ -83,21 +83,17 @@ export async function resolveSupervisorForBooking(bookingId: number): Promise<{
   relatedStaffId: number | null;
   supervisor: SupervisorContact | null;
 }> {
+  // Phase 5.2: staffId removed from bookings — resolve via customer only
   const [booking] = await db
-    .select({ staffId: bookingsTable.staffId, customerId: bookingsTable.customerId })
+    .select({ customerId: bookingsTable.customerId })
     .from(bookingsTable)
     .where(eq(bookingsTable.id, bookingId))
     .limit(1);
 
   if (!booking) return { relatedStaffId: null, supervisor: null };
 
-  if (booking.staffId) {
-    const supervisor = await resolveSupervisorForStaff(booking.staffId);
-    if (supervisor) return { relatedStaffId: booking.staffId, supervisor };
-  }
-
   const supervisor = await resolveSupervisorForCustomer(booking.customerId);
-  return { relatedStaffId: booking.staffId ?? null, supervisor };
+  return { relatedStaffId: null, supervisor };
 }
 
 export async function listDirectReports(supervisorId: number) {

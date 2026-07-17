@@ -3,13 +3,19 @@ import { bookingService } from "../BookingService";
 import { buildBookingTraceContext } from "../correlation/BookingTraceContext";
 import { bookingDomainEventPublisher } from "../domain/events/EventPublisher";
 import { baseBookingEventFields } from "../domain/events/types";
-import { buildBookingMetrics, emitBookingMetrics } from "../metrics/BookingMetrics";
 import { bookingTimelineService } from "../timeline/BookingTimelineService";
 import { bookingSnapshotService } from "../snapshots/BookingSnapshotService";
 import { repositoryBookingSearchProvider } from "../search/RepositorySearchProvider";
 import { bookingSearchRegistry } from "../search/types";
 import { BOOKING_CAPABILITY_VERSION } from "../versioning";
-import type { CreateBookingInput, CreateBookingResult, TransitionBookingInput } from "../types";
+import { schedulingDomainService } from "../scheduling";
+import type {
+  CreateBookingInput,
+  CreateBookingResult,
+  TransitionBookingInput,
+  RescheduleBookingInput,
+  CancelBookingInput,
+} from "../types";
 import { bookingToPublicResponse, BookingValidationError } from "../types";
 import type { BookingSearchCriteria } from "../search/types";
 
@@ -34,7 +40,10 @@ export class BookingCapability {
     });
   }
 
-  async createBooking(input: CreateBookingInput, opts?: BookingCapabilityOptions): Promise<CreateBookingResult & { bookingContext?: Awaited<ReturnType<typeof bookingService.getContext>> }> {
+  async createBooking(
+    input: CreateBookingInput,
+    opts?: BookingCapabilityOptions,
+  ): Promise<CreateBookingResult & { bookingContext?: Awaited<ReturnType<typeof bookingService.getContext>> }> {
     const result = await bookingService.create(input, opts);
     const bookingContext = await bookingService.getContext(result.booking.id, opts);
     return { ...result, bookingContext: bookingContext ?? undefined };
@@ -44,6 +53,36 @@ export class BookingCapability {
     const booking = await bookingService.transition(input, opts);
     const bookingContext = await bookingService.getContext(booking.id, opts);
     return { booking: bookingToPublicResponse(booking), bookingContext };
+  }
+
+  async confirmBooking(
+    bookingId: number,
+    opts?: BookingCapabilityOptions & { actorId?: number; actorName?: string },
+  ) {
+    const booking = await bookingService.confirm(bookingId, opts);
+    return { booking: bookingToPublicResponse(booking) };
+  }
+
+  async markWaitingAssignment(
+    bookingId: number,
+    opts?: BookingCapabilityOptions & { actorId?: number; actorName?: string },
+  ) {
+    const booking = await bookingService.markWaitingAssignment(bookingId, opts);
+    return { booking: bookingToPublicResponse(booking) };
+  }
+
+  async rescheduleBooking(input: RescheduleBookingInput, opts?: BookingCapabilityOptions) {
+    const booking = await bookingService.reschedule(input, opts);
+    return { booking: bookingToPublicResponse(booking) };
+  }
+
+  async cancelBooking(input: CancelBookingInput, opts?: BookingCapabilityOptions) {
+    const booking = await bookingService.cancel(input, opts);
+    return { booking: bookingToPublicResponse(booking) };
+  }
+
+  async getSlots(query: Parameters<typeof schedulingDomainService.getSlots>[0]) {
+    return schedulingDomainService.getSlots(query);
   }
 
   async getBookingContext(bookingId: number, opts?: BookingCapabilityOptions) {

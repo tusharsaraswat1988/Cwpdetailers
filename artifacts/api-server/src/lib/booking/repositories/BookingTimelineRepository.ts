@@ -1,4 +1,4 @@
-import type { BookingTimeline, InsertBookingTimeline, BookingTimelineEventType } from "@workspace/db";
+import type { BookingTimeline, InsertBookingTimeline, BookingTimelineEventType, BookingStatus } from "@workspace/db";
 import { db, bookingTimelineTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
 import type { BookingTraceContext } from "../correlation/BookingTraceContext";
@@ -8,8 +8,8 @@ export type TimelineEntryInput = {
   eventType: BookingTimelineEventType;
   title: string;
   description?: string;
-  fromPlatformStatus?: InsertBookingTimeline["fromPlatformStatus"];
-  toPlatformStatus?: InsertBookingTimeline["toPlatformStatus"];
+  fromStatus?: BookingStatus | null;
+  toStatus?: BookingStatus | null;
   actorId?: number;
   actorName?: string;
   metadata?: Record<string, unknown>;
@@ -23,8 +23,8 @@ export class BookingTimelineRepository {
       eventType: input.eventType,
       title: input.title,
       description: input.description,
-      fromPlatformStatus: input.fromPlatformStatus,
-      toPlatformStatus: input.toPlatformStatus,
+      fromStatus: input.fromStatus ?? null,
+      toStatus: input.toStatus ?? null,
       actorId: input.actorId,
       actorName: input.actorName,
       metadata: input.metadata ?? {},

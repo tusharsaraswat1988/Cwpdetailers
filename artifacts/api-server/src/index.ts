@@ -9,6 +9,7 @@ import { runDcmsMaintenanceJobs } from "./lib/dcms/maintenanceService";
 import { notifyDailyRoutesAvailable } from "./lib/dcms/routeNotifyService";
 import { processPendingNotificationEvents } from "./lib/push/eventProcessor";
 import { todayStrInIST, getNext2359IST } from "./lib/dcms/dateUtils";
+import { bootstrapJobOrchestration } from "./lib/job-orchestration/bootstrap";
 
 const rawPort = process.env["PORT"];
 
@@ -45,6 +46,7 @@ app.listen(port, "0.0.0.0", (err) => {
   bootstrapDcmsScheduler();
   bootstrapMorningRouteNotify();
   bootstrapPushEventProcessor();
+  bootstrapJobOrchestration();
 });
 
 function getNextMidnightIST(now: Date): Date {

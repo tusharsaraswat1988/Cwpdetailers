@@ -34,6 +34,14 @@ export type PendingAssignment = {
   priority: AssignmentPriority;
   createdAt: string;
   requiredTasks: TaskAssignmentSlot[];
+  bookingId: number | null;
+  bookingStatus: string | null;
+  scheduledDate: string | null;
+  scheduledTime: string | null;
+  sourceSystem: string;
+  sourceId: number;
+  notes: string | null;
+  branchId: number | null;
 };
 
 export type AssignedService = {
@@ -55,13 +63,29 @@ export type AssignedService = {
   taskType: ServiceTaskType;
   taskTypeLabel: string;
   assignedAt: string;
-  status: "assigned";
+  status: "assigned" | "ready_for_execution";
+  bookingId: number | null;
+  notes: string | null;
+};
+
+export type AssignmentTimelineEntry = {
+  id: number;
+  eventType: string;
+  title: string;
+  description: string | null;
+  fromStaffId: number | null;
+  toStaffId: number | null;
+  actorId: number | null;
+  actorName: string | null;
+  notes: string | null;
+  createdAt: string;
 };
 
 export type AssignmentDetail = AssignedService & {
   serviceLocationAddress: string | null;
   queuedAt: string | null;
-  status: "pending" | "assigned";
+  status: "pending" | "assigned" | "ready_for_execution" | "removed";
+  timeline?: AssignmentTimelineEntry[];
 };
 
 export type AssignmentFilters = {
@@ -110,6 +134,15 @@ export async function fetchAssignmentDetail(id: number): Promise<AssignmentDetai
   return res.json();
 }
 
+export async function fetchAssignmentTimeline(id: number): Promise<AssignmentTimelineEntry[]> {
+  const res = await fetch(`/api/assignments/${id}/timeline`, { credentials: "include" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Failed to load timeline");
+  }
+  return res.json();
+}
+
 export async function assignPendingService(pendingId: number, staffId: number): Promise<AssignedService> {
   const res = await fetch(`/api/assignments/${pendingId}/assign`, {
     method: "POST",
@@ -132,16 +165,49 @@ export type TaskAssignmentInput = {
 export async function assignPendingServiceTasks(
   pendingId: number,
   tasks: TaskAssignmentInput[],
+  notes?: string,
 ): Promise<AssignedService[]> {
   const res = await fetch(`/api/assignments/${pendingId}/assign`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tasks }),
+    body: JSON.stringify({ tasks, notes }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { error?: string }).error ?? "Assignment failed");
+  }
+  return res.json();
+}
+
+export async function reassignAssignment(
+  assignmentId: number,
+  staffId: number,
+  notes?: string,
+): Promise<AssignedService> {
+  const res = await fetch(`/api/assignments/${assignmentId}/reassign`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ staffId, notes }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Reassignment failed");
+  }
+  return res.json();
+}
+
+export async function removeAssignment(assignmentId: number, notes?: string): Promise<{ id: number; status: string }> {
+  const res = await fetch(`/api/assignments/${assignmentId}/remove`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notes }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? "Remove failed");
   }
   return res.json();
 }

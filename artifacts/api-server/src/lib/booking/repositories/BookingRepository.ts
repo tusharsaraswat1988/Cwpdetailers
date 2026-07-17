@@ -1,4 +1,4 @@
-import type { Booking, InsertBooking, BookingPlatformStatus } from "@workspace/db";
+import type { Booking, InsertBooking } from "@workspace/db";
 import { db, bookingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -19,16 +19,6 @@ export class BookingRepository {
       .where(eq(bookingsTable.id, id))
       .returning();
     return booking ?? null;
-  }
-
-  async updatePlatformStatus(
-    id: number,
-    platformStatus: BookingPlatformStatus,
-    legacyStatus?: string,
-  ): Promise<Booking | null> {
-    const update: Partial<InsertBooking> = { platformStatus };
-    if (legacyStatus) update.status = legacyStatus as InsertBooking["status"];
-    return this.update(id, update);
   }
 }
 

@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { bookingsTable, complaintsTable } from "@workspace/db";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { serviceExecutionsTable } from "@workspace/db";
+import { eq, and, sql, desc } from "drizzle-orm";
 
 export type StaffPerformanceProfile = {
   totalJobs: number;
@@ -14,32 +14,25 @@ export type StaffPerformanceProfile = {
   lastJobDate: string | null;
 };
 
+/** Phase 5.2: staff/rating removed from bookings — use service_executions; rating stubbed at 0. */
 export async function buildStaffPerformanceProfile(staffId: number): Promise<StaffPerformanceProfile> {
   const [counts] = await db.select({
     totalJobs: sql<number>`count(*)::int`,
-    completedJobs: sql<number>`count(*) filter (where ${bookingsTable.status} = 'completed')::int`,
-    dailyCleaningVisits: sql<number>`count(*) filter (where ${bookingsTable.status} = 'completed' and ${bookingsTable.serviceType} = 'daily_cleaning')::int`,
-    carWashes: sql<number>`count(*) filter (where ${bookingsTable.status} = 'completed' and ${bookingsTable.serviceType} in ('car_wash', 'one_time_wash', 'subscription_wash', 'detailing'))::int`,
-    solarJobs: sql<number>`count(*) filter (where ${bookingsTable.status} = 'completed' and ${bookingsTable.serviceType} = 'solar_cleaning')::int`,
-    solarAmcVisits: sql<number>`count(*) filter (where ${bookingsTable.status} = 'completed' and ${bookingsTable.serviceType} = 'solar_cleaning' and ${bookingsTable.notes} ilike '%amc%')::int`,
-    averageRating: sql<number>`coalesce(avg(${bookingsTable.rating}) filter (where ${bookingsTable.rating} is not null), 0)`,
-  }).from(bookingsTable).where(eq(bookingsTable.staffId, staffId));
+    completedJobs: sql<number>`count(*) filter (where ${serviceExecutionsTable.status} = 'completed')::int`,
+    dailyCleaningVisits: sql<number>`count(*) filter (where ${serviceExecutionsTable.status} = 'completed' and ${serviceExecutionsTable.taskType} = 'daily_cleaning')::int`,
+    carWashes: sql<number>`count(*) filter (where ${serviceExecutionsTable.status} = 'completed' and ${serviceExecutionsTable.taskType} in ('car_wash', 'one_time_service', 'interior_detailing'))::int`,
+    solarJobs: sql<number>`count(*) filter (where ${serviceExecutionsTable.status} = 'completed' and ${serviceExecutionsTable.taskType} = 'solar_cleaning')::int`,
+    solarAmcVisits: sql<number>`0::int`,
+  }).from(serviceExecutionsTable).where(eq(serviceExecutionsTable.assignedStaffId, staffId));
 
-  const [lastJob] = await db.select({ scheduledDate: bookingsTable.scheduledDate })
-    .from(bookingsTable)
-    .where(and(eq(bookingsTable.staffId, staffId), eq(bookingsTable.status, "completed")))
-    .orderBy(desc(bookingsTable.scheduledDate))
+  const [lastJob] = await db.select({ scheduledDate: serviceExecutionsTable.scheduledDate })
+    .from(serviceExecutionsTable)
+    .where(and(
+      eq(serviceExecutionsTable.assignedStaffId, staffId),
+      eq(serviceExecutionsTable.status, "completed"),
+    ))
+    .orderBy(desc(serviceExecutionsTable.scheduledDate))
     .limit(1);
-
-  const staffBookings = await db.select({ id: bookingsTable.id }).from(bookingsTable).where(eq(bookingsTable.staffId, staffId));
-  const bookingIds = staffBookings.map((b) => b.id);
-  let complaintsReceived = 0;
-  if (bookingIds.length > 0) {
-    const [complaintCount] = await db.select({ cnt: sql<number>`count(*)::int` })
-      .from(complaintsTable)
-      .where(inArray(complaintsTable.bookingId, bookingIds));
-    complaintsReceived = Number(complaintCount?.cnt ?? 0);
-  }
 
   return {
     totalJobs: Number(counts?.totalJobs ?? 0),
@@ -48,8 +41,8 @@ export async function buildStaffPerformanceProfile(staffId: number): Promise<Sta
     carWashes: Number(counts?.carWashes ?? 0),
     solarJobs: Number(counts?.solarJobs ?? 0),
     solarAmcVisits: Number(counts?.solarAmcVisits ?? 0),
-    averageRating: Math.round(Number(counts?.averageRating ?? 0) * 10) / 10,
-    complaintsReceived,
+    averageRating: 0,
+    complaintsReceived: 0,
     lastJobDate: lastJob?.scheduledDate ?? null,
   };
 }

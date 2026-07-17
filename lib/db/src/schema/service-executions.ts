@@ -5,8 +5,41 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { serviceTaskTypeEnum } from "./service-task-type";
 
+/**
+ * Phase 5.4 Field Execution lifecycle (happy path):
+ * ready_for_execution → started → paused → resumed → completed
+ * Legacy: scheduled (treated as ready), missed, rescheduled kept for history.
+ *
+ * Phase 5.5: this row IS the Job entity (ADR A — no Job Card).
+ * Operational lifecycle lives in ops_status / priority / escalation columns.
+ */
 export const serviceExecutionStatusEnum = pgEnum("service_execution_status", [
-  "scheduled", "started", "completed", "missed", "cancelled", "rescheduled",
+  "scheduled",
+  "ready_for_execution",
+  "started",
+  "paused",
+  "resumed",
+  "completed",
+  "missed",
+  "cancelled",
+  "rescheduled",
+]);
+
+/** Phase 5.5 — operational job lifecycle (orthogonal to field status). */
+export const jobOpsStatusEnum = pgEnum("job_ops_status", [
+  "in_field",
+  "pending_quality_review",
+  "reopened",
+  "approved",
+  "ready_for_billing",
+  "cancelled",
+]);
+
+export const jobPriorityEnum = pgEnum("job_priority", [
+  "low",
+  "normal",
+  "high",
+  "urgent",
 ]);
 
 export const serviceExecutionPhotoKindEnum = pgEnum("service_execution_photo_kind", [
@@ -34,11 +67,32 @@ export const serviceExecutionsTable = pgTable("service_executions", {
   substituteForStaffId: integer("substitute_for_staff_id"),
   scheduledDate: date("scheduled_date").notNull(),
   scheduledTime: text("scheduled_time"),
-  status: serviceExecutionStatusEnum("status").notNull().default("scheduled"),
+  status: serviceExecutionStatusEnum("status").notNull().default("ready_for_execution"),
   startedAt: timestamp("started_at"),
+  pausedAt: timestamp("paused_at"),
+  resumedAt: timestamp("resumed_at"),
   completedAt: timestamp("completed_at"),
+  customerSignatureUrl: text("customer_signature_url"),
+  customerSignedAt: timestamp("customer_signed_at"),
   cancellationReason: text("cancellation_reason"),
   rescheduledFromId: integer("rescheduled_from_id"),
+  /** Phase 5.5 Job Orchestration (Job = this row). */
+  opsStatus: jobOpsStatusEnum("ops_status").notNull().default("in_field"),
+  priority: jobPriorityEnum("priority").notNull().default("normal"),
+  dependsOnExecutionId: integer("depends_on_execution_id"),
+  isEscalated: boolean("is_escalated").notNull().default(false),
+  escalationReason: text("escalation_reason"),
+  escalatedAt: timestamp("escalated_at"),
+  escalatedBy: integer("escalated_by"),
+  opsOwnerUserId: integer("ops_owner_user_id"),
+  qualityReviewStartedAt: timestamp("quality_review_started_at"),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: integer("approved_by"),
+  readyForBillingAt: timestamp("ready_for_billing_at"),
+  reopenedAt: timestamp("reopened_at"),
+  reopenReason: text("reopen_reason"),
+  opsCancelledAt: timestamp("ops_cancelled_at"),
+  opsCancelReason: text("ops_cancel_reason"),
   legacyBookingId: integer("legacy_booking_id"),
   legacyDcmsVisitId: integer("legacy_dcms_visit_id"),
   companyId: integer("company_id"),
@@ -53,6 +107,10 @@ export const serviceExecutionsTable = pgTable("service_executions", {
   index("idx_service_executions_status").on(t.status),
   index("idx_service_executions_customer").on(t.customerId),
   index("idx_service_executions_scheduled_date").on(t.scheduledDate),
+  index("idx_service_executions_ops_status").on(t.opsStatus),
+  index("idx_service_executions_priority").on(t.priority),
+  index("idx_service_executions_escalated").on(t.isEscalated),
+  index("idx_service_executions_depends_on").on(t.dependsOnExecutionId),
 ]);
 
 export const serviceExecutionPhotosTable = pgTable("service_execution_photos", {
@@ -110,3 +168,6 @@ export const insertServiceExecutionSchema = createInsertSchema(serviceExecutions
 
 export type ServiceExecution = typeof serviceExecutionsTable.$inferSelect;
 export type InsertServiceExecution = z.infer<typeof insertServiceExecutionSchema>;
+export type ServiceExecutionStatus = typeof serviceExecutionStatusEnum.enumValues[number];
+export type JobOpsStatus = typeof jobOpsStatusEnum.enumValues[number];
+export type JobPriority = typeof jobPriorityEnum.enumValues[number];

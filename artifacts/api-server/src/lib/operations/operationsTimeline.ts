@@ -76,14 +76,12 @@ export async function getOperationsTimeline(req: Request, date: string): Promise
     db.select({
       booking: bookingsTable,
       customerName: customersTable.name,
-      staffName: staffTable.name,
       vehicleNumber: vehiclesTable.registrationNumber,
       solarAddress: solarSitesTable.address,
       serviceName: servicesTable.name,
     })
       .from(bookingsTable)
       .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
-      .leftJoin(staffTable, eq(bookingsTable.staffId, staffTable.id))
       .leftJoin(vehiclesTable, eq(bookingsTable.vehicleId, vehiclesTable.id))
       .leftJoin(solarSitesTable, eq(bookingsTable.solarSiteId, solarSitesTable.id))
       .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
@@ -121,8 +119,8 @@ export async function getOperationsTimeline(req: Request, date: string): Promise
     workType: row.serviceName ?? row.booking.serviceType.replace(/_/g, " "),
     status: row.booking.status,
     scheduledAt: `${row.booking.scheduledDate}T${row.booking.scheduledTime ?? "00:00"}:00`,
-    staffName: row.staffName,
-    staffId: row.booking.staffId,
+    staffName: null, // Phase 5.2: staff on assignments/executions
+    staffId: null,
   }));
 
   const visitItems: OperationsTimelineItem[] = visits.map(row => ({

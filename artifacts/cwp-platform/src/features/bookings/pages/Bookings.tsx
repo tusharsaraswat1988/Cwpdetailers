@@ -1,64 +1,69 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useListBookings, getListBookingsQueryKey,
-  type ListBookingsParams,
+  type ListBookingsParams, type Booking, type BookingEvent,
   useTransitionBooking, useRescheduleBooking, useGetBookingEvents,
   type ListBookingsStatus,
 } from "@workspace/api-client-react";
-import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { Calendar, Clock, User, ChevronLeft, ChevronRight, Route, CheckCircle, XCircle, ArrowRight, Loader2 } from "lucide-react";
+import {
+  Calendar, Clock, User, CheckCircle, XCircle, ArrowRight, Loader2,
+  ClipboardList, UserCog, RotateCcw, Ban, StickyNote, Car,
+} from "lucide-react";
 import { Can } from "@/components/Can";
-import { PageHeader, FilterBar, DataTable, type Column } from "@/components/shared";
+import {
+  PageTemplate, FilterBar, DataTable, StatusBadge, KpiRow, BulkActionBar,
+  EntityDrawer, Timeline, ConfirmDialog, OfflineState,
+  type Column, type KpiItem, type TimelineEvent,
+} from "@/components/shared";
 import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
 import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
 import { format, parseISO } from "date-fns";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
-const statusColors: Record<string, string> = {
-  pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  confirmed: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  scheduled: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
-  en_route: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
-  in_progress: "bg-primary/10 text-primary border-primary/20",
-  completed: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
-  cancelled: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-  rescheduled: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
-  missed: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+const STATUS_FILTERS = ["all", "draft", "scheduled", "confirmed", "waiting_assignment", "rescheduled", "cancelled"] as const;
+
+const EVENT_ICON: Partial<Record<BookingEvent["type"], TimelineEvent["icon"]>> = {
+  status_change: ArrowRight,
+  proof_upload: ClipboardList,
+  reassign: UserCog,
+  reschedule: RotateCcw,
+  cancel: Ban,
+  note: StickyNote,
 };
 
-type B = {
-  id: number; customerId?: number; customerName?: string; customerPhone?: string;
-  serviceName?: string | null; serviceType?: string | null; staffName?: string | null;
-  scheduledDate?: string; scheduledTime?: string | null; status?: string;
-  area?: string | null; address?: string | null; amount?: string | number | null;
-  proofPhotoUrls?: string[] | null;
-};
+function eventTone(e: BookingEvent): TimelineEvent["tone"] {
+  if (e.type === "cancel") return "destructive";
+  if (e.toStatus === "completed" || e.toStatus === "confirmed") return "success";
+  if (e.type === "reschedule") return "warning";
+  return "default";
+}
 
 export default function AdminBookings() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const isOnline = useOnlineStatus();
+
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [offset, setOffset] = useState(0);
-  const [detailBooking, setDetailBooking] = useState<B | null>(null);
+  const [search, setSearch] = useState("");
+  const [dateValue, setDateValue] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ key: string; direction: "asc" | "desc" }>({ key: "datetime", direction: "desc" });
+  const [selectedKeys, setSelectedKeys] = useState<Array<string | number>>([]);
+  const [drawerBookingId, setDrawerBookingId] = useState<number | null>(null);
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [customerFilter, setCustomerFilter] = useState<string | undefined>(undefined);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [bulkCancelConfirm, setBulkCancelConfirm] = useState(false);
   const limit = 15;
 
   useEffect(() => {
@@ -68,17 +73,40 @@ export default function AdminBookings() {
 
   const params: ListBookingsParams = {
     status: statusFilter !== "all" ? (statusFilter as ListBookingsStatus) : undefined,
+    date: dateValue,
     limit,
-    offset,
-    ...(customerFilter ? { customerId: customerFilter } as ListBookingsParams : {}),
+    offset: (page - 1) * limit,
+    ...(customerFilter ? { customerId: Number(customerFilter) } as ListBookingsParams : {}),
   };
 
-  const { data, isLoading } = useListBookings(params, {
+  const { data, isLoading, isError, refetch } = useListBookings(params, {
     query: { queryKey: getListBookingsQueryKey(params) },
   });
 
-  const { data: events } = useGetBookingEvents(detailBooking?.id ?? 0, {
-    query: { enabled: !!detailBooking?.id, queryKey: ["bookingEvents", detailBooking?.id] },
+  // Lightweight counts for the KPI row — reuses the same list endpoint with limit:1,
+  // since there's no dedicated bookings-stats endpoint (no backend change allowed).
+  const { data: totalCount } = useListBookings({ limit: 1 }, { query: { queryKey: getListBookingsQueryKey({ limit: 1 }) } });
+  const { data: waitingCount } = useListBookings(
+    { status: "waiting_assignment" as ListBookingsStatus, limit: 1 },
+    { query: { queryKey: getListBookingsQueryKey({ status: "waiting_assignment" as ListBookingsStatus, limit: 1 }) } },
+  );
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const { data: todayCount } = useListBookings(
+    { date: todayStr, limit: 1 },
+    { query: { queryKey: getListBookingsQueryKey({ date: todayStr, limit: 1 }) } },
+  );
+  const { data: cancelledCount } = useListBookings(
+    { status: "cancelled" as ListBookingsStatus, limit: 1 },
+    { query: { queryKey: getListBookingsQueryKey({ status: "cancelled" as ListBookingsStatus, limit: 1 }) } },
+  );
+
+  const drawerBooking = useMemo(
+    () => data?.data.find((b: Booking) => b.id === drawerBookingId) ?? null,
+    [data, drawerBookingId],
+  );
+
+  const { data: events, isLoading: eventsLoading } = useGetBookingEvents(drawerBookingId ?? 0, {
+    query: { enabled: !!drawerBookingId, queryKey: ["bookingEvents", drawerBookingId] },
   });
 
   const transitionMutation = useTransitionBooking({
@@ -87,7 +115,7 @@ export default function AdminBookings() {
         qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
         toast({ title: "Status updated" });
       },
-      onError: (e) => toast({ title: (e as any)?.response?.data?.error || "Transition failed", variant: "destructive" }),
+      onError: (e: unknown) => toast({ title: (e as any)?.response?.data?.error || "Transition failed", variant: "destructive" }),
     },
   });
 
@@ -98,13 +126,42 @@ export default function AdminBookings() {
         toast({ title: "Rescheduled" });
         setShowReschedule(false);
       },
-      onError: (e) => toast({ title: (e as any)?.response?.data?.error || "Reschedule failed", variant: "destructive" }),
+      onError: (e: unknown) => toast({ title: (e as any)?.response?.data?.error || "Reschedule failed", variant: "destructive" }),
     },
   });
 
-  const columns: Column<B>[] = [
+  const rows = useMemo(() => {
+    const list = data?.data ?? [];
+    const filtered = search.trim()
+      ? list.filter((b: Booking) => {
+          const q = search.trim().toLowerCase();
+          return (
+            b.customerName?.toLowerCase().includes(q) ||
+            b.customerPhone?.toLowerCase().includes(q) ||
+            b.serviceName?.toLowerCase().includes(q) ||
+            String(b.id).includes(q)
+          );
+        })
+      : list;
+
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sort.key === "id") cmp = a.id - b.id;
+      else if (sort.key === "customer") cmp = (a.customerName ?? "").localeCompare(b.customerName ?? "");
+      else if (sort.key === "datetime") cmp = (a.scheduledDate ?? "").localeCompare(b.scheduledDate ?? "");
+      else if (sort.key === "status") cmp = (a.status ?? "").localeCompare(b.status ?? "");
+      return sort.direction === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [data, search, sort]);
+
+  const columns: Column<Booking>[] = [
     {
-      key: "customer", header: "Customer",
+      key: "id", header: "ID", sortable: true, hideable: true, defaultHidden: true,
+      cell: b => <span className="text-muted-foreground">#{b.id}</span>,
+    },
+    {
+      key: "customer", header: "Customer", sortable: true,
       cell: b => (
         <div className="flex items-center gap-2">
           <User size={13} className="text-muted-foreground" />
@@ -124,9 +181,16 @@ export default function AdminBookings() {
         </div>
       ),
     },
-    { key: "staff", header: "Staff", cell: b => <span className="text-muted-foreground">{b.staffName ?? "Unassigned"}</span> },
     {
-      key: "datetime", header: "Date & Time",
+      key: "staff", header: "Assignment", hideable: true,
+      cell: b => (
+        <span className="text-muted-foreground">
+          {b.staffName ?? (b.status === "waiting_assignment" ? "Waiting assignment" : "—")}
+        </span>
+      ),
+    },
+    {
+      key: "datetime", header: "Date & Time", sortable: true,
       cell: b => (
         <div>
           <div className="flex items-center gap-1.5 text-xs text-foreground"><Calendar size={11} className="text-muted-foreground" /><span>{b.scheduledDate}</span></div>
@@ -135,15 +199,14 @@ export default function AdminBookings() {
       ),
     },
     {
-      key: "status", header: "Status",
-      cell: b => <Badge variant="outline" className={`text-xs capitalize ${statusColors[b.status ?? "scheduled"]}`}>{b.status?.replace(/_/g, " ")}</Badge>,
+      key: "status", header: "Status", sortable: true,
+      cell: b => <StatusBadge status={b.status ?? "scheduled"} />,
     },
-    { key: "amount", header: "Amount", align: "right", cell: b => b.amount ? <span className="font-medium text-foreground">₹{Number(b.amount).toLocaleString("en-IN")}</span> : <span className="text-muted-foreground">—</span> },
     {
-      key: "action", header: "", align: "right",
+      key: "action", header: "", align: "right", hideable: false, sticky: "right",
       cell: b => (
         <Can resource="bookings" action="edit">
-          <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => setDetailBooking(b)}>
+          <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => setDrawerBookingId(b.id)}>
             View
           </Button>
         </Can>
@@ -151,173 +214,242 @@ export default function AdminBookings() {
     },
   ];
 
-  const statusFilters = ["all", "pending", "confirmed", "scheduled", "en_route", "in_progress", "completed", "cancelled", "rescheduled", "missed"];
+  const kpis: KpiItem[] = [
+    { id: "total", label: "Total Bookings", value: totalCount?.total ?? "--", icon: ClipboardList },
+    {
+      id: "waiting", label: "Awaiting Assignment", value: waitingCount?.total ?? "--", icon: UserCog,
+      tone: (waitingCount?.total ?? 0) > 0 ? "warning" : "default",
+      onClick: () => { setStatusFilter("waiting_assignment"); setPage(1); },
+    },
+    { id: "today", label: "Scheduled Today", value: todayCount?.total ?? "--", icon: Calendar },
+    { id: "cancelled", label: "Cancelled", value: cancelledCount?.total ?? "--", icon: Ban, tone: "destructive" },
+  ];
+
+  const timelineEvents: TimelineEvent[] = (events ?? []).map((e: BookingEvent) => ({
+    id: e.id,
+    title: e.type.replace(/_/g, " ").replace(/^\w/, (c: string) => c.toUpperCase()),
+    description: [
+      e.fromStatus && e.toStatus ? `${e.fromStatus} → ${e.toStatus}` : undefined,
+      e.body,
+    ].filter(Boolean).join(" — ") || undefined,
+    actor: e.actorName,
+    timestamp: e.createdAt ? format(parseISO(e.createdAt), "MMM d, h:mm a") : undefined,
+    icon: EVENT_ICON[e.type],
+    tone: eventTone(e),
+  }));
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setDateValue(undefined);
+    setPage(1);
+  };
+
+  const hasActiveFilters = search !== "" || statusFilter !== "all" || !!dateValue;
+
+  const runBulkTransition = async (toStatus: "confirmed" | "cancelled") => {
+    const ids = selectedKeys as number[];
+    await Promise.all(ids.map(id => transitionMutation.mutateAsync({ id, data: { toStatus, reason: toStatus === "cancelled" ? "Bulk cancelled by admin" : undefined } })));
+    toast({ title: `${ids.length} booking(s) updated` });
+    setSelectedKeys([]);
+  };
 
   return (
-    <AdminLayout>
-      <div className="p-6 space-y-5">
-        <CustomerHubAdminNav />
-        <PageHeader
-          title="Bookings"
-          description="One-time wash, detailing & solar jobs. Monthly daily clean → Assign Service."
-        />
-
-        <Alert>
-          <AlertDescription className="text-sm">
-            Monthly daily cleaning (₹1600 plans) is managed in{" "}
-            <Link href="/admin/assign-services" className="font-medium text-primary underline underline-offset-2">
-              Assign Service
-            </Link>
-            {" "}and{" "}
-            <Link href="/admin/daily-cleaning/subscriptions" className="font-medium text-primary underline underline-offset-2">
-              Daily Clean subscriptions
-            </Link>
-            . This list shows doorstep one-time jobs only.
-          </AlertDescription>
-        </Alert>
-
-        {customerFilter && (
-          <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2 text-sm">
-            <span>Showing bookings for customer #{customerFilter}</span>
-            <Button variant="ghost" size="sm" onClick={() => { setCustomerFilter(undefined); window.history.replaceState({}, "", "/admin/bookings"); }}>
-              Clear filter
-            </Button>
-          </div>
-        )}
-
-        <FilterBar>
-          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setOffset(0); }}>
-            <SelectTrigger className="w-40" aria-label="Filter bookings by status" data-testid="select-booking-status">
-              <SelectValue placeholder="Filter status" />
-            </SelectTrigger>
-            <SelectContent>
-              {statusFilters.map(s => <SelectItem key={s} value={s}>{s === "all" ? "All Statuses" : s.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase())}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          {statusFilter !== "all" && (
-            <Button variant="ghost" size="sm" onClick={() => { setStatusFilter("all"); setOffset(0); }}>
-              Reset
-            </Button>
-          )}
+    <PageTemplate
+      title="Bookings"
+      description="One-time wash, detailing & solar jobs. Monthly daily clean → Assign Service."
+      breadcrumbs={[{ label: "Operations" }, { label: "Bookings" }]}
+      stats={<KpiRow items={kpis} />}
+      filters={
+        <FilterBar
+          search={search}
+          onSearchChange={v => setSearch(v)}
+          searchPlaceholder="Search by customer, phone, service, ID…"
+          statusOptions={STATUS_FILTERS.map(s => ({ value: s, label: s === "all" ? "All Statuses" : s.replace(/_/g, " ").replace(/^\w/, (c: string) => c.toUpperCase()) }))}
+          statusValue={statusFilter}
+          onStatusChange={v => { setStatusFilter(v); setPage(1); }}
+          onClearAll={hasActiveFilters ? clearFilters : undefined}
+        >
+          <Input
+            type="date"
+            value={dateValue ?? ""}
+            onChange={e => { setDateValue(e.target.value || undefined); setPage(1); }}
+            className="w-40"
+            aria-label="Filter by scheduled date"
+            data-testid="filter-booking-date"
+          />
         </FilterBar>
+      }
+    >
+      <CustomerHubAdminNav />
 
-        <DataTable
-          columns={columns}
-          rows={data?.data as B[] | undefined}
-          isLoading={isLoading}
-          rowKey={r => r.id}
-          onRowClick={b => setDetailBooking(b)}
-          rowLabel={b => `View booking #${b.id} for ${b.customerName ?? "customer"}`}
-          caption="List of service bookings with customer, service, staff, schedule, status and amount"
-          emptyTitle={statusFilter !== "all" ? `No ${statusFilter.replace(/_/g, " ")} bookings` : "No bookings found"}
-          emptyDescription={statusFilter !== "all" ? "Try a different status filter, or reset filters to see all bookings." : "Bookings created via the booking wizard will show up here."}
-          emptyAction={statusFilter !== "all" ? <Button size="sm" variant="outline" onClick={() => { setStatusFilter("all"); setOffset(0); }}>Reset filter</Button> : undefined}
-        />
+      <Alert>
+        <AlertDescription className="text-sm">
+          Monthly daily cleaning (₹1600 plans) is managed in{" "}
+          <Link href="/admin/assign-services" className="font-medium text-primary underline underline-offset-2">
+            Assign Service
+          </Link>
+          {" "}and{" "}
+          <Link href="/admin/daily-cleaning/subscriptions" className="font-medium text-primary underline underline-offset-2">
+            Daily Clean subscriptions
+          </Link>
+          . This list shows doorstep one-time jobs only.
+        </AlertDescription>
+      </Alert>
 
-        <div className="flex items-center justify-between text-sm" aria-live="polite">
-          <span className="text-muted-foreground">
-            {(data?.total ?? 0) > 0
-              ? `Showing ${offset + 1}–${Math.min(offset + limit, data?.total ?? 0)} of ${data?.total}`
-              : ""}
-          </span>
-          {(data?.total ?? 0) > limit && (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={offset === 0} aria-label="Previous page" data-testid="btn-prev-page"><ChevronLeft size={14} /></Button>
-              <Button variant="outline" size="sm" onClick={() => setOffset(o => o + limit)} disabled={offset + limit >= (data?.total ?? 0)} aria-label="Next page" data-testid="btn-next-page"><ChevronRight size={14} /></Button>
-            </div>
-          )}
+      {customerFilter && (
+        <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2 text-sm">
+          <span>Showing bookings for customer #{customerFilter}</span>
+          <Button variant="ghost" size="sm" onClick={() => { setCustomerFilter(undefined); window.history.replaceState({}, "", "/admin/bookings"); }}>
+            Clear filter
+          </Button>
         </div>
-      </div>
+      )}
 
-      {/* Detail Drawer */}
-      {detailBooking && (
-        <Dialog open onOpenChange={() => setDetailBooking(null)}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <span>Booking #{detailBooking.id}</span>
-                <Badge variant="outline" className={`text-xs capitalize ${statusColors[detailBooking.status ?? "scheduled"]}`}>
-                  {detailBooking.status?.replace(/_/g, " ")}
-                </Badge>
-              </DialogTitle>
-            </DialogHeader>
+      {!isOnline ? (
+        <OfflineState onRetry={() => refetch()} />
+      ) : (
+        <>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            isLoading={isLoading}
+            error={isError ? true : undefined}
+            onRetry={() => refetch()}
+            rowKey={r => r.id}
+            onRowClick={b => setDrawerBookingId(b.id)}
+            rowLabel={b => `View booking #${b.id} for ${b.customerName ?? "customer"}`}
+            caption="Scheduled service bookings — date, time, location, and status"
+            emptyTitle={hasActiveFilters ? "No bookings match your filters" : "No bookings found"}
+            emptyDescription={hasActiveFilters ? "Try a different search, status or date, or clear filters to see all bookings." : "Bookings created via Book Services or customer schedule will show up here."}
+            emptyAction={hasActiveFilters ? <Button size="sm" variant="outline" onClick={clearFilters}>Clear filters</Button> : undefined}
+            sort={{ key: sort.key, direction: sort.direction, onSortChange: (key, direction) => setSort({ key, direction }) }}
+            selection={{ selectedKeys, onSelectionChange: setSelectedKeys }}
+            enableColumnVisibility
+            pagination={{
+              page,
+              pageSize: limit,
+              total: data?.total ?? 0,
+              onPageChange: setPage,
+            }}
+          />
 
-            <Tabs defaultValue="details">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger value="timeline">Timeline</TabsTrigger>
-                <TabsTrigger value="actions">Actions</TabsTrigger>
-              </TabsList>
+          <BulkActionBar
+            selectedCount={selectedKeys.length}
+            onClear={() => setSelectedKeys([])}
+            actions={[
+              { id: "confirm", label: "Confirm", icon: <CheckCircle size={14} />, onClick: () => runBulkTransition("confirmed"), disabled: transitionMutation.isPending },
+              { id: "cancel", label: "Cancel", icon: <XCircle size={14} />, variant: "destructive", onClick: () => setBulkCancelConfirm(true), disabled: transitionMutation.isPending },
+            ]}
+          />
+        </>
+      )}
 
-              <TabsContent value="details" className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Customer</p>
-                    <p className="font-medium">{detailBooking.customerName}</p>
-                    {detailBooking.customerId && (
-                      <CustomerProfileLink
-                        customerId={detailBooking.customerId}
-                        customerBasePath="/admin/customers"
-                        name={detailBooking.customerName}
-                        className="mt-2 h-7 text-xs"
-                      />
-                    )}
-                  </div>
-                  <div><p className="text-muted-foreground">Service</p><p className="font-medium">{detailBooking.serviceName ?? detailBooking.serviceType?.replace(/_/g, " ")}</p></div>
-                  <div><p className="text-muted-foreground">Date</p><p className="font-medium">{detailBooking.scheduledDate}</p></div>
-                  <div><p className="text-muted-foreground">Time</p><p className="font-medium">{detailBooking.scheduledTime ?? "—"}</p></div>
-                  <div><p className="text-muted-foreground">Staff</p><p className="font-medium">{detailBooking.staffName ?? "Unassigned"}</p></div>
-                  <div><p className="text-muted-foreground">Amount</p><p className="font-medium">{detailBooking.amount ? `₹${Number(detailBooking.amount).toLocaleString("en-IN")}` : "—"}</p></div>
-                  {detailBooking.address && <div className="col-span-2"><p className="text-muted-foreground">Address</p><p className="font-medium">{detailBooking.address}</p></div>}
-                  {detailBooking.area && <div className="col-span-2"><p className="text-muted-foreground">Area</p><p className="font-medium">{detailBooking.area}</p></div>}
+      {/* Quick-view drawer */}
+      <EntityDrawer
+        open={!!drawerBookingId}
+        onOpenChange={(open) => { if (!open) setDrawerBookingId(null); }}
+        title={drawerBooking ? `Booking #${drawerBooking.id}` : "Booking"}
+        description={drawerBooking?.customerName}
+        status={drawerBooking?.status}
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            content: drawerBooking && (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><p className="text-muted-foreground">Service</p><p className="font-medium">{drawerBooking.serviceName ?? drawerBooking.serviceType?.replace(/_/g, " ")}</p></div>
+                <div><p className="text-muted-foreground">Date</p><p className="font-medium">{drawerBooking.scheduledDate}</p></div>
+                <div><p className="text-muted-foreground">Time</p><p className="font-medium">{drawerBooking.scheduledTime ?? "—"}</p></div>
+                <div><p className="text-muted-foreground">Assignment</p><p className="font-medium">{drawerBooking.staffName ?? (drawerBooking.status === "waiting_assignment" ? "Waiting for Assignment platform" : "—")}</p></div>
+                {drawerBooking.amount != null && <div><p className="text-muted-foreground">Amount</p><p className="font-medium">₹{drawerBooking.amount.toLocaleString("en-IN")}</p></div>}
+                {drawerBooking.address && <div className="col-span-2"><p className="text-muted-foreground">Address</p><p className="font-medium">{drawerBooking.address}</p></div>}
+                {drawerBooking.area && <div className="col-span-2"><p className="text-muted-foreground">Area</p><p className="font-medium">{drawerBooking.area}</p></div>}
+              </div>
+            ),
+          },
+          {
+            id: "customer",
+            label: "Customer & Vehicle",
+            content: drawerBooking && (
+              <div className="space-y-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Customer</p>
+                  <p className="font-medium">{drawerBooking.customerName}</p>
+                  <p className="text-xs text-muted-foreground">{drawerBooking.customerPhone}</p>
+                  {drawerBooking.customerId && (
+                    <CustomerProfileLink
+                      customerId={drawerBooking.customerId}
+                      customerBasePath="/admin/customers"
+                      name={drawerBooking.customerName}
+                      className="mt-2 h-7 text-xs"
+                    />
+                  )}
                 </div>
-                {detailBooking.proofPhotoUrls && detailBooking.proofPhotoUrls.length > 0 && (
+                <div className="flex items-start gap-2">
+                  <Car size={14} className="text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-muted-foreground text-sm mb-2">Proof Photos</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {detailBooking.proofPhotoUrls.map((url, i) => (
-                        <img key={i} src={url} alt="Proof" className="rounded-lg h-20 w-full object-cover bg-muted" />
-                      ))}
-                    </div>
+                    <p className="text-muted-foreground">Vehicle</p>
+                    <p className="font-medium">{drawerBooking.vehicleInfo ?? "—"}</p>
+                  </div>
+                </div>
+              </div>
+            ),
+          },
+          {
+            id: "notes",
+            label: "Notes",
+            content: drawerBooking && (
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Customer notes</p>
+                  <p className="font-medium">{drawerBooking.notes || "No notes"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Technician notes</p>
+                  <p className="font-medium">{drawerBooking.technicianNotes || "—"}</p>
+                </div>
+                {drawerBooking.cancellationReason && (
+                  <div>
+                    <p className="text-muted-foreground">Cancellation reason</p>
+                    <p className="font-medium">{drawerBooking.cancellationReason}</p>
                   </div>
                 )}
-              </TabsContent>
-
-              <TabsContent value="timeline" className="mt-4">
+              </div>
+            ),
+          },
+          {
+            id: "timeline",
+            label: "Timeline",
+            content: eventsLoading
+              ? <p className="text-sm text-muted-foreground text-center py-6">Loading…</p>
+              : <Timeline events={timelineEvents} />,
+          },
+          {
+            id: "actions",
+            label: "Actions",
+            content: drawerBooking && (
+              <Can resource="bookings" action="edit">
                 <div className="space-y-3">
-                  {(events ?? []).length === 0 ? (
-                    <p className="text-muted-foreground text-sm text-center py-4">No events yet</p>
-                  ) : (events ?? []).map((e: any) => (
-                    <div key={e.id} className="flex items-start gap-3 text-sm border-l-2 border-border pl-3 py-1">
-                      <div className="flex-1">
-                        <p className="font-medium capitalize">{e.type.replace(/_/g, " ")}</p>
-                        {e.fromStatus && e.toStatus && (
-                          <p className="text-muted-foreground text-xs">{e.fromStatus} <ArrowRight size={10} className="inline" /> {e.toStatus}</p>
-                        )}
-                        {e.body && <p className="text-muted-foreground text-xs mt-0.5">{e.body}</p>}
-                        {e.actorName && <p className="text-muted-foreground text-xs mt-0.5">by {e.actorName}</p>}
-                      </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">{e.createdAt ? format(parseISO(e.createdAt), "MMM d, h:mm a") : ""}</span>
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="actions" className="space-y-3 mt-4">
-                <Can resource="bookings" action="edit">
-                  {detailBooking.status === "scheduled" && (
-                    <Button className="w-full" size="sm" disabled={transitionMutation.isPending} onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "en_route" } })}>
-                      {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Route size={14} className="mr-2" />} En Route
+                  {(drawerBooking.status === "draft" || drawerBooking.status === "scheduled" || drawerBooking.status === "rescheduled") && (
+                    <Button
+                      className="w-full"
+                      size="sm"
+                      disabled={transitionMutation.isPending}
+                      onClick={() => transitionMutation.mutate({ id: drawerBooking.id, data: { toStatus: "confirmed" } })}
+                    >
+                      {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <CheckCircle size={14} className="mr-2" />} Confirm schedule
                     </Button>
                   )}
-                  {detailBooking.status === "en_route" && (
-                    <Button className="w-full" size="sm" disabled={transitionMutation.isPending} onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "in_progress" } })}>
-                      {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <CheckCircle size={14} className="mr-2" />} Start Job
-                    </Button>
-                  )}
-                  {detailBooking.status === "in_progress" && (
-                    <Button className="w-full bg-green-600 hover:bg-green-700 text-white" size="sm" disabled={transitionMutation.isPending} onClick={() => transitionMutation.mutate({ id: detailBooking.id, data: { toStatus: "completed" } })}>
-                      {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <CheckCircle size={14} className="mr-2" />} Mark Complete
+                  {(drawerBooking.status === "confirmed" || drawerBooking.status === "scheduled") && (
+                    <Button
+                      className="w-full"
+                      size="sm"
+                      variant="secondary"
+                      disabled={transitionMutation.isPending}
+                      onClick={() => transitionMutation.mutate({ id: drawerBooking.id, data: { toStatus: "waiting_assignment" } })}
+                    >
+                      {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <User size={14} className="mr-2" />} Mark waiting assignment
                     </Button>
                   )}
                   <Button variant="outline" className="w-full" size="sm" onClick={() => { setRescheduleDate(""); setRescheduleReason(""); setShowReschedule(true); }}>
@@ -328,45 +460,52 @@ export default function AdminBookings() {
                       <User size={14} className="mr-2" /> Assign staff (Assign Service)
                     </Button>
                   </Link>
-                  {detailBooking.status !== "cancelled" && detailBooking.status !== "completed" && (
+                  {drawerBooking.status !== "cancelled" && (
                     <Button variant="destructive" className="w-full" size="sm" onClick={() => setShowCancelConfirm(true)}>
                       <XCircle size={14} className="mr-2" /> Cancel booking
                     </Button>
                   )}
-                </Can>
-              </TabsContent>
-            </Tabs>
-          </DialogContent>
-        </Dialog>
-      )}
+                </div>
+              </Can>
+            ),
+          },
+        ]}
+      />
 
       {/* Cancel confirmation — prevents accidental destructive action */}
-      <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will mark booking #{detailBooking?.id} as cancelled and notify the customer. This action cannot be undone from here.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep booking</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={transitionMutation.isPending}
-              onClick={() => {
-                if (!detailBooking) return;
-                transitionMutation.mutate(
-                  { id: detailBooking.id, data: { toStatus: "cancelled", reason: "Cancelled by admin" } },
-                  { onSuccess: () => setShowCancelConfirm(false) },
-                );
-              }}
-            >
-              {transitionMutation.isPending ? <Loader2 size={14} className="mr-2 animate-spin" /> : null} Yes, cancel booking
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={showCancelConfirm}
+        onOpenChange={setShowCancelConfirm}
+        title="Cancel this booking?"
+        description={`This will mark booking #${drawerBooking?.id} as cancelled and notify the customer. This action cannot be undone from here.`}
+        confirmLabel="Yes, cancel booking"
+        cancelLabel="Keep booking"
+        destructive
+        isConfirming={transitionMutation.isPending}
+        onConfirm={() => {
+          if (!drawerBooking) return;
+          transitionMutation.mutate(
+            { id: drawerBooking.id, data: { toStatus: "cancelled", reason: "Cancelled by admin" } },
+            { onSuccess: () => setShowCancelConfirm(false) },
+          );
+        }}
+      />
+
+      {/* Bulk cancel confirmation */}
+      <ConfirmDialog
+        open={bulkCancelConfirm}
+        onOpenChange={setBulkCancelConfirm}
+        title={`Cancel ${selectedKeys.length} booking(s)?`}
+        description="Selected bookings will be marked as cancelled and customers notified. This action cannot be undone from here."
+        confirmLabel="Yes, cancel selected"
+        cancelLabel="Keep bookings"
+        destructive
+        isConfirming={transitionMutation.isPending}
+        onConfirm={async () => {
+          await runBulkTransition("cancelled");
+          setBulkCancelConfirm(false);
+        }}
+      />
 
       {/* Reschedule Dialog */}
       <Dialog open={showReschedule} onOpenChange={setShowReschedule}>
@@ -386,12 +525,12 @@ export default function AdminBookings() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReschedule(false)}>Cancel</Button>
-            <Button onClick={() => rescheduleMutation.mutate({ id: detailBooking?.id ?? 0, data: { scheduledDate: rescheduleDate, reason: rescheduleReason } })} disabled={!rescheduleDate || rescheduleMutation.isPending}>
+            <Button onClick={() => rescheduleMutation.mutate({ id: drawerBooking?.id ?? 0, data: { scheduledDate: rescheduleDate, reason: rescheduleReason } })} disabled={!rescheduleDate || rescheduleMutation.isPending}>
               {rescheduleMutation.isPending ? <Loader2 className="animate-spin mr-2" size={14} /> : null} Reschedule
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AdminLayout>
+    </PageTemplate>
   );
 }

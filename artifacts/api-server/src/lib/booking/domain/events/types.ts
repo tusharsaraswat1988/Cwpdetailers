@@ -2,17 +2,25 @@ import type { BookingTraceContext } from "../../correlation/BookingTraceContext"
 import { BOOKING_DOMAIN_VERSION } from "../../versioning";
 import type { BookingContext } from "../../BookingContext";
 
+/**
+ * Phase 5.2 schedule-owned domain events (required).
+ * Field-ops / payment events retained as deprecated aliases for gradual cleanup —
+ * Booking Engine does not publish them.
+ */
 export type BookingDomainEventType =
   | "BookingCreated"
-  | "BookingValidated"
+  | "BookingScheduled"
   | "BookingConfirmed"
+  | "BookingRescheduled"
+  | "BookingCancelled"
+  /** @deprecated Not owned by Booking Engine (Phase 5.2 freeze). */
+  | "BookingValidated"
   | "BookingAssigned"
   | "BookingAccepted"
   | "BookingStarted"
   | "BookingPaused"
   | "BookingResumed"
   | "BookingCompleted"
-  | "BookingCancelled"
   | "BookingFailed"
   | "BookingReviewed"
   | "BookingArchived"
@@ -20,6 +28,17 @@ export type BookingDomainEventType =
   | "BookingSnapshotCreated"
   | "BookingPaymentPending"
   | "BookingPaymentCompleted";
+
+/** Canonical Phase 5.2 event set. */
+export const BOOKING_SCHEDULE_DOMAIN_EVENTS = [
+  "BookingCreated",
+  "BookingScheduled",
+  "BookingConfirmed",
+  "BookingRescheduled",
+  "BookingCancelled",
+] as const;
+
+export type BookingScheduleDomainEventType = (typeof BOOKING_SCHEDULE_DOMAIN_EVENTS)[number];
 
 export type BookingDomainEventBase = {
   type: BookingDomainEventType;
@@ -40,13 +59,33 @@ export type BookingCreatedEvent = BookingDomainEventBase & {
   bookingContext: BookingContext;
 };
 
-export type BookingValidatedEvent = BookingDomainEventBase & {
-  type: "BookingValidated";
+export type BookingScheduledEvent = BookingDomainEventBase & {
+  type: "BookingScheduled";
   bookingContext: BookingContext;
 };
 
 export type BookingConfirmedEvent = BookingDomainEventBase & {
   type: "BookingConfirmed";
+  bookingContext: BookingContext;
+};
+
+export type BookingRescheduledEvent = BookingDomainEventBase & {
+  type: "BookingRescheduled";
+  bookingContext: BookingContext;
+  previousScheduledDate?: string;
+  previousScheduledTime?: string | null;
+  previousScheduledStartAt?: string | null;
+  previousScheduledEndAt?: string | null;
+};
+
+export type BookingCancelledEvent = BookingDomainEventBase & {
+  type: "BookingCancelled";
+  bookingContext: BookingContext;
+  reason?: string;
+};
+
+export type BookingValidatedEvent = BookingDomainEventBase & {
+  type: "BookingValidated";
   bookingContext: BookingContext;
 };
 
@@ -80,12 +119,6 @@ export type BookingResumedEvent = BookingDomainEventBase & {
 export type BookingCompletedEvent = BookingDomainEventBase & {
   type: "BookingCompleted";
   bookingContext: BookingContext;
-};
-
-export type BookingCancelledEvent = BookingDomainEventBase & {
-  type: "BookingCancelled";
-  bookingContext: BookingContext;
-  reason?: string;
 };
 
 export type BookingFailedEvent = BookingDomainEventBase & {
@@ -131,15 +164,17 @@ export type BookingPaymentCompletedEvent = BookingDomainEventBase & {
 
 export type BookingDomainEvent =
   | BookingCreatedEvent
-  | BookingValidatedEvent
+  | BookingScheduledEvent
   | BookingConfirmedEvent
+  | BookingRescheduledEvent
+  | BookingCancelledEvent
+  | BookingValidatedEvent
   | BookingAssignedEvent
   | BookingAcceptedEvent
   | BookingStartedEvent
   | BookingPausedEvent
   | BookingResumedEvent
   | BookingCompletedEvent
-  | BookingCancelledEvent
   | BookingFailedEvent
   | BookingReviewedEvent
   | BookingArchivedEvent
@@ -167,15 +202,17 @@ export function baseBookingEventFields(
 
 export const TIMELINE_EVENT_FOR_DOMAIN: Partial<Record<BookingDomainEventType, string>> = {
   BookingCreated: "BOOKING_CREATED",
-  BookingValidated: "BOOKING_VALIDATED",
+  BookingScheduled: "BOOKING_VALIDATED",
   BookingConfirmed: "BOOKING_CONFIRMED",
+  BookingRescheduled: "RESCHEDULED",
+  BookingCancelled: "CANCELLED",
+  BookingValidated: "BOOKING_VALIDATED",
   BookingAssigned: "ASSIGNED",
   BookingAccepted: "ACCEPTED",
   BookingStarted: "STARTED",
   BookingPaused: "PAUSED",
   BookingResumed: "RESUMED",
   BookingCompleted: "COMPLETED",
-  BookingCancelled: "CANCELLED",
   BookingFailed: "FAILED",
   BookingReviewed: "REVIEWED",
   BookingArchived: "ARCHIVED",

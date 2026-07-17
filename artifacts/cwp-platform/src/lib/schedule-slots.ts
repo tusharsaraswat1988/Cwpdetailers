@@ -1,4 +1,5 @@
-/** Customer-facing time slots — aligned with booking WorkingHoursRule (06:00–22:00). */
+/** Customer-facing time slots — aligned with Booking Engine SlotService. */
+
 export const SCHEDULE_TIME_SLOTS = [
   "08:00", "09:00", "10:00", "11:00", "12:00",
   "14:00", "15:00", "16:00", "17:00", "18:00",
@@ -8,6 +9,13 @@ export type ScheduleDateOption = {
   date: string;
   label: string;
   disabled: boolean;
+  reason?: string;
+};
+
+export type AvailableSlot = {
+  time: string;
+  available: boolean;
+  remaining?: number;
   reason?: string;
 };
 
@@ -48,15 +56,49 @@ export function buildAvailableDates(count = 14, fromDate = todayIso()): Schedule
 }
 
 export function firstAvailableDate(dates: ScheduleDateOption[]): string | null {
-  return dates.find(d => !d.disabled)?.date ?? null;
+  return dates.find((d) => !d.disabled)?.date ?? null;
 }
 
+/** Local fallback when slots API is unavailable. */
 export function slotsForDate(dateStr: string, now = new Date()): string[] {
   const isToday = dateStr === todayIso();
   if (!isToday) return [...SCHEDULE_TIME_SLOTS];
   const currentHour = now.getHours();
-  return SCHEDULE_TIME_SLOTS.filter(slot => {
+  return SCHEDULE_TIME_SLOTS.filter((slot) => {
     const hour = parseInt(slot.split(":")[0] ?? "0", 10);
     return hour > currentHour;
   });
+}
+
+/**
+ * Fetch server-side slot availability from Booking Engine.
+ * Falls back to static slots if the API fails.
+ */
+export async function fetchAvailableSlots(params: {
+  date: string;
+  branchId?: number | null;
+  assetId?: number | null;
+  serviceLocationId?: number | null;
+  customerId?: number | null;
+}): Promise<AvailableSlot[]> {
+  const qs = new URLSearchParams({ date: params.date });
+  if (params.branchId != null) qs.set("branchId", String(params.branchId));
+  if (params.assetId != null) qs.set("assetId", String(params.assetId));
+  if (params.serviceLocationId != null) qs.set("serviceLocationId", String(params.serviceLocationId));
+  if (params.customerId != null) qs.set("customerId", String(params.customerId));
+
+  try {
+    const res = await fetch(`/api/bookings/slots?${qs.toString()}`, { credentials: "include" });
+    if (!res.ok) throw new Error(`slots HTTP ${res.status}`);
+    const body = await res.json() as { slots?: AvailableSlot[] };
+    if (Array.isArray(body.slots) && body.slots.length > 0) return body.slots;
+  } catch {
+    // fall through to static
+  }
+
+  return slotsForDate(params.date).map((time) => ({ time, available: true }));
+}
+
+export function availableTimesFromSlots(slots: AvailableSlot[]): string[] {
+  return slots.filter((s) => s.available).map((s) => s.time);
 }
