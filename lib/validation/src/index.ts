@@ -41,6 +41,8 @@ export {
   type ContactConflictField,
 } from "./contactIdentity";
 
+export { isDailyCleanCatalogServiceName } from "./dailyCleanCatalog";
+
 export function firstFieldError(
   results: Record<string, { ok: boolean; error?: string }>,
 ): string | null {

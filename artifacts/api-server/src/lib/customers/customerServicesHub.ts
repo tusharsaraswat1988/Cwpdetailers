@@ -12,7 +12,6 @@ import {
   entitlementConsumptionLogTable,
   catalogPackagesTable,
   bookingsTable,
-  serviceAddonsTable,
   staffTable,
   customersTable,
 } from "@workspace/db";
@@ -203,12 +202,10 @@ export async function getCustomerServicesHub(customerId: number): Promise<Custom
 
     db.select({
       booking: bookingsTable,
-      staffName: staffTable.name,
       vehicleNumber: vehiclesTable.registrationNumber,
       serviceName: servicesTable.name,
     })
       .from(bookingsTable)
-      .leftJoin(staffTable, eq(bookingsTable.staffId, staffTable.id))
       .leftJoin(vehiclesTable, eq(bookingsTable.vehicleId, vehiclesTable.id))
       .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
       .where(eq(bookingsTable.customerId, customerId))
@@ -241,7 +238,8 @@ export async function getCustomerServicesHub(customerId: number): Promise<Custom
       .from(bookingsTable)
       .where(and(
         eq(bookingsTable.customerId, customerId),
-        eq(bookingsTable.status, "completed"),
+        // Phase 5.2: completed is execution-owned; count non-cancelled solar bookings
+        sql`${bookingsTable.status} <> 'cancelled'`,
         sql`${bookingsTable.solarSiteId} is not null`,
       ))
       .groupBy(bookingsTable.solarSiteId),
@@ -282,18 +280,6 @@ export async function getCustomerServicesHub(customerId: number): Promise<Custom
 
   const planIds = [...new Set(dcmsRows.map(r => r.sub.planId))];
   const planAddonsMap = await getPlanAddonsForPlans(planIds);
-
-  const allAddonIds = [
-    ...new Set(
-      bookingRows.flatMap(r => (r.booking.addonIds as number[] | null) ?? []).filter(Boolean),
-    ),
-  ];
-  const addonRows = allAddonIds.length
-    ? await db.select({ id: serviceAddonsTable.id, name: serviceAddonsTable.name })
-      .from(serviceAddonsTable)
-      .where(inArray(serviceAddonsTable.id, allAddonIds))
-    : [];
-  const addonNameById = Object.fromEntries(addonRows.map(a => [a.id, a.name]));
 
   const dailyCleaning = dcmsRows.map(row => ({
     id: row.sub.id,
@@ -363,20 +349,17 @@ export async function getCustomerServicesHub(customerId: number): Promise<Custom
   }));
 
   const bookingItems: TimelineItem[] = bookingRows.map(row => {
-    const ids = (row.booking.addonIds as number[] | null) ?? [];
-    const addonNames = ids.map(id => addonNameById[id]).filter(Boolean);
+    const occurredAt = `${row.booking.scheduledDate}T${row.booking.scheduledTime ?? "00:00"}:00`;
     return {
       id: `booking-${row.booking.id}`,
       source: "booking" as const,
       workType: row.serviceName ?? row.booking.serviceType.replace(/_/g, " "),
       assetLabel: row.vehicleNumber ?? (row.booking.solarSiteId ? `Solar site #${row.booking.solarSiteId}` : null),
       status: row.booking.status,
-      occurredAt: row.booking.completedAt?.toISOString()
-        ?? `${row.booking.scheduledDate}T${row.booking.scheduledTime ?? "00:00"}:00`,
-      staffName: row.staffName,
-      addonLabel: addonNames.length ? addonNames.join(", ") : null,
-      sortKey: row.booking.completedAt?.toISOString()
-        ?? `${row.booking.scheduledDate}T${row.booking.scheduledTime ?? "00:00"}:00`,
+      occurredAt,
+      staffName: null, // Phase 5.2: staff on assignments/executions
+      addonLabel: null,
+      sortKey: occurredAt,
     };
   });
 

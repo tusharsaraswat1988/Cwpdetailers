@@ -37,7 +37,7 @@ export function CustomerServiceLocationsPanel({ customerId }: CustomerServiceLoc
           <p className="text-sm text-muted-foreground">
             No service addresses yet. Add one when you{" "}
             <Link href={`/admin/book-services?customerId=${customerId}`} className="text-primary hover:underline">
-              book a service
+              create a service request
             </Link>
             .
           </p>

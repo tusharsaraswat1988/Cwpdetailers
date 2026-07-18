@@ -29,7 +29,19 @@ export type State = { id: number; name: string; code: string; isActive: boolean 
 export type City = { id: number; stateId: number; name: string; slug: string; stateName: string; stateCode: string };
 export type ServiceArea = { id: number; cityId: number; name: string; cityName: string };
 export type Pincode = { id: number; serviceAreaId: number; pincode: string; areaName: string; cityName: string };
-export type ServiceCategory = { id: number; name: string; slug: string; legacyCategory?: string; isActive: boolean };
+export type ServiceCategory = {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  legacyCategory?: string | null;
+  sortOrder?: number;
+  isActive: boolean;
+  showOnWebsite?: boolean;
+  showInBooking?: boolean;
+  showInSeo?: boolean;
+  iconUrl?: string | null;
+};
 export type SavedLocation = {
   id: number; customerId: number; label: string; address: string;
   latitude: number; longitude: number; placeId?: string; isDefault: boolean;

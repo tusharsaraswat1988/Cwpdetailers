@@ -1,5 +1,5 @@
 import { resolveMediaUrl } from "@/lib/media-url";
-import { MapPin, Phone, ArrowRight, CheckCircle, Loader2, Route, ClipboardCheck, Navigation } from "lucide-react";
+import { MapPin, Phone, ArrowRight, CheckCircle, Loader2, Route, ClipboardCheck, Navigation, Pause, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import { format, parseISO, isValid } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -168,6 +168,27 @@ export function StaffServiceJobFlow({
     );
   }
 
+  if (isExecution && job.status === "paused") {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+          <p className="font-medium text-amber-800">Work paused</p>
+          <p className="text-xs text-muted-foreground mt-1">Resume when you are ready to continue.</p>
+        </div>
+        <JobContactActions job={job} addressLine={addressLine} />
+        <Button
+          className={`${btnClass} bg-primary text-secondary hover:bg-primary/90`}
+          onClick={() => void transitionJob(job.id, "resume", job)}
+          disabled={isActionPending}
+          data-testid={`btn-resume-${job.id}`}
+        >
+          {isActionPending ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Play size={15} className="mr-2" />}
+          Resume Work
+        </Button>
+      </div>
+    );
+  }
+
   if (job.status === "scheduled" && !isExecution) {
     return (
       <div className="space-y-4">
@@ -195,10 +216,10 @@ export function StaffServiceJobFlow({
           className={`${btnClass} bg-orange-500 hover:bg-orange-600 text-white`}
           onClick={() => setAccepted(true)}
           disabled={isActionPending}
-          data-testid={`btn-accept-booking-${job.id}`}
+          data-testid={`btn-accept-job-${job.id}`}
         >
           <ClipboardCheck size={15} className="mr-2" />
-          Accept Booking
+          Accept Job
         </Button>
       </div>
     );
@@ -312,10 +333,10 @@ export function StaffServiceJobFlow({
         <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 text-sm space-y-1">
           <div className="flex items-center gap-2">
             <StatusBadge status="in_progress" pulse />
-            <p className="font-medium text-blue-800">Car wash in progress</p>
+            <p className="font-medium text-blue-800">Service in progress</p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Step 2 — Gaadi dho kar saaf karein. Kaam khatam hone par neeche dabayein.
+            Step 2 — Complete the service. When finished, continue to after photos.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 opacity-80">
@@ -325,6 +346,18 @@ export function StaffServiceJobFlow({
             </div>
           ))}
         </div>
+        {isExecution && (
+          <Button
+            variant="outline"
+            className={btnClass}
+            onClick={() => void transitionJob(job.id, "paused", job)}
+            disabled={isActionPending}
+            data-testid={`btn-pause-${job.id}`}
+          >
+            <Pause size={15} className="mr-2" />
+            Pause Work
+          </Button>
+        )}
         <Button
           className={`${btnClass} bg-primary text-secondary hover:bg-primary/90`}
           onClick={() => setReadyForAfter(true)}
@@ -332,7 +365,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-wash-done-${job.id}`}
         >
           <CheckCircle size={15} className="mr-2" />
-          Wash Complete — After Photos
+          Service Done — After Photos
         </Button>
       </div>
     );

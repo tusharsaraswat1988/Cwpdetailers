@@ -20,7 +20,7 @@ import {
   type InvoiceItem,
 } from "@workspace/db";
 import { enqueuePendingFromContract } from "../assignments/pendingAssignmentEnqueue";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getDefaultGstRate } from "../catalog/pricingEngine";
 import {
   computeInvoiceGst,
@@ -78,12 +78,22 @@ type BuiltBillingContext = {
 
 const VALID_PAYMENT_TERMS = new Set(["full_advance", "partial_advance", "after_service"]);
 
-let quotationCounter = 1000;
-
-function generateQuotationNumber(): string {
+/**
+ * Stable quotation numbers from DB max sequence (survives restarts / multi-instance).
+ * Format preserved: Q-{calendarYear}-{####} for backward compatibility.
+ */
+async function generateQuotationNumber(tx?: Transaction): Promise<string> {
+  const ctx = tx ?? db;
   const fy = new Date().getFullYear();
-  quotationCounter += 1;
-  return `Q-${fy}-${String(quotationCounter).padStart(4, "0")}`;
+  const prefix = `Q-${fy}-`;
+  const [row] = await ctx
+    .select({
+      maxNum: sql<string>`max(cast(substring(${quotationsTable.quotationNumber} from '[0-9]+$') as integer))`,
+    })
+    .from(quotationsTable)
+    .where(sql`${quotationsTable.quotationNumber} like ${prefix + "%"}`);
+  const next = Math.max(1001, (parseInt(row?.maxNum ?? "0", 10) || 0) + 1);
+  return `${prefix}${String(next).padStart(4, "0")}`;
 }
 
 function serviceCategoryForContract(contract: CustomerContract): string {
@@ -147,7 +157,8 @@ async function buildBillingContext(registryId: number, tx?: Transaction): Promis
       if (!booking) throw new Error("Booking source record not found for contract");
 
       bookingId = booking.id;
-      const amount = parseFloat(booking.amount ?? "0");
+      // Phase 5.2: amount lives on contract summaryJson (not bookings)
+      const amount = parseFloat(String(summary.amount ?? "0"));
       if (amount <= 0) throw new Error("Contract has no billable amount");
 
       const [svc] = booking.serviceId
@@ -386,7 +397,7 @@ export async function createQuotationForContract(
   });
 
   const [quotation] = await ctx.insert(quotationsTable).values({
-    quotationNumber: generateQuotationNumber(),
+    quotationNumber: await generateQuotationNumber(tx),
     customerId: built.contract.customerId,
     contractRegistryId: registryId,
     serviceLocationId: built.contract.serviceLocationId,

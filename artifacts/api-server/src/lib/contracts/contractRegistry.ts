@@ -216,6 +216,9 @@ export async function syncContractFromEntitlement(ent: CustomerEntitlement, extr
   packageName?: string | null;
   serviceName?: string | null;
   contractType?: "contract_credits";
+  companyId?: number | null;
+  franchiseeId?: number | null;
+  branchId?: number | null;
 }) {
   const assetType = ent.solarSiteId ? "solar_site" as const
     : ent.vehicleId ? "vehicle" as const
@@ -246,9 +249,9 @@ export async function syncContractFromEntitlement(ent: CustomerEntitlement, extr
       remainingCredits: ent.remainingCredits,
       totalCredits: ent.totalCredits,
     },
-    companyId: null,
-    franchiseeId: null,
-    branchId: null,
+    companyId: extras?.companyId ?? null,
+    franchiseeId: extras?.franchiseeId ?? null,
+    branchId: extras?.branchId ?? null,
   });
 }
 
@@ -260,6 +263,8 @@ export async function syncContractFromBooking(booking: Booking, extras: {
   paymentTerms?: string;
   discountType?: string;
   discountValue?: string;
+  /** Commercial amount — Booking no longer stores amount (Phase 5.2). */
+  amount?: string | number | null;
 }): Promise<number> {
   const assetType = booking.solarSiteId ? "solar_site" as const
     : booking.vehicleId ? "vehicle" as const
@@ -283,7 +288,7 @@ export async function syncContractFromBooking(booking: Booking, extras: {
     summaryJson: {
       serviceName: extras.serviceName,
       bookingId: booking.id,
-      amount: booking.amount,
+      amount: extras.amount ?? null,
       paymentTerms: extras.paymentTerms,
       discountType: extras.discountType,
       discountValue: extras.discountValue,
@@ -292,6 +297,74 @@ export async function syncContractFromBooking(booking: Booking, extras: {
     franchiseeId: booking.franchiseeId,
     branchId: booking.branchId,
   });
+}
+
+/**
+ * Phase 5.2 — create one-time contract BEFORE booking (contract owns sale).
+ * Uses a provisional sourceId, then caller links sourceId → booking.id.
+ */
+export async function createOneTimeContractRegistry(input: {
+  customerId: number;
+  vehicleId?: number | null;
+  solarSiteId?: number | null;
+  serviceLocationId?: number | null;
+  registryAssetId: number;
+  serviceId: number;
+  serviceName: string;
+  scheduledDate: string;
+  amount: string;
+  paymentTerms?: string;
+  discountType?: string;
+  discountValue?: string;
+  catalogRefKind?: string;
+  companyId?: number | null;
+  franchiseeId?: number | null;
+  branchId?: number | null;
+}): Promise<number> {
+  const provisionalSourceId = -Math.floor(Date.now());
+  const assetType = input.solarSiteId ? "solar_site" as const
+    : input.vehicleId ? "vehicle" as const
+      : "customer" as const;
+  return upsertContract({
+    customerId: input.customerId,
+    assetType,
+    assetId: input.solarSiteId ?? input.vehicleId ?? null,
+    serviceLocationId: input.serviceLocationId ?? null,
+    registryAssetId: input.registryAssetId,
+    serviceId: input.serviceId,
+    contractType: "one_time",
+    catalogRefKind: input.catalogRefKind ?? "service",
+    catalogRefId: input.serviceId,
+    productLine: "one_time_service",
+    sourceSystem: "booking",
+    sourceId: provisionalSourceId,
+    status: "active",
+    validFrom: input.scheduledDate,
+    validUntil: input.scheduledDate,
+    summaryJson: {
+      serviceName: input.serviceName,
+      amount: input.amount,
+      paymentTerms: input.paymentTerms,
+      discountType: input.discountType,
+      discountValue: input.discountValue,
+    },
+    companyId: input.companyId ?? null,
+    franchiseeId: input.franchiseeId ?? null,
+    branchId: input.branchId ?? null,
+  });
+}
+
+export async function linkContractToBooking(registryId: number, bookingId: number, amount?: string) {
+  const [existing] = await db.select().from(customerContractsTable)
+    .where(eq(customerContractsTable.id, registryId)).limit(1);
+  if (!existing) return;
+  const summary: Record<string, unknown> = { ...(existing.summaryJson as Record<string, unknown>), bookingId };
+  if (amount != null) summary.amount = amount;
+  await db.update(customerContractsTable).set({
+    sourceId: bookingId,
+    summaryJson: summary,
+    updatedAt: new Date(),
+  }).where(eq(customerContractsTable.id, registryId));
 }
 
 /** Reconcile registry rows for one customer from all source systems. */
@@ -369,7 +442,18 @@ export async function countActiveContractsForTenant(req: Request): Promise<numbe
   return Number(row?.count ?? 0);
 }
 
-export async function listCustomerContracts(customerId: number): Promise<RegistryContractRow[]> {
+export async function listCustomerContracts(
+  customerId: number,
+  req?: Request,
+): Promise<RegistryContractRow[]> {
+  const scopeFilters = req
+    ? tenantFilters(req, {
+      companyCol: customerContractsTable.companyId,
+      branchCol: customerContractsTable.branchId,
+      franchiseeCol: customerContractsTable.franchiseeId,
+    })
+    : [];
+
   const rows = await db.select({
     contract: customerContractsTable,
     vehicleNumber: vehiclesTable.registrationNumber,
@@ -390,7 +474,10 @@ export async function listCustomerContracts(customerId: number): Promise<Registr
     .leftJoin(serviceLocationsTable, eq(customerContractsTable.serviceLocationId, serviceLocationsTable.id))
     .leftJoin(assetsTable, eq(customerContractsTable.registryAssetId, assetsTable.id))
     .leftJoin(servicesTable, eq(customerContractsTable.serviceId, servicesTable.id))
-    .where(eq(customerContractsTable.customerId, customerId))
+    .where(and(
+      eq(customerContractsTable.customerId, customerId),
+      ...scopeFilters,
+    ))
     .orderBy(desc(customerContractsTable.updatedAt));
 
   return rows.map(r => {

@@ -1,16 +1,22 @@
+/**
+ * Phase 5.2 Booking Engine routes — schedule only.
+ * Owns: create, confirm, reschedule, cancel, slots, list/detail, timeline.
+ * Does NOT own: pricing, staff assignment, proof photos, job completion, invoices.
+ */
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { bookingsTable, customersTable, staffTable, servicesTable, bookingEventsTable, vehiclesTable, solarSitesTable, subscriptionsTable } from "@workspace/db";
+import {
+  bookingsTable,
+  customersTable,
+  servicesTable,
+  bookingEventsTable,
+  vehiclesTable,
+  solarSitesTable,
+  type BookingStatus,
+} from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
-import { decrementOnCompletion, recomputeNextDueDate, getTodayIST, type Transaction } from "../subscriptions/service";
-import { resolveBookingAmount } from "../lib/dynamicPricing";
-import { staffAssignableError } from "../lib/staffEcosystem/profileCompletion";
-import { roleSlugForBookingService, staffOperationalRoleError } from "../lib/staffEcosystem/operationalRoles";
-import { notifyBookingConfirmed, notifyBookingCompleted } from "../lib/notifications/dispatcher";
-import { captureBookingTransitionLocation } from "../lib/staffLocation/bookingLocation";
-import { handleLocationError } from "../lib/staffLocation/locationService";
-import { notifyStaffJobAssigned } from "../lib/push/staffJobNotify";
+import { getTodayIST } from "../subscriptions/service";
 import { isDailyCleanCatalogServiceName } from "../lib/dcms/dailyCleanCatalogGuard";
 import {
   serviceabilityBlockedLogPayload,
@@ -22,29 +28,16 @@ import {
   BookingCoverageError,
   BookingValidationError,
   resolveBookingTraceId,
-  bookingTimelineService,
-  mapLegacyTransitionToPlatform,
-  resolvePlatformStatus,
-  buildBookingTraceContext,
+  BOOKING_TRANSITIONS,
 } from "../lib/booking";
 
 const router = Router();
-
-async function validateStaffAssignmentForService(
-  staff: typeof staffTable.$inferSelect,
-  serviceType: string,
-): Promise<string | null> {
-  const roleSlug = roleSlugForBookingService(serviceType);
-  if (!roleSlug) return staffAssignableError(staff);
-  return staffOperationalRoleError(staff, roleSlug);
-}
 
 const SCOPE_COLS = {
   companyCol: bookingsTable.companyId,
   branchCol: bookingsTable.branchId,
   franchiseeCol: bookingsTable.franchiseeId,
   customerCol: bookingsTable.customerId,
-  staffCol: bookingsTable.staffId,
 };
 
 const bookingSelect = {
@@ -52,16 +45,17 @@ const bookingSelect = {
   customerId: bookingsTable.customerId,
   customerName: customersTable.name,
   customerPhone: customersTable.phone,
+  contractRegistryId: bookingsTable.contractRegistryId,
+  serviceLocationId: bookingsTable.serviceLocationId,
+  assetId: bookingsTable.assetId,
   vehicleId: bookingsTable.vehicleId,
   solarSiteId: bookingsTable.solarSiteId,
-  subscriptionId: bookingsTable.subscriptionId,
   serviceId: bookingsTable.serviceId,
   serviceName: servicesTable.name,
-  staffId: bookingsTable.staffId,
-  staffName: staffTable.name,
   branchId: bookingsTable.branchId,
   companyId: bookingsTable.companyId,
   franchiseeId: bookingsTable.franchiseeId,
+  cityId: bookingsTable.cityId,
   scheduledDate: bookingsTable.scheduledDate,
   scheduledTime: bookingsTable.scheduledTime,
   status: bookingsTable.status,
@@ -72,103 +66,78 @@ const bookingSelect = {
   locationLng: bookingsTable.locationLng,
   placeId: bookingsTable.placeId,
   savedLocationId: bookingsTable.savedLocationId,
+  addressSnapshotId: bookingsTable.addressSnapshotId,
+  addressIdentityId: bookingsTable.addressIdentityId,
   notes: bookingsTable.notes,
-  startedAt: bookingsTable.startedAt,
-  completedAt: bookingsTable.completedAt,
   cancellationReason: bookingsTable.cancellationReason,
-  proofPhotoUrls: bookingsTable.proofPhotoUrls,
-  customerSignatureUrl: bookingsTable.customerSignatureUrl,
-  beforePhotoUrl: bookingsTable.beforePhotoUrl,
-  afterPhotoUrl: bookingsTable.afterPhotoUrl,
-  technicianNotes: bookingsTable.technicianNotes,
-  rating: bookingsTable.rating,
-  amount: bookingsTable.amount,
-  recurrenceRule: bookingsTable.recurrenceRule,
-  parentBookingId: bookingsTable.parentBookingId,
+  customerConfirmedAt: bookingsTable.customerConfirmedAt,
   createdAt: bookingsTable.createdAt,
-};
-
-async function fireStaffJobAssignedNotify(input: {
-  staffId: number;
-  bookingId: number;
-  customerId: number;
-  serviceId?: number | null;
-  serviceType?: string | null;
-  scheduledDate?: string | null;
-  scheduledTime?: string | null;
-}) {
-  const [customer] = await db.select({ name: customersTable.name }).from(customersTable)
-    .where(eq(customersTable.id, input.customerId)).limit(1);
-  const [service] = input.serviceId
-    ? await db.select({ name: servicesTable.name }).from(servicesTable)
-      .where(eq(servicesTable.id, input.serviceId)).limit(1)
-    : [null];
-
-  void notifyStaffJobAssigned({
-    staffId: input.staffId,
-    bookingId: input.bookingId,
-    customerName: customer?.name,
-    serviceName: service?.name ?? input.serviceType,
-    scheduledDate: input.scheduledDate,
-    scheduledTime: input.scheduledTime,
-  });
-}
-
-const allowedTransitions: Record<string, string[]> = {
-  scheduled: ["confirmed", "cancelled", "rescheduled"],
-  confirmed: ["en_route", "cancelled"],
-  en_route: ["in_progress", "cancelled"],
-  in_progress: ["completed", "cancelled"],
-  completed: [],
-  cancelled: [],
-  rescheduled: ["confirmed", "en_route", "cancelled"],
-  pending: ["confirmed", "cancelled"],
+  updatedAt: bookingsTable.updatedAt,
 };
 
 async function logEvent(
   bookingId: number,
   type: string,
-  opts?: { fromStatus?: string; toStatus?: string; body?: string; actorId?: number | null; actorName?: string; locationLat?: string; locationLng?: string },
-  tx?: any,
+  opts?: {
+    fromStatus?: string;
+    toStatus?: string;
+    body?: string;
+    actorId?: number | null;
+    actorName?: string;
+  },
 ) {
-  const ctx = tx ?? db;
-  await ctx.insert(bookingEventsTable).values({
+  await db.insert(bookingEventsTable).values({
     bookingId,
-    type: type as any,
+    type: type as never,
     fromStatus: opts?.fromStatus ?? null,
     toStatus: opts?.toStatus ?? null,
     body: opts?.body ?? null,
     actorId: opts?.actorId ?? null,
     actorName: opts?.actorName ?? null,
-    locationLat: opts?.locationLat ?? null,
-    locationLng: opts?.locationLng ?? null,
   });
 }
 
-async function getBookingWithScope(req: any, id: number) {
+async function getBookingWithScope(req: Parameters<typeof rowInScope>[0], id: number) {
   const [booking] = await db.select(bookingSelect).from(bookingsTable)
     .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
-    .leftJoin(staffTable, eq(bookingsTable.staffId, staffTable.id))
     .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
     .where(eq(bookingsTable.id, id));
   if (!booking || !rowInScope(req, booking)) return null;
   return booking;
 }
 
+router.get("/bookings/slots", async (req, res) => {
+  try {
+    const { date, branchId, assetId, serviceLocationId, customerId, durationMinutes } = req.query as Record<string, string>;
+    if (!date) return res.status(400).json({ error: "date is required (YYYY-MM-DD)" });
+
+    const slots = await bookingCapability.getSlots({
+      date,
+      branchId: branchId ? parseInt(branchId, 10) : undefined,
+      assetId: assetId ? parseInt(assetId, 10) : undefined,
+      serviceLocationId: serviceLocationId ? parseInt(serviceLocationId, 10) : undefined,
+      customerId: customerId ? parseInt(customerId, 10) : undefined,
+      durationMinutes: durationMinutes ? parseInt(durationMinutes, 10) : undefined,
+    });
+    return res.json({ date, slots });
+  } catch (err) {
+    req.log.error({ err }, "Get booking slots error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/bookings/today", async (req, res) => {
   try {
-    const { staffId, branchId } = req.query as Record<string, string>;
+    const { branchId } = req.query as Record<string, string>;
     const today = getTodayIST();
     const conditions = [
       ...tenantFilters(req, SCOPE_COLS),
       sql`${bookingsTable.scheduledDate}::text = ${today}`,
     ];
-    if (staffId) conditions.push(eq(bookingsTable.staffId, parseInt(staffId)));
-    if (branchId) conditions.push(eq(bookingsTable.branchId, parseInt(branchId)));
+    if (branchId) conditions.push(eq(bookingsTable.branchId, parseInt(branchId, 10)));
 
     const data = await db.select(bookingSelect).from(bookingsTable)
       .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
-      .leftJoin(staffTable, eq(bookingsTable.staffId, staffTable.id))
       .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
       .where(and(...conditions))
       .orderBy(bookingsTable.scheduledTime);
@@ -182,31 +151,21 @@ router.get("/bookings/today", async (req, res) => {
 
 router.get("/bookings", async (req, res) => {
   try {
-    const { customerId, staffId, date, status, serviceType, limit = "50", offset = "0" } = req.query as Record<string, string>;
-    const lim = Math.min(parseInt(limit), 100);
-    const off = parseInt(offset);
+    const {
+      customerId, date, status, serviceType, limit = "50", offset = "0",
+    } = req.query as Record<string, string>;
+    const lim = Math.min(parseInt(limit, 10), 100);
+    const off = parseInt(offset, 10);
 
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
-    if (customerId) conditions.push(eq(bookingsTable.customerId, parseInt(customerId)));
-    if (staffId) conditions.push(eq(bookingsTable.staffId, parseInt(staffId)));
+    if (customerId) conditions.push(eq(bookingsTable.customerId, parseInt(customerId, 10)));
     if (date) conditions.push(sql`${bookingsTable.scheduledDate}::text = ${date}`);
-    if (status) conditions.push(eq(bookingsTable.status, status as any));
-    if (serviceType) conditions.push(eq(bookingsTable.serviceType, serviceType as any));
+    if (status) conditions.push(eq(bookingsTable.status, status as BookingStatus));
+    if (serviceType) conditions.push(eq(bookingsTable.serviceType, serviceType as never));
 
     const includeLegacyDaily = req.query.includeLegacyDaily === "true";
     if (!includeLegacyDaily) {
       conditions.push(sql`${bookingsTable.serviceType} <> 'daily_cleaning'`);
-      conditions.push(sql`NOT (
-        ${bookingsTable.serviceType} = 'one_time_wash'
-        AND EXISTS (
-          SELECT 1 FROM ${servicesTable} s
-          WHERE s.id = ${bookingsTable.serviceId}
-            AND (
-              lower(s.name) LIKE '%daily%'
-              AND (lower(s.name) LIKE '%clean%' OR lower(s.name) LIKE '%exterior%')
-            )
-        )
-      )`);
     }
 
     const where = conditions.length ? and(...conditions) : undefined;
@@ -214,7 +173,6 @@ router.get("/bookings", async (req, res) => {
     const [data, countResult] = await Promise.all([
       db.select(bookingSelect).from(bookingsTable)
         .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
-        .leftJoin(staffTable, eq(bookingsTable.staffId, staffTable.id))
         .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
         .where(where).orderBy(desc(bookingsTable.createdAt)).limit(lim).offset(off),
       db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(where),
@@ -230,11 +188,12 @@ router.get("/bookings", async (req, res) => {
 router.post("/bookings", async (req, res) => {
   try {
     const {
-      customerId, vehicleId, solarSiteId, subscriptionId, serviceId, staffId, branchId,
+      customerId, vehicleId, solarSiteId, serviceId, branchId,
       scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng,
-      placeId, savedLocationId, notes, amount, recurrenceRule,
-      entitlementId, addonIds, cityId, citySlug,
+      placeId, savedLocationId, notes, cityId, citySlug, assetId, serviceLocationId,
+      contractRegistryId, addressId,
     } = req.body;
+
     if (!customerId || !scheduledDate || !serviceType) {
       return res.status(400).json({ error: "customerId, scheduledDate, and serviceType are required" });
     }
@@ -243,20 +202,10 @@ router.post("/bookings", async (req, res) => {
     }
 
     const customer = await loadIfInScope(req,
-      () => db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1).then(r => r[0]),
-      r => ({ ...r, customerId: r.id }),
+      () => db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1).then((r) => r[0]),
+      (r) => ({ ...r, customerId: r.id }),
     );
     if (!customer) return res.status(404).json({ error: "Customer not found" });
-
-    if (staffId) {
-      const staff = await loadIfInScope(req,
-        () => db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1).then(r => r[0]),
-        r => ({ ...r, staffId: r.id }),
-      );
-      if (!staff) return res.status(404).json({ error: "Staff not found" });
-      const assignErr = await validateStaffAssignmentForService(staff, serviceType);
-      if (assignErr) return res.status(409).json({ error: assignErr });
-    }
 
     if (vehicleId) {
       const [vehicle] = await db.select().from(vehiclesTable).where(eq(vehiclesTable.id, vehicleId)).limit(1);
@@ -278,67 +227,6 @@ router.post("/bookings", async (req, res) => {
       }
     }
 
-    let resolvedAmount = amount?.toString();
-    const resolvedBranchId = branchId ?? customer.branchId ?? undefined;
-    let resolvedEntitlementId: number | null = entitlementId ?? null;
-    let resolvedCityId: number | null = cityId ?? null;
-
-    if (serviceId && customerId && !resolvedEntitlementId) {
-      const { checkSelfBookingEligibility } = await import("../lib/catalog/entitlementEngine");
-      const { resolveCityId } = await import("../lib/catalog/pricingEngine");
-      const cid = resolvedCityId ?? (citySlug ? await resolveCityId(citySlug) : null);
-      const eligibility = await checkSelfBookingEligibility({
-        customerId, serviceId, cityId: cid,
-      });
-      if (eligibility.eligible && eligibility.entitlementId) {
-        resolvedEntitlementId = eligibility.entitlementId;
-      }
-    }
-
-    if (resolvedEntitlementId) {
-      const { customerEntitlementsTable } = await import("@workspace/db");
-      const { gt: gtOp } = await import("drizzle-orm");
-      const today = getTodayIST();
-      const [ent] = await db.select().from(customerEntitlementsTable)
-        .where(and(
-          eq(customerEntitlementsTable.id, resolvedEntitlementId),
-          eq(customerEntitlementsTable.customerId, customerId),
-          eq(customerEntitlementsTable.status, "active"),
-          gtOp(customerEntitlementsTable.remainingCredits, 0),
-        ))
-        .limit(1);
-      if (!ent || ent.validUntil < today) {
-        return res.status(400).json({ error: "Invalid or expired entitlement for this booking" });
-      }
-    }
-
-    if (!resolvedAmount) {
-      const panelCount = solarSiteId
-        ? (await db.select({ panelCount: solarSitesTable.panelCount }).from(solarSitesTable)
-            .where(eq(solarSitesTable.id, solarSiteId)).limit(1))[0]?.panelCount
-        : undefined;
-      const computed = await resolveBookingAmount({
-        serviceId, vehicleId, solarSiteId, serviceType, panelCount,
-        cityId: resolvedCityId, citySlug,
-      });
-      if (computed != null) resolvedAmount = String(computed);
-    }
-
-    if (resolvedEntitlementId) {
-      resolvedAmount = "0";
-    }
-
-    if (Array.isArray(addonIds) && addonIds.length > 0) {
-      const { serviceAddonsTable } = await import("@workspace/db");
-      const { inArray } = await import("drizzle-orm");
-      const addons = await db.select().from(serviceAddonsTable)
-        .where(and(inArray(serviceAddonsTable.id, addonIds), eq(serviceAddonsTable.isActive, true)));
-      const addonTotal = addons.reduce((sum, a) => sum + parseFloat(a.basePrice), 0);
-      resolvedAmount = String(parseFloat(resolvedAmount ?? "0") + addonTotal);
-    }
-
-    const initialStatus = req.user?.role === "customer" ? "pending" as const : "scheduled" as const;
-
     if (serviceId) {
       const [svc] = await db.select({ name: servicesTable.name }).from(servicesTable)
         .where(eq(servicesTable.id, serviceId)).limit(1);
@@ -349,17 +237,20 @@ router.post("/bookings", async (req, res) => {
       }
     }
 
-    const traceId = resolveBookingTraceId(req.headers["x-trace-id"] ?? req.headers["x-request-id"]);
+    const initialStatus: BookingStatus = req.user?.role === "customer" ? "draft" : "scheduled";
+    const resolvedBranchId = branchId ?? customer.branchId ?? undefined;
     const tenantValues = tenantStamp(req, {});
+    const traceId = resolveBookingTraceId(req.headers["x-trace-id"] ?? req.headers["x-request-id"]);
 
     try {
       const createResult = await bookingCapability.createBooking({
         customerId,
+        contractRegistryId: contractRegistryId ?? null,
+        serviceLocationId: serviceLocationId ?? null,
+        assetId: assetId ?? null,
         vehicleId,
         solarSiteId,
-        subscriptionId,
         serviceId,
-        staffId,
         branchId: resolvedBranchId,
         companyId: tenantValues.companyId,
         franchiseeId: tenantValues.franchiseeId,
@@ -372,17 +263,12 @@ router.post("/bookings", async (req, res) => {
         locationLng,
         placeId,
         savedLocationId,
-        addressId: req.body.addressId,
+        addressId,
         notes,
-        amount: resolvedAmount,
-        recurrenceRule,
-        entitlementId: resolvedEntitlementId,
-        addonIds: Array.isArray(addonIds) ? addonIds : [],
-        cityId: resolvedCityId,
+        cityId: cityId ?? null,
         citySlug,
         cityName: typeof area === "string" ? area : undefined,
         status: initialStatus,
-        initialPlatformStatus: initialStatus === "pending" ? "DRAFT" : "VALIDATED",
       }, {
         traceId,
         requestId: String(req.id ?? req.headers["x-request-id"] ?? traceId),
@@ -391,14 +277,14 @@ router.post("/bookings", async (req, res) => {
       });
 
       const booking = createResult.booking;
-      if (!resolvedCityId && createResult.coverage?.resolvedCityId) {
-        resolvedCityId = createResult.coverage.resolvedCityId;
-      }
 
       const { tryReactivateLegacyCustomer } = await import("../lib/customerReactivation");
-      const reactivation = await tryReactivateLegacyCustomer(customerId, "booking", { type: "booking", id: booking.id });
+      const reactivation = await tryReactivateLegacyCustomer(customerId, "booking", {
+        type: "booking",
+        id: booking.id,
+      });
 
-      if (initialStatus !== "cancelled") {
+      if (booking.status !== "cancelled" && booking.status !== "draft") {
         const { bridgeLegacyBookingToContractAndQueue } = await import("../lib/assignments/enqueueAdapters");
         let serviceName: string | null = null;
         if (serviceId) {
@@ -407,17 +293,21 @@ router.post("/bookings", async (req, res) => {
           serviceName = svc?.name ?? null;
         }
         await bridgeLegacyBookingToContractAndQueue(booking, serviceName);
+        await bookingCapability.markWaitingAssignment(booking.id, {
+          traceId,
+          logger: req.log,
+          actorId: req.user?.id,
+        });
       }
 
+      const fresh = await getBookingWithScope(req, booking.id);
       return res.status(201).json({
-        ...booking,
+        ...fresh,
         reactivated: reactivation.reactivated,
         bookingContext: createResult.bookingContext,
-        platformStatus: booking.platformStatus,
         addressSnapshotId: createResult.addressSnapshotId,
         addressIdentityId: createResult.addressIdentityId,
         coverageValidationId: createResult.coverageValidationId,
-        confidenceScore: createResult.confidenceScore,
       });
     } catch (err) {
       if (err instanceof BookingCoverageError) {
@@ -440,7 +330,7 @@ router.post("/bookings", async (req, res) => {
 
 router.get("/bookings/:id/timeline", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     const booking = await getBookingWithScope(req, id);
     if (!booking) return res.status(404).json({ error: "Booking not found" });
     const timeline = await bookingCapability.getTimeline(id);
@@ -451,9 +341,24 @@ router.get("/bookings/:id/timeline", async (req, res) => {
   }
 });
 
+router.get("/bookings/:id/events", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const booking = await getBookingWithScope(req, id);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    const events = await db.select().from(bookingEventsTable)
+      .where(eq(bookingEventsTable.bookingId, id))
+      .orderBy(desc(bookingEventsTable.createdAt));
+    return res.json(events);
+  } catch (err) {
+    req.log.error({ err }, "Get booking events error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/bookings/:id", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     const booking = await getBookingWithScope(req, id);
     if (!booking) return res.status(404).json({ error: "Booking not found" });
     return res.json(booking);
@@ -463,415 +368,210 @@ router.get("/bookings/:id", async (req, res) => {
   }
 });
 
+/** Schedule-field edits only — no staff, photos, amount, or execution fields. */
 router.patch("/bookings/:id", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
     if (!existing || !rowInScope(req, existing)) {
       return res.status(404).json({ error: "Booking not found" });
     }
-    const { status, staffId, scheduledDate, scheduledTime, notes, technicianNotes, beforePhotoUrl, afterPhotoUrl, proofPhotoUrls, customerSignatureUrl, cancellationReason, rating, completedAt } = req.body;
-    const updateData: Record<string, unknown> = { updatedAt: new Date() };
-    if (status !== undefined) updateData.status = status;
-    if (staffId !== undefined) {
-      if (staffId === null) {
-        updateData.staffId = null;
-      } else {
-        const [staff] = await db.select().from(staffTable).where(eq(staffTable.id, staffId)).limit(1);
-        if (!staff) return res.status(404).json({ error: "Staff not found" });
-        const assignErr = await validateStaffAssignmentForService(staff, existing.serviceType);
-        if (assignErr) return res.status(409).json({ error: assignErr });
-        updateData.staffId = staffId;
-      }
+
+    const { scheduledDate, scheduledTime, notes, status } = req.body;
+
+    if (status !== undefined) {
+      return res.status(400).json({
+        error: "Use POST /bookings/:id/confirm, /reschedule, /cancel, or /transition for status changes",
+      });
     }
-    if (scheduledDate !== undefined) updateData.scheduledDate = scheduledDate;
-    if (scheduledTime !== undefined) updateData.scheduledTime = scheduledTime;
-    if (notes !== undefined) updateData.notes = notes;
-    if (technicianNotes !== undefined) updateData.technicianNotes = technicianNotes;
-    if (beforePhotoUrl !== undefined) updateData.beforePhotoUrl = beforePhotoUrl;
-    if (afterPhotoUrl !== undefined) updateData.afterPhotoUrl = afterPhotoUrl;
-    if (proofPhotoUrls !== undefined) updateData.proofPhotoUrls = proofPhotoUrls;
-    if (customerSignatureUrl !== undefined) updateData.customerSignatureUrl = customerSignatureUrl;
-    if (cancellationReason !== undefined) updateData.cancellationReason = cancellationReason;
-    if (rating !== undefined) updateData.rating = rating;
-    if (completedAt !== undefined) updateData.completedAt = new Date(completedAt);
-    if (status === "completed" && !completedAt) updateData.completedAt = new Date();
 
-    const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
+    if (req.body.staffId !== undefined || req.body.amount !== undefined
+      || req.body.proofPhotoUrls !== undefined || req.body.rating !== undefined) {
+      return res.status(400).json({
+        error: "staffId, amount, photos, and rating are not owned by Booking Engine",
+      });
+    }
 
-    if (
-      staffId !== undefined &&
-      staffId != null &&
-      staffId !== existing.staffId
-    ) {
-      void fireStaffJobAssignedNotify({
-        staffId,
+    if (scheduledDate || scheduledTime) {
+      const result = await bookingCapability.rescheduleBooking({
         bookingId: id,
-        customerId: existing.customerId,
-        serviceId: existing.serviceId,
-        serviceType: existing.serviceType,
-        scheduledDate: (updateData.scheduledDate as string | undefined) ?? existing.scheduledDate,
-        scheduledTime: (updateData.scheduledTime as string | undefined) ?? existing.scheduledTime,
+        scheduledDate: scheduledDate ?? existing.scheduledDate,
+        scheduledTime: scheduledTime !== undefined ? scheduledTime : existing.scheduledTime,
+        actorId: req.user?.id,
+        actorName: req.user?.name,
+      }, { logger: req.log });
+      if (notes !== undefined) {
+        await db.update(bookingsTable).set({ notes, updatedAt: new Date() }).where(eq(bookingsTable.id, id));
+      }
+      await logEvent(id, "reschedule", {
+        fromStatus: existing.status,
+        toStatus: result.booking.status,
+        actorId: req.user?.id,
       });
+      const fresh = await getBookingWithScope(req, id);
+      return res.json(fresh);
     }
 
-    if (beforePhotoUrl !== undefined) {
-      await logEvent(id, "proof_upload", {
-        body: "Before photo uploaded",
-        actorId: req.user?.id ?? req.scope?.staffId,
-        actorName: req.user?.name ?? "system",
-      });
-    }
-    if (afterPhotoUrl !== undefined) {
-      await logEvent(id, "proof_upload", {
-        body: "After photo uploaded",
-        actorId: req.user?.id ?? req.scope?.staffId,
-        actorName: req.user?.name ?? "system",
-      });
+    if (notes !== undefined) {
+      await db.update(bookingsTable).set({ notes, updatedAt: new Date() }).where(eq(bookingsTable.id, id));
     }
 
+    const fresh = await getBookingWithScope(req, id);
+    return res.json(fresh);
+  } catch (err) {
+    if (err instanceof BookingValidationError) {
+      return res.status(400).json({ error: err.message, code: err.code, details: err.details });
+    }
+    req.log.error({ err }, "Update booking error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/bookings/:id/confirm", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const existing = await getBookingWithScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Booking not found" });
+
+    const { booking } = await bookingCapability.confirmBooking(id, {
+      actorId: req.user?.id,
+      actorName: req.user?.name,
+      logger: req.log,
+    });
+    await logEvent(id, "status_change", {
+      fromStatus: existing.status,
+      toStatus: booking.status,
+      actorId: req.user?.id,
+      actorName: req.user?.name,
+    });
     return res.json(booking);
   } catch (err) {
-    req.log.error({ err }, "Update booking error");
+    if (err instanceof BookingValidationError) {
+      return res.status(400).json({ error: err.message, code: err.code });
+    }
+    req.log.error({ err }, "Confirm booking error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
 router.post("/bookings/:id/transition", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const { toStatus, reason } = req.body;
-    const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
-    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Booking not found" });
-    if (!toStatus) return res.status(400).json({ error: "toStatus is required" });
-
-    const allowed = allowedTransitions[existing.status] || [];
-    if (!allowed.includes(toStatus)) {
-      return res.status(400).json({ error: `Invalid transition from ${existing.status} to ${toStatus}` });
-    }
-
-    if (toStatus === "completed") {
-      const proof = (existing.proofPhotoUrls as string[] | null) ?? [];
-      const hasMultiPhotoProof = proof.length >= 6;
-      if (!hasMultiPhotoProof && !existing.afterPhotoUrl) {
-        return res.status(400).json({ error: "Upload 3 before and 3 after geo-tagged photos before completing the job" });
-      }
-    }
-
-    const isAssignedStaff =
-      req.user?.staffId != null
-      && existing.staffId != null
-      && req.user.staffId === existing.staffId;
-    const locationRequired = isAssignedStaff && ["en_route", "in_progress", "completed"].includes(toStatus);
-
-    let locationLog: Awaited<ReturnType<typeof captureBookingTransitionLocation>> = null;
-    try {
-      locationLog = await captureBookingTransitionLocation(
-        existing,
-        existing.staffId!,
-        toStatus,
-        req.body as Record<string, unknown>,
-        { requireLocation: locationRequired },
-      );
-    } catch (locErr) {
-      const handled = handleLocationError(locErr);
-      if (handled) return res.status(handled.status).json(handled.body);
-      throw locErr;
-    }
-
-    const fromPlatform = resolvePlatformStatus(existing.status, existing.platformStatus ?? undefined);
-    const toPlatform = mapLegacyTransitionToPlatform(toStatus);
-    const trace = buildBookingTraceContext({
-      traceId: resolveBookingTraceId(req.headers["x-trace-id"] ?? req.headers["x-request-id"]),
-      requestId: String(req.id ?? req.headers["x-request-id"] ?? ""),
-      bookingId: id,
-      customerId: existing.customerId,
-      addressIdentityId: existing.addressIdentityId ?? undefined,
-      addressSnapshotId: existing.addressSnapshotId ?? undefined,
-      coverageValidationId: existing.coverageValidationId ?? undefined,
-    });
-
-    const updateData: Record<string, unknown> = {
-      status: toStatus,
-      platformStatus: toPlatform,
-      updatedAt: new Date(),
+    const id = parseInt(req.params.id, 10);
+    const { status, toStatus, reason } = req.body as {
+      status?: string;
+      toStatus?: string;
+      reason?: string;
     };
-    if (toStatus === "in_progress") updateData.startedAt = new Date();
-    if (toStatus === "completed") updateData.completedAt = new Date();
+    const nextRaw = toStatus ?? status;
+    if (!nextRaw) return res.status(400).json({ error: "toStatus is required" });
 
-    const eventLocation = locationLog
-      ? { locationLat: String(locationLog.latitude), locationLng: String(locationLog.longitude) }
-      : undefined;
-
-    if (toStatus === "completed") {
-      const fullBooking = await getBookingWithScope(req, id);
-      if (!fullBooking) return res.status(404).json({ error: "Booking not found" });
-
-      try {
-        const booking = await db.transaction(async (tx) => {
-          const [b] = await tx.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
-          await logEvent(id, "status_change", {
-            fromStatus: existing.status,
-            toStatus,
-            body: reason,
-            actorId: req.user?.id ?? req.scope?.staffId,
-            actorName: req.user?.name ?? "system",
-            ...eventLocation,
-          }, tx);
-
-          if (existing.subscriptionId) {
-            const subId = existing.subscriptionId as number;
-            await decrementOnCompletion(subId, tx);
-            const { recomputeServicesRemaining } = await import("../subscriptions/service");
-            await recomputeNextDueDate(subId, tx);
-            await recomputeServicesRemaining(subId, tx);
-          }
-
-          if (existing.entitlementId) {
-            const { consumeEntitlementOnCompletion } = await import("../lib/catalog/entitlementEngine");
-            await consumeEntitlementOnCompletion(existing.entitlementId as number, id, 1, tx);
-          }
-
-          const { consumeDcmsWashFromWalkInBooking } = await import("../lib/staff/walkInService");
-          await consumeDcmsWashFromWalkInBooking(
-            existing,
-            req.user?.id ?? req.scope?.staffId ?? existing.staffId ?? 0,
-            tx,
-          );
-
-          const {
-            maybeCreateInvoiceOnBookingComplete,
-            resolveBookingServiceName,
-          } = await import("../lib/billing/invoiceService");
-          const serviceName = await resolveBookingServiceName(existing.serviceId, tx);
-          await maybeCreateInvoiceOnBookingComplete(existing, { serviceName }, tx);
-
-          return b;
-        });
-
-        notifyBookingCompleted({
-          id: booking.id,
-          customerId: booking.customerId,
-          customerName: fullBooking.customerName,
-          serviceName: fullBooking.serviceName,
-          serviceType: fullBooking.serviceType,
-          scheduledDate: String(fullBooking.scheduledDate),
-          companyId: fullBooking.companyId,
-          branchId: fullBooking.branchId,
-        }).catch((err) => req.log.error({ err, bookingId: id }, "Completion notification failed"));
-
-        void bookingTimelineService.recordTransition(
-          id, trace, fromPlatform, toPlatform,
-          { actorId: req.user?.id ?? req.scope?.staffId ?? undefined, actorName: req.user?.name ?? "system", description: reason },
-          req.log,
-        );
-
-        return res.json(booking);
-      } catch (err) {
-        throw err;
-      }
-    }
-
-    if (toStatus === "confirmed") {
-      const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
-      await logEvent(id, "status_change", {
-        fromStatus: existing.status,
-        toStatus,
-        body: reason,
-        actorId: req.user?.id ?? req.scope?.staffId,
-        actorName: req.user?.name ?? "system",
+    const allowed: BookingStatus[] = [
+      "draft", "scheduled", "confirmed", "waiting_assignment", "rescheduled", "cancelled",
+    ];
+    if (!allowed.includes(nextRaw as BookingStatus)) {
+      return res.status(400).json({
+        error: `Invalid booking status "${nextRaw}". Booking Engine supports: ${allowed.join(", ")}`,
       });
-
-      const fullBooking = await getBookingWithScope(req, id);
-      if (fullBooking) {
-        notifyBookingConfirmed({
-          id: fullBooking.id,
-          customerId: fullBooking.customerId,
-          customerName: fullBooking.customerName,
-          serviceName: fullBooking.serviceName,
-          serviceType: fullBooking.serviceType,
-          scheduledDate: String(fullBooking.scheduledDate),
-          companyId: fullBooking.companyId,
-          branchId: fullBooking.branchId,
-        }).catch((err) => req.log.error({ err, bookingId: id }, "Confirmation notification failed"));
-      }
-
-      void bookingTimelineService.recordTransition(
-        id, trace, fromPlatform, toPlatform,
-        { actorId: req.user?.id ?? req.scope?.staffId ?? undefined, actorName: req.user?.name ?? "system", description: reason },
-        req.log,
-      );
-
-      return res.json(booking);
     }
 
-    const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
+    const existing = await getBookingWithScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Booking not found" });
+
+    const next = nextRaw as BookingStatus;
+    if (!(BOOKING_TRANSITIONS[existing.status as BookingStatus] ?? []).includes(next)) {
+      return res.status(400).json({
+        error: `Cannot transition from ${existing.status} to ${next}`,
+      });
+    }
+
+    const { booking } = await bookingCapability.transitionBooking({
+      bookingId: id,
+      toStatus: next,
+      reason,
+      actorId: req.user?.id,
+      actorName: req.user?.name,
+    }, { logger: req.log });
+
     await logEvent(id, "status_change", {
       fromStatus: existing.status,
-      toStatus,
+      toStatus: booking.status,
       body: reason,
-      actorId: req.user?.id ?? req.scope?.staffId,
-      actorName: req.user?.name ?? "system",
-      ...eventLocation,
+      actorId: req.user?.id,
+      actorName: req.user?.name,
     });
-
-    void bookingTimelineService.recordTransition(
-      id, trace, fromPlatform, toPlatform,
-      { actorId: req.user?.id ?? req.scope?.staffId ?? undefined, actorName: req.user?.name ?? "system", description: reason },
-      req.log,
-    );
 
     return res.json(booking);
   } catch (err) {
+    if (err instanceof BookingValidationError) {
+      return res.status(400).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Transition booking error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-router.post("/bookings/:id/proof", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const { urls } = req.body as { urls: string[] };
-    const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
-    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Booking not found" });
-    if (!Array.isArray(urls) || urls.length === 0) return res.status(400).json({ error: "urls array required" });
-
-    const current = (existing.proofPhotoUrls as string[] | null) ?? [];
-    const updated = [...current, ...urls];
-    const [booking] = await db.update(bookingsTable).set({ proofPhotoUrls: updated, updatedAt: new Date() }).where(eq(bookingsTable.id, id)).returning();
-    await logEvent(id, "proof_upload", {
-      body: `${urls.length} photo(s) added`,
-      actorId: req.user?.id ?? req.scope?.staffId,
-      actorName: req.user?.name ?? "system",
-    });
-    return res.json(booking);
-  } catch (err) {
-    req.log.error({ err }, "Proof upload error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
 router.post("/bookings/:id/reschedule", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     const { scheduledDate, scheduledTime, reason } = req.body;
-    const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
-    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Booking not found" });
     if (!scheduledDate) return res.status(400).json({ error: "scheduledDate is required" });
 
-    const [booking] = await db.update(bookingsTable).set({
-      scheduledDate, scheduledTime: scheduledTime ?? null, status: "rescheduled", updatedAt: new Date(),
-    }).where(eq(bookingsTable.id, id)).returning();
+    const existing = await getBookingWithScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Booking not found" });
+
+    const { booking } = await bookingCapability.rescheduleBooking({
+      bookingId: id,
+      scheduledDate,
+      scheduledTime,
+      reason,
+      actorId: req.user?.id,
+      actorName: req.user?.name,
+    }, { logger: req.log });
+
     await logEvent(id, "reschedule", {
-      body: reason ?? `Rescheduled to ${scheduledDate}`,
-      actorId: req.user?.id ?? req.scope?.staffId,
-      actorName: req.user?.name ?? "system",
+      fromStatus: existing.status,
+      toStatus: booking.status,
+      body: reason ?? `Rescheduled to ${scheduledDate} ${scheduledTime ?? ""}`,
+      actorId: req.user?.id,
     });
+
     return res.json(booking);
   } catch (err) {
+    if (err instanceof BookingValidationError) {
+      return res.status(400).json({ error: err.message, code: err.code, details: err.details });
+    }
     req.log.error({ err }, "Reschedule booking error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-const SELF_CANCELLABLE_STATUSES = new Set(["pending", "confirmed", "scheduled", "rescheduled"]);
-
-/**
- * Narrow, safe self-service cancellation for customers (and staff/admin).
- * Unlike the generic PATCH endpoint, this only ever sets status→cancelled
- * and only when the booking hasn't already progressed to en_route/in_progress/
- * completed, so a customer can't use it to tamper with other booking fields.
- */
 router.post("/bookings/:id/cancel", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id, 10);
     const { reason } = req.body as { reason?: string };
-    const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
-    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Booking not found" });
-    if (!SELF_CANCELLABLE_STATUSES.has(existing.status)) {
-      return res.status(400).json({ error: "This booking can no longer be cancelled" });
-    }
+    const existing = await getBookingWithScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Booking not found" });
 
-    const [booking] = await db.update(bookingsTable).set({
-      status: "cancelled",
-      cancellationReason: reason ?? null,
-      updatedAt: new Date(),
-    }).where(eq(bookingsTable.id, id)).returning();
+    const { booking } = await bookingCapability.cancelBooking({
+      bookingId: id,
+      reason,
+      actorId: req.user?.id,
+      actorName: req.user?.name,
+    }, { logger: req.log });
 
-    await logEvent(id, "status_change", {
+    await logEvent(id, "cancel", {
       fromStatus: existing.status,
       toStatus: "cancelled",
-      body: reason ?? "Cancelled by customer",
-      actorId: req.user?.id ?? req.scope?.staffId,
-      actorName: req.user?.name ?? "system",
+      body: reason,
+      actorId: req.user?.id,
     });
 
     return res.json(booking);
   } catch (err) {
-    req.log.error({ err }, "Cancel booking error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-router.post("/bookings/:id/regenerate-occurrences", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
-    if (!existing || !rowInScope(req, existing)) return res.status(404).json({ error: "Booking not found" });
-    if (!existing.recurrenceRule) return res.status(400).json({ error: "Booking has no recurrenceRule" });
-
-    const rule = existing.recurrenceRule as string;
-    const days = parseInt(rule.match(/\d+/)?.[0] ?? "7");
-    const count = parseInt(rule.match(/count=(\d+)/)?.[1] ?? "4");
-    const startDate = new Date(existing.scheduledDate);
-
-    const createdIds: number[] = [];
-    for (let i = 1; i <= count; i++) {
-      const nextDate = new Date(startDate);
-      nextDate.setDate(nextDate.getDate() + days * i);
-      const nextDateStr = getTodayIST(nextDate);
-
-      const dup = tenantStamp(req, {
-        customerId: existing.customerId,
-        vehicleId: existing.vehicleId,
-        solarSiteId: existing.solarSiteId,
-        subscriptionId: existing.subscriptionId,
-        serviceId: existing.serviceId,
-        staffId: existing.staffId,
-        branchId: existing.branchId,
-        companyId: existing.companyId,
-        franchiseeId: existing.franchiseeId,
-        scheduledDate: nextDateStr,
-        scheduledTime: existing.scheduledTime,
-        serviceType: existing.serviceType,
-        address: existing.address,
-        area: existing.area,
-        notes: existing.notes,
-        amount: existing.amount,
-        parentBookingId: existing.id,
-        status: "scheduled" as const,
-      });
-      const [child] = await db.insert(bookingsTable).values(dup as any).returning();
-      createdIds.push(child.id);
+    if (err instanceof BookingValidationError) {
+      return res.status(400).json({ error: err.message, code: err.code });
     }
-
-    return res.json({ created: createdIds.length, bookingIds: createdIds });
-  } catch (err) {
-    req.log.error({ err }, "Regenerate occurrences error");
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-router.get("/bookings/:id/events", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
-    if (!booking || !rowInScope(req, booking)) return res.status(404).json({ error: "Booking not found" });
-
-    const data = await db.select().from(bookingEventsTable).where(eq(bookingEventsTable.bookingId, id)).orderBy(desc(bookingEventsTable.createdAt));
-    return res.json(data);
-  } catch (err) {
-    req.log.error({ err }, "Get booking events error");
+    req.log.error({ err }, "Cancel booking error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

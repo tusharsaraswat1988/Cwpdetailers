@@ -1,20 +1,11 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/components/shared";
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle } from "lucide-react";
 import { CreateQuotationDialog } from "./CreateQuotationDialog";
-
-const qStatusColors: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground border-muted",
-  sent: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  accepted: "bg-green-500/10 text-green-600 border-green-500/20",
-  rejected: "bg-destructive/10 text-destructive border-destructive/20",
-  converted: "bg-primary/10 text-primary border-primary/20",
-  expired: "bg-muted text-muted-foreground border-muted",
-};
 
 type QuotationFilter = "all" | "open" | "converted" | "expired";
 
@@ -152,7 +143,7 @@ export function QuotationsTab({ customerId, prefillCustomerId }: Props) {
                   <td className="px-4 py-3 text-xs text-muted-foreground">₹{Number(q.gstAmount).toLocaleString("en-IN")}</td>
                   <td className="px-4 py-3 font-semibold">₹{Number(q.totalAmount).toLocaleString("en-IN")}</td>
                   <td className="px-4 py-3">
-                    <Badge variant="outline" className={`text-xs ${qStatusColors[q.status ?? "draft"]}`}>{q.status}</Badge>
+                    <StatusBadge status={q.status ?? "draft"} />
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{q.validUntil ?? "—"}</td>
                   <td className="px-4 py-3">

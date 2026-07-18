@@ -872,7 +872,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+            enum: [draft, scheduled, confirmed, waiting_assignment, rescheduled, cancelled]
         - name: serviceType
           in: query
           schema:
@@ -911,6 +911,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Booking"
+
+  /bookings/slots:
+    get:
+      operationId: getBookingSlots
+      tags: [bookings]
+      summary: Get available schedule slots for a date
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: assetId
+          in: query
+          schema:
+            type: integer
+        - name: serviceLocationId
+          in: query
+          schema:
+            type: integer
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Available slots
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date:
+                    type: string
+                  slots:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        time:
+                          type: string
+                        available:
+                          type: boolean
+                        remaining:
+                          type: integer
+                        reason:
+                          type: string
+                required: [date, slots]
 
   /bookings/{id}:
     get:
@@ -998,7 +1051,7 @@ paths:
               properties:
                 toStatus:
                   type: string
-                  enum: [scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+                  enum: [draft, scheduled, confirmed, waiting_assignment, rescheduled, cancelled]
                 reason:
                   type: string
               required: [toStatus]
@@ -2615,7 +2668,7 @@ components:
           type: string
         status:
           type: string
-          enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+          enum: [draft, scheduled, confirmed, waiting_assignment, rescheduled, cancelled]
         serviceType:
           type: string
           enum: [car_wash, detailing, solar_cleaning, one_time_wash, daily_cleaning, subscription_wash, pickup_drop, emergency]
@@ -2631,37 +2684,17 @@ components:
           format: double
         notes:
           type: string
-        startedAt:
+        customerConfirmedAt:
           type: string
           format: date-time
-        completedAt:
-          type: string
-          format: date-time
+        contractRegistryId:
+          type: integer
         cancellationReason:
           type: string
-        proofPhotoUrls:
-          type: array
-          items:
-            type: string
-        customerSignatureUrl:
-          type: string
-        beforePhotoUrl:
-          type: string
-        afterPhotoUrl:
-          type: string
-        technicianNotes:
-          type: string
-        rating:
-          type: integer
-          minimum: 1
-          maximum: 5
-        amount:
-          type: number
-        recurrenceRule:
-          type: string
-        parentBookingId:
-          type: integer
         createdAt:
+          type: string
+          format: date-time
+        updatedAt:
           type: string
           format: date-time
       required: [id, customerId, scheduledDate, status, serviceType]
@@ -2729,7 +2762,7 @@ components:
       properties:
         status:
           type: string
-          enum: [pending, confirmed, scheduled, en_route, in_progress, completed, cancelled, rescheduled]
+          enum: [draft, scheduled, confirmed, waiting_assignment, rescheduled, cancelled]
         staffId:
           type: integer
         scheduledDate:

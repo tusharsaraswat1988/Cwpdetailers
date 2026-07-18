@@ -54,13 +54,47 @@
   --app-bar-height: 3.5rem;
   --bottom-nav-height: calc(4rem + env(safe-area-inset-bottom, 0px));
 
-  /* Status colors */
+  /* Status colors — single source of truth for StatusBadge across all modules
+     (bookings, jobs, assignments, invoices, attendance). Do not add new local
+     status color maps in feature code; extend this set instead. */
   --status-scheduled: 199 89% 48%;
   --status-en-route: 25 95% 53%;
   --status-in-progress: 180 100% 40%;
   --status-completed: 142 71% 45%;
   --status-cancelled: 0 84% 60%;
   --status-paused: 38 92% 50%;
+  --status-open: 199 89% 48%;
+  --status-pending: 38 92% 50%;
+  --status-resolved: 142 71% 45%;
+  --status-closed: 220 10% 50%;
+  --status-active: 142 71% 45%;
+  --status-blocked: 0 84% 60%;
+  --status-overdue: 0 84% 60%;
+  --status-escalated: 0 72% 51%;
+  --status-draft: 220 10% 50%;
+
+  /* Elevation scale — reuse for Cards/Dialogs/Popovers instead of ad-hoc shadow classes */
+  --shadow-color: 220 40% 10%;
+  --shadow-xs: 0 1px 2px hsl(var(--shadow-color) / 0.05);
+  --shadow-sm: 0 1px 3px hsl(var(--shadow-color) / 0.08), 0 1px 2px hsl(var(--shadow-color) / 0.06);
+  --shadow-md: 0 4px 6px hsl(var(--shadow-color) / 0.08), 0 2px 4px hsl(var(--shadow-color) / 0.06);
+  --shadow-lg: 0 10px 15px hsl(var(--shadow-color) / 0.1), 0 4px 6px hsl(var(--shadow-color) / 0.06);
+  --shadow-xl: 0 20px 25px hsl(var(--shadow-color) / 0.12), 0 8px 10px hsl(var(--shadow-color) / 0.06);
+
+  /* Animation durations / easing — reuse instead of ad-hoc duration-* values */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+
+  /*
+   * Typography and spacing already follow Tailwind v4's default scale
+   * (text-xs…text-3xl, spacing 0–96) plus --font-sans / --font-display
+   * above. No new tokens are added for these — the audit found the
+   * existing scale sufficient; the gap was inconsistent *usage* across
+   * pages (Sprint 2+ fixes that at the module level), not missing tokens.
+   */
 
   /* Brand identity tokens (overridden at runtime by BrandingProvider) */
   --brand-primary: #00cccc;

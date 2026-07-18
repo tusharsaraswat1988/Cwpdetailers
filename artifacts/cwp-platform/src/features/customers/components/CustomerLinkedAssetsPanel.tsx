@@ -5,12 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Car, Sun, Plus } from "lucide-react";
-import { listAssets, type AssetListRow } from "@/features/assets/api";
-
-const TYPE_LABELS: Record<string, string> = {
-  vehicle: "Vehicle",
-  solar_site: "Solar site",
-};
+import { ASSET_TYPE_LABELS, listAssets, type AssetListRow } from "@/features/assets/api";
 
 type CustomerVehiclesPanelProps = {
   customerId: number;
@@ -35,7 +30,7 @@ export function CustomerLinkedAssetsPanel({ customerId }: CustomerVehiclesPanelP
         </div>
         <Link href={`/admin/book-services?customerId=${customerId}`}>
           <Button variant="outline" size="sm" className="text-xs h-8 shrink-0" data-testid="btn-add-customer-vehicle">
-            <Plus size={12} className="mr-1" /> Book service
+            <Plus size={12} className="mr-1" /> Service request
           </Button>
         </Link>
       </CardHeader>
@@ -44,7 +39,7 @@ export function CustomerLinkedAssetsPanel({ customerId }: CustomerVehiclesPanelP
           <Skeleton className="h-20" />
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No vehicles or solar sites yet. They are added when you book a service for this customer.
+            No vehicles or solar sites yet. They are added when you create a service request for this customer.
           </p>
         ) : (
           rows.map((row: AssetListRow) => (
@@ -57,7 +52,7 @@ export function CustomerLinkedAssetsPanel({ customerId }: CustomerVehiclesPanelP
                 {row.assetType === "vehicle" ? <Car size={14} className="text-primary mt-0.5" /> : <Sun size={14} className="text-primary mt-0.5" />}
                 <div>
                   <p className="font-medium">{row.label}</p>
-                  <p className="text-xs text-muted-foreground">{TYPE_LABELS[row.assetType] ?? row.assetType}</p>
+                  <p className="text-xs text-muted-foreground">{ASSET_TYPE_LABELS[row.assetType] ?? row.assetType}</p>
                   {row.serviceLocationLabel && (
                     <p className="text-xs text-muted-foreground mt-0.5">At {row.serviceLocationLabel}</p>
                   )}

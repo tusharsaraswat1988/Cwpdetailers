@@ -1,10 +1,9 @@
 import type { Logger } from "pino";
-import type { Booking } from "@workspace/db";
-import { addressCapability } from "../address";
+import type { Booking, BookingStatus } from "@workspace/db";
 import { bookingRepository } from "./repositories/BookingRepository";
 import { bookingValidationPolicy } from "./policies/BookingValidationPolicy";
 import { bookingCreationPolicy } from "./policies/BookingCreationPolicy";
-import { schedulingPolicy } from "./policies/BookingPolicies";
+import { schedulingPolicy, cancellationPolicy } from "./policies/BookingPolicies";
 import { bookingSnapshotService } from "./snapshots/BookingSnapshotService";
 import { bookingTimelineService } from "./timeline/BookingTimelineService";
 import { bookingDomainEventPublisher } from "./domain/events/EventPublisher";
@@ -12,14 +11,15 @@ import { baseBookingEventFields } from "./domain/events/types";
 import { buildBookingContext } from "./BookingContext";
 import { buildBookingTraceContext } from "./correlation/BookingTraceContext";
 import { buildBookingMetrics, emitBookingMetrics } from "./metrics/BookingMetrics";
-import {
-  validateLegacyTransition,
-  mapLegacyTransitionToPlatform,
-  resolvePlatformStatus,
-  resolveLegacyStatus,
-  LEGACY_TO_PLATFORM,
-} from "./domain/stateMachine";
-import type { CreateBookingInput, CreateBookingResult, TransitionBookingInput } from "./types";
+import { validateTransition } from "./domain/stateMachine";
+import { schedulingDomainService } from "./scheduling";
+import type {
+  CreateBookingInput,
+  CreateBookingResult,
+  TransitionBookingInput,
+  RescheduleBookingInput,
+  CancelBookingInput,
+} from "./types";
 import { BookingCoverageError, BookingValidationError } from "./types";
 import type { CoverageResult } from "../coverage/CoverageTypes";
 
@@ -30,7 +30,10 @@ export type BookingServiceOptions = {
   logger?: Logger;
 };
 
-/** Internal orchestrator — routes should use BookingCapability. */
+/**
+ * Booking Domain Service — single orchestrator for create / confirm / reschedule / cancel.
+ * All scheduling (conflict, capacity, slots, time windows) goes through SchedulingDomainService.
+ */
 export class BookingService {
   private trace(opts?: BookingServiceOptions, extra?: { bookingId?: number; customerId?: number }) {
     return buildBookingTraceContext({
@@ -46,17 +49,31 @@ export class BookingService {
     const trace = this.trace(opts, { customerId: input.customerId });
 
     await schedulingPolicy.execute(
-      { scheduledDate: input.scheduledDate, scheduledTime: input.scheduledTime, recurrenceRule: input.recurrenceRule },
+      { scheduledDate: input.scheduledDate, scheduledTime: input.scheduledTime },
       { trace, logger: opts?.logger },
     ).then((r) => {
       if (!r.success) throw new BookingValidationError(r.error ?? "Scheduling validation failed");
     });
 
-    let coverage: CoverageResult | undefined;
-    const validationCache = new Map<string, CoverageResult>();
+    const scheduleCheck = await schedulingDomainService.validate({
+      scheduledDate: input.scheduledDate,
+      scheduledTime: input.scheduledTime,
+      scheduledStartAt: input.scheduledStartAt,
+      scheduledEndAt: input.scheduledEndAt,
+      durationMinutes: input.durationMinutes,
+      customerId: input.customerId,
+      assetId: input.assetId,
+      serviceLocationId: input.serviceLocationId,
+      branchId: input.branchId,
+      cityId: input.cityId,
+    });
+    if (!scheduleCheck.valid || !scheduleCheck.window) {
+      throw new BookingValidationError(scheduleCheck.error ?? "Schedule validation failed", "SCHEDULE_CONFLICT");
+    }
+    const window = scheduleCheck.window;
 
-    const coverageKey = `${input.customerId}:${input.locationLat}:${input.locationLng}:${input.serviceId}`;
-    if (!validationCache.has(coverageKey)) {
+    let coverage: CoverageResult | undefined;
+    if (!input.skipCoverageValidation && input.locationLat != null && input.locationLng != null) {
       const validationResult = await bookingValidationPolicy.execute(
         {
           customerId: input.customerId,
@@ -83,23 +100,29 @@ export class BookingService {
         }));
         throw new BookingCoverageError(
           validationResult.error ?? "Coverage validation failed",
-          validationResult.data ?? { success: false, status: "INVALID_ADDRESS", legacyStatus: "INVALID_ADDRESS", message: validationResult.error ?? "Coverage validation failed", coverageStatus: "INVALID", correlation: { coverageValidationId: trace.bookingOperationId, requestId: trace.requestId, traceId: trace.traceId } },
+          validationResult.data ?? {
+            success: false,
+            status: "INVALID_ADDRESS",
+            legacyStatus: "INVALID_ADDRESS",
+            message: validationResult.error ?? "Coverage validation failed",
+            coverageStatus: "INVALID",
+            correlation: {
+              coverageValidationId: trace.bookingOperationId,
+              requestId: trace.requestId,
+              traceId: trace.traceId,
+            },
+          },
         );
       }
       coverage = validationResult.data;
-      validationCache.set(coverageKey, coverage);
-    } else {
-      coverage = validationCache.get(coverageKey);
+      trace.coverageValidationId = coverage?.correlation.coverageValidationId;
     }
 
     const coverageStatus = coverage?.coverageStatus ?? coverage?.locationContext?.coverageStatus;
-    trace.coverageValidationId = coverage?.correlation.coverageValidationId;
-
     const creationResult = await bookingCreationPolicy.execute(
       {
         ...input,
         coverageStatus: typeof coverageStatus === "string" ? coverageStatus : undefined,
-        amount: input.amount,
       },
       { trace, logger: opts?.logger },
     );
@@ -110,53 +133,45 @@ export class BookingService {
         businessRuleFailure: true,
         failureReason: creationResult.error,
       }));
-      throw new BookingValidationError(creationResult.error ?? "Booking creation rules failed", "BUSINESS_RULE_FAILED", creationResult.metadata);
+      throw new BookingValidationError(
+        creationResult.error ?? "Booking creation rules failed",
+        "BUSINESS_RULE_FAILED",
+        creationResult.metadata,
+      );
     }
 
-    const initialLegacy = input.status ?? "scheduled";
-    const initialPlatform = input.initialPlatformStatus
-      ?? input.platformStatus
-      ?? LEGACY_TO_PLATFORM[initialLegacy]
-      ?? "VALIDATED";
-
+    const initialStatus: BookingStatus = input.status ?? "scheduled";
     const resolvedCityId = input.cityId ?? coverage?.resolvedCityId ?? null;
-    const confidenceScore = coverage?.locationContext?.confidenceScore ?? null;
 
-    const insertValues = {
+    const booking = await bookingRepository.create({
       customerId: input.customerId,
-      vehicleId: input.vehicleId,
-      solarSiteId: input.solarSiteId,
-      subscriptionId: input.subscriptionId,
-      serviceId: input.serviceId,
-      staffId: input.staffId,
-      branchId: input.branchId,
-      companyId: input.companyId,
-      franchiseeId: input.franchiseeId,
-      scheduledDate: input.scheduledDate,
-      scheduledTime: input.scheduledTime,
+      contractRegistryId: input.contractRegistryId ?? null,
+      serviceLocationId: input.serviceLocationId ?? null,
+      assetId: input.assetId ?? null,
+      vehicleId: input.vehicleId ?? null,
+      solarSiteId: input.solarSiteId ?? null,
+      serviceId: input.serviceId ?? null,
+      branchId: input.branchId ?? null,
+      companyId: input.companyId ?? null,
+      franchiseeId: input.franchiseeId ?? null,
+      bookingType: input.bookingType ?? "one_time",
+      scheduledDate: window.scheduledDate,
+      scheduledTime: window.scheduledTime,
+      scheduledStartAt: window.scheduledStartAt,
+      scheduledEndAt: window.scheduledEndAt,
+      durationMinutes: window.durationMinutes,
       serviceType: input.serviceType as never,
-      address: input.address,
-      area: input.area,
-      locationLat: input.locationLat,
-      locationLng: input.locationLng,
-      placeId: input.placeId,
-      savedLocationId: input.savedLocationId,
-      addressId: input.addressId,
-      notes: input.notes,
-      amount: input.amount,
-      recurrenceRule: input.recurrenceRule,
-      entitlementId: input.entitlementId,
-      addonIds: input.addonIds ?? [],
+      address: input.address ?? null,
+      area: input.area ?? null,
+      locationLat: input.locationLat ?? null,
+      locationLng: input.locationLng ?? null,
+      placeId: input.placeId ?? null,
+      savedLocationId: input.savedLocationId ?? null,
+      addressId: input.addressId ?? null,
+      notes: input.notes ?? null,
       cityId: resolvedCityId,
-      status: initialLegacy as never,
-      platformStatus: initialPlatform,
-      coverageStatus: typeof coverageStatus === "string" ? coverageStatus : null,
-      coverageValidationId: coverage?.correlation.coverageValidationId ?? null,
-      confidenceScore,
-      locationContextSnapshot: coverage?.locationContext as Record<string, unknown> | undefined,
-    };
-
-    const booking = await bookingRepository.create(insertValues);
+      status: initialStatus,
+    });
     trace.bookingId = booking.id;
 
     let addressSnapshotId: number | undefined;
@@ -208,24 +223,10 @@ export class BookingService {
       }, opts?.logger);
     }
 
-    if (input.amount) {
-      await bookingSnapshotService.createPriceSnapshot(booking.id, {
-        amount: input.amount,
-        addonIds: input.addonIds,
-        entitlementId: input.entitlementId,
-      }, trace);
-      await bookingTimelineService.record({
-        bookingId: booking.id,
-        eventType: "PRICE_CALCULATED",
-        trace,
-        metadata: { amount: input.amount },
-      }, opts?.logger);
-    }
-
     await bookingTimelineService.record({
       bookingId: booking.id,
       eventType: "BOOKING_CREATED",
-      toPlatformStatus: initialPlatform,
+      toStatus: initialStatus,
       trace,
     }, opts?.logger);
 
@@ -242,11 +243,23 @@ export class BookingService {
       opts?.logger,
     );
 
+    if (initialStatus === "scheduled" || initialStatus === "confirmed" || initialStatus === "waiting_assignment") {
+      bookingDomainEventPublisher.publish(
+        { ...baseBookingEventFields(trace), type: "BookingScheduled", bookingContext: ctx },
+        opts?.logger,
+      );
+    }
+    if (initialStatus === "confirmed") {
+      bookingDomainEventPublisher.publish(
+        { ...baseBookingEventFields(trace), type: "BookingConfirmed", bookingContext: ctx },
+        opts?.logger,
+      );
+    }
+
     emitBookingMetrics(opts?.logger, buildBookingMetrics("create", trace, {
       success: true,
       durationMs: Date.now() - started,
-      platformStatus: initialPlatform,
-      legacyStatus: initialLegacy,
+      legacyStatus: initialStatus,
     }));
 
     return {
@@ -255,7 +268,6 @@ export class BookingService {
       addressSnapshotId,
       addressIdentityId,
       coverageValidationId: coverage?.correlation.coverageValidationId,
-      confidenceScore: confidenceScore ?? undefined,
     };
   }
 
@@ -264,27 +276,23 @@ export class BookingService {
     const existing = await bookingRepository.findById(input.bookingId);
     if (!existing) throw new BookingValidationError("Booking not found");
 
-    validateLegacyTransition(existing.status, input.toLegacyStatus);
-
-    const fromPlatform = resolvePlatformStatus(existing.status, existing.platformStatus ?? undefined);
-    const toPlatform = mapLegacyTransitionToPlatform(input.toLegacyStatus);
-    const toLegacy = resolveLegacyStatus(toPlatform, input.toLegacyStatus);
+    validateTransition(existing.status, input.toStatus);
 
     const trace = this.trace(opts, {
       bookingId: existing.id,
       customerId: existing.customerId,
-      addressIdentityId: existing.addressIdentityId ?? undefined,
-      addressSnapshotId: existing.addressSnapshotId ?? undefined,
-      coverageValidationId: existing.coverageValidationId ?? undefined,
     });
 
     const updateData: Record<string, unknown> = {
-      status: toLegacy,
-      platformStatus: toPlatform,
+      status: input.toStatus,
       updatedAt: new Date(),
     };
-    if (input.toLegacyStatus === "in_progress") updateData.startedAt = new Date();
-    if (input.toLegacyStatus === "completed") updateData.completedAt = new Date();
+    if (input.toStatus === "confirmed") {
+      updateData.customerConfirmedAt = new Date();
+    }
+    if (input.toStatus === "cancelled" && input.reason) {
+      updateData.cancellationReason = input.reason;
+    }
 
     const booking = await bookingRepository.update(existing.id, updateData as never);
     if (!booking) throw new BookingValidationError("Failed to update booking");
@@ -292,23 +300,33 @@ export class BookingService {
     await bookingTimelineService.recordTransition(
       booking.id,
       trace,
-      fromPlatform,
-      toPlatform,
+      existing.status,
+      input.toStatus,
       { actorId: input.actorId, actorName: input.actorName, description: input.reason },
       opts?.logger,
     );
 
     const ctx = buildBookingContext({ booking, correlation: trace });
-    const eventTypeMap: Record<string, "BookingConfirmed" | "BookingStarted" | "BookingCompleted" | "BookingCancelled"> = {
-      confirmed: "BookingConfirmed",
-      in_progress: "BookingStarted",
-      completed: "BookingCompleted",
-      cancelled: "BookingCancelled",
-    };
-    const eventType = eventTypeMap[input.toLegacyStatus];
-    if (eventType) {
+    if (input.toStatus === "scheduled") {
       bookingDomainEventPublisher.publish(
-        { ...baseBookingEventFields(trace), type: eventType, bookingContext: ctx },
+        { ...baseBookingEventFields(trace), type: "BookingScheduled", bookingContext: ctx },
+        opts?.logger,
+      );
+    }
+    if (input.toStatus === "confirmed") {
+      bookingDomainEventPublisher.publish(
+        { ...baseBookingEventFields(trace), type: "BookingConfirmed", bookingContext: ctx },
+        opts?.logger,
+      );
+    }
+    if (input.toStatus === "cancelled") {
+      bookingDomainEventPublisher.publish(
+        {
+          ...baseBookingEventFields(trace),
+          type: "BookingCancelled",
+          bookingContext: ctx,
+          reason: input.reason,
+        },
         opts?.logger,
       );
     }
@@ -316,11 +334,129 @@ export class BookingService {
     emitBookingMetrics(opts?.logger, buildBookingMetrics("transition", trace, {
       success: true,
       durationMs: Date.now() - started,
-      platformStatus: toPlatform,
-      legacyStatus: toLegacy,
+      legacyStatus: input.toStatus,
     }));
 
     return booking;
+  }
+
+  async confirm(bookingId: number, opts?: BookingServiceOptions & { actorId?: number; actorName?: string }) {
+    return this.transition({
+      bookingId,
+      toStatus: "confirmed",
+      actorId: opts?.actorId,
+      actorName: opts?.actorName,
+    }, opts);
+  }
+
+  async markWaitingAssignment(
+    bookingId: number,
+    opts?: BookingServiceOptions & { actorId?: number; actorName?: string },
+  ) {
+    const existing = await bookingRepository.findById(bookingId);
+    if (!existing) throw new BookingValidationError("Booking not found");
+    if (existing.status === "waiting_assignment") return existing;
+    if (existing.status === "draft" || existing.status === "rescheduled") {
+      await this.transition({
+        bookingId,
+        toStatus: "confirmed",
+        actorId: opts?.actorId,
+        actorName: opts?.actorName,
+        reason: "Auto-confirm before waiting assignment",
+      }, opts);
+    }
+    return this.transition({
+      bookingId,
+      toStatus: "waiting_assignment",
+      actorId: opts?.actorId,
+      actorName: opts?.actorName,
+    }, opts);
+  }
+
+  async reschedule(input: RescheduleBookingInput, opts?: BookingServiceOptions): Promise<Booking> {
+    const existing = await bookingRepository.findById(input.bookingId);
+    if (!existing) throw new BookingValidationError("Booking not found");
+    if (existing.status === "cancelled") {
+      throw new BookingValidationError("Cannot reschedule a cancelled booking");
+    }
+
+    const scheduleCheck = await schedulingDomainService.validate({
+      scheduledDate: input.scheduledDate,
+      scheduledTime: input.scheduledTime,
+      scheduledStartAt: input.scheduledStartAt,
+      scheduledEndAt: input.scheduledEndAt,
+      durationMinutes: input.durationMinutes ?? existing.durationMinutes,
+      customerId: existing.customerId,
+      assetId: existing.assetId,
+      serviceLocationId: existing.serviceLocationId,
+      branchId: existing.branchId,
+      cityId: existing.cityId,
+      excludeBookingId: existing.id,
+    });
+    if (!scheduleCheck.valid || !scheduleCheck.window) {
+      throw new BookingValidationError(scheduleCheck.error ?? "Schedule validation failed", "SCHEDULE_CONFLICT");
+    }
+    const window = scheduleCheck.window;
+
+    validateTransition(existing.status, "rescheduled");
+
+    const trace = this.trace(opts, { bookingId: existing.id, customerId: existing.customerId });
+    const booking = await bookingRepository.update(existing.id, {
+      scheduledDate: window.scheduledDate,
+      scheduledTime: window.scheduledTime,
+      scheduledStartAt: window.scheduledStartAt,
+      scheduledEndAt: window.scheduledEndAt,
+      durationMinutes: window.durationMinutes,
+      status: "rescheduled",
+    });
+    if (!booking) throw new BookingValidationError("Failed to reschedule booking");
+
+    await bookingTimelineService.recordTransition(
+      booking.id,
+      trace,
+      existing.status,
+      "rescheduled",
+      {
+        actorId: input.actorId,
+        actorName: input.actorName,
+        description: input.reason
+          ?? `Rescheduled from ${existing.scheduledDate} ${existing.scheduledTime ?? ""} to ${window.scheduledDate} ${window.scheduledTime ?? ""}`,
+      },
+      opts?.logger,
+    );
+
+    const ctx = buildBookingContext({ booking, correlation: trace });
+    bookingDomainEventPublisher.publish(
+      {
+        ...baseBookingEventFields(trace),
+        type: "BookingRescheduled",
+        bookingContext: ctx,
+        previousScheduledDate: String(existing.scheduledDate),
+        previousScheduledTime: existing.scheduledTime,
+        previousScheduledStartAt: existing.scheduledStartAt?.toISOString() ?? null,
+        previousScheduledEndAt: existing.scheduledEndAt?.toISOString() ?? null,
+      },
+      opts?.logger,
+    );
+
+    return booking;
+  }
+
+  async cancel(input: CancelBookingInput, opts?: BookingServiceOptions): Promise<Booking> {
+    const cancelCheck = await cancellationPolicy.execute(
+      { currentStatus: (await bookingRepository.findById(input.bookingId))?.status ?? "", reason: input.reason },
+      { trace: this.trace(opts), logger: opts?.logger },
+    );
+    if (!cancelCheck.success) {
+      throw new BookingValidationError(cancelCheck.error ?? "Cannot cancel booking");
+    }
+    return this.transition({
+      bookingId: input.bookingId,
+      toStatus: "cancelled",
+      reason: input.reason,
+      actorId: input.actorId,
+      actorName: input.actorName,
+    }, opts);
   }
 
   async getContext(bookingId: number, opts?: BookingServiceOptions) {
@@ -329,15 +465,11 @@ export class BookingService {
     const trace = this.trace(opts, {
       bookingId: booking.id,
       customerId: booking.customerId,
-      addressIdentityId: booking.addressIdentityId ?? undefined,
-      addressSnapshotId: booking.addressSnapshotId ?? undefined,
-      coverageValidationId: booking.coverageValidationId ?? undefined,
     });
     const timeline = await bookingTimelineService.getTimeline(bookingId);
     return buildBookingContext({
       booking,
       correlation: trace,
-      locationContext: booking.locationContextSnapshot,
       timeline: timeline.map((t) => ({
         id: t.id,
         eventType: t.eventType,

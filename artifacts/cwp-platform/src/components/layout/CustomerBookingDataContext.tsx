@@ -64,7 +64,7 @@ export function CustomerBookingDataBanner({ entityLabel, customerId, customerNam
           <Link href="/admin/customers" className="text-primary hover:underline">
             Customer Profile
           </Link>
-          , then use Book Service.
+          , then use Create Service Request.
         </span>
       </CardContent>
     </Card>

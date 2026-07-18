@@ -9,6 +9,7 @@ import { useCatalogAddons } from "@/features/service-catalog/api";
 import type { CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
 import type { CustomerServiceLocationRow } from "@/features/service-locations/api";
 import type { AssetListRow } from "@/features/assets/api";
+import { LEAD_SOURCES, type LeadSource } from "@/features/leads/constants";
 import {
   EMPTY_BOOK_SERVICES_DRAFT,
   WIZARD_STEPS,
@@ -23,9 +24,7 @@ import { CustomerSelect } from "./CustomerSelect";
 import { LocationSelect } from "./LocationSelect";
 import { AssetSelect } from "./AssetSelect";
 import { ServiceSelect } from "./ServiceSelect";
-import { AddOnSelect } from "./AddOnSelect";
-import { DiscountStep } from "./DiscountStep";
-import { PaymentTermsStep } from "./PaymentTermsStep";
+import { PricingStep } from "./PricingStep";
 import { ReviewSummaryStep } from "./ReviewSummaryStep";
 import { ContractCreatedStep } from "./ContractCreatedStep";
 
@@ -35,13 +34,31 @@ type Props = {
 
 const DRAFT_STORAGE_KEY = "cwp:book-services:draft";
 
+function normalizeRequestSource(raw: unknown): LeadSource {
+  if (typeof raw === "string" && (LEAD_SOURCES as readonly string[]).includes(raw)) {
+    return raw as LeadSource;
+  }
+  // Migrate older draft values that are not `lead_source` enum members.
+  if (raw === "phone") return "call";
+  return "walk_in";
+}
+
 function loadSavedDraft(): { draft: BookServicesDraft; stepIndex: number } | null {
   try {
     const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.draft) return null;
-    return parsed;
+    // Migrate older drafts that used the previous step set.
+    const draft: BookServicesDraft = {
+      ...EMPTY_BOOK_SERVICES_DRAFT,
+      ...parsed.draft,
+      requestSource: normalizeRequestSource(parsed.draft.requestSource),
+      requestNotes: parsed.draft.requestNotes ?? "",
+    };
+    const maxIndex = WIZARD_STEPS.length - 1;
+    const stepIndex = Math.min(typeof parsed.stepIndex === "number" ? parsed.stepIndex : 0, maxIndex);
+    return { draft, stepIndex };
   } catch {
     return null;
   }
@@ -55,6 +72,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
   const [draft, setDraft] = useState<BookServicesDraft>(() => saved?.draft ?? {
     ...EMPTY_BOOK_SERVICES_DRAFT,
     customer: initialCustomer,
+    requestSource: "walk_in",
   });
   const [restoredNotice, setRestoredNotice] = useState(!!saved?.draft?.customer);
   const [stepError, setStepError] = useState<string | null>(null);
@@ -63,7 +81,6 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
   const [contractResult, setContractResult] = useState<ServiceContractResult | null>(null);
   const [billingResult, setBillingResult] = useState<ContractBillingResult | null>(null);
 
-  // Autosave in-progress draft so admins don't lose work on an accidental refresh or nav.
   useEffect(() => {
     if (contractResult) return;
     try {
@@ -73,11 +90,10 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
         sessionStorage.removeItem(DRAFT_STORAGE_KEY);
       }
     } catch {
-      // storage unavailable (private mode / quota) — safe to ignore, autosave is best-effort
+      // storage unavailable — autosave is best-effort
     }
   }, [draft, stepIndex, contractResult]);
 
-  // Warn before an accidental tab close / navigation while a booking is in progress.
   useEffect(() => {
     if (!draft.customer || contractResult) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -104,7 +120,10 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
 
   useEffect(() => {
     if (initialCustomer) {
-      setDraft(prev => ({ ...prev, customer: initialCustomer }));
+      setDraft(prev => ({
+        ...prev,
+        customer: initialCustomer,
+      }));
       setStepIndex(prev => (prev === 0 ? 1 : prev));
     }
   }, [initialCustomer?.id, initialCustomer?.name, initialCustomer?.phone]);
@@ -113,19 +132,10 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     setDraft(prev => ({
       ...EMPTY_BOOK_SERVICES_DRAFT,
       customer,
+      requestSource: prev.requestSource,
+      requestNotes: customer ? prev.requestNotes : "",
       paymentTerms: prev.paymentTerms,
       partialAdvancePercent: prev.partialAdvancePercent,
-    }));
-    setStepError(null);
-  }, []);
-
-  const handleLocationChange = useCallback((location: CustomerServiceLocationRow | null) => {
-    setDraft(prev => ({
-      ...prev,
-      location,
-      asset: null,
-      service: null,
-      addonIds: [],
     }));
     setStepError(null);
   }, []);
@@ -134,8 +144,21 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     setDraft(prev => ({
       ...prev,
       asset,
+      // Clear location unless it still matches the asset's registered site.
+      location: asset?.serviceLocationId && prev.location?.id === asset.serviceLocationId
+        ? prev.location
+        : null,
       service: null,
       addonIds: [],
+    }));
+    setStepError(null);
+  }, []);
+
+  const handleLocationChange = useCallback((location: CustomerServiceLocationRow | null) => {
+    setDraft(prev => ({
+      ...prev,
+      location,
+      // Keep asset; location is where we perform service, not necessarily asset registration site.
     }));
     setStepError(null);
   }, []);
@@ -217,11 +240,11 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       qc.invalidateQueries({ queryKey: ["quotations"] });
       qc.invalidateQueries({ queryKey: ["/api/invoices"] });
     } catch (e) {
-      setCreateError(getApiErrorMessage(e, "Failed to complete booking"));
+      setCreateError(getApiErrorMessage(e, "Failed to create service request"));
     } finally {
       setCreating(false);
     }
-  }, [draft, addonList, qc]);
+  }, [draft, addonList, qc, reactivateCustomer]);
 
   const resetWizard = useCallback(() => {
     try {
@@ -232,6 +255,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     setDraft({
       ...EMPTY_BOOK_SERVICES_DRAFT,
       customer: initialCustomer,
+      requestSource: "walk_in",
     });
     setStepIndex(initialCustomer ? 1 : 0);
     setContractResult(null);
@@ -247,7 +271,11 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     } catch {
       // ignore
     }
-    setDraft({ ...EMPTY_BOOK_SERVICES_DRAFT, customer: initialCustomer });
+    setDraft({
+      ...EMPTY_BOOK_SERVICES_DRAFT,
+      customer: initialCustomer,
+      requestSource: "walk_in",
+    });
     setStepIndex(initialCustomer ? 1 : 0);
     setStepError(null);
     setRestoredNotice(false);
@@ -256,23 +284,30 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
   const stepContent = useMemo(() => {
     switch (currentStep.id) {
       case "customer":
-        return <CustomerSelect value={draft.customer} onChange={handleCustomerChange} />;
-      case "location":
         return (
-          <LocationSelect
-            customerId={draft.customer?.id ?? null}
-            value={draft.location}
-            onChange={handleLocationChange}
+          <CustomerSelect
+            value={draft.customer}
+            requestSource={draft.requestSource}
+            requestNotes={draft.requestNotes}
+            onChange={handleCustomerChange}
+            onMetaChange={patch => patchDraft(patch)}
           />
         );
       case "asset":
         return (
           <AssetSelect
             customerId={draft.customer?.id ?? null}
-            serviceLocationId={draft.location?.id ?? null}
-            serviceLocationLabel={draft.location?.label ?? draft.location?.address ?? null}
             value={draft.asset}
             onChange={handleAssetChange}
+          />
+        );
+      case "location":
+        return (
+          <LocationSelect
+            customerId={draft.customer?.id ?? null}
+            preferredLocationId={draft.asset?.serviceLocationId ?? null}
+            value={draft.location}
+            onChange={handleLocationChange}
           />
         );
       case "service":
@@ -283,28 +318,11 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
             onChange={handleServiceChange}
           />
         );
-      case "addons":
+      case "pricing":
         return (
-          <AddOnSelect
-            service={draft.service}
-            selectedIds={draft.addonIds}
-            onChange={ids => patchDraft({ addonIds: ids })}
-          />
-        );
-      case "discount":
-        return (
-          <DiscountStep
-            discountType={draft.discountType}
-            discountValue={draft.discountValue}
-            onChange={patch => patchDraft(patch)}
-          />
-        );
-      case "payment":
-        return (
-          <PaymentTermsStep
-            paymentTerms={draft.paymentTerms}
-            partialAdvancePercent={draft.partialAdvancePercent}
-            onChange={patch => patchDraft(patch)}
+          <PricingStep
+            draft={draft}
+            onChange={patchDraft}
           />
         );
       case "review":
@@ -349,7 +367,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       {restoredNotice && (
         <Alert>
           <AlertDescription className="flex items-center justify-between gap-3 text-sm">
-            <span>Resumed your in-progress booking for {draft.customer?.name ?? "this customer"}.</span>
+            <span>Resumed your in-progress service request for {draft.customer?.name ?? "this customer"}.</span>
             <Button type="button" variant="ghost" size="sm" onClick={discardSavedDraft} className="h-7 shrink-0">
               Start fresh instead
             </Button>
@@ -359,7 +377,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       <p className="text-sm font-medium text-muted-foreground" aria-live="polite">
         Step {stepIndex + 1} of {WIZARD_STEPS.length}: {currentStep.label}
       </p>
-      <nav aria-label="Booking steps" className="overflow-x-auto">
+      <nav aria-label="Service request steps" className="overflow-x-auto">
         <ol className="flex gap-1 min-w-max pb-1">
           {WIZARD_STEPS.map((step, i) => {
             const reachable = canProceedToStep(i, draft);
@@ -372,8 +390,9 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
                   disabled={!reachable && !active}
                   onClick={() => goToStep(i)}
                   data-testid={`book-wizard-step-${step.id}`}
+                  aria-current={active ? "step" : undefined}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
+                    "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap min-h-9",
                     active && "bg-primary text-primary-foreground",
                     !active && done && "bg-muted text-foreground hover:bg-muted/80",
                     !active && !done && reachable && "text-muted-foreground hover:bg-muted/60",
@@ -395,7 +414,8 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       </nav>
 
       <div className="min-h-[280px]">
-        <h2 className="font-display font-semibold text-lg mb-4">{currentStep.label}</h2>
+        <h2 className="font-display font-semibold text-lg mb-1">{currentStep.question}</h2>
+        <p className="text-sm text-muted-foreground mb-4 sr-only">{currentStep.label}</p>
         {stepContent}
       </div>
 
@@ -429,7 +449,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
         )}
         {isReview && (
           <p className="text-sm text-muted-foreground text-right flex-1">
-            Confirms the booking and creates {draft.billingAction === "invoice" ? "an invoice" : "a quotation"}.
+            Creates the service request and {draft.billingAction === "invoice" ? "an invoice" : "a quotation"}.
           </p>
         )}
       </div>

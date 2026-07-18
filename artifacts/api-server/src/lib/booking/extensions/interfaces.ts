@@ -66,4 +66,10 @@ export type BookingExtensionRegistry = {
   analytics?: AnalyticsProvider;
 };
 
-export const bookingExtensionRegistry: BookingExtensionRegistry = {};
+import { bookingScheduleProvider } from "../scheduling";
+import { bookingSlotProvider } from "../scheduling/SlotService";
+
+export const bookingExtensionRegistry: BookingExtensionRegistry = {
+  schedule: bookingScheduleProvider,
+  slot: bookingSlotProvider,
+};

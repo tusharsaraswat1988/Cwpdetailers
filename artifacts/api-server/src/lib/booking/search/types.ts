@@ -1,5 +1,3 @@
-import type { BookingContext } from "../BookingContext";
-
 export type BookingSearchCriteria = {
   customerId?: number;
   bookingId?: number;
@@ -10,11 +8,10 @@ export type BookingSearchCriteria = {
   serviceId?: number;
   serviceType?: string;
   status?: string;
-  platformStatus?: string;
   scheduledDate?: string;
-  staffId?: number;
   branchId?: number;
   franchiseeId?: number;
+  contractRegistryId?: number;
   limit?: number;
   offset?: number;
 };
@@ -24,10 +21,9 @@ export type BookingSearchResult = {
   customerId: number;
   serviceType: string;
   status: string;
-  platformStatus?: string;
   scheduledDate: string;
-  staffId?: number | null;
   addressIdentityId?: number | null;
+  contractRegistryId?: number | null;
   score?: number;
 };
 

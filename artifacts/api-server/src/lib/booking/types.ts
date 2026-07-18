@@ -1,18 +1,25 @@
-import type { InsertBooking, Booking } from "@workspace/db";
+import type { Booking, BookingStatus, BookingType } from "@workspace/db";
 import type { CoverageResult } from "../coverage/CoverageTypes";
 
 export type CreateBookingInput = {
   customerId: number;
+  contractRegistryId?: number | null;
+  serviceLocationId?: number | null;
+  assetId?: number | null;
   vehicleId?: number | null;
   solarSiteId?: number | null;
-  subscriptionId?: number | null;
   serviceId?: number | null;
-  staffId?: number | null;
   branchId?: number | null;
   companyId?: number | null;
   franchiseeId?: number | null;
+  /** Why this booking exists (default one_time). */
+  bookingType?: BookingType;
   scheduledDate: string;
   scheduledTime?: string | null;
+  /** Canonical window — preferred over date+time alone. */
+  scheduledStartAt?: Date | string | null;
+  scheduledEndAt?: Date | string | null;
+  durationMinutes?: number | null;
   serviceType: string;
   address?: string | null;
   area?: string | null;
@@ -22,18 +29,14 @@ export type CreateBookingInput = {
   savedLocationId?: number | null;
   addressId?: number | null;
   notes?: string | null;
-  amount?: string | null;
-  recurrenceRule?: string | null;
-  entitlementId?: number | null;
-  addonIds?: number[];
   cityId?: number | null;
   citySlug?: string | null;
   cityName?: string | null;
   addressComponents?: unknown[];
   postalCode?: string | null;
-  status?: InsertBooking["status"];
-  platformStatus?: InsertBooking["platformStatus"];
-  initialPlatformStatus?: InsertBooking["platformStatus"];
+  status?: BookingStatus;
+  /** Skip coverage when caller already validated (e.g. Phase 5.1). */
+  skipCoverageValidation?: boolean;
 };
 
 export type CreateBookingResult = {
@@ -42,12 +45,30 @@ export type CreateBookingResult = {
   addressSnapshotId?: number;
   addressIdentityId?: number;
   coverageValidationId?: string;
-  confidenceScore?: number;
 };
 
 export type TransitionBookingInput = {
   bookingId: number;
-  toLegacyStatus: string;
+  toStatus: BookingStatus;
+  reason?: string;
+  actorId?: number;
+  actorName?: string;
+};
+
+export type RescheduleBookingInput = {
+  bookingId: number;
+  scheduledDate: string;
+  scheduledTime?: string | null;
+  scheduledStartAt?: Date | string | null;
+  scheduledEndAt?: Date | string | null;
+  durationMinutes?: number | null;
+  reason?: string;
+  actorId?: number;
+  actorName?: string;
+};
+
+export type CancelBookingInput = {
+  bookingId: number;
   reason?: string;
   actorId?: number;
   actorName?: string;
@@ -72,8 +93,5 @@ export class BookingCoverageError extends BookingValidationError {
 }
 
 export function bookingToPublicResponse(booking: Booking) {
-  return {
-    ...booking,
-    platformStatus: booking.platformStatus ?? "DRAFT",
-  };
+  return { ...booking };
 }

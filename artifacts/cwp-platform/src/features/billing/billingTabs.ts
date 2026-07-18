@@ -1,5 +1,5 @@
 export const BILLING_TABS = [
-  "invoices",
+  "commercial",
   "payments",
   "quotations",
   "expenses",
@@ -12,7 +12,7 @@ export type BillingTab = typeof BILLING_TABS[number];
 export function billingTabFromSearch(search: string): BillingTab {
   const tab = new URLSearchParams(search).get("tab");
   if (BILLING_TABS.includes(tab as BillingTab)) return tab as BillingTab;
-  return "invoices";
+  return "commercial";
 }
 
 export function isValidBillingTab(tab: string | null): tab is BillingTab {
@@ -20,7 +20,7 @@ export function isValidBillingTab(tab: string | null): tab is BillingTab {
 }
 
 export const BILLING_TAB_LABELS: Record<BillingTab, string> = {
-  invoices: "Invoices",
+  commercial: "Commercial Operations",
   payments: "Payments",
   quotations: "Quotations",
   expenses: "Expenses",

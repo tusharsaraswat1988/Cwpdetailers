@@ -38,28 +38,21 @@ export const serviceUnavailableBlockRule: BusinessRule = {
   },
 };
 
+/** @deprecated Pricing is not owned by Booking Engine (Phase 5.2). Always passes. */
 export const pricingRequiredRule: BusinessRule = {
   name: "PricingRequiredRule",
   category: "pricing",
-  async evaluate(input: RuleEvaluationInput): Promise<RuleEvaluationResult> {
-    if (input.bookingContext?.pricing.entitlementId) {
-      return pass("pricing", "PricingRequiredRule", { waivedByEntitlement: true });
-    }
-    if (!input.amount && input.amount !== "0") {
-      return fail("pricing", "PricingRequiredRule", "Booking amount could not be resolved");
-    }
-    return pass("pricing", "PricingRequiredRule", { amount: input.amount });
+  async evaluate(_input: RuleEvaluationInput): Promise<RuleEvaluationResult> {
+    return pass("pricing", "PricingRequiredRule", { skipped: true, reason: "pricing_not_booking_owned" });
   },
 };
 
+/** @deprecated Subscription linkage is not on BookingContext (Phase 5.2). Always passes/skips. */
 export const subscriptionActiveRule: BusinessRule = {
   name: "SubscriptionActiveRule",
   category: "subscription",
-  async evaluate(input: RuleEvaluationInput): Promise<RuleEvaluationResult> {
-    if (!input.bookingContext?.pricing.subscriptionId) {
-      return pass("subscription", "SubscriptionActiveRule", { skipped: true });
-    }
-    return pass("subscription", "SubscriptionActiveRule");
+  async evaluate(_input: RuleEvaluationInput): Promise<RuleEvaluationResult> {
+    return pass("subscription", "SubscriptionActiveRule", { skipped: true, reason: "subscription_not_booking_owned" });
   },
 };
 
@@ -111,13 +104,9 @@ export const refundEligibilityRule: BusinessRule = {
 export const defaultBookingRules: BusinessRule[] = [
   coverageAvailabilityRule,
   serviceUnavailableBlockRule,
-  pricingRequiredRule,
-  subscriptionActiveRule,
-  couponValidityRule,
   holidayBlockRule,
   workingHoursRule,
   cancellationWindowRule,
-  refundEligibilityRule,
 ];
 
 export function registerDefaultBookingRules(engine: { registerAll: (rules: BusinessRule[]) => void }): void {

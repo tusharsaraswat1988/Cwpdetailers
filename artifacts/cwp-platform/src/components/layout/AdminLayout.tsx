@@ -5,6 +5,7 @@ import { useBrandingPortal } from "@/lib/branding";
 import { useAppStore } from "@/lib/store";
 import { PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CommandPalette } from "@/components/shared/CommandPalette";
 
 function CollapsedSidebarExpandButton() {
   const collapsed = useAppStore(s => s.sidebarCollapsed);
@@ -37,6 +38,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       mobileTitle={`${branding.brandName} Admin`}
       sidebar={(props) => <AdminSidebar {...props} />}
     >
+      <CommandPalette />
       <CollapsedSidebarExpandButton />
       {children}
     </PanelShell>

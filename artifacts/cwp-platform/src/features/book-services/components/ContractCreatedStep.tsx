@@ -34,16 +34,16 @@ export function ContractCreatedStep({ draft, result, billing, onBookAnother }: P
       <div className="flex items-start gap-3">
         <CheckCircle2 className="h-8 w-8 text-green-600 shrink-0" />
         <div>
-          <h2 className="font-display font-semibold text-lg">Sale recorded</h2>
+          <h2 className="font-display font-semibold text-lg">Service request created</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Booking saved, bill created, and job added to Assign Service for your team.
+            Request saved, bill created, and job added to Assign Service for your team.
           </p>
         </div>
       </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Booking &amp; billing</CardTitle>
+          <CardTitle className="text-base">Request &amp; billing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <Row label="Customer" value={draft.customer ? `${draft.customer.name}` : "—"} />
@@ -72,14 +72,21 @@ export function ContractCreatedStep({ draft, result, billing, onBookAnother }: P
             <Row
               label="Invoice"
               value={
-                <Link href="/admin/billing?tab=invoices" className="text-primary hover:underline">
+                <Link href="/admin/billing?tab=commercial" className="text-primary hover:underline">
                   {billing.invoiceNumber ?? `#${billing.invoiceId}`}
                 </Link>
               }
             />
           )}
           {billing?.pendingAssignmentId && (
-            <Row label="Assignment" value="Pending (Sprint 6)" />
+            <Row
+              label="Assignment"
+              value={
+                <Link href="/admin/assign-services" className="text-primary hover:underline">
+                  Queued #{billing.pendingAssignmentId}
+                </Link>
+              }
+            />
           )}
 
           {gst && (
@@ -129,7 +136,7 @@ export function ContractCreatedStep({ draft, result, billing, onBookAnother }: P
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={onBookAnother} data-testid="book-another-service">
-          Book another service
+          Create another request
         </Button>
         {draft.customer?.id && (
           <Link href={`/admin/bookings?customerId=${draft.customer.id}`}>

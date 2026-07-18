@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { bookingsTable, customersTable, subscriptionsTable, staffTable, invoicesTable, complaintsTable, paymentsTable } from "@workspace/db";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { tenantFilters, sqlTenant } from "../middlewares/tenantScope";
 import { countActiveContractsForTenant } from "../lib/contracts/contractRegistry";
 
@@ -37,13 +37,15 @@ router.get("/analytics/dashboard", async (req, res) => {
       db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId }))),
       db.execute(sql`SELECT COUNT(*) as count FROM customers WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "customers.company_id", b: "customers.branch_id" })}`),
       db.execute(sql`SELECT COALESCE(SUM(due_amount::numeric), 0) as total FROM invoices WHERE status IN ('sent', 'overdue') AND ${t(req, { c: "invoices.company_id", b: "invoices.branch_id" })}`),
-      db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(and(eq(bookingsTable.status, "in_progress"), ...tenantFilters(req, { companyCol: bookingsTable.companyId, branchCol: bookingsTable.branchId }))),
-      db.execute(sql`SELECT COUNT(*) as count FROM bookings WHERE status = 'completed' AND DATE(scheduled_date) = CURRENT_DATE AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id" })}`),
+      // Phase 5.2: in_progress/completed are execution-owned — count active schedule statuses
+      db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(and(inArray(bookingsTable.status, ["scheduled", "confirmed", "waiting_assignment"]), ...tenantFilters(req, { companyCol: bookingsTable.companyId, branchCol: bookingsTable.branchId }))),
+      db.execute(sql`SELECT COUNT(*) as count FROM service_executions WHERE status = 'completed' AND DATE(scheduled_date) = CURRENT_DATE`),
       db.select({ count: sql<number>`count(*)` }).from(complaintsTable).where(and(eq(complaintsTable.status, "open"), ...tenantFilters(req, { companyCol: complaintsTable.companyId, branchCol: complaintsTable.branchId }))),
+      // Phase 5.2: bookings.amount removed — category revenue stubbed via invoice lines later
       db.execute(sql`
-        SELECT s.category, COALESCE(SUM(b.amount::numeric), 0) as amount
+        SELECT s.category, 0::numeric as amount
         FROM bookings b LEFT JOIN services s ON b.service_id = s.id
-        WHERE b.status = 'completed' AND ${t(req, { c: "b.company_id", b: "b.branch_id" })}
+        WHERE b.status <> 'cancelled' AND ${t(req, { c: "b.company_id", b: "b.branch_id" })}
         GROUP BY s.category
       `),
       db.execute(sql`
@@ -64,7 +66,7 @@ router.get("/analytics/dashboard", async (req, res) => {
     const totalCustomerCount = Number(totalCustomers[0]?.count ?? 0);
     const repeatResult = await db.execute(sql`
       SELECT customer_id FROM bookings
-      WHERE status = 'completed' AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id" })}
+      WHERE status <> 'cancelled' AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id" })}
       GROUP BY customer_id
       HAVING COUNT(*) > 1
     `);
@@ -123,10 +125,10 @@ router.get("/analytics/revenue", async (req, res) => {
         LIMIT 12
       `),
       db.execute(sql`
-        SELECT s.name as service_name, COALESCE(SUM(b.amount::numeric), 0) as revenue, COUNT(*) as bookings
+        SELECT s.name as service_name, 0::numeric as revenue, COUNT(*) as bookings
         FROM bookings b LEFT JOIN services s ON b.service_id = s.id
-        WHERE b.status = 'completed' AND ${t(req, { c: "b.company_id", b: "b.branch_id" })}
-        GROUP BY s.name ORDER BY revenue DESC LIMIT 10
+        WHERE b.status <> 'cancelled' AND ${t(req, { c: "b.company_id", b: "b.branch_id" })}
+        GROUP BY s.name ORDER BY bookings DESC LIMIT 10
       `),
       db.execute(sql`
         SELECT br.name as branch_name, COALESCE(SUM(p.amount::numeric), 0) as revenue
@@ -200,18 +202,19 @@ router.get("/analytics/staff-leaderboard", async (req, res) => {
     const monthFilter = month || new Date().toISOString().slice(0, 7);
     const t = sqlTenant;
 
+    // Phase 5.2: staff/amount/rating removed from bookings — use service_executions
     const results = await db.execute(sql`
       SELECT
         s.id as staff_id, s.name as staff_name,
-        COUNT(b.id) FILTER (WHERE b.status = 'completed') as jobs_completed,
-        COALESCE(SUM(b.amount::numeric) FILTER (WHERE b.status = 'completed'), 0) as revenue_generated,
-        COALESCE(AVG(b.rating) FILTER (WHERE b.rating IS NOT NULL), 0) as average_rating
+        COUNT(e.id) FILTER (WHERE e.status = 'completed') as jobs_completed,
+        0::numeric as revenue_generated,
+        0::numeric as average_rating
       FROM staff s
-      LEFT JOIN bookings b ON b.staff_id = s.id
-        AND TO_CHAR(b.scheduled_date::date, 'YYYY-MM') = ${monthFilter}
+      LEFT JOIN service_executions e ON e.assigned_staff_id = s.id
+        AND TO_CHAR(e.scheduled_date::date, 'YYYY-MM') = ${monthFilter}
       WHERE s.is_active = true AND ${t(req, { c: "s.company_id", b: "s.branch_id" })}
       GROUP BY s.id, s.name
-      ORDER BY jobs_completed DESC, revenue_generated DESC
+      ORDER BY jobs_completed DESC
       LIMIT 20
     `);
 

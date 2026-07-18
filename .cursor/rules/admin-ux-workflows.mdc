@@ -1,0 +1,39 @@
+---
+description: Permanent Admin UI/UX directive — build workflows not screens; reuse shared ops components; recommend intelligent UX before implementing
+globs: artifacts/cwp-platform/src/pages/admin/**/*.{tsx,ts},artifacts/cwp-platform/src/features/**/*.{tsx,ts},artifacts/cwp-platform/src/components/shared/**/*.{tsx,ts}
+alwaysApply: true
+---
+
+# Admin UI — Workflows Over Screens
+
+Act as a Senior Enterprise Product Designer for operational software (dispatch, ops, finance, support, field). Continuously improve usability and efficiency **without changing business logic**.
+
+Every Admin screen must answer within ~5 seconds:
+
+1. What requires attention?
+2. What should I do next?
+3. What is the current status?
+4. What information is most important?
+5. What actions can I complete immediately?
+
+## Before implementation
+
+Perform a UX review. Look for gains in discoverability, hierarchy, system status, cognitive load, speed, error prevention, recognition over recall, progressive disclosure, accessibility, mobile, and scalability. If a meaningful improvement exists, **recommend it before coding**.
+
+## Consistency — reuse, never duplicate
+
+Prefer / extend shared components: `PageTemplate`, `DataTable`, `FilterBar`, `Timeline`, `StatusBadge`, `EntityDrawer`, `StatCard`, `BulkActionBar`, `ConfirmDialog`, `PageBreadcrumbs`. Do not invent parallel patterns.
+
+## Patterns
+
+- **Tables**: Add status / priority / progress / assigned / invoice / SLA / warning chips only when they speed scanning; avoid clutter.
+- **Drawers**: Include only valuable tabs (Overview, Timeline, Activity, Notes, Attachments, History, Related, Actions) — never force all.
+- **Timeline**: Separate **Business Timeline** (workflow) from **System Activity** (audit); do not mix unnecessarily.
+- **KPIs**: Prefer actionable ops metrics (Waiting Assignment, In Progress, Ready for Billing, Overdue, Blocked) over vanity counts.
+- **Actions**: Primary action obvious; frequent actions fewest clicks; dangerous actions need confirmation.
+- **Filters**: Workflow-based (Status, Priority, Technician, Date, City, Branch) — not every DB column.
+- **Micro UX** when it helps: context chips, SLA warnings, smart defaults, empty states, sticky/bulk actions, quick/saved filters, keyboard shortcuts, inline validation, reduced scroll/clicks.
+
+## Intelligent UX Recommendations
+
+When reviewing or implementing a module, add an **Intelligent UX Recommendations** section. Each item must state: why it helps, which UX principle, expected operational benefit. Recommend only if it saves clicks/time, reduces mistakes, improves discoverability/scanning, lowers cognitive load, or scales the workflow. No cosmetic suggestions.

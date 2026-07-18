@@ -57,12 +57,12 @@ export default function DcmsSubscriptionsPage() {
           <div>
             <h2 className="font-display font-bold text-xl">Subscriptions</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              View and manage existing daily cleaning plans. New sales use Book Services.
+              View and manage existing daily cleaning plans. New sales use Create Service Request.
             </p>
           </div>
           <Link href="/admin/book-services">
             <Button size="sm" variant="outline">
-              <CalendarCheck className="h-4 w-4 mr-1" /> Sell via Book Services
+              <CalendarCheck className="h-4 w-4 mr-1" /> Create Service Request
             </Button>
           </Link>
         </div>

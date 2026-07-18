@@ -1,6 +1,7 @@
 /**
- * Sprint 7 — execution domain service.
- * Mutates service_executions only — never service_assignments.
+ * Phase 5.4 — Field Execution platform.
+ * Business question: "How is an assigned service executed?"
+ * Mutates service_executions (+ evidence/timeline) only — never Booking or Assignment.
  */
 
 import {
@@ -22,6 +23,21 @@ import { eq, and, desc, sql, type SQL } from "drizzle-orm";
 import type { Request } from "express";
 import { tenantFilters, rowInScope } from "../../middlewares/tenantScope";
 import { getTodayIST } from "../../subscriptions/service";
+import {
+  assertAssignedTechnician,
+  assertAssignmentAllowsExecution,
+  assertNotCompleted,
+  actorFromReq,
+  isReady,
+  isInProgress,
+  isTerminal,
+  WORKABLE_STATUSES,
+} from "./executionValidation";
+import { recordExecutionTimeline, getExecutionTimeline } from "./executionTimeline";
+import {
+  executionDomainEventPublisher,
+  baseExecutionEventFields,
+} from "./domainEvents";
 
 const TASK_TYPE_LABELS: Record<string, string> = {
   daily_cleaning: "Daily Clean",
@@ -31,21 +47,20 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   one_time_service: "One-Time Service",
 };
 
+const DEFAULT_CHECKLIST = [
+  "Arrive at service location",
+  "Inspect vehicle / asset condition",
+  "Complete service as specified",
+  "Clean up work area",
+  "Confirm with customer (if present)",
+];
+
 function taskTypeLabelFor(value: string | null | undefined): string {
   if (!value) return "Service";
   return TASK_TYPE_LABELS[value] ?? value.replace(/_/g, " ");
 }
 
-export type ExecutionStatus =
-  | "scheduled"
-  | "started"
-  | "completed"
-  | "missed"
-  | "cancelled"
-  | "rescheduled";
-
-const TERMINAL: ExecutionStatus[] = ["completed", "missed", "cancelled", "rescheduled"];
-const ACTIVE: ExecutionStatus[] = ["scheduled", "started"];
+export type ExecutionStatus = FieldExecutionStatus;
 
 const EXEC_SCOPE = {
   companyCol: serviceExecutionsTable.companyId,
@@ -75,7 +90,11 @@ export type ExecutionView = {
   scheduledTime: string | null;
   status: ExecutionStatus;
   startedAt: string | null;
+  pausedAt: string | null;
+  resumedAt: string | null;
   completedAt: string | null;
+  customerSignatureUrl: string | null;
+  customerSignedAt: string | null;
   cancellationReason: string | null;
   rescheduledFromId: number | null;
   taskType: string;
@@ -86,8 +105,17 @@ export type ExecutionView = {
 export type ExecutionDetail = ExecutionView & {
   photos: { id: number; kind: string; url: string; caption: string | null; latitude: number | null; longitude: number | null; accuracy: number | null }[];
   notes: { id: number; kind: string; body: string; createdAt: string }[];
-  checklist: { id: number; label: string; isCompleted: boolean }[];
+  checklist: { id: number; label: string; isCompleted: boolean; completedAt: string | null }[];
   locationLogs: { id: number; eventType: string; latitude: number | null; longitude: number | null; recordedAt: string }[];
+  timeline: {
+    id: number;
+    eventType: string;
+    title: string;
+    description: string | null;
+    actorId: number | null;
+    actorName: string | null;
+    createdAt: string;
+  }[];
 };
 
 function mapExecutionRow(row: {
@@ -121,7 +149,11 @@ function mapExecutionRow(row: {
     scheduledTime: row.execution.scheduledTime,
     status: row.execution.status as ExecutionStatus,
     startedAt: row.execution.startedAt?.toISOString() ?? null,
+    pausedAt: row.execution.pausedAt?.toISOString() ?? null,
+    resumedAt: row.execution.resumedAt?.toISOString() ?? null,
     completedAt: row.execution.completedAt?.toISOString() ?? null,
+    customerSignatureUrl: row.execution.customerSignatureUrl ?? null,
+    customerSignedAt: row.execution.customerSignedAt?.toISOString() ?? null,
     cancellationReason: row.execution.cancellationReason,
     rescheduledFromId: row.execution.rescheduledFromId,
     taskType: row.execution.taskType ?? "one_time_service",
@@ -169,6 +201,14 @@ function assertInScope(req: Request, execution: typeof serviceExecutionsTable.$i
   });
 }
 
+async function loadLinkedAssignment(serviceAssignmentId: number | null) {
+  if (serviceAssignmentId == null) return null;
+  const [row] = await db.select().from(serviceAssignmentsTable)
+    .where(eq(serviceAssignmentsTable.id, serviceAssignmentId))
+    .limit(1);
+  return row ?? null;
+}
+
 export type CreateScheduledExecutionInput = {
   serviceAssignmentId: number;
   contractId: number;
@@ -186,9 +226,27 @@ export type CreateScheduledExecutionInput = {
   branchId?: number | null;
 };
 
+/**
+ * Handoff from Assignment: creates execution at ready_for_execution.
+ * Rejects duplicate active execution for same assignment + task type.
+ */
 export async function createScheduledExecutionForAssignment(
   input: CreateScheduledExecutionInput,
 ): Promise<number> {
+  const taskType = (input.taskType ?? "one_time_service") as typeof serviceExecutionsTable.$inferInsert.taskType;
+
+  const [duplicate] = await db.select({ id: serviceExecutionsTable.id })
+    .from(serviceExecutionsTable)
+    .where(and(
+      eq(serviceExecutionsTable.serviceAssignmentId, input.serviceAssignmentId),
+      eq(serviceExecutionsTable.taskType, taskType),
+      sql`${serviceExecutionsTable.status} NOT IN ('completed', 'cancelled', 'missed', 'rescheduled')`,
+    ))
+    .limit(1);
+  if (duplicate && !input.isSubstitute) {
+    throw new Error("Duplicate execution — an active execution already exists for this assignment");
+  }
+
   const [row] = await db.insert(serviceExecutionsTable).values({
     serviceAssignmentId: input.serviceAssignmentId,
     contractId: input.contractId,
@@ -196,16 +254,24 @@ export async function createScheduledExecutionForAssignment(
     serviceLocationId: input.serviceLocationId ?? null,
     assetId: input.assetId ?? null,
     assignedStaffId: input.assignedStaffId,
-    taskType: (input.taskType ?? "one_time_service") as typeof serviceExecutionsTable.$inferInsert.taskType,
+    taskType,
     isSubstitute: input.isSubstitute ?? false,
     substituteForStaffId: input.substituteForStaffId ?? null,
     scheduledDate: input.scheduledDate,
     scheduledTime: input.scheduledTime ?? null,
-    status: "scheduled",
+    status: "ready_for_execution",
     companyId: input.companyId ?? null,
     franchiseeId: input.franchiseeId ?? null,
     branchId: input.branchId ?? null,
   }).returning();
+
+  await recordExecutionTimeline({
+    executionId: row!.id,
+    eventType: "EXECUTION_READY",
+    description: "Execution ready for field work",
+    metadata: { serviceAssignmentId: input.serviceAssignmentId, taskType },
+  });
+
   return row!.id;
 }
 
@@ -251,7 +317,7 @@ export async function getExecutionDetail(req: Request, executionId: number): Pro
   const row = await loadExecutionRow(executionId);
   if (!row || !assertInScope(req, row.execution)) return null;
 
-  const [photos, notes, checklist, locationLogs] = await Promise.all([
+  const [photos, notes, checklist, locationLogs, timeline] = await Promise.all([
     db.select().from(serviceExecutionPhotosTable)
       .where(eq(serviceExecutionPhotosTable.executionId, executionId))
       .orderBy(serviceExecutionPhotosTable.createdAt),
@@ -264,6 +330,7 @@ export async function getExecutionDetail(req: Request, executionId: number): Pro
     db.select().from(serviceExecutionLocationLogsTable)
       .where(eq(serviceExecutionLocationLogsTable.executionId, executionId))
       .orderBy(desc(serviceExecutionLocationLogsTable.recordedAt)),
+    getExecutionTimeline(executionId),
   ]);
 
   return {
@@ -278,13 +345,27 @@ export async function getExecutionDetail(req: Request, executionId: number): Pro
       accuracy: p.accuracy,
     })),
     notes: notes.map(n => ({ id: n.id, kind: n.kind, body: n.body, createdAt: n.createdAt.toISOString() })),
-    checklist: checklist.map(c => ({ id: c.id, label: c.label, isCompleted: c.isCompleted })),
+    checklist: checklist.map(c => ({
+      id: c.id,
+      label: c.label,
+      isCompleted: c.isCompleted,
+      completedAt: c.completedAt?.toISOString() ?? null,
+    })),
     locationLogs: locationLogs.map(l => ({
       id: l.id,
       eventType: l.eventType,
       latitude: l.latitude,
       longitude: l.longitude,
       recordedAt: l.recordedAt.toISOString(),
+    })),
+    timeline: timeline.map(t => ({
+      id: t.id,
+      eventType: t.eventType,
+      title: t.title,
+      description: t.description,
+      actorId: t.actorId,
+      actorName: t.actorName,
+      createdAt: t.createdAt.toISOString(),
     })),
   };
 }
@@ -294,23 +375,56 @@ async function getMutableExecution(req: Request, executionId: number) {
   if (!row || !assertInScope(req, row.execution)) {
     throw new Error("Execution not found");
   }
-  if (TERMINAL.includes(row.execution.status as ExecutionStatus)) {
-    throw new Error(`Execution is already ${row.execution.status}`);
-  }
+  assertNotCompleted(row.execution);
+  assertAssignedTechnician(req, row.execution);
   return row.execution;
+}
+
+function eventBase(execution: typeof serviceExecutionsTable.$inferSelect, actorId: number | null) {
+  return baseExecutionEventFields({
+    executionId: execution.id,
+    serviceAssignmentId: execution.serviceAssignmentId,
+    contractId: execution.contractId,
+    customerId: execution.customerId,
+    staffId: execution.assignedStaffId,
+    actorId,
+  });
+}
+
+async function ensureDefaultChecklist(executionId: number): Promise<void> {
+  const existing = await db.select({ id: serviceExecutionChecklistItemsTable.id })
+    .from(serviceExecutionChecklistItemsTable)
+    .where(eq(serviceExecutionChecklistItemsTable.executionId, executionId))
+    .limit(1);
+  if (existing.length) return;
+  await db.insert(serviceExecutionChecklistItemsTable).values(
+    DEFAULT_CHECKLIST.map((label, i) => ({
+      executionId,
+      label,
+      isCompleted: false,
+      sortOrder: i,
+    })),
+  );
 }
 
 export async function startExecution(req: Request, executionId: number, gps?: {
   latitude?: number; longitude?: number; accuracy?: number;
 }): Promise<ExecutionView> {
   const execution = await getMutableExecution(req, executionId);
-  if (execution.status !== "scheduled") {
-    throw new Error("Only scheduled executions can be started");
+  if (!isReady(execution.status)) {
+    throw new Error("Only ready executions can be started");
   }
+
+  const assignment = await loadLinkedAssignment(execution.serviceAssignmentId);
+  assertAssignmentAllowsExecution(assignment);
+
+  const actor = actorFromReq(req);
   const now = new Date();
   await db.update(serviceExecutionsTable)
     .set({ status: "started", startedAt: now, updatedAt: now })
     .where(eq(serviceExecutionsTable.id, executionId));
+
+  await ensureDefaultChecklist(executionId);
 
   if (gps?.latitude != null && gps?.longitude != null) {
     await db.insert(serviceExecutionLocationLogsTable).values({
@@ -322,6 +436,73 @@ export async function startExecution(req: Request, executionId: number, gps?: {
     });
   }
 
+  await recordExecutionTimeline({
+    executionId,
+    eventType: "EXECUTION_STARTED",
+    description: "Technician started work",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+  });
+  executionDomainEventPublisher.publish({
+    ...eventBase(execution, actor.actorId),
+    type: "ExecutionStarted",
+  });
+
+  const row = await loadExecutionRow(executionId);
+  return mapExecutionRow(row!);
+}
+
+export async function pauseExecution(req: Request, executionId: number, reason?: string): Promise<ExecutionView> {
+  const execution = await getMutableExecution(req, executionId);
+  if (!isInProgress(execution.status)) {
+    throw new Error("Only in-progress executions can be paused");
+  }
+  const actor = actorFromReq(req);
+  const now = new Date();
+  await db.update(serviceExecutionsTable)
+    .set({ status: "paused", pausedAt: now, updatedAt: now })
+    .where(eq(serviceExecutionsTable.id, executionId));
+
+  await recordExecutionTimeline({
+    executionId,
+    eventType: "EXECUTION_PAUSED",
+    description: reason?.trim() || "Work paused",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+  });
+  executionDomainEventPublisher.publish({
+    ...eventBase(execution, actor.actorId),
+    type: "ExecutionPaused",
+    metadata: { reason },
+  });
+
+  const row = await loadExecutionRow(executionId);
+  return mapExecutionRow(row!);
+}
+
+export async function resumeExecution(req: Request, executionId: number): Promise<ExecutionView> {
+  const execution = await getMutableExecution(req, executionId);
+  if (execution.status !== "paused") {
+    throw new Error("Only paused executions can be resumed");
+  }
+  const actor = actorFromReq(req);
+  const now = new Date();
+  await db.update(serviceExecutionsTable)
+    .set({ status: "resumed", resumedAt: now, updatedAt: now })
+    .where(eq(serviceExecutionsTable.id, executionId));
+
+  await recordExecutionTimeline({
+    executionId,
+    eventType: "EXECUTION_RESUMED",
+    description: "Work resumed",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+  });
+  executionDomainEventPublisher.publish({
+    ...eventBase(execution, actor.actorId),
+    type: "ExecutionResumed",
+  });
+
   const row = await loadExecutionRow(executionId);
   return mapExecutionRow(row!);
 }
@@ -330,6 +511,7 @@ export type CompleteExecutionInput = {
   photos?: { kind?: "before" | "after" | "proof" | "other"; url: string; caption?: string; latitude?: number; longitude?: number; accuracy?: number }[];
   notes?: { kind?: "technician" | "customer" | "internal"; body: string }[];
   checklist?: { label: string; isCompleted: boolean }[];
+  customerSignatureUrl?: string;
   gps?: { latitude?: number; longitude?: number; accuracy?: number };
 };
 
@@ -363,8 +545,12 @@ export async function addExecutionPhotos(
   photos: AddExecutionPhotoInput[],
 ): Promise<ExecutionDetail> {
   const execution = await getMutableExecution(req, executionId);
-  if (execution.status !== "started") {
-    throw new Error("Photos can only be added after the job is started");
+  if (!isInProgress(execution.status)) {
+    throw new Error(
+      execution.status === "paused"
+        ? "Resume work before uploading photos"
+        : "Photos can only be added while work is in progress",
+    );
   }
   if (!photos.length) throw new Error("At least one photo is required");
 
@@ -386,9 +572,171 @@ export async function addExecutionPhotos(
     })),
   );
 
+  const actor = actorFromReq(req);
+  const beforeCount = photos.filter(p => p.kind === "before").length;
+  const afterCount = photos.filter(p => p.kind === "after").length;
+  if (beforeCount > 0) {
+    await recordExecutionTimeline({
+      executionId,
+      eventType: "BEFORE_PHOTOS_UPLOADED",
+      description: `${beforeCount} before photo(s) uploaded`,
+      actorId: actor.actorId,
+      actorName: actor.actorName,
+    });
+    executionDomainEventPublisher.publish({
+      ...eventBase(execution, actor.actorId),
+      type: "BeforePhotosUploaded",
+      metadata: { count: beforeCount },
+    });
+  }
+  if (afterCount > 0) {
+    await recordExecutionTimeline({
+      executionId,
+      eventType: "AFTER_PHOTOS_UPLOADED",
+      description: `${afterCount} after photo(s) uploaded`,
+      actorId: actor.actorId,
+      actorName: actor.actorName,
+    });
+    executionDomainEventPublisher.publish({
+      ...eventBase(execution, actor.actorId),
+      type: "AfterPhotosUploaded",
+      metadata: { count: afterCount },
+    });
+  }
+
   const detail = await getExecutionDetail(req, executionId);
   if (!detail) throw new Error("Execution not found");
   return detail;
+}
+
+export async function saveExecutionNotes(
+  req: Request,
+  executionId: number,
+  notes: { kind?: "technician" | "customer" | "internal"; body: string }[],
+): Promise<ExecutionDetail> {
+  const execution = await getMutableExecution(req, executionId);
+  if (!WORKABLE_STATUSES.includes(execution.status as FieldExecutionStatus) && !isReady(execution.status)) {
+    throw new Error("Notes cannot be saved for this execution status");
+  }
+  if (!notes.length) throw new Error("At least one note is required");
+
+  const actor = actorFromReq(req);
+  const staffId = req.scope?.staffId ?? null;
+  await db.insert(serviceExecutionNotesTable).values(
+    notes.map(n => ({
+      executionId,
+      kind: n.kind ?? "technician",
+      body: n.body,
+      authorStaffId: staffId,
+    })),
+  );
+
+  for (const n of notes) {
+    await recordExecutionTimeline({
+      executionId,
+      eventType: "NOTE_ADDED",
+      description: n.body.slice(0, 200),
+      actorId: actor.actorId,
+      actorName: actor.actorName,
+    });
+  }
+
+  const detail = await getExecutionDetail(req, executionId);
+  if (!detail) throw new Error("Execution not found");
+  return detail;
+}
+
+export async function saveExecutionChecklist(
+  req: Request,
+  executionId: number,
+  items: { id?: number; label: string; isCompleted: boolean }[],
+): Promise<ExecutionDetail> {
+  const execution = await getMutableExecution(req, executionId);
+  if (!isInProgress(execution.status) && execution.status !== "paused") {
+    throw new Error("Checklist can only be updated while work is in progress or paused");
+  }
+  if (!items.length) throw new Error("Checklist items required");
+
+  const actor = actorFromReq(req);
+  const now = new Date();
+
+  for (const item of items) {
+    if (item.id) {
+      await db.update(serviceExecutionChecklistItemsTable)
+        .set({
+          label: item.label,
+          isCompleted: item.isCompleted,
+          completedAt: item.isCompleted ? now : null,
+        })
+        .where(and(
+          eq(serviceExecutionChecklistItemsTable.id, item.id),
+          eq(serviceExecutionChecklistItemsTable.executionId, executionId),
+        ));
+    } else {
+      await db.insert(serviceExecutionChecklistItemsTable).values({
+        executionId,
+        label: item.label,
+        isCompleted: item.isCompleted,
+        completedAt: item.isCompleted ? now : null,
+        sortOrder: 0,
+      });
+    }
+  }
+
+  const all = await db.select().from(serviceExecutionChecklistItemsTable)
+    .where(eq(serviceExecutionChecklistItemsTable.executionId, executionId));
+  const allDone = all.length > 0 && all.every(c => c.isCompleted);
+
+  await recordExecutionTimeline({
+    executionId,
+    eventType: allDone ? "CHECKLIST_COMPLETED" : "CHECKLIST_UPDATED",
+    description: allDone ? "All checklist items completed" : "Checklist updated",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+  });
+  if (allDone) {
+    executionDomainEventPublisher.publish({
+      ...eventBase(execution, actor.actorId),
+      type: "ChecklistCompleted",
+    });
+  }
+
+  const detail = await getExecutionDetail(req, executionId);
+  if (!detail) throw new Error("Execution not found");
+  return detail;
+}
+
+export async function saveCustomerSignature(
+  req: Request,
+  executionId: number,
+  signatureUrl: string,
+): Promise<ExecutionView> {
+  const execution = await getMutableExecution(req, executionId);
+  if (!isInProgress(execution.status) && execution.status !== "paused") {
+    throw new Error("Signature can only be captured while work is in progress");
+  }
+  if (!signatureUrl?.trim()) throw new Error("signatureUrl is required");
+
+  const actor = actorFromReq(req);
+  const now = new Date();
+  await db.update(serviceExecutionsTable)
+    .set({
+      customerSignatureUrl: signatureUrl.trim(),
+      customerSignedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(serviceExecutionsTable.id, executionId));
+
+  await recordExecutionTimeline({
+    executionId,
+    eventType: "SIGNATURE_CAPTURED",
+    description: "Customer signature captured",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+  });
+
+  const row = await loadExecutionRow(executionId);
+  return mapExecutionRow(row!);
 }
 
 export async function completeExecution(
@@ -397,8 +745,8 @@ export async function completeExecution(
   input: CompleteExecutionInput = {},
 ): Promise<ExecutionView> {
   const execution = await getMutableExecution(req, executionId);
-  if (!ACTIVE.includes(execution.status as ExecutionStatus)) {
-    throw new Error("Execution cannot be completed from current status");
+  if (!isInProgress(execution.status)) {
+    throw new Error("Start work before completing — cannot complete from current status");
   }
 
   if (!isDailyCleanTask(execution.taskType)) {
@@ -412,12 +760,17 @@ export async function completeExecution(
     }
   }
 
+  const actor = actorFromReq(req);
   const now = new Date();
   await db.update(serviceExecutionsTable)
     .set({
       status: "completed",
       startedAt: execution.startedAt ?? now,
       completedAt: now,
+      customerSignatureUrl: input.customerSignatureUrl?.trim() || execution.customerSignatureUrl,
+      customerSignedAt: input.customerSignatureUrl?.trim()
+        ? now
+        : execution.customerSignedAt,
       updatedAt: now,
     })
     .where(eq(serviceExecutionsTable.id, executionId));
@@ -472,13 +825,25 @@ export async function completeExecution(
     });
   }
 
+  await recordExecutionTimeline({
+    executionId,
+    eventType: "EXECUTION_COMPLETED",
+    description: "Field execution completed",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+  });
+  executionDomainEventPublisher.publish({
+    ...eventBase(execution, actor.actorId),
+    type: "ExecutionCompleted",
+  });
+
   const row = await loadExecutionRow(executionId);
   return mapExecutionRow(row!);
 }
 
 export async function missExecution(req: Request, executionId: number, reason?: string): Promise<ExecutionView> {
   const execution = await getMutableExecution(req, executionId);
-  if (!ACTIVE.includes(execution.status as ExecutionStatus)) {
+  if (isTerminal(execution.status)) {
     throw new Error("Execution cannot be marked missed from current status");
   }
   const now = new Date();
@@ -495,9 +860,10 @@ export async function missExecution(req: Request, executionId: number, reason?: 
 
 export async function cancelExecution(req: Request, executionId: number, reason?: string): Promise<ExecutionView> {
   const execution = await getMutableExecution(req, executionId);
-  if (!ACTIVE.includes(execution.status as ExecutionStatus)) {
+  if (isTerminal(execution.status)) {
     throw new Error("Execution cannot be cancelled from current status");
   }
+  const actor = actorFromReq(req);
   const now = new Date();
   await db.update(serviceExecutionsTable)
     .set({
@@ -506,6 +872,20 @@ export async function cancelExecution(req: Request, executionId: number, reason?
       updatedAt: now,
     })
     .where(eq(serviceExecutionsTable.id, executionId));
+
+  await recordExecutionTimeline({
+    executionId,
+    eventType: "EXECUTION_CANCELLED",
+    description: reason ?? "Cancelled",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+  });
+  executionDomainEventPublisher.publish({
+    ...eventBase(execution, actor.actorId),
+    type: "ExecutionCancelled",
+    metadata: { reason },
+  });
+
   const row = await loadExecutionRow(executionId);
   return mapExecutionRow(row!);
 }
@@ -516,8 +896,13 @@ export async function rescheduleExecution(
   input: { scheduledDate: string; scheduledTime?: string | null; reason?: string },
 ): Promise<{ previous: ExecutionView; next: ExecutionView }> {
   const execution = await getMutableExecution(req, executionId);
-  if (!ACTIVE.includes(execution.status as ExecutionStatus)) {
-    throw new Error("Execution cannot be rescheduled from current status");
+  if (isTerminal(execution.status) || isInProgress(execution.status) || execution.status === "paused") {
+    if (isTerminal(execution.status)) {
+      throw new Error("Execution cannot be rescheduled from current status");
+    }
+  }
+  if (!isReady(execution.status)) {
+    throw new Error("Only ready executions can be rescheduled — pause/cancel in-progress work first");
   }
   const now = new Date();
   await db.update(serviceExecutionsTable)
@@ -535,14 +920,22 @@ export async function rescheduleExecution(
     serviceLocationId: execution.serviceLocationId,
     assetId: execution.assetId,
     assignedStaffId: execution.assignedStaffId,
+    taskType: execution.taskType,
     scheduledDate: input.scheduledDate,
     scheduledTime: input.scheduledTime ?? null,
-    status: "scheduled",
+    status: "ready_for_execution",
     rescheduledFromId: executionId,
     companyId: execution.companyId,
     franchiseeId: execution.franchiseeId,
     branchId: execution.branchId,
   }).returning();
+
+  await recordExecutionTimeline({
+    executionId: nextRow!.id,
+    eventType: "EXECUTION_READY",
+    description: `Rescheduled from execution #${executionId}`,
+    metadata: { rescheduledFromId: executionId },
+  });
 
   const [prevLoaded, nextLoaded] = await Promise.all([
     loadExecutionRow(executionId),
@@ -559,7 +952,9 @@ export type ServiceUpdatesSummary = {
   pending: number;
   assigned: number;
   scheduled: number;
+  readyForExecution: number;
   started: number;
+  paused: number;
   completed: number;
   missed: number;
   cancelled: number;
@@ -589,7 +984,10 @@ export async function getServiceUpdatesSummary(req: Request, date: string): Prom
       .where(and(eq(pendingServiceAssignmentsTable.status, "pending"), ...pendingScope)),
     db.select({ count: sql<number>`count(*)::int` })
       .from(serviceAssignmentsTable)
-      .where(and(eq(serviceAssignmentsTable.status, "assigned"), ...assignedScope)),
+      .where(and(
+        sql`${serviceAssignmentsTable.status} IN ('assigned', 'ready_for_execution')`,
+        ...assignedScope,
+      )),
     db.select({
       status: serviceExecutionsTable.status,
       count: sql<number>`count(*)::int`,
@@ -606,7 +1004,9 @@ export async function getServiceUpdatesSummary(req: Request, date: string): Prom
     pending: Number(pendingRow[0]?.count ?? 0),
     assigned: Number(assignedRow[0]?.count ?? 0),
     scheduled: byStatus.scheduled ?? 0,
-    started: byStatus.started ?? 0,
+    readyForExecution: (byStatus.ready_for_execution ?? 0) + (byStatus.scheduled ?? 0),
+    started: (byStatus.started ?? 0) + (byStatus.resumed ?? 0),
+    paused: byStatus.paused ?? 0,
     completed: byStatus.completed ?? 0,
     missed: byStatus.missed ?? 0,
     cancelled: byStatus.cancelled ?? 0,

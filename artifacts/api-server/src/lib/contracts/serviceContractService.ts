@@ -5,7 +5,6 @@
 
 import {
   db,
-  bookingsTable,
   subscriptionsTable,
   catalogPackagesTable,
   catalogPackageEntitlementsTable,
@@ -26,7 +25,6 @@ import {
   type CatalogSelectionKind,
 } from "./fulfillmentMode";
 import {
-  syncContractFromBooking,
   syncContractFromSubscription,
   listCustomerContracts,
 } from "./contractRegistry";
@@ -51,6 +49,7 @@ export type CreateServiceContractBody = {
   partialAdvancePercent?: string;
   startDate?: string;
   scheduledDate?: string;
+  scheduledTime?: string;
   notes?: string;
   estimatedAmount?: number;
 };
@@ -127,7 +126,7 @@ async function createOneTimeContract(
   const serviceId = body.catalogServiceId ?? body.selectionId;
   const [svc] = await db.select().from(servicesTable).where(eq(servicesTable.id, serviceId)).limit(1);
   if (!svc) throw new Error("Service not found");
-  const { isDailyCleanCatalogServiceName } = await import("../dcms/dailyCleanCatalogGuard");
+  const { isDailyCleanCatalogServiceName } = await import("@workspace/validation");
   if (isDailyCleanCatalogServiceName(svc.name)) {
     throw new Error("Daily cleaning monthly plans must be selected as a Plan — not as a one-time catalog service.");
   }
@@ -154,14 +153,40 @@ async function createOneTimeContract(
   });
   assertServiceabilitySuccess(serviceability);
 
-  const [booking] = await db.insert(bookingsTable).values({
+  const { createOneTimeContractRegistry, linkContractToBooking } = await import("./contractRegistry");
+  const { bookingCapability } = await import("../booking");
+  const { enqueuePendingFromLegacyBooking } = await import("../assignments/enqueueAdapters");
+
+  // 1) Contract first (commercial intent)
+  const registryId = await createOneTimeContractRegistry({
     customerId: body.customerId,
+    vehicleId: asset.vehicleId ?? null,
+    solarSiteId: asset.solarSiteId ?? null,
+    serviceLocationId: body.serviceLocationId,
+    registryAssetId: body.assetId,
+    serviceId,
+    serviceName: svc.name,
+    scheduledDate,
+    amount: amount.toFixed(2),
+    paymentTerms: body.paymentTerms,
+    discountType: body.discountType,
+    discountValue: body.discountValue,
+    companyId: tenant.companyId ?? null,
+    franchiseeId: tenant.franchiseeId ?? null,
+    branchId: tenant.branchId ?? null,
+  });
+
+  // 2) Booking Engine (schedule only)
+  const createResult = await bookingCapability.createBooking({
+    customerId: body.customerId,
+    contractRegistryId: registryId,
     serviceLocationId: body.serviceLocationId,
     assetId: body.assetId,
     vehicleId: asset.vehicleId ?? null,
     solarSiteId: asset.solarSiteId ?? null,
     serviceId,
     scheduledDate,
+    scheduledTime: body.scheduledTime ?? null,
     serviceType: mapBookingServiceType(asset.assetType, svc.category),
     address,
     area: location.city ?? undefined,
@@ -169,31 +194,34 @@ async function createOneTimeContract(
     locationLng: lng,
     placeId: location.placeId ?? undefined,
     cityId: serviceability.resolvedCityId ?? undefined,
-    status: "scheduled",
-    amount: amount.toFixed(2),
-    addonIds: body.addonIds ?? [],
     notes: body.notes ?? `Book Services — ${svc.name}`,
     companyId: tenant.companyId ?? null,
     franchiseeId: tenant.franchiseeId ?? null,
     branchId: tenant.branchId ?? null,
-  }).returning();
+    status: "scheduled",
+    skipCoverageValidation: true,
+  }, {
+    requestSource: "book_services_one_time",
+  });
 
-  const registryId = await syncContractFromBooking(booking!, {
-    serviceName: svc.name,
-    catalogRefKind: "service",
-    catalogRefId: serviceId,
-    paymentTerms: body.paymentTerms,
-    discountType: body.discountType,
-    discountValue: body.discountValue,
-    registryAssetId: body.assetId,
+  const booking = createResult.booking;
+
+  // 3) Link contract → booking (legacy source_id bridge)
+  await linkContractToBooking(registryId, booking.id, amount.toFixed(2));
+
+  // 4) Waiting assignment queue
+  await enqueuePendingFromLegacyBooking(booking.id);
+  await bookingCapability.markWaitingAssignment(booking.id, {
+    actorId: performedBy,
+    actorName: "Book Services",
   });
 
   return {
     contractType: "one_time",
     registryId,
     sourceSystem: "booking",
-    sourceId: booking!.id,
-    bookingId: booking!.id,
+    sourceId: booking.id,
+    bookingId: booking.id,
     productLine: "one_time_service",
     label: svc.name,
     status: "active",
@@ -359,6 +387,7 @@ async function createCreditsPackageContract(
   body: CreateServiceContractBody,
   asset: NonNullable<Awaited<ReturnType<typeof getAssetDetail>>>,
   performedBy: number,
+  tenant: { companyId?: number | null; franchiseeId?: number | null; branchId?: number | null },
 ): Promise<ServiceContractResult> {
   const [pkg] = await db.select().from(catalogPackagesTable)
     .where(eq(catalogPackagesTable.id, body.selectionId))
@@ -389,11 +418,14 @@ async function createCreditsPackageContract(
     ))
     .limit(1);
 
-  if (registry?.id && body.paymentTerms) {
+  if (registry?.id) {
     const [existing] = await db.select().from(customerContractsTable)
       .where(eq(customerContractsTable.id, registry.id)).limit(1);
     if (existing) {
       await db.update(customerContractsTable).set({
+        companyId: tenant.companyId ?? existing.companyId,
+        franchiseeId: tenant.franchiseeId ?? existing.franchiseeId,
+        branchId: tenant.branchId ?? existing.branchId,
         summaryJson: {
           ...(existing.summaryJson as Record<string, unknown>),
           paymentTerms: body.paymentTerms,
@@ -468,26 +500,38 @@ export async function createServiceContract(
       }
       return createRecurringSolarAmcContract(body, asset, performedBy, tenant);
     case "contract_credits":
-      return createCreditsPackageContract(body, asset, performedBy);
+      return createCreditsPackageContract(body, asset, performedBy, tenant);
     default:
       throw new Error(`Unsupported fulfillment mode: ${fulfillment.mode}`);
   }
 }
 
-export async function getServiceContract(registryId: number) {
+export async function getServiceContract(registryId: number, req?: Request) {
   const rows = await db.select().from(customerContractsTable)
     .where(eq(customerContractsTable.id, registryId))
     .limit(1);
-  return rows[0] ?? null;
+  const row = rows[0] ?? null;
+  if (!row) return null;
+  if (req) {
+    const { rowInScope } = await import("../../middlewares/tenantScope");
+    if (!rowInScope(req, {
+      companyId: row.companyId,
+      branchId: row.branchId,
+      franchiseeId: row.franchiseeId,
+      customerId: row.customerId,
+    })) {
+      return null;
+    }
+  }
+  return row;
 }
 
 export async function updateContractStatus(
   registryId: number,
   status: "active" | "paused" | "completed" | "expired" | "cancelled" | "expiring",
+  req?: Request,
 ) {
-  const [existing] = await db.select().from(customerContractsTable)
-    .where(eq(customerContractsTable.id, registryId))
-    .limit(1);
+  const existing = await getServiceContract(registryId, req);
   if (!existing) throw new Error("Contract not found");
 
   await db.update(customerContractsTable)
@@ -511,7 +555,7 @@ export async function updateContractStatus(
       .where(eq(subscriptionsTable.id, existing.sourceId));
   }
 
-  return getServiceContract(registryId);
+  return getServiceContract(registryId, req);
 }
 
 export { listCustomerContracts };

@@ -15,7 +15,7 @@ export function DiscountStep({ discountType, discountValue, onChange }: Props) {
       <div>
         <Label>Discount (optional)</Label>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Apply a one-time discount for this quote. This is for display only until booking is confirmed in a later step.
+          Apply a one-time discount for this request. It is saved on the contract and applied to the quotation or invoice total.
         </p>
       </div>
       <div className="grid sm:grid-cols-2 gap-3">

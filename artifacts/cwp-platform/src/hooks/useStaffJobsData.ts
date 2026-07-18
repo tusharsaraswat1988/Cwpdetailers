@@ -29,6 +29,8 @@ import {
   fetchStaffExecutions,
   fetchExecutionDetail,
   startExecution,
+  pauseExecution,
+  resumeExecution,
   completeExecution,
   addExecutionPhotos,
   SERVICE_EXECUTIONS_QUERY_KEY,
@@ -161,14 +163,28 @@ export function useStaffJobsData() {
   });
 
   const executionMutation = useMutation({
-    mutationFn: async ({ job, toStatus }: { job: StaffJob; toStatus: string }) => {
+    mutationFn: async ({
+      job,
+      toStatus,
+      notes,
+    }: {
+      job: StaffJob;
+      toStatus: string;
+      notes?: string;
+    }) => {
       const executionId = job.executionId ?? job.id;
+      if (toStatus === "paused") {
+        return pauseExecution(executionId);
+      }
+      if (toStatus === "resumed" || toStatus === "resume") {
+        return resumeExecution(executionId);
+      }
       const gps = await getStaffLocation("action");
       if (toStatus === "in_progress") {
         return startExecution(executionId, gps);
       }
       if (toStatus === "completed") {
-        return completeExecution(executionId, gps);
+        return completeExecution(executionId, { gps, notes });
       }
       throw new Error("Unsupported action for this job");
     },
@@ -231,11 +247,11 @@ export function useStaffJobsData() {
     [todayRaw],
   );
 
-  async function transitionJob(jobId: number, toStatus: string, job?: StaffJob) {
+  async function transitionJob(jobId: number, toStatus: string, job?: StaffJob, notes?: string) {
     setLocatingJobId(jobId);
     try {
       if (job?.source === "execution") {
-        await executionMutation.mutateAsync({ job, toStatus });
+        await executionMutation.mutateAsync({ job, toStatus, notes });
         return;
       }
       await transitionMutation.mutateAsync({ id: jobId, data: { toStatus } });
@@ -314,7 +330,7 @@ export function useStaffJobsData() {
   async function completeJobWithNotes(job: StaffJob, notes: string) {
     const trimmed = notes.trim();
     if (job.source === "execution") {
-      await transitionJob(job.id, "completed", job);
+      await transitionJob(job.id, "completed", job, trimmed || undefined);
       return;
     }
     if (trimmed) {

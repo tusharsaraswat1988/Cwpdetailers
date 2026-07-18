@@ -436,12 +436,12 @@ async function resolveLocation(
   }
   if (solarSiteId) {
     const [s] = await db.select().from(solarSitesTable).where(eq(solarSitesTable.id, solarSiteId)).limit(1);
-    if (s?.locationComplete && s.latitude != null && s.longitude != null) {
+    if (s?.locationComplete && s.serviceLat != null && s.serviceLng != null) {
       return {
         address: s.address,
         area: s.locationLabel,
-        locationLat: s.latitude,
-        locationLng: s.longitude,
+        locationLat: s.serviceLat,
+        locationLng: s.serviceLng,
         solarSiteId: s.id,
       };
     }
@@ -462,16 +462,16 @@ async function resolveLocation(
 
 async function findExistingWalkInBooking(
   customerId: number,
-  staffId: number,
+  _staffId: number,
   serviceType: string,
   today: string,
 ) {
+  // Phase 5.2: staff lives on assignments/executions — match schedule-only booking fields
   const [row] = await db.select().from(bookingsTable).where(and(
     eq(bookingsTable.customerId, customerId),
     eq(bookingsTable.scheduledDate, today),
-    eq(bookingsTable.serviceType, serviceType),
-    inArray(bookingsTable.status, ["pending", "scheduled", "en_route", "in_progress"]),
-    sql`(${bookingsTable.staffId} IS NULL OR ${bookingsTable.staffId} = ${staffId})`,
+    eq(bookingsTable.serviceType, serviceType as never),
+    inArray(bookingsTable.status, ["draft", "scheduled", "confirmed", "waiting_assignment"]),
   )).orderBy(desc(bookingsTable.updatedAt)).limit(1);
   return row ?? null;
 }
@@ -619,9 +619,7 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
 
   if (existing) {
     await db.update(bookingsTable).set({
-      staffId: input.staffId,
       updatedAt: new Date(),
-      ...(entitlementId && !existing.entitlementId ? { entitlementId, amount: "0" } : {}),
     }).where(eq(bookingsTable.id, existing.id));
 
     return {
@@ -630,9 +628,9 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
       serviceType: config.serviceType,
       bookingId: existing.id,
       status: existing.status,
-      createdDraft: existing.status === "pending",
-      consumedFrom: existing.entitlementId ? "entitlement" : consumedFrom,
-      entitlementId: existing.entitlementId ?? entitlementId,
+      createdDraft: existing.status === "draft",
+      consumedFrom,
+      entitlementId,
       message: "Using existing booking for today",
     };
   }
@@ -646,7 +644,8 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
   }
 
   const isDraft = consumedFrom === "draft" || input.forceDraft === true;
-  const initialStatus = isDraft ? "pending" as const : "scheduled" as const;
+  // Phase 5.2: schedule-only booking — no staff/amount/entitlement/subscription on bookings
+  const initialStatus = isDraft ? "draft" as const : "scheduled" as const;
 
   const serviceability = await validateServiceabilityForBooking({
     customerId: input.customerId,
@@ -662,9 +661,7 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
     customerId: input.customerId,
     vehicleId: loc.vehicleId ?? input.vehicleId ?? null,
     solarSiteId: loc.solarSiteId ?? input.solarSiteId ?? null,
-    subscriptionId: legacySubscriptionId,
     serviceId,
-    staffId: input.staffId,
     scheduledDate: today,
     scheduledTime: null,
     serviceType: config.serviceType,
@@ -672,13 +669,16 @@ export async function resolveWalkInJob(req: Request, input: ResolveWalkInInput):
     area: loc.area ?? null,
     locationLat: loc.locationLat,
     locationLng: loc.locationLng,
-    notes: dcmsWashSubscriptionId
-      ? `Staff walk-in — DCMS wash (subscription ${dcmsWashSubscriptionId})`
-      : isDraft
-        ? `Staff walk-in — draft booking, payment pending (created ${today})`
-        : `Staff walk-in entry (${consumedFrom})`,
-    amount: entitlementId ? "0" : null,
-    entitlementId,
+    notes: [
+      dcmsWashSubscriptionId
+        ? `Staff walk-in — DCMS wash (subscription ${dcmsWashSubscriptionId})`
+        : isDraft
+          ? `Staff walk-in — draft booking, payment pending (created ${today})`
+          : `Staff walk-in entry (${consumedFrom})`,
+      legacySubscriptionId ? `legacySubscriptionId=${legacySubscriptionId}` : null,
+      entitlementId ? `entitlementId=${entitlementId}` : null,
+      `staffId=${input.staffId}`,
+    ].filter(Boolean).join(" | "),
     status: initialStatus,
     cityId: serviceability.resolvedCityId ?? null,
   });

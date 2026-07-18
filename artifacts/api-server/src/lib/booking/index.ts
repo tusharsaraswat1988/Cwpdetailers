@@ -1,5 +1,5 @@
 /**
- * Booking Platform — public API.
+ * Booking Platform — public API (Phase 5.2 schedule-only).
  * Future modules must consume BookingCapability, not BookingService.
  */
 
@@ -7,6 +7,8 @@ export type {
   CreateBookingInput,
   CreateBookingResult,
   TransitionBookingInput,
+  RescheduleBookingInput,
+  CancelBookingInput,
 } from "./types";
 
 export {
@@ -25,8 +27,6 @@ export type {
   BookingContext,
   BookingRecordSummary,
   BookingScheduleContext,
-  BookingPricingContext,
-  BookingStaffContext,
   BookingTimelineEntry,
 } from "./BookingContext";
 export { buildBookingContext } from "./BookingContext";
@@ -44,18 +44,13 @@ export type { BookingDomainEvent, BookingDomainEventType } from "./domain/events
 export { bookingDomainEventPublisher, BookingDomainEventPublisher } from "./domain/events/EventPublisher";
 
 export {
-  BOOKING_PLATFORM_STATUSES,
-  PLATFORM_TRANSITIONS,
-  LEGACY_TRANSITIONS,
-  LEGACY_TO_PLATFORM,
-  PLATFORM_TO_LEGACY,
-  validatePlatformTransition,
-  validateLegacyTransition,
-  canTransitionPlatform,
-  canTransitionLegacy,
-  resolvePlatformStatus,
-  resolveLegacyStatus,
-  mapLegacyTransitionToPlatform,
+  BOOKING_STATUSES,
+  BOOKING_TRANSITIONS,
+  SLOT_OCCUPYING_STATUSES,
+  validateTransition,
+  canTransition,
+  isTerminalStatus,
+  isActiveScheduleStatus,
   BookingStateMachineError,
 } from "./domain/stateMachine";
 
@@ -110,6 +105,43 @@ export type {
   ServiceDiscoveryInput,
   ServiceDiscoveryResult,
 } from "./services/ServiceDiscoveryService";
+
+export {
+  schedulingDomainService,
+  SchedulingDomainService,
+  validateSchedule,
+  detectConflicts,
+  assertNoDuplicateBooking,
+  getAvailableSlots,
+  BOOKING_TIME_SLOTS,
+  checkSlotCapacity,
+  getCapacityProvider,
+  setCapacityProvider,
+  resetCapacityProvider,
+  DefaultCapacityProvider,
+  resolveTimeWindow,
+  windowsOverlap,
+  generateCandidateStarts,
+  DOMAIN_DEFAULT_DURATION_MINUTES,
+  bookingScheduleProvider,
+  bookingSlotProvider,
+} from "./scheduling";
+export type {
+  CapacityProvider,
+  CapacityContext,
+  SlotQuery,
+  AvailableSlot,
+  TimeWindowInput,
+  ResolvedTimeWindow,
+  ValidateScheduleInput,
+  ValidateScheduleResult,
+} from "./scheduling";
+
+export {
+  BOOKING_SCHEDULE_DOMAIN_EVENTS,
+} from "./domain/events/types";
+export type { BookingScheduleDomainEventType } from "./domain/events/types";
+
 
 /** @deprecated Use bookingCapability — internal implementation */
 export { BookingService, bookingService } from "./BookingService";

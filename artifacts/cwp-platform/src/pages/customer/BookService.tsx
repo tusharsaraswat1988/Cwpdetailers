@@ -30,7 +30,7 @@ import {
   type CustomerPlan, type RawSubscription,
 } from "@/lib/customer-plans";
 import { checkCoverage } from "@/lib/coverage-client";
-import { buildAvailableDates, firstAvailableDate, slotsForDate } from "@/lib/schedule-slots";
+import { buildAvailableDates, firstAvailableDate, fetchAvailableSlots, availableTimesFromSlots } from "@/lib/schedule-slots";
 import {
   parseScheduleEntryParams,
   resolveBookingAddressForEntry,
@@ -200,9 +200,18 @@ export default function BookService() {
   }, [coveredByPlan, asset, selectedSolar, pricingQuote, selectedService]);
 
   const dateOptions = useMemo(() => buildAvailableDates(14), []);
+  const { data: slotPayload } = useQuery({
+    queryKey: ["booking-slots", scheduledDate, customerId, asset?.id],
+    queryFn: () => fetchAvailableSlots({
+      date: scheduledDate,
+      customerId: customerId ?? null,
+      assetId: asset?.kind === "vehicle" || asset?.kind === "solar" ? Number(asset.id) || null : null,
+    }),
+    enabled: Boolean(scheduledDate),
+  });
   const timeSlots = useMemo(
-    () => (scheduledDate ? slotsForDate(scheduledDate) : []),
-    [scheduledDate],
+    () => (slotPayload ? availableTimesFromSlots(slotPayload) : []),
+    [slotPayload],
   );
 
   const createMutation = useCreateBooking({
@@ -309,12 +318,12 @@ export default function BookService() {
   }, [scheduledDate, dateOptions, step, asset, serviceId]);
 
   useEffect(() => {
-    if (scheduledDate && !scheduledTime) {
-      const slots = slotsForDate(scheduledDate);
-      if (slots.length === 1) setScheduledTime(slots[0]);
-      else if (slots.length > 0 && !slots.includes(scheduledTime)) setScheduledTime(slots[0]);
+    if (scheduledDate && timeSlots.length > 0) {
+      if (!scheduledTime || !timeSlots.includes(scheduledTime)) {
+        setScheduledTime(timeSlots[0] ?? "");
+      }
     }
-  }, [scheduledDate, scheduledTime]);
+  }, [scheduledDate, scheduledTime, timeSlots]);
 
   // Auto-advance past skippable steps after initialization
   useEffect(() => {

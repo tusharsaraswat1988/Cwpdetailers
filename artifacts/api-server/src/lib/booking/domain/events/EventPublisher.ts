@@ -3,7 +3,7 @@ import type { BookingDomainEvent } from "./types";
 
 type BookingEventHandler = (event: BookingDomainEvent) => void | Promise<void>;
 
-/** Publish-only event bus — no consumers wired in Phase 3. */
+/** Publish-only event bus — infrastructure-independent; consumers subscribe later. */
 export class BookingDomainEventPublisher {
   private subscribers: BookingEventHandler[] = [];
 

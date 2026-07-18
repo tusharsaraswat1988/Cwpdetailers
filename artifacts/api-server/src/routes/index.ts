@@ -24,6 +24,7 @@ import storageRouter from "./storage";
 import quotationsRouter from "./quotations";
 import expensesRouter from "./expenses";
 import billingRouter from "./billing";
+import commercialBillingRouter from "./commercial-billing";
 import walletRouter from "./wallet";
 import communicationsRouter from "./communications";
 import communicationsPhase2Router from "./communications-phase2";
@@ -43,6 +44,7 @@ import assetsRouter from "./assets";
 import serviceContractsRouter from "./service-contracts";
 import assignmentsRouter from "./assignments";
 import serviceExecutionsRouter from "./service-executions";
+import jobsRouter from "./jobs";
 import bookingPlatformRouter from "./booking-platform";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX } from "../middlewares/permissions";
 
@@ -97,6 +99,8 @@ router.use(
 router.use(
   guardResource("bookings", [
     { match: /\/service-contracts$/, method: "POST", action: "create" },
+    { match: /\/service-contracts\/\d+\/quotation$/, method: "POST", action: "create" },
+    { match: /\/service-contracts\/\d+\/invoice$/, method: "POST", action: "create" },
     { match: /\/service-contracts\/\d+\/status$/, method: "PATCH", action: "edit" },
   ], [], "/service-contracts"),
   serviceContractsRouter,
@@ -104,18 +108,40 @@ router.use(
 router.use(
   guardResource("bookings", [
     { match: /\/assignments\/\d+\/assign$/, method: "POST", action: "edit" },
+    { match: /\/assignments\/\d+\/reassign$/, method: "POST", action: "edit" },
+    { match: /\/assignments\/\d+\/remove$/, method: "POST", action: "edit" },
+    { match: /\/assignments\/substitute$/, method: "POST", action: "edit" },
   ], [], "/assignments"),
   assignmentsRouter,
 );
 router.use(
   guardResource("bookings", [
     { match: /\/service-executions\/\d+\/start$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/pause$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/resume$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/photos$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/notes$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/checklist$/, method: "POST", action: "edit" },
+    { match: /\/service-executions\/\d+\/signature$/, method: "POST", action: "edit" },
     { match: /\/service-executions\/\d+\/complete$/, method: "POST", action: "edit" },
     { match: /\/service-executions\/\d+\/miss$/, method: "POST", action: "edit" },
     { match: /\/service-executions\/\d+\/cancel$/, method: "POST", action: "edit" },
     { match: /\/service-executions\/\d+\/reschedule$/, method: "POST", action: "edit" },
   ], [], "/service-executions"),
   serviceExecutionsRouter,
+);
+router.use(
+  guardResource("bookings", [
+    { match: /\/jobs\/\d+\/reopen$/, method: "POST", action: "edit" },
+    { match: /\/jobs\/\d+\/escalate$/, method: "POST", action: "edit" },
+    { match: /\/jobs\/\d+\/priority$/, method: "POST", action: "edit" },
+    { match: /\/jobs\/\d+\/approve$/, method: "POST", action: "edit" },
+    { match: /\/jobs\/\d+\/ready-for-billing$/, method: "POST", action: "edit" },
+    { match: /\/jobs\/\d+\/cancel$/, method: "POST", action: "edit" },
+    { match: /\/jobs\/\d+\/ownership$/, method: "POST", action: "edit" },
+    { match: /\/jobs\/\d+\/dependency$/, method: "POST", action: "edit" },
+  ], [], "/jobs"),
+  jobsRouter,
 );
 router.use(
   guardResource("bookings", [
@@ -191,6 +217,16 @@ router.use(
 router.use(guardResource("invoices"), quotationsRouter);
 router.use(guardResource("invoices"), expensesRouter);
 router.use(guardResource("invoices"), billingRouter);
+router.use(
+  guardResource("invoices", [
+    { match: /\/billing\/jobs\/\d+\/generate$/, method: "POST", action: "create" },
+    { match: /\/billing\/invoices\/\d+\/issue$/, method: "POST", action: "edit" },
+    { match: /\/billing\/invoices\/\d+\/mark-paid$/, method: "POST", action: "edit" },
+    { match: /\/billing\/invoices\/\d+\/void$/, method: "POST", action: "edit" },
+    { match: /\/billing\/invoices\/\d+\/credit-note$/, method: "POST", action: "create" },
+  ]),
+  commercialBillingRouter,
+);
 router.use(
   guardResource("franchisees", [
     { match: /\/create-account$/, method: "POST", action: "approve" },

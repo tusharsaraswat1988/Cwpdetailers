@@ -15,8 +15,8 @@ import {
 
 const router = Router();
 
-function requireStaff(req: { user?: { staffId?: number; role?: string } }, res: { status: (n: number) => { json: (b: unknown) => unknown } }) {
-  if (req.user?.role !== "staff" || !req.user.staffId) {
+function requireStaff(req: { user?: { staffId?: number | null; role?: string } }, res: { status: (n: number) => { json: (b: unknown) => unknown } }) {
+  if (req.user?.role !== "staff" || req.user.staffId == null) {
     res.status(403).json({ error: "Staff account required" });
     return null;
   }

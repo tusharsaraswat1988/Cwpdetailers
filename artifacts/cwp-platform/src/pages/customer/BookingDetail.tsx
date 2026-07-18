@@ -28,7 +28,7 @@ import {
   Car, MessageCircle,
 } from "lucide-react";
 
-const CANCELLABLE_STATUSES = new Set(["pending", "confirmed", "scheduled", "rescheduled"]);
+const CANCELLABLE_STATUSES = new Set(["draft", "confirmed", "scheduled", "waiting_assignment", "rescheduled"]);
 
 function StatusStep({
   label, done, active, isLast,
@@ -170,7 +170,7 @@ export default function BookingDetail() {
                 </h1>
                 <StatusBadge
                   status={booking.status}
-                  pulse={booking.status === "in_progress" || booking.status === "en_route"}
+                  pulse={booking.status === "confirmed" || booking.status === "waiting_assignment"}
                 />
               </div>
               <p className="text-muted-foreground text-sm mt-1">Request #{booking.id}</p>
@@ -182,9 +182,9 @@ export default function BookingDetail() {
                 <div className="flex items-center justify-between">
                   <StatusBadge
                     status={booking.status}
-                    pulse={booking.status === "in_progress" || booking.status === "en_route"}
+                    pulse={booking.status === "confirmed" || booking.status === "waiting_assignment"}
                   />
-                  {booking.status === "pending" && (
+                  {booking.status === "draft" && (
                     <span className="text-xs text-muted-foreground">Awaiting CWP confirmation</span>
                   )}
                 </div>

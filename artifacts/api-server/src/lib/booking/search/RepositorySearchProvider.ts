@@ -1,4 +1,4 @@
-import { db, bookingsTable, customersTable } from "@workspace/db";
+import { db, bookingsTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import type { BookingSearchCriteria, BookingSearchProvider, BookingSearchResult } from "./types";
 
@@ -15,11 +15,12 @@ export class RepositoryBookingSearchProvider implements BookingSearchProvider {
     if (criteria.serviceId) conditions.push(eq(bookingsTable.serviceId, criteria.serviceId));
     if (criteria.serviceType) conditions.push(eq(bookingsTable.serviceType, criteria.serviceType as never));
     if (criteria.status) conditions.push(eq(bookingsTable.status, criteria.status as never));
-    if (criteria.platformStatus) conditions.push(eq(bookingsTable.platformStatus, criteria.platformStatus as never));
     if (criteria.scheduledDate) conditions.push(sql`${bookingsTable.scheduledDate}::text = ${criteria.scheduledDate}`);
-    if (criteria.staffId) conditions.push(eq(bookingsTable.staffId, criteria.staffId));
     if (criteria.branchId) conditions.push(eq(bookingsTable.branchId, criteria.branchId));
     if (criteria.franchiseeId) conditions.push(eq(bookingsTable.franchiseeId, criteria.franchiseeId));
+    if (criteria.contractRegistryId) {
+      conditions.push(eq(bookingsTable.contractRegistryId, criteria.contractRegistryId));
+    }
 
     const limit = Math.min(criteria.limit ?? 50, 100);
     const offset = criteria.offset ?? 0;
@@ -30,10 +31,9 @@ export class RepositoryBookingSearchProvider implements BookingSearchProvider {
       customerId: bookingsTable.customerId,
       serviceType: bookingsTable.serviceType,
       status: bookingsTable.status,
-      platformStatus: bookingsTable.platformStatus,
       scheduledDate: bookingsTable.scheduledDate,
-      staffId: bookingsTable.staffId,
       addressIdentityId: bookingsTable.addressIdentityId,
+      contractRegistryId: bookingsTable.contractRegistryId,
     }).from(bookingsTable)
       .where(where)
       .orderBy(desc(bookingsTable.createdAt))
@@ -49,10 +49,9 @@ export class RepositoryBookingSearchProvider implements BookingSearchProvider {
       customerId: r.customerId,
       serviceType: r.serviceType,
       status: r.status,
-      platformStatus: r.platformStatus ?? undefined,
       scheduledDate: String(r.scheduledDate),
-      staffId: r.staffId,
       addressIdentityId: r.addressIdentityId,
+      contractRegistryId: r.contractRegistryId,
     }));
 
     return { results, total: Number(countRow?.count ?? 0) };

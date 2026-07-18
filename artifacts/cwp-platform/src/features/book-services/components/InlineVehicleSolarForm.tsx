@@ -19,6 +19,8 @@ type Props = {
   customerId: number;
   serviceLocationId: number;
   serviceLocationLabel?: string;
+  /** Prefer vehicle or solar when opening the create form. */
+  defaultTab?: "vehicle" | "solar_site";
   onCreated: (asset: AssetListRow) => void;
   onCancel?: () => void;
 };
@@ -27,12 +29,13 @@ export function InlineVehicleSolarForm({
   customerId,
   serviceLocationId,
   serviceLocationLabel,
+  defaultTab = "vehicle",
   onCreated,
   onCancel,
 }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"vehicle" | "solar_site">("vehicle");
+  const [tab, setTab] = useState<"vehicle" | "solar_site">(defaultTab);
   const [vehicleForm, setVehicleForm] = useState({
     ...EMPTY_VEHICLE_ASSET_FORM,
     customerId: String(customerId),
@@ -89,7 +92,7 @@ export function InlineVehicleSolarForm({
           color: vehicleForm.color || undefined,
           notes: vehicleForm.notes || undefined,
         });
-        await qc.invalidateQueries({ queryKey: ["book-services", "assets", customerId, serviceLocationId] });
+        await qc.invalidateQueries({ queryKey: ["book-services", "assets", customerId] });
         onCreated(result.asset);
         toast({ title: "Vehicle added" });
       } else {
@@ -107,7 +110,7 @@ export function InlineVehicleSolarForm({
           panelCount: solarForm.panelCount ? parseInt(solarForm.panelCount, 10) : 1,
           notes: solarForm.notes || undefined,
         });
-        await qc.invalidateQueries({ queryKey: ["book-services", "assets", customerId, serviceLocationId] });
+        await qc.invalidateQueries({ queryKey: ["book-services", "assets", customerId] });
         onCreated(result.asset);
         toast({ title: "Solar site added" });
       }

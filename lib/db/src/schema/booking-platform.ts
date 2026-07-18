@@ -1,18 +1,14 @@
-import { pgTable, serial, integer, text, timestamp, pgEnum, json, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, pgEnum, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { bookingsTable } from "./bookings";
+import { bookingsTable, bookingStatusEnum } from "./bookings";
 
-export const bookingPlatformStatusEnum = pgEnum("booking_platform_status", [
-  "DRAFT", "VALIDATED", "CONFIRMED", "PAYMENT_PENDING", "ASSIGNED", "ACCEPTED",
-  "TRAVELLING", "ARRIVED", "STARTED", "PAUSED", "RESUMED", "COMPLETED",
-  "CANCELLED", "FAILED", "REVIEW_PENDING", "REVIEWED", "ARCHIVED",
-]);
-
+/** Schedule-relevant snapshot types only (PRICE/STAFF kept for historical rows; new writes avoid them). */
 export const bookingSnapshotTypeEnum = pgEnum("booking_snapshot_type", [
   "ADDRESS", "LOCATION", "COVERAGE", "PRICE", "STAFF", "VEHICLE", "COUPON",
 ]);
 
+/** Timeline events for the schedule domain. Field-ops events retained for historical rows only. */
 export const bookingTimelineEventTypeEnum = pgEnum("booking_timeline_event_type", [
   "BOOKING_CREATED", "COVERAGE_VALIDATED", "ADDRESS_SNAPSHOT_CREATED",
   "PRICE_CALCULATED", "BOOKING_VALIDATED", "BOOKING_CONFIRMED",
@@ -20,7 +16,7 @@ export const bookingTimelineEventTypeEnum = pgEnum("booking_timeline_event_type"
   "TRAVELLING", "ARRIVED", "STARTED", "PAUSED", "RESUMED",
   "COMPLETED", "CANCELLED", "FAILED", "REVIEW_PENDING", "REVIEWED",
   "ARCHIVED", "ADDRESS_CHANGED", "RESCHEDULED", "PROOF_UPLOADED",
-  "BUSINESS_RULE_EVALUATED", "SERVICE_DISCOVERED",
+  "BUSINESS_RULE_EVALUATED", "SERVICE_DISCOVERED", "WAITING_ASSIGNMENT",
 ]);
 
 export const bookingTimelineTable = pgTable("booking_timeline", {
@@ -29,8 +25,8 @@ export const bookingTimelineTable = pgTable("booking_timeline", {
   eventType: bookingTimelineEventTypeEnum("event_type").notNull(),
   title: text("title").notNull(),
   description: text("description"),
-  fromPlatformStatus: bookingPlatformStatusEnum("from_platform_status"),
-  toPlatformStatus: bookingPlatformStatusEnum("to_platform_status"),
+  fromStatus: bookingStatusEnum("from_status"),
+  toStatus: bookingStatusEnum("to_status"),
   actorId: integer("actor_id"),
   actorName: text("actor_name"),
   metadata: json("metadata").$type<Record<string, unknown>>().default({}),
@@ -57,7 +53,6 @@ export const bookingSnapshotsTable = pgTable("booking_snapshots", {
 export const insertBookingTimelineSchema = createInsertSchema(bookingTimelineTable).omit({ id: true, createdAt: true });
 export const insertBookingSnapshotSchema = createInsertSchema(bookingSnapshotsTable).omit({ id: true, createdAt: true });
 
-export type BookingPlatformStatus = typeof bookingPlatformStatusEnum.enumValues[number];
 export type BookingSnapshotType = typeof bookingSnapshotTypeEnum.enumValues[number];
 export type BookingTimelineEventType = typeof bookingTimelineEventTypeEnum.enumValues[number];
 export type BookingTimeline = typeof bookingTimelineTable.$inferSelect;

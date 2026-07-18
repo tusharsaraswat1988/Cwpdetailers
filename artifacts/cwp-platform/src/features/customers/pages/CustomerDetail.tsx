@@ -223,7 +223,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
               {basePath.startsWith("/admin") && (
                 <Link href={`/admin/book-services?customerId=${id}`}>
                   <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="customer-profile-primary-cta">
-                    Book Service
+                    Create Service Request
                   </Button>
                 </Link>
               )}

@@ -51,6 +51,13 @@ const PENDING = [
   "045_branding_theme_defaults.sql",
   "046_catalog_package_addons.sql",
   "047_addresses.sql",
+  "048_booking_platform.sql",
+  "049_booking_engine_phase52.sql",
+  "050_booking_time_model_and_type.sql",
+  "051_assignment_platform_phase53.sql",
+  "052_field_execution_phase54.sql",
+  "053_execution_ready_backfill.sql",
+  "054_job_orchestration_phase55.sql",
 ];
 
 async function main() {
