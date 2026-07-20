@@ -7,12 +7,15 @@ import { z } from "zod/v4";
 export const pricingTypeEnum = pgEnum("pricing_type", ["inclusive", "exclusive"]);
 export const pricingModelEnum = pgEnum("pricing_model", ["fixed", "vehicle_matrix", "solar_slab"]);
 export const serviceStatusEnum = pgEnum("service_status", ["active", "disabled", "archived"]);
+export const solarPricingTermEnum = pgEnum("solar_pricing_term", ["one_time", "amc_6", "amc_12"]);
 export const entitlementTypeEnum = pgEnum("entitlement_type", [
   "wash_credit", "cleaning_credit", "solar_visit", "detailing_credit", "generic",
 ]);
 export const entitlementStatusEnum = pgEnum("entitlement_status", [
   "active", "expired", "exhausted", "cancelled",
 ]);
+
+export type SolarPricingTerm = "one_time" | "amc_6" | "amc_12";
 
 /** Global catalog settings (default GST mode, rates, etc.) */
 export const catalogSettingsTable = pgTable("catalog_settings", {
@@ -33,15 +36,23 @@ export const serviceCityAvailabilityTable = pgTable("service_city_availability",
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-/** Solar panel pricing slabs per service (optionally per city) */
+/**
+ * Solar rate card rows — fully admin-configurable.
+ * Panel bands, ₹/panel, minimum billing, and site-visit flags live here (not in app code).
+ */
 export const solarPricingSlabsTable = pgTable("solar_pricing_slabs", {
   id: serial("id").primaryKey(),
   serviceId: integer("service_id").notNull(),
+  /** When set, this row prices a specific AMC package; otherwise prices the one-time service for `term`. */
+  packageId: integer("package_id"),
   cityId: integer("city_id"),
+  term: solarPricingTermEnum("term").notNull().default("one_time"),
   minPanels: integer("min_panels").notNull().default(1),
   maxPanels: integer("max_panels"),
-  pricePerPanel: numeric("price_per_panel", { precision: 10, scale: 2 }).notNull(),
+  /** Null when `requiresSiteVisit` — rate finalized after site visit. */
+  pricePerPanel: numeric("price_per_panel", { precision: 10, scale: 2 }),
   minimumBilling: numeric("minimum_billing", { precision: 10, scale: 2 }).notNull().default("0"),
+  requiresSiteVisit: boolean("requires_site_visit").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -87,6 +98,8 @@ export const catalogPackagesTable = pgTable("catalog_packages", {
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).notNull().default("18"),
   pricingType: pricingTypeEnum("pricing_type").notNull().default("inclusive"),
+  /** Links package to solar rate-card term for panel-based quoting. */
+  solarTerm: solarPricingTermEnum("solar_term"),
   validityDays: integer("validity_days").notNull().default(30),
   offDays: json("off_days").$type<number[]>().default([]),
   tag: text("tag"),

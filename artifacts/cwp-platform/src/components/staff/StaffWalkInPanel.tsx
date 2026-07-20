@@ -504,8 +504,78 @@ export function StaffWalkInPanel({ onBookingResolved, onDcmsResolved, successMes
               ))
             )}
           </div>
+
+          <SolarSiteVisitCallback
+            customerName={context.customer.name}
+            customerPhone={context.customer.phone}
+          />
         </>
       )}
     </section>
+  );
+}
+
+/** Staff handoff for large solar sites — creates lead for advisor callback / site visit. */
+function SolarSiteVisitCallback({
+  customerName,
+  customerPhone,
+}: {
+  customerName: string;
+  customerPhone: string;
+}) {
+  const { toast } = useToast();
+  const [panelCount, setPanelCount] = useState("");
+  const [pending, setPending] = useState(false);
+  const [leadId, setLeadId] = useState<number | null>(null);
+
+  const submit = async () => {
+    setPending(true);
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: customerName,
+          phone: customerPhone,
+          city: "Varanasi",
+          source: "walk_in",
+          serviceInterest: "solar",
+          notes: [
+            "Staff walk-in: solar site visit / callback",
+            panelCount ? `Panels: ${panelCount}` : "Panels: not provided",
+            "Finalize rates after site visit, then book via Book Services.",
+          ].join("\n"),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Lead create failed");
+      setLeadId(body.id);
+      toast({ title: "Solar callback lead created", description: `#${body.id}` });
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Failed", variant: "destructive" });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+      <p className="text-xs font-medium">☀️ Solar — site visit / naya quote</p>
+      <p className="text-[11px] text-muted-foreground">
+        Bade sites (rate card site-visit band) ke liye callback lead banao. Advisor visit ke baad Book Services se book karega.
+      </p>
+      <Input
+        placeholder="Panel count (optional)"
+        inputMode="numeric"
+        value={panelCount}
+        onChange={e => setPanelCount(e.target.value)}
+        className="h-9"
+      />
+      <Button type="button" variant="secondary" className="w-full" disabled={pending || leadId != null} onClick={() => void submit()}>
+        {pending ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
+        {leadId != null ? `Lead #${leadId}` : "Request solar callback"}
+      </Button>
+    </div>
   );
 }

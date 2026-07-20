@@ -14,6 +14,8 @@ export type AssetListRow = {
   serviceLocationLabel?: string | null;
   customerId?: number | null;
   customerName?: string | null;
+  /** Present for solar sites — drives rate-card quoting. */
+  panelCount?: number | null;
   createdAt: string;
   updatedAt: string;
 };

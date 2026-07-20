@@ -6,6 +6,7 @@ import {
   seatCategoriesTable,
   servicePricingTable,
   servicesTable,
+  vehiclesTable,
 } from "@workspace/db";
 import { eq, and, or, isNull } from "drizzle-orm";
 
@@ -14,6 +15,7 @@ export interface PricingResult {
   source: "pricing_matrix" | "base_price" | "solar_formula";
   vehicleCategory?: string;
   seatCategory?: string;
+  seatCategoryId?: number;
   durationMinutes?: number;
 }
 
@@ -21,14 +23,20 @@ export async function resolveVehiclePricing(
   serviceId: number,
   vehicleModelId: number,
   cityId?: number | null,
+  seatCategoryIdOverride?: number | null,
 ): Promise<PricingResult | null> {
-  return resolveVehiclePricingWithCity(serviceId, vehicleModelId, cityId);
+  return resolveVehiclePricingWithCity(serviceId, vehicleModelId, cityId, seatCategoryIdOverride);
 }
 
+/**
+ * Resolve wash pricing from matrix.
+ * Seat category: override (vehicle.seatCategoryId) wins over model default.
+ */
 export async function resolveVehiclePricingWithCity(
   serviceId: number,
   vehicleModelId: number,
   cityId?: number | null,
+  seatCategoryIdOverride?: number | null,
 ): Promise<PricingResult | null> {
   const [model] = await db
     .select({
@@ -44,6 +52,23 @@ export async function resolveVehiclePricingWithCity(
     .limit(1);
 
   if (!model) return null;
+
+  let seatCategoryId = model.seatCategoryId;
+  let seatName = model.seatName ?? undefined;
+
+  if (seatCategoryIdOverride != null) {
+    const [seat] = await db.select({
+      id: seatCategoriesTable.id,
+      name: seatCategoriesTable.name,
+    })
+      .from(seatCategoriesTable)
+      .where(eq(seatCategoriesTable.id, seatCategoryIdOverride))
+      .limit(1);
+    if (seat) {
+      seatCategoryId = seat.id;
+      seatName = seat.name;
+    }
+  }
 
   const pricingConditions = [
     eq(servicePricingTable.serviceId, serviceId),
@@ -69,7 +94,7 @@ export async function resolveVehiclePricingWithCity(
   // Try exact match: category + seat
   const exactPool = preferCity(allPricing.filter(r =>
     r.vehicleCategoryId === model.vehicleCategoryId &&
-    r.seatCategoryId === model.seatCategoryId,
+    r.seatCategoryId === seatCategoryId,
   ));
   const exact = exactPool[0];
   if (exact) {
@@ -77,14 +102,15 @@ export async function resolveVehiclePricingWithCity(
       amount: parseFloat(exact.price),
       source: "pricing_matrix",
       vehicleCategory: model.categoryName ?? undefined,
-      seatCategory: model.seatName ?? undefined,
+      seatCategory: seatName,
+      seatCategoryId: seatCategoryId ?? undefined,
       durationMinutes: exact.durationMinutes ?? undefined,
     };
   }
 
   // Fallback: seat category only
   const seatPool = preferCity(allPricing.filter(r =>
-    r.seatCategoryId === model.seatCategoryId && !r.vehicleCategoryId,
+    r.seatCategoryId === seatCategoryId && !r.vehicleCategoryId,
   ));
   const seatOnly = seatPool[0];
   if (seatOnly) {
@@ -92,7 +118,8 @@ export async function resolveVehiclePricingWithCity(
       amount: parseFloat(seatOnly.price),
       source: "pricing_matrix",
       vehicleCategory: model.categoryName ?? undefined,
-      seatCategory: model.seatName ?? undefined,
+      seatCategory: seatName,
+      seatCategoryId: seatCategoryId ?? undefined,
       durationMinutes: seatOnly.durationMinutes ?? undefined,
     };
   }
@@ -107,7 +134,8 @@ export async function resolveVehiclePricingWithCity(
       amount: parseFloat(catOnly.price),
       source: "pricing_matrix",
       vehicleCategory: model.categoryName ?? undefined,
-      seatCategory: model.seatName ?? undefined,
+      seatCategory: seatName,
+      seatCategoryId: seatCategoryId ?? undefined,
       durationMinutes: catOnly.durationMinutes ?? undefined,
     };
   }
@@ -123,7 +151,8 @@ export async function resolveVehiclePricingWithCity(
       amount: parseFloat(svc.basePrice),
       source: "base_price",
       vehicleCategory: model.categoryName ?? undefined,
-      seatCategory: model.seatName ?? undefined,
+      seatCategory: seatName,
+      seatCategoryId: seatCategoryId ?? undefined,
     };
   }
 
@@ -150,19 +179,24 @@ export async function resolveBookingAmount(opts: {
     }
 
     let vehicleModelId: number | undefined;
+    let seatCategoryId: number | undefined;
     if (opts.vehicleId) {
-      const { vehiclesTable } = await import("@workspace/db");
       const [vehicle] = await db
-        .select({ vehicleModelId: vehiclesTable.vehicleModelId })
+        .select({
+          vehicleModelId: vehiclesTable.vehicleModelId,
+          seatCategoryId: vehiclesTable.seatCategoryId,
+        })
         .from(vehiclesTable)
         .where(eq(vehiclesTable.id, opts.vehicleId))
         .limit(1);
       vehicleModelId = vehicle?.vehicleModelId ?? undefined;
+      seatCategoryId = vehicle?.seatCategoryId ?? undefined;
     }
 
     const pricing = await resolveCatalogPricing({
       serviceId: opts.serviceId,
       vehicleModelId,
+      seatCategoryId,
       panelCount,
       cityId: opts.cityId,
       citySlug: opts.citySlug,
@@ -183,6 +217,7 @@ export async function getVehicleModelDetails(vehicleModelId: number) {
       categorySlug: vehicleCategoriesTable.slug,
       seatName: seatCategoriesTable.name,
       seatCount: seatCategoriesTable.seatCount,
+      seatCategoryId: seatCategoriesTable.id,
     })
     .from(vehicleModelsTable)
     .innerJoin(vehicleBrandsTable, eq(vehicleModelsTable.brandId, vehicleBrandsTable.id))

@@ -1,4 +1,4 @@
-import { buildRequestNotes, type BookServicesDraft } from "./types";
+import { buildRequestNotes, resolveSolarServicePrice, type BookServicesDraft } from "./types";
 
 export type FulfillmentMode = "one_time" | "contract_recurring" | "contract_credits";
 
@@ -70,7 +70,9 @@ export function draftToContractPayload(
   draft: BookServicesDraft,
   addons: Array<{ id: number; basePrice: string }>,
 ) {
-  const servicePrice = draft.service?.price ?? 0;
+  const servicePrice = draft.asset?.assetType === "solar_site"
+    ? resolveSolarServicePrice(draft)
+    : (draft.service?.price ?? 0);
   const addonTotal = draft.addonIds.reduce((sum, id) => {
     const a = addons.find(x => x.id === id);
     return sum + (a ? parseFloat(a.basePrice) || 0 : 0);

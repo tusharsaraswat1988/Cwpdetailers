@@ -173,6 +173,7 @@ export function AddCustomerServiceWizard({
   const { data: pricingQuote } = useCatalogPricingQuote({
     serviceId: product === "one_time_wash" ? serviceIdNum : undefined,
     vehicleModelId: selectedVehicle?.vehicleModelId ?? undefined,
+    vehicleId: selectedVehicle?.id,
     citySlug: "varanasi",
   });
   const { data: catalogAddons } = useCatalogAddons(

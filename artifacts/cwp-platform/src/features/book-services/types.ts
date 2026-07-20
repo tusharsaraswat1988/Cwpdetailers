@@ -17,7 +17,11 @@ export type SelectedBookService = {
   price: number;
   /** Catalog service id when kind is service (for add-ons / pricing quote) */
   catalogServiceId?: number;
+  /** Solar rate-card term when applicable */
+  solarTerm?: "one_time" | "amc_6" | "amc_12";
 };
+
+export type SolarPricingStatus = "idle" | "loading" | "priced" | "needs_site_visit" | "no_slab" | "manual";
 
 export type PaymentTermsChoice = "full_advance" | "partial_advance" | "after_service";
 
@@ -41,6 +45,16 @@ export type BookServicesDraft = {
   paymentTerms: PaymentTermsChoice;
   partialAdvancePercent: string;
   billingAction: BillingActionChoice;
+  /** Panel count from solar site (loaded when asset selected). */
+  solarPanelCount: number | null;
+  solarPricingStatus: SolarPricingStatus;
+  /** Pre-GST subtotal from rate card (exclusive GST added at billing). */
+  solarQuotedSubtotal: number | null;
+  solarPricePerPanel: number | null;
+  solarMinimumBilling: number | null;
+  /** Advisor override after site visit. */
+  solarManualAmount: string;
+  solarCallbackLeadId: number | null;
 };
 
 export const EMPTY_BOOK_SERVICES_DRAFT: BookServicesDraft = {
@@ -56,6 +70,13 @@ export const EMPTY_BOOK_SERVICES_DRAFT: BookServicesDraft = {
   paymentTerms: "after_service",
   partialAdvancePercent: "50",
   billingAction: "quotation",
+  solarPanelCount: null,
+  solarPricingStatus: "idle",
+  solarQuotedSubtotal: null,
+  solarPricePerPanel: null,
+  solarMinimumBilling: null,
+  solarManualAmount: "",
+  solarCallbackLeadId: null,
 };
 
 /**
@@ -103,11 +124,21 @@ export function buildRequestNotes(draft: BookServicesDraft): string | undefined 
   return parts.length ? parts.join("\n") : undefined;
 }
 
+export function resolveSolarServicePrice(draft: BookServicesDraft): number {
+  if (draft.solarPricingStatus === "manual" || draft.solarPricingStatus === "needs_site_visit") {
+    const manual = parseFloat(draft.solarManualAmount);
+    if (Number.isFinite(manual) && manual >= 0) return manual;
+  }
+  if (draft.solarQuotedSubtotal != null) return draft.solarQuotedSubtotal;
+  return draft.service?.price ?? 0;
+}
+
 export function computeDraftTotals(
   draft: BookServicesDraft,
   addons: AddonOption[],
 ): { subtotal: number; discountAmount: number; estimatedTotal: number } {
-  const servicePrice = draft.service?.price ?? 0;
+  const isSolar = draft.asset?.assetType === "solar_site";
+  const servicePrice = isSolar ? resolveSolarServicePrice(draft) : (draft.service?.price ?? 0);
   const addonTotal = draft.addonIds.reduce((sum, id) => {
     const a = addons.find(x => x.id === id);
     return sum + (a ? parseFloat(a.basePrice) || 0 : 0);
@@ -138,6 +169,16 @@ export function validateStep(step: WizardStepId, draft: BookServicesDraft): stri
     case "service":
       return draft.service ? null : "Select a service, plan, or package to continue.";
     case "pricing":
+      if (draft.asset?.assetType === "solar_site") {
+        if (draft.solarPricingStatus === "needs_site_visit" || draft.solarPricingStatus === "no_slab" || draft.solarPricingStatus === "manual") {
+          const manual = parseFloat(draft.solarManualAmount);
+          if (!Number.isFinite(manual) || manual <= 0) {
+            return draft.solarPricingStatus === "needs_site_visit"
+              ? "Large site: request callback, then enter the finalized amount after site visit."
+              : "Enter a finalized amount (no matching rate-card slab, or manual override).";
+          }
+        }
+      }
       if (draft.discountType === "percent" && draft.discountValue) {
         const pct = parseFloat(draft.discountValue);
         if (Number.isNaN(pct) || pct < 0 || pct > 100) return "Enter a discount between 0 and 100%.";

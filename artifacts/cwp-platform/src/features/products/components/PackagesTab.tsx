@@ -69,21 +69,50 @@ export type PackageFilter = "wash" | "solar_6" | "solar_12";
 function filterPackages(list: CatalogPackage[], filter?: PackageFilter): CatalogPackage[] {
   if (!filter) return list;
   return list.filter(pkg => {
+    if (pkg.status === "archived") return false;
     const ents = pkg.entitlements ?? [];
-    const hasSolar = ents.some(e => e.entitlementType === "solar_visit");
+    const hasSolar = ents.some(e => e.entitlementType === "solar_visit") || !!pkg.solarTerm;
     const hasWash = ents.some(e => e.entitlementType === "wash_credit");
     const hasCleaning = ents.some(e => e.entitlementType === "cleaning_credit");
     if (filter === "wash") {
       return hasWash && !hasSolar && !hasCleaning;
     }
-    if (!hasSolar) return false;
+    if (!hasSolar && !pkg.solarTerm) return false;
+    if (pkg.solarTerm === "amc_6") return filter === "solar_6";
+    if (pkg.solarTerm === "amc_12") return filter === "solar_12";
     const name = pkg.name.toLowerCase();
-    const slug = pkg.slug.toLowerCase();
+    const slug = (pkg.slug ?? "").toLowerCase();
     if (filter === "solar_6") {
       return name.includes("6") || slug.includes("6-month") || slug.includes("6mo") || (pkg.validityDays >= 150 && pkg.validityDays <= 210);
     }
     return name.includes("12") || slug.includes("12-month") || slug.includes("12mo") || pkg.validityDays >= 300;
   });
+}
+
+function solarDefaults(filter?: PackageFilter): Partial<PackageForm> & { solarTerm?: "amc_6" | "amc_12"; visitCredits?: number } {
+  if (filter === "solar_6") {
+    return {
+      name: "6 Month Solar AMC",
+      price: "0",
+      validityDays: "180",
+      description: "Quoted from panel count × rate card (GST extra). Min billing from rate card.",
+      features: "6 Cleaning Visits\n180 Days Validity\nQuoted from panel count",
+      solarTerm: "amc_6",
+      visitCredits: 6,
+    };
+  }
+  if (filter === "solar_12") {
+    return {
+      name: "12 Month Solar AMC",
+      price: "0",
+      validityDays: "365",
+      description: "Quoted from panel count × rate card (GST extra). Min billing from rate card.",
+      features: "12 Cleaning Visits\n365 Days Validity\nQuoted from panel count",
+      solarTerm: "amc_12",
+      visitCredits: 12,
+    };
+  }
+  return {};
 }
 
 type Props = {
@@ -128,7 +157,17 @@ export function PackagesTab({ packageFilter }: Props = {}) {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ ...emptyForm(), addons: buildAddonForms() });
+    const defaults = solarDefaults(packageFilter);
+    setForm({
+      ...emptyForm(),
+      ...defaults,
+      name: defaults.name ?? "",
+      price: defaults.price ?? "",
+      validityDays: defaults.validityDays ?? "30",
+      description: defaults.description ?? "",
+      features: defaults.features ?? "",
+      addons: buildAddonForms(),
+    });
     setDialogOpen(true);
   };
 
@@ -166,7 +205,12 @@ export function PackagesTab({ packageFilter }: Props = {}) {
   };
 
   const handleSave = () => {
-    if (!form.name.trim() || !form.price) {
+    const isSolar = packageFilter === "solar_6" || packageFilter === "solar_12";
+    if (!form.name.trim()) {
+      toast({ title: "Name is required", variant: "destructive" });
+      return;
+    }
+    if (!isSolar && !form.price) {
       toast({ title: "Name and price required", variant: "destructive" });
       return;
     }
@@ -178,9 +222,10 @@ export function PackagesTab({ packageFilter }: Props = {}) {
         sortOrder: i,
       }));
 
-    const payload = {
+    const defaults = solarDefaults(packageFilter);
+    const payload: Record<string, unknown> = {
       name: form.name.trim(),
-      price: form.price,
+      price: form.price || "0",
       validityDays: parseInt(form.validityDays, 10) || 30,
       description: form.description.trim() || undefined,
       tag: form.tag.trim() || undefined,
@@ -190,6 +235,17 @@ export function PackagesTab({ packageFilter }: Props = {}) {
       status: "active",
       addons: addonsPayload,
     };
+    if (isSolar) {
+      payload.pricingType = "exclusive";
+      payload.solarTerm = defaults.solarTerm;
+      payload.solarVisitCredits = defaults.visitCredits;
+      // slug helps filter survive even before entitlements load
+      if (!editing) {
+        payload.slug = defaults.solarTerm === "amc_6"
+          ? "6-month-solar-amc-package"
+          : "12-month-solar-amc-package";
+      }
+    }
     if (editing) {
       update.mutate({ id: editing.id, ...payload }, {
         onSuccess: () => { setDialogOpen(false); toast({ title: "Package updated" }); },
@@ -212,11 +268,12 @@ export function PackagesTab({ packageFilter }: Props = {}) {
   const isSaving = create.isPending || update.isPending;
   const selectedAddonTotal = addonPriceTotal(form.addons);
   const displayTotalPrice = Number(form.price || 0) + selectedAddonTotal;
-  const showHeader = !packageFilter || packageFilter === "wash";
+  const isSolarFilter = packageFilter === "solar_6" || packageFilter === "solar_12";
+  const showWashHeader = !packageFilter || packageFilter === "wash";
 
   return (
     <div className="space-y-4">
-      {showHeader && (
+      {showWashHeader && (
         <div className="flex justify-between items-center">
           <div>
             <h2 className="font-display font-bold text-lg">Wash packages</h2>
@@ -230,6 +287,14 @@ export function PackagesTab({ packageFilter }: Props = {}) {
         </div>
       )}
 
+      {isSolarFilter && hqEditor && (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={openCreate} data-testid={`btn-add-${packageFilter}`}>
+            <Plus size={14} className="mr-1" /> Add {packageFilter === "solar_6" ? "6 month" : "12 month"} plan
+          </Button>
+        </div>
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -238,7 +303,13 @@ export function PackagesTab({ packageFilter }: Props = {}) {
           <div className="space-y-3">
             <div><Label>Name</Label><Input className="mt-1" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Base price (₹)</Label><Input className="mt-1" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} /></div>
+              <div>
+                <Label>{isSolarFilter ? "List price fallback (₹)" : "Base price (₹)"}</Label>
+                <Input className="mt-1" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
+                {isSolarFilter && (
+                  <p className="text-[11px] text-muted-foreground mt-1">Sell price is quoted from panel count × rate card. Use 0 here.</p>
+                )}
+              </div>
               <div><Label>Validity (days)</Label><Input type="number" className="mt-1" value={form.validityDays} onChange={e => setForm(f => ({ ...f, validityDays: e.target.value }))} /></div>
             </div>
             <div><Label>Description</Label><Textarea className="mt-1" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
@@ -304,7 +375,14 @@ export function PackagesTab({ packageFilter }: Props = {}) {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading packages…</p>
       ) : !filtered.length ? (
-        <p className="text-sm text-muted-foreground">No packages yet.</p>
+        <div className="rounded-lg border border-dashed px-4 py-6 text-center space-y-2">
+          <p className="text-sm text-muted-foreground">No packages yet.</p>
+          {isSolarFilter && hqEditor && (
+            <Button size="sm" variant="outline" onClick={openCreate}>
+              <Plus size={14} className="mr-1" /> Create {packageFilter === "solar_6" ? "6 month" : "12 month"} AMC
+            </Button>
+          )}
+        </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map(pkg => (

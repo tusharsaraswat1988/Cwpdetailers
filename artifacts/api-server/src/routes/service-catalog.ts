@@ -18,7 +18,8 @@ import {
 } from "@workspace/db";
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { listHomepagePlans } from "../lib/catalog/homepagePlans";
-import { resolveCatalogPricing, resolveCityId } from "../lib/catalog/pricingEngine";
+import { getSolarRateCard, resolveCatalogPricing, resolveCityId } from "../lib/catalog/pricingEngine";
+import type { SolarPricingTerm } from "@workspace/db";
 import { tenantStamp } from "../middlewares/tenantScope";
 import { createInvoiceForPackagePurchase } from "../lib/billing/invoiceService";
 import {
@@ -122,18 +123,37 @@ router.patch("/catalog/city-availability/:id", async (req, res) => {
 // ─── Solar Slabs ─────────────────────────────────────────────────────────────
 
 router.get("/catalog/solar-slabs", async (req, res) => {
-  const { serviceId, cityId } = req.query as Record<string, string>;
-  const conditions = [eq(solarPricingSlabsTable.isActive, true)];
+  const { serviceId, cityId, packageId, term, includeInactive } = req.query as Record<string, string>;
+  const conditions = includeInactive === "true" ? [] : [eq(solarPricingSlabsTable.isActive, true)];
   if (serviceId) conditions.push(eq(solarPricingSlabsTable.serviceId, parseInt(serviceId)));
   if (cityId) conditions.push(eq(solarPricingSlabsTable.cityId, parseInt(cityId)));
+  if (packageId) conditions.push(eq(solarPricingSlabsTable.packageId, parseInt(packageId)));
+  if (term) conditions.push(eq(solarPricingSlabsTable.term, term as SolarPricingTerm));
   const data = await db.select().from(solarPricingSlabsTable)
-    .where(and(...conditions))
-    .orderBy(asc(solarPricingSlabsTable.sortOrder));
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(asc(solarPricingSlabsTable.term), asc(solarPricingSlabsTable.minPanels), asc(solarPricingSlabsTable.sortOrder));
   return res.json(data);
 });
 
+/** Public rate card for landing / marketing — all bands & rates from DB. */
+router.get("/catalog/solar-rate-card", async (req, res) => {
+  const { serviceId, cityId, citySlug } = req.query as Record<string, string>;
+  const card = await getSolarRateCard({
+    serviceId: serviceId ? parseInt(serviceId) : undefined,
+    cityId: cityId ? parseInt(cityId) : undefined,
+    citySlug,
+  });
+  return res.json(card);
+});
+
 router.post("/catalog/solar-slabs", async (req, res) => {
-  const [row] = await db.insert(solarPricingSlabsTable).values(req.body).returning();
+  const body = req.body ?? {};
+  if (body.serviceId == null) return res.status(400).json({ error: "serviceId is required" });
+  if (body.term == null) body.term = "one_time";
+  if (body.requiresSiteVisit && (body.pricePerPanel === "" || body.pricePerPanel == null)) {
+    body.pricePerPanel = null;
+  }
+  const [row] = await db.insert(solarPricingSlabsTable).values(body).returning();
   return res.status(201).json(row);
 });
 
@@ -366,7 +386,7 @@ router.get("/catalog/packages/:id", async (req, res) => {
 
 router.post("/catalog/packages", async (req, res) => {
   try {
-    const { addons: rawAddons, ...rest } = req.body;
+    const { addons: rawAddons, solarVisitCredits, entitlements: rawEntitlements, ...rest } = req.body;
     const addons = normalizePackageAddons(rawAddons);
     const addonPrice = await resolvePackageAddonPrice(addons);
     const basePrice = Number(rest.price ?? 0);
@@ -375,10 +395,43 @@ router.post("/catalog/packages", async (req, res) => {
       slug: rest.slug ?? slugify(rest.name),
       price: (basePrice + addonPrice).toFixed(2),
     };
+    // Drop non-column fields
+    delete (body as { solarVisitCredits?: unknown }).solarVisitCredits;
+    delete (body as { entitlements?: unknown }).entitlements;
     const [row] = await db.insert(catalogPackagesTable).values(body).returning();
     if (addons.length) await replacePackageAddons(row.id, addons);
+
+    // Auto-attach solar_visit entitlements when creating AMC packages
+    const credits = solarVisitCredits != null ? parseInt(String(solarVisitCredits), 10) : NaN;
+    if (row.solarTerm && Number.isFinite(credits) && credits > 0) {
+      const [solarSvc] = await db.select({ id: servicesTable.id })
+        .from(servicesTable)
+        .where(eq(servicesTable.pricingModel, "solar_slab"))
+        .limit(1);
+      if (solarSvc) {
+        await db.insert(catalogPackageEntitlementsTable).values({
+          packageId: row.id,
+          serviceId: solarSvc.id,
+          entitlementType: "solar_visit",
+          creditCount: credits,
+        });
+      }
+    } else if (Array.isArray(rawEntitlements)) {
+      for (const ent of rawEntitlements) {
+        if (!ent?.serviceId || !ent?.entitlementType || !ent?.creditCount) continue;
+        await db.insert(catalogPackageEntitlementsTable).values({
+          packageId: row.id,
+          serviceId: ent.serviceId,
+          entitlementType: ent.entitlementType,
+          creditCount: ent.creditCount,
+        });
+      }
+    }
+
+    const items = await db.select().from(catalogPackageEntitlementsTable)
+      .where(eq(catalogPackageEntitlementsTable.packageId, row.id));
     const savedAddons = await getPackageAddons(row.id);
-    return res.status(201).json({ ...row, addons: savedAddons });
+    return res.status(201).json({ ...row, entitlements: items, addons: savedAddons });
   } catch (err) {
     req.log.error({ err }, "Create package error");
     return res.status(500).json({ error: "Internal server error" });
@@ -388,10 +441,12 @@ router.post("/catalog/packages", async (req, res) => {
 router.patch("/catalog/packages/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { addons: rawAddons, ...rest } = req.body;
+    const { addons: rawAddons, solarVisitCredits: _svc, entitlements: _ents, ...rest } = req.body;
     const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date() };
     delete updateData.id;
     delete updateData.createdAt;
+    delete updateData.solarVisitCredits;
+    delete updateData.entitlements;
 
     if (rawAddons !== undefined) {
       const addons = normalizePackageAddons(rawAddons);
@@ -553,14 +608,45 @@ router.post("/catalog/reminder-hooks/refresh", async (_req, res) => {
 // ─── Pricing Quote (must be registered before /catalog/:citySlug/:serviceSlug) ─
 
 router.get("/catalog/pricing/quote", async (req, res) => {
-  const { serviceId, vehicleModelId, panelCount, cityId, citySlug } = req.query as Record<string, string>;
-  if (!serviceId) return res.status(400).json({ error: "serviceId is required" });
+  const {
+    serviceId, packageId, vehicleModelId, vehicleId, seatCategoryId,
+    panelCount, cityId, citySlug, term, manualAmount,
+  } = req.query as Record<string, string>;
+  if (!serviceId && !packageId) {
+    return res.status(400).json({ error: "serviceId or packageId is required" });
+  }
+
+  let resolvedModelId = vehicleModelId ? parseInt(vehicleModelId) : undefined;
+  let resolvedSeatId = seatCategoryId ? parseInt(seatCategoryId) : undefined;
+
+  // Prefer seating stored on the vehicle when quoting by vehicleId
+  if (vehicleId) {
+    const vid = parseInt(vehicleId);
+    const { vehiclesTable } = await import("@workspace/db");
+    const [vehicle] = await db.select({
+      vehicleModelId: vehiclesTable.vehicleModelId,
+      seatCategoryId: vehiclesTable.seatCategoryId,
+    }).from(vehiclesTable).where(eq(vehiclesTable.id, vid)).limit(1);
+    if (vehicle) {
+      if (resolvedModelId == null && vehicle.vehicleModelId != null) {
+        resolvedModelId = vehicle.vehicleModelId;
+      }
+      if (resolvedSeatId == null && vehicle.seatCategoryId != null) {
+        resolvedSeatId = vehicle.seatCategoryId;
+      }
+    }
+  }
+
   const pricing = await resolveCatalogPricing({
-    serviceId: parseInt(serviceId),
-    vehicleModelId: vehicleModelId ? parseInt(vehicleModelId) : undefined,
+    serviceId: serviceId ? parseInt(serviceId) : undefined,
+    packageId: packageId ? parseInt(packageId) : undefined,
+    vehicleModelId: resolvedModelId,
+    seatCategoryId: resolvedSeatId,
     panelCount: panelCount ? parseInt(panelCount) : undefined,
+    term: term as SolarPricingTerm | undefined,
     cityId: cityId ? parseInt(cityId) : undefined,
     citySlug,
+    manualAmount: manualAmount != null && manualAmount !== "" ? parseFloat(manualAmount) : undefined,
   });
   if (!pricing) return res.status(404).json({ error: "Pricing not found" });
   return res.json(pricing);

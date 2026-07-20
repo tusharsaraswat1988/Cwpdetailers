@@ -1,8 +1,11 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VehicleModelSelect } from "@/components/shared/VehicleModelSelect";
+import { SeatCategorySelect } from "@/components/shared/SeatCategorySelect";
 import type { VehicleModel } from "@/features/master-data/api";
+import { Plus } from "lucide-react";
 
 const VEHICLE_TYPES = ["sedan", "suv", "hatchback", "luxury", "van", "truck"] as const;
 
@@ -11,6 +14,8 @@ export type VehicleAssetFormValues = {
   serviceLocationId: string;
   registrationNumber: string;
   vehicleType: string;
+  /** Seating override for pricing (required when saving a vehicle). */
+  seatCategoryId: string;
   year: string;
   color: string;
   notes: string;
@@ -21,6 +26,7 @@ export const EMPTY_VEHICLE_ASSET_FORM: VehicleAssetFormValues = {
   serviceLocationId: "",
   registrationNumber: "",
   vehicleType: "sedan",
+  seatCategoryId: "",
   year: "",
   color: "",
   notes: "",
@@ -36,6 +42,7 @@ type VehicleFormProps = {
   showCustomerSelect?: boolean;
   hideServiceLocation?: boolean;
   lockServiceLocation?: boolean;
+  onAddServiceLocation?: () => void;
 };
 
 export function VehicleForm({
@@ -48,6 +55,7 @@ export function VehicleForm({
   showCustomerSelect = true,
   hideServiceLocation = false,
   lockServiceLocation = false,
+  onAddServiceLocation,
 }: VehicleFormProps) {
   const set = (patch: Partial<VehicleAssetFormValues>) => onChange({ ...values, ...patch });
   const lockedLocation = serviceLocations.find(l => String(l.id) === values.serviceLocationId);
@@ -67,24 +75,55 @@ export function VehicleForm({
         </div>
       )}
       {!hideServiceLocation && (
-        <div>
+        <div className="space-y-2">
           <Label>Service address *</Label>
           {lockServiceLocation && lockedLocation ? (
             <p className="mt-1.5 text-sm rounded-md border border-border bg-muted/30 px-3 py-2">
               {lockedLocation.label}
             </p>
+          ) : serviceLocations.length === 0 ? (
+            <div className="rounded-md border border-dashed px-3 py-3 space-y-2">
+              <p className="text-sm text-muted-foreground">No addresses on file yet.</p>
+              {onAddServiceLocation && (
+                <Button type="button" size="sm" variant="outline" onClick={onAddServiceLocation}>
+                  <Plus size={14} className="mr-1" /> Add address with a name
+                </Button>
+              )}
+            </div>
           ) : (
-            <Select value={values.serviceLocationId || "none"} onValueChange={v => set({ serviceLocationId: v === "none" ? "" : v })}>
-              <SelectTrigger className="mt-1" data-testid="vehicle-service-location"><SelectValue placeholder="Select location" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none" disabled>Select location</SelectItem>
-                {serviceLocations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <>
+              <Select value={values.serviceLocationId || "none"} onValueChange={v => set({ serviceLocationId: v === "none" ? "" : v })}>
+                <SelectTrigger className="mt-1" data-testid="vehicle-service-location"><SelectValue placeholder="Select an address" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" disabled>Select an address</SelectItem>
+                  {serviceLocations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {onAddServiceLocation && (
+                <Button type="button" size="sm" variant="ghost" className="h-8 px-0 text-xs" onClick={onAddServiceLocation}>
+                  <Plus size={12} className="mr-1" /> Add another address
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}
-      <VehicleModelSelect selected={selectedModel} modelId={selectedModel?.id} onSelect={onModelSelect} />
+      <VehicleModelSelect
+        selected={selectedModel}
+        modelId={selectedModel?.id}
+        onSelect={model => {
+          onModelSelect(model);
+          // Default seater from model; advisor can still change for 5 vs 7 variants
+          if (model?.seatCategoryId != null) {
+            set({ seatCategoryId: String(model.seatCategoryId) });
+          }
+        }}
+      />
+      <SeatCategorySelect
+        value={values.seatCategoryId ? parseInt(values.seatCategoryId, 10) : null}
+        onChange={id => set({ seatCategoryId: id != null ? String(id) : "" })}
+        model={selectedModel}
+      />
       <div>
         <Label>Vehicle number *</Label>
         <Input
@@ -143,49 +182,8 @@ export const EMPTY_SOLAR_ASSET_FORM: SolarAssetFormValues = {
   serviceLocationId: "",
   siteName: "",
   panelCapacityKw: "",
-  panelCount: "1",
+  panelCount: "",
   notes: "",
 };
 
-type SolarFormProps = {
-  values: SolarAssetFormValues;
-  onChange: (v: SolarAssetFormValues) => void;
-  serviceLocations: Array<{ id: number; label: string }>;
-};
-
-export function SolarSiteForm({ values, onChange, serviceLocations }: SolarFormProps) {
-  const set = (patch: Partial<SolarAssetFormValues>) => onChange({ ...values, ...patch });
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <Label>Service address *</Label>
-        <Select value={values.serviceLocationId || "none"} onValueChange={v => set({ serviceLocationId: v === "none" ? "" : v })}>
-          <SelectTrigger className="mt-1" data-testid="solar-service-location"><SelectValue placeholder="Select location" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none" disabled>Select location</SelectItem>
-            {serviceLocations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label>Site name *</Label>
-        <Input className="mt-1" value={values.siteName} onChange={e => set({ siteName: e.target.value })} data-testid="solar-site-name" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label>Capacity (kW) *</Label>
-          <Input className="mt-1" value={values.panelCapacityKw} onChange={e => set({ panelCapacityKw: e.target.value })} data-testid="solar-capacity" />
-        </div>
-        <div>
-          <Label>Panel count</Label>
-          <Input type="number" min={1} className="mt-1" value={values.panelCount} onChange={e => set({ panelCount: e.target.value })} />
-        </div>
-      </div>
-      <div>
-        <Label>Notes</Label>
-        <Input className="mt-1" value={values.notes} onChange={e => set({ notes: e.target.value })} />
-      </div>
-    </div>
-  );
-}
+export { SolarSiteForm } from "./SolarSiteForm";

@@ -1,46 +1,44 @@
 import { db } from "@workspace/db";
-import { solarPricingSlabsTable, servicesTable } from "@workspace/db";
+import { solarPricingSlabsTable, servicesTable, type SolarPricingTerm } from "@workspace/db";
 import { eq, and, asc } from "drizzle-orm";
+import { resolveSolarSlabQuote } from "./catalog/pricingEngine";
 
-/** DB-driven solar pricing with legacy fallback (₹60/panel, min ₹800). */
+/**
+ * DB-driven solar pricing. Returns null when no slab matches or site visit is required.
+ * Callers must handle needs_site_visit via resolveSolarSlabQuote / resolveCatalogPricing.
+ */
 export async function computeSolarCleaningPrice(
   panelCount: number,
   serviceId?: number,
   cityId?: number | null,
-): Promise<number> {
+  term: SolarPricingTerm = "one_time",
+): Promise<number | null> {
   if (!Number.isFinite(panelCount) || panelCount <= 0) {
     throw new Error("panelCount must be a positive number");
   }
 
   if (serviceId) {
-    const { resolveSolarSlabPrice } = await import("./catalog/pricingEngine");
-    const result = await resolveSolarSlabPrice(serviceId, panelCount, cityId);
-    if (result) return result.amount;
+    const quote = await resolveSolarSlabQuote({ serviceId, panelCount, cityId, term });
+    if (quote.status === "priced" && quote.amount != null) return quote.amount;
+    return null;
   }
 
-  // Global fallback slab from DB (any solar service)
-  const slabs = await db.select()
-    .from(solarPricingSlabsTable)
-    .where(eq(solarPricingSlabsTable.isActive, true))
-    .orderBy(asc(solarPricingSlabsTable.sortOrder))
+  // Resolve any active one-time slab for a solar service (still DB-driven)
+  const [svc] = await db.select({ id: servicesTable.id })
+    .from(servicesTable)
+    .where(eq(servicesTable.pricingModel, "solar_slab"))
     .limit(1);
 
-  if (slabs[0]) {
-    const pricePerPanel = parseFloat(slabs[0].pricePerPanel);
-    const minimumBilling = parseFloat(slabs[0].minimumBilling);
-    return Math.max(minimumBilling, Math.round(panelCount * pricePerPanel));
-  }
+  if (!svc) return null;
 
-  // Last resort — should not occur after migration
-  return Math.max(800, Math.round(panelCount * 60));
-}
-
-/** Sync helper for client-side estimate when serviceId unknown */
-export function computeSolarCleaningPriceSync(panelCount: number, pricePerPanel = 60, minimumBilling = 800): number {
-  if (!Number.isFinite(panelCount) || panelCount <= 0) {
-    throw new Error("panelCount must be a positive number");
-  }
-  return Math.max(minimumBilling, Math.round(panelCount * pricePerPanel));
+  const quote = await resolveSolarSlabQuote({
+    serviceId: svc.id,
+    panelCount,
+    cityId,
+    term,
+  });
+  if (quote.status === "priced" && quote.amount != null) return quote.amount;
+  return null;
 }
 
 export async function getSolarPricingConfig(serviceId: number, cityId?: number | null) {

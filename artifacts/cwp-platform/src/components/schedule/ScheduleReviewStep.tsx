@@ -18,6 +18,10 @@ interface ScheduleReviewStepProps {
   onChangeAddress: () => void;
   estimatedPrice: number | null;
   coveredByPlan: boolean;
+  /** Rate card requires site visit / callback (e.g. large panel count). */
+  siteVisitRequired?: boolean;
+  /** When exclusive GST, show “+ GST” hint. */
+  gstExtra?: boolean;
 }
 
 export function ScheduleReviewStep({
@@ -33,6 +37,8 @@ export function ScheduleReviewStep({
   onChangeAddress,
   estimatedPrice,
   coveredByPlan,
+  siteVisitRequired = false,
+  gstExtra = false,
 }: ScheduleReviewStepProps) {
   return (
     <div className="space-y-4" data-testid="schedule-step-review">
@@ -63,9 +69,17 @@ export function ScheduleReviewStep({
         By requesting this service, you agree that CWP will verify availability and confirm your scheduled service.
       </p>
 
-      {estimatedPrice != null && !coveredByPlan && (
+      {siteVisitRequired && !coveredByPlan && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm space-y-1">
+          <p className="font-medium">Site visit required</p>
+          <p className="text-muted-foreground text-xs">
+            For this panel count we confirm rates after a site visit. Request a callback below — our team will call you to schedule the visit, then book at the agreed rate.
+          </p>
+        </div>
+      )}
+      {estimatedPrice != null && !coveredByPlan && !siteVisitRequired && (
         <div className="rounded-lg bg-muted/50 px-4 py-3 flex justify-between text-sm">
-          <span className="text-muted-foreground">Estimated price</span>
+          <span className="text-muted-foreground">Estimated price{gstExtra ? " (+ GST)" : ""}</span>
           <span className="font-semibold text-primary">₹{estimatedPrice.toLocaleString("en-IN")}</span>
         </div>
       )}

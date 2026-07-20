@@ -52,6 +52,8 @@ export type CatalogPackage = {
   description?: string | null;
   features?: string[]; tag?: string; isHighlighted: boolean; showOnHomepage?: boolean;
   cityId?: number;
+  pricingType?: "inclusive" | "exclusive";
+  solarTerm?: SolarPricingTerm | null;
   entitlements?: Array<{ id: number; serviceId: number; entitlementType: string; creditCount: number }>;
   addons?: CatalogPackageAddon[];
 };
@@ -87,9 +89,49 @@ export type ServiceAddon = {
   linkCount?: number;
 };
 
+export type SolarPricingTerm = "one_time" | "amc_6" | "amc_12";
+
 export type SolarSlab = {
-  id: number; serviceId: number; cityId?: number; minPanels: number; maxPanels?: number;
-  pricePerPanel: string; minimumBilling: string;
+  id: number;
+  serviceId: number;
+  packageId?: number | null;
+  cityId?: number | null;
+  term?: SolarPricingTerm;
+  minPanels: number;
+  maxPanels?: number | null;
+  pricePerPanel?: string | null;
+  minimumBilling: string;
+  requiresSiteVisit?: boolean;
+  isActive?: boolean;
+  sortOrder?: number;
+};
+
+export type CatalogPricingQuote = {
+  status: "priced" | "needs_site_visit" | "no_slab" | "base";
+  amount: number;
+  source: string;
+  gstRate: number;
+  pricingType: "inclusive" | "exclusive";
+  breakdown: {
+    baseAmount: number;
+    subtotal: number;
+    gst: number;
+    total: number;
+    displayPrice: number;
+  };
+  message?: string;
+  solar?: {
+    status: string;
+    term: SolarPricingTerm;
+    panelCount: number;
+    amount?: number;
+    pricePerPanel?: number;
+    minimumBilling?: number;
+    requiresSiteVisit: boolean;
+    minPanels?: number;
+    maxPanels?: number | null;
+    message?: string;
+  };
 };
 
 export type HomepageSection = {
@@ -226,10 +268,29 @@ export function useCatalogAddonMutations() {
   };
 }
 
-export function useSolarSlabs(serviceId?: number) {
+export function useSolarSlabs(serviceId?: number, opts?: { includeInactive?: boolean; term?: SolarPricingTerm }) {
+  const qs = new URLSearchParams();
+  if (serviceId) qs.set("serviceId", String(serviceId));
+  if (opts?.includeInactive) qs.set("includeInactive", "true");
+  if (opts?.term) qs.set("term", opts.term);
+  const query = qs.toString();
   return useQuery({
-    queryKey: ["catalog", "solar-slabs", serviceId],
-    queryFn: () => catalogFetch<SolarSlab[]>(`/catalog/solar-slabs${serviceId ? `?serviceId=${serviceId}` : ""}`),
+    queryKey: ["catalog", "solar-slabs", serviceId, opts?.includeInactive, opts?.term],
+    queryFn: () => catalogFetch<SolarSlab[]>(`/catalog/solar-slabs${query ? `?${query}` : ""}`),
+  });
+}
+
+export function useSolarRateCard(citySlug?: string, serviceId?: number) {
+  const qs = new URLSearchParams();
+  if (citySlug) qs.set("citySlug", citySlug);
+  if (serviceId) qs.set("serviceId", String(serviceId));
+  const query = qs.toString();
+  return useQuery({
+    queryKey: ["catalog", "solar-rate-card", citySlug, serviceId],
+    queryFn: () => catalogFetch<{
+      cityId: number | null;
+      slabs: SolarSlab[];
+    }>(`/catalog/solar-rate-card${query ? `?${query}` : ""}`),
   });
 }
 
@@ -324,17 +385,33 @@ export function useCityServices(citySlug: string) {
 }
 
 export function useCatalogPricingQuote(params: {
-  serviceId?: number; vehicleModelId?: number; panelCount?: number; citySlug?: string;
+  serviceId?: number;
+  packageId?: number;
+  vehicleModelId?: number;
+  /** When set, quote uses the vehicle's seat override (5 vs 7 seater). */
+  vehicleId?: number;
+  seatCategoryId?: number;
+  panelCount?: number;
+  citySlug?: string;
+  term?: SolarPricingTerm;
+  manualAmount?: number;
+  enabled?: boolean;
 }) {
   const qs = new URLSearchParams();
   if (params.serviceId) qs.set("serviceId", String(params.serviceId));
+  if (params.packageId) qs.set("packageId", String(params.packageId));
   if (params.vehicleModelId) qs.set("vehicleModelId", String(params.vehicleModelId));
-  if (params.panelCount) qs.set("panelCount", String(params.panelCount));
+  if (params.vehicleId) qs.set("vehicleId", String(params.vehicleId));
+  if (params.seatCategoryId) qs.set("seatCategoryId", String(params.seatCategoryId));
+  if (params.panelCount != null) qs.set("panelCount", String(params.panelCount));
   if (params.citySlug) qs.set("citySlug", params.citySlug);
+  if (params.term) qs.set("term", params.term);
+  if (params.manualAmount != null) qs.set("manualAmount", String(params.manualAmount));
+  const canQuote = !!(params.serviceId || params.packageId);
   return useQuery({
     queryKey: ["catalog", "pricing", params],
-    queryFn: () => catalogFetch<Record<string, unknown>>(`/catalog/pricing/quote?${qs}`),
-    enabled: !!params.serviceId,
+    queryFn: () => catalogFetch<CatalogPricingQuote>(`/catalog/pricing/quote?${qs}`),
+    enabled: params.enabled !== false && canQuote,
   });
 }
 

@@ -2,17 +2,17 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageActionHeader } from "@/components/layout/PageActionHeader";
 import { useGetCustomer, getGetCustomerQueryKey } from "@workspace/api-client-react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { CustomerBookingDataBanner, CustomerProfileBackLink } from "@/components/layout/CustomerBookingDataContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Car, Sun, Plus, Search, Layers } from "lucide-react";
+import { Car, Sun, Search, Pencil } from "lucide-react";
 import { listAssets, createAsset, ASSET_TYPE_LABELS, type AssetType } from "@/features/assets/api";
 import { listServiceLocations } from "@/features/service-locations/api";
 import {
@@ -83,12 +83,17 @@ export default function AssetsPage() {
           toast({ title: "Customer, location, model, and vehicle number are required", variant: "destructive" });
           return;
         }
+        if (!vehicleForm.seatCategoryId) {
+          toast({ title: "Seater is required", description: "Pick 5 / 5+ / 7 seating for wash pricing.", variant: "destructive" });
+          return;
+        }
         const result = await createAsset({
           assetType: "vehicle",
           customerId: parseInt(vehicleForm.customerId, 10),
           serviceLocationId: parseInt(vehicleForm.serviceLocationId, 10),
           registrationNumber: vehicleForm.registrationNumber.trim(),
           vehicleModelId: selectedModel.id,
+          seatCategoryId: parseInt(vehicleForm.seatCategoryId, 10),
           vehicleType: vehicleForm.vehicleType,
           year: vehicleForm.year ? parseInt(vehicleForm.year, 10) : undefined,
           color: vehicleForm.color || undefined,
@@ -99,17 +104,22 @@ export default function AssetsPage() {
         qc.invalidateQueries({ queryKey: ["assets"] });
         window.location.href = `/admin/customers/${serviceLocationCustomerId}?tab=profile`;
       } else {
-        if (!solarForm.customerId || !solarForm.serviceLocationId || !solarForm.siteName.trim() || !solarForm.panelCapacityKw.trim()) {
-          toast({ title: "Customer, location, site name, and capacity are required", variant: "destructive" });
+        const panels = parseInt(solarForm.panelCount, 10);
+        if (!solarForm.customerId || !solarForm.serviceLocationId || !solarForm.siteName.trim()) {
+          toast({ title: "Customer, location, and site name are required", variant: "destructive" });
           return;
         }
-        const result = await createAsset({
+        if (!Number.isFinite(panels) || panels < 1) {
+          toast({ title: "Panel count is required (used for rate-card quoting)", variant: "destructive" });
+          return;
+        }
+        await createAsset({
           assetType: "solar_site",
           customerId: parseInt(solarForm.customerId, 10),
           serviceLocationId: parseInt(solarForm.serviceLocationId, 10),
           siteName: solarForm.siteName.trim(),
-          panelCapacityKw: solarForm.panelCapacityKw.trim(),
-          panelCount: solarForm.panelCount ? parseInt(solarForm.panelCount, 10) : 1,
+          panelCapacityKw: solarForm.panelCapacityKw.trim() || undefined,
+          panelCount: panels,
           notes: solarForm.notes || undefined,
         });
         toast({ title: "Solar site added" });
@@ -230,7 +240,7 @@ export default function AssetsPage() {
           {isLoading
             ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)
             : rows.map(row => (
-              <div key={row.id} className="bg-card border border-border rounded-xl p-4 h-full" data-testid={`asset-card-${row.id}`}>
+              <div key={row.id} className="bg-card border border-border rounded-xl p-4 h-full flex flex-col" data-testid={`asset-card-${row.id}`}>
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-semibold text-base">{row.label}</h3>
                     <Badge variant="outline" className="text-xs capitalize shrink-0">{row.status}</Badge>
@@ -242,6 +252,14 @@ export default function AssetsPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">{row.serviceLocationLabel}</p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">{ASSET_TYPE_LABELS[row.assetType]}</p>
+                  <div className="mt-auto pt-3">
+                    <Link href={`/admin/assets/${row.id}`}>
+                      <Button variant="outline" size="sm" className="w-full h-9 gap-1.5" data-testid={`asset-edit-${row.id}`}>
+                        <Pencil size={14} />
+                        Edit
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
             ))}
         </div>

@@ -74,11 +74,23 @@ export async function seedCatalogMigration() {
     },
     {
       match: s => s.category === "solar_cleaning",
-      updates: { slug: "one-time-solar-cleaning", name: "One Time Cleaning", serviceCategoryId: catIds.solar, pricingModel: "solar_slab" },
+      updates: {
+        slug: "one-time-solar-cleaning",
+        name: "One Time Cleaning",
+        serviceCategoryId: catIds.solar,
+        pricingModel: "solar_slab",
+        pricingType: "exclusive",
+      },
     },
     {
       match: s => s.category === "amc",
-      updates: { slug: "12-month-solar-amc", name: "12 Month Solar AMC", serviceCategoryId: catIds.amc, pricingModel: "fixed", basePrice: "9999" },
+      updates: {
+        slug: "12-month-solar-amc",
+        name: "12 Month Solar AMC",
+        serviceCategoryId: catIds.amc,
+        pricingModel: "fixed",
+        pricingType: "exclusive",
+      },
     },
     {
       match: s => s.category === "detailing",
@@ -110,22 +122,77 @@ export async function seedCatalogMigration() {
     .set({ cityId: varanasiId, updatedAt: new Date() })
     .where(isNull(servicePricingTable.cityId));
 
-  // Solar slab — ₹60/panel, min ₹800
+  // Solar rate card — defaults match KLEAN SOLAR flyer; all values editable via admin.
+  // Bands / rates / mins are NOT hardcoded in app logic — only seeded here.
   const solarSvc = allServices.find(s => s.category === "solar_cleaning");
   if (solarSvc) {
-    const existing = await db.select().from(solarPricingSlabsTable)
-      .where(eq(solarPricingSlabsTable.serviceId, solarSvc.id)).limit(1);
-    if (!existing[0]) {
-      await db.insert(solarPricingSlabsTable).values({
-        serviceId: solarSvc.id,
-        cityId: varanasiId,
-        minPanels: 1,
-        maxPanels: null,
-        pricePerPanel: "60",
-        minimumBilling: "800",
-        sortOrder: 1,
-      });
+    const existingSlabs = await db.select().from(solarPricingSlabsTable)
+      .where(eq(solarPricingSlabsTable.serviceId, solarSvc.id));
+
+    // Deactivate legacy open-ended single slabs (no term matrix yet / one row covering all panels)
+    for (const s of existingSlabs) {
+      const isLegacyOpen =
+        (s.term === "one_time" || !s.term)
+        && s.minPanels === 1
+        && s.maxPanels == null
+        && !s.requiresSiteVisit
+        && existingSlabs.filter(x => x.term === "one_time" || !x.term).length === 1;
+      if (isLegacyOpen) {
+        await db.update(solarPricingSlabsTable)
+          .set({ isActive: false, updatedAt: new Date() })
+          .where(eq(solarPricingSlabsTable.id, s.id));
+      }
     }
+
+    const rateCardDefaults: Array<{
+      term: "one_time" | "amc_6" | "amc_12";
+      minPanels: number;
+      maxPanels: number | null;
+      pricePerPanel: string | null;
+      minimumBilling: string;
+      requiresSiteVisit: boolean;
+      sortOrder: number;
+    }> = [
+      // One-time — min billing ₹800 (seed default; change in admin)
+      { term: "one_time", minPanels: 1, maxPanels: 30, pricePerPanel: "60", minimumBilling: "800", requiresSiteVisit: false, sortOrder: 10 },
+      { term: "one_time", minPanels: 31, maxPanels: 100, pricePerPanel: "50", minimumBilling: "800", requiresSiteVisit: false, sortOrder: 20 },
+      { term: "one_time", minPanels: 101, maxPanels: null, pricePerPanel: null, minimumBilling: "800", requiresSiteVisit: true, sortOrder: 30 },
+      // AMC — min billing ₹700 (seed default; change in admin)
+      { term: "amc_6", minPanels: 1, maxPanels: 30, pricePerPanel: "50", minimumBilling: "700", requiresSiteVisit: false, sortOrder: 40 },
+      { term: "amc_6", minPanels: 31, maxPanels: 100, pricePerPanel: "45", minimumBilling: "700", requiresSiteVisit: false, sortOrder: 50 },
+      { term: "amc_6", minPanels: 101, maxPanels: null, pricePerPanel: null, minimumBilling: "700", requiresSiteVisit: true, sortOrder: 60 },
+      { term: "amc_12", minPanels: 1, maxPanels: 30, pricePerPanel: "45", minimumBilling: "700", requiresSiteVisit: false, sortOrder: 70 },
+      { term: "amc_12", minPanels: 31, maxPanels: 100, pricePerPanel: "40", minimumBilling: "700", requiresSiteVisit: false, sortOrder: 80 },
+      { term: "amc_12", minPanels: 101, maxPanels: null, pricePerPanel: null, minimumBilling: "700", requiresSiteVisit: true, sortOrder: 90 },
+    ];
+
+    const fresh = await db.select().from(solarPricingSlabsTable)
+      .where(eq(solarPricingSlabsTable.serviceId, solarSvc.id));
+
+    for (const row of rateCardDefaults) {
+      const match = fresh.find(s =>
+        s.term === row.term
+        && s.minPanels === row.minPanels
+        && (s.maxPanels ?? null) === (row.maxPanels ?? null)
+        && s.cityId === varanasiId,
+      );
+      // Never overwrite admin-edited rates — only insert missing matrix rows
+      if (!match) {
+        await db.insert(solarPricingSlabsTable).values({
+          serviceId: solarSvc.id,
+          cityId: varanasiId,
+          term: row.term,
+          minPanels: row.minPanels,
+          maxPanels: row.maxPanels,
+          pricePerPanel: row.pricePerPanel,
+          minimumBilling: row.minimumBilling,
+          requiresSiteVisit: row.requiresSiteVisit,
+          sortOrder: row.sortOrder,
+          isActive: true,
+        });
+      }
+    }
+    console.log(`  Upserted ${rateCardDefaults.length} solar rate-card slabs for service #${solarSvc.id}`);
   }
 
   // Addons
@@ -196,17 +263,22 @@ export async function seedCatalogMigration() {
     {
       name: "12 Month Solar AMC",
       slug: "12-month-solar-amc-package",
-      price: "9999",
+      // Display/fallback only — live price = panels × rate-card (min from slab)
+      price: "0",
+      pricingType: "exclusive" as const,
+      solarTerm: "amc_12" as const,
       validityDays: 365,
-      features: ["12 Cleaning Visits", "365 Days Validity"],
+      features: ["12 Cleaning Visits", "365 Days Validity", "Quoted from panel count"],
       entitlements: [{ serviceSlug: "one-time-solar-cleaning", type: "solar_visit" as const, credits: 12 }],
     },
     {
       name: "6 Month Solar AMC",
       slug: "6-month-solar-amc-package",
-      price: "5499",
+      price: "0",
+      pricingType: "exclusive" as const,
+      solarTerm: "amc_6" as const,
       validityDays: 180,
-      features: ["6 Cleaning Visits", "180 Days Validity"],
+      features: ["6 Cleaning Visits", "180 Days Validity", "Quoted from panel count"],
       entitlements: [{ serviceSlug: "one-time-solar-cleaning", type: "solar_visit" as const, credits: 6 }],
     },
   ];
@@ -218,21 +290,27 @@ export async function seedCatalogMigration() {
     const p = packageDefs[i];
     const existing = await db.select().from(catalogPackagesTable).where(eq(catalogPackagesTable.slug, p.slug)).limit(1);
     let packageId: number;
-    if (existing[0]) packageId = existing[0].id;
-    else {
-      const [row] = await db.insert(catalogPackagesTable).values({
-        name: p.name,
-        slug: p.slug,
-        price: p.price,
-        validityDays: p.validityDays,
-        offDays: p.offDays ?? [],
-        tag: p.tag,
-        isHighlighted: p.isHighlighted ?? false,
-        features: p.features,
-        cityId: varanasiId,
-        serviceCategoryId: p.slug.includes("solar") ? catIds.amc : catIds.dailyCleaning,
-        sortOrder: i + 1,
-      }).returning();
+    const pkgFields = {
+      name: p.name,
+      slug: p.slug,
+      price: p.price,
+      pricingType: ("pricingType" in p ? p.pricingType : "inclusive") as "inclusive" | "exclusive",
+      solarTerm: ("solarTerm" in p ? p.solarTerm : null) as "amc_6" | "amc_12" | null,
+      validityDays: p.validityDays,
+      offDays: p.offDays ?? [],
+      tag: p.tag,
+      isHighlighted: p.isHighlighted ?? false,
+      features: p.features,
+      cityId: varanasiId,
+      serviceCategoryId: p.slug.includes("solar") ? catIds.amc : catIds.dailyCleaning,
+      sortOrder: i + 1,
+      updatedAt: new Date(),
+    };
+    if (existing[0]) {
+      packageId = existing[0].id;
+      await db.update(catalogPackagesTable).set(pkgFields).where(eq(catalogPackagesTable.id, packageId));
+    } else {
+      const [row] = await db.insert(catalogPackagesTable).values(pkgFields).returning();
       packageId = row.id;
     }
 

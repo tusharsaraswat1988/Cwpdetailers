@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Car, Sun, Plus } from "lucide-react";
+import { Car, Sun, Plus, Pencil } from "lucide-react";
 import { ASSET_TYPE_LABELS, listAssets, type AssetListRow } from "@/features/assets/api";
 
 type CustomerVehiclesPanelProps = {
@@ -28,11 +28,18 @@ export function CustomerLinkedAssetsPanel({ customerId }: CustomerVehiclesPanelP
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">Registered when booking — shown on each job</p>
         </div>
-        <Link href={`/admin/book-services?customerId=${customerId}`}>
-          <Button variant="outline" size="sm" className="text-xs h-8 shrink-0" data-testid="btn-add-customer-vehicle">
-            <Plus size={12} className="mr-1" /> Service request
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <Link href={`/admin/assets?customerId=${customerId}`}>
+            <Button variant="ghost" size="sm" className="text-xs h-8" data-testid="btn-manage-customer-assets">
+              Manage
+            </Button>
+          </Link>
+          <Link href={`/admin/book-services?customerId=${customerId}`}>
+            <Button variant="outline" size="sm" className="text-xs h-8" data-testid="btn-add-customer-vehicle">
+              <Plus size={12} className="mr-1" /> Service request
+            </Button>
+          </Link>
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         {isLoading ? (
@@ -48,17 +55,25 @@ export function CustomerLinkedAssetsPanel({ customerId }: CustomerVehiclesPanelP
               className="border border-border rounded-lg px-3 py-2 text-sm flex items-start justify-between gap-3"
               data-testid={`customer-vehicle-row-${row.id}`}
             >
-              <div className="flex items-start gap-2">
+              <div className="flex items-start gap-2 min-w-0">
                 {row.assetType === "vehicle" ? <Car size={14} className="text-primary mt-0.5" /> : <Sun size={14} className="text-primary mt-0.5" />}
-                <div>
-                  <p className="font-medium">{row.label}</p>
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{row.label}</p>
                   <p className="text-xs text-muted-foreground">{ASSET_TYPE_LABELS[row.assetType] ?? row.assetType}</p>
                   {row.serviceLocationLabel && (
                     <p className="text-xs text-muted-foreground mt-0.5">At {row.serviceLocationLabel}</p>
                   )}
                 </div>
               </div>
-              <Badge variant="outline" className="text-xs capitalize shrink-0">{row.status}</Badge>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant="outline" className="text-xs capitalize">{row.status}</Badge>
+                <Link href={`/admin/assets/${row.id}`}>
+                  <Button variant="outline" size="sm" className="h-7 px-2 gap-1 text-xs" data-testid={`customer-asset-edit-${row.id}`}>
+                    <Pencil size={12} />
+                    Edit
+                  </Button>
+                </Link>
+              </div>
             </div>
           ))
         )}

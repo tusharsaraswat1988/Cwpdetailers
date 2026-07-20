@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCatalogAddons } from "@/features/service-catalog/api";
+import { useCatalogAddons, useCatalogPricingQuote } from "@/features/service-catalog/api";
 import type { CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
 import type { CustomerServiceLocationRow } from "@/features/service-locations/api";
-import type { AssetListRow } from "@/features/assets/api";
+import { getAsset, type AssetListRow } from "@/features/assets/api";
+import { useQuery } from "@tanstack/react-query";
 import { LEAD_SOURCES, type LeadSource } from "@/features/leads/constants";
 import {
   EMPTY_BOOK_SERVICES_DRAFT,
@@ -108,6 +109,114 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
     ? draft.service.catalogServiceId ?? draft.service.id
     : undefined;
   const { data: addonList = [] } = useCatalogAddons(catalogServiceId);
+
+  const isSolarAsset = draft.asset?.assetType === "solar_site";
+  const { data: solarAssetDetail } = useQuery({
+    queryKey: ["asset-detail", draft.asset?.id],
+    queryFn: () => getAsset(draft.asset!.id),
+    enabled: isSolarAsset && draft.asset?.id != null,
+  });
+
+  useEffect(() => {
+    if (!isSolarAsset) {
+      if (draft.solarPanelCount != null || draft.solarPricingStatus !== "idle") {
+        setDraft(prev => ({
+          ...prev,
+          solarPanelCount: null,
+          solarPricingStatus: "idle",
+          solarQuotedSubtotal: null,
+          solarPricePerPanel: null,
+          solarMinimumBilling: null,
+          solarManualAmount: "",
+          solarCallbackLeadId: null,
+        }));
+      }
+      return;
+    }
+    // Prefer list row panelCount (fast), then detail fetch
+    const fromList = draft.asset?.panelCount;
+    const fromDetail = Number((solarAssetDetail?.solarSite as { panelCount?: number } | null | undefined)?.panelCount);
+    const panels = (fromList != null && fromList > 0)
+      ? fromList
+      : (Number.isFinite(fromDetail) && fromDetail > 0 ? fromDetail : null);
+    if (panels != null && panels !== draft.solarPanelCount) {
+      setDraft(prev => ({ ...prev, solarPanelCount: panels }));
+    }
+  }, [isSolarAsset, draft.asset?.panelCount, solarAssetDetail, draft.solarPanelCount, draft.solarPricingStatus]);
+
+  const solarQuoteEnabled = isSolarAsset
+    && draft.service != null
+    && draft.solarPanelCount != null
+    && draft.solarPanelCount > 0
+    && !draft.solarManualAmount.trim();
+
+  const { data: solarQuote, isFetching: solarQuoteLoading } = useCatalogPricingQuote({
+    serviceId: draft.service?.kind === "service" ? catalogServiceId : undefined,
+    packageId: draft.service?.kind === "package" ? draft.service.id : undefined,
+    panelCount: draft.solarPanelCount ?? undefined,
+    term: draft.service?.solarTerm,
+    enabled: solarQuoteEnabled,
+  });
+
+  useEffect(() => {
+    if (!isSolarAsset || !draft.service) return;
+    if (draft.solarManualAmount.trim()) return;
+    if (solarQuoteLoading) {
+      setDraft(prev => (prev.solarPricingStatus === "loading" ? prev : { ...prev, solarPricingStatus: "loading" }));
+      return;
+    }
+    if (!solarQuote) return;
+
+    const subtotal = solarQuote.breakdown?.baseAmount
+      ?? solarQuote.solar?.amount
+      ?? null;
+
+    if (solarQuote.status === "needs_site_visit") {
+      setDraft(prev => {
+        if (prev.solarPricingStatus === "needs_site_visit") return prev;
+        return {
+          ...prev,
+          solarPricingStatus: "needs_site_visit",
+          solarQuotedSubtotal: null,
+          solarPricePerPanel: solarQuote.solar?.pricePerPanel ?? null,
+          solarMinimumBilling: solarQuote.solar?.minimumBilling ?? null,
+          service: prev.service ? { ...prev.service, price: 0 } : prev.service,
+        };
+      });
+      return;
+    }
+
+    if (solarQuote.status === "priced" && subtotal != null) {
+      setDraft(prev => {
+        if (
+          prev.solarPricingStatus === "priced"
+          && prev.solarQuotedSubtotal === subtotal
+          && prev.service?.price === subtotal
+        ) return prev;
+        return {
+          ...prev,
+          solarPricingStatus: "priced",
+          solarQuotedSubtotal: subtotal,
+          solarPricePerPanel: solarQuote.solar?.pricePerPanel ?? null,
+          solarMinimumBilling: solarQuote.solar?.minimumBilling ?? null,
+          service: prev.service ? { ...prev.service, price: subtotal } : prev.service,
+        };
+      });
+      return;
+    }
+
+    if (solarQuote.status === "no_slab") {
+      setDraft(prev => {
+        if (prev.solarPricingStatus === "no_slab") return prev;
+        return {
+          ...prev,
+          solarPricingStatus: "no_slab",
+          solarQuotedSubtotal: null,
+          service: prev.service ? { ...prev.service, price: 0 } : prev.service,
+        };
+      });
+    }
+  }, [isSolarAsset, draft.service?.id, draft.service?.kind, draft.solarManualAmount, solarQuote, solarQuoteLoading]);
 
   const currentStep = WIZARD_STEPS[stepIndex]!;
   const isReview = currentStep.id === "review";

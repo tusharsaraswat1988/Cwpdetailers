@@ -3,8 +3,10 @@ import { useCatalogAddons } from "@/features/service-catalog/api";
 import { AddOnSelect } from "./AddOnSelect";
 import { DiscountStep } from "./DiscountStep";
 import { PaymentTermsStep } from "./PaymentTermsStep";
+import { SolarQuotePanel } from "./SolarQuotePanel";
 import {
   computeDraftTotals,
+  resolveSolarServicePrice,
   type BookServicesDraft,
   type PaymentTermsChoice,
 } from "../types";
@@ -20,22 +22,26 @@ export function PricingStep({ draft, onChange }: Props) {
     : undefined;
   const { data: addons = [] } = useCatalogAddons(catalogServiceId);
   const totals = computeDraftTotals(draft, addons);
+  const isSolar = draft.asset?.assetType === "solar_site";
+  const serviceDisplayPrice = isSolar ? resolveSolarServicePrice(draft) : (draft.service?.price ?? 0);
 
   return (
     <div className="space-y-8" data-testid="book-step-pricing">
       <div>
         <Label className="text-base">What are we selling?</Label>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Confirm extras, discount, and payment terms. Estimated total updates as you go — final GST is calculated on create.
+          Confirm extras, discount, and payment terms. Solar prices come from the rate card; GST is applied on create.
         </p>
       </div>
+
+      {isSolar && <SolarQuotePanel draft={draft} onChange={onChange} />}
 
       <section aria-labelledby="pricing-service-heading" className="rounded-lg border border-border p-4 space-y-2">
         <h3 id="pricing-service-heading" className="text-sm font-medium">Service</h3>
         <div className="flex justify-between gap-3 text-sm">
           <span>{draft.service?.name ?? "—"}</span>
           <span className="font-semibold tabular-nums">
-            ₹{(draft.service?.price ?? 0).toLocaleString("en-IN")}
+            ₹{serviceDisplayPrice.toLocaleString("en-IN")}
           </span>
         </div>
       </section>

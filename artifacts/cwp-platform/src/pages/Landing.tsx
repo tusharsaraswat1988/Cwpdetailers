@@ -1,11 +1,12 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useListServices } from "@workspace/api-client-react";
-import { useHomepagePlans, useHomepageSections } from "@/features/service-catalog/api";
+import { useHomepagePlans, useHomepageSections, useSolarRateCard, type SolarSlab } from "@/features/service-catalog/api";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useBranding } from "@/lib/branding";
 import { Sun, Car, Shield, Sparkles, ChevronRight, MapPin, Phone, Star, Zap, Droplets, Check } from "lucide-react";
+import { useMemo } from "react";
 
 const serviceIcons: Record<string, React.ElementType> = {
   car_wash: Droplets,
@@ -73,29 +74,59 @@ const carWashPlans = [
   },
 ];
 
-const solarTiers = [
-  {
-    range: "1–30 Panels",
-    oneTime: "₹60",
-    sixMonth: "₹50",
-    twelveMonth: "₹45",
-    suffix: "per panel",
-  },
-  {
-    range: "30–100 Panels",
-    oneTime: "₹50",
-    sixMonth: "₹45",
-    twelveMonth: "₹40",
-    suffix: "per panel",
-  },
-  {
-    range: "100+ Panels",
-    oneTime: "—",
-    sixMonth: "—",
-    twelveMonth: "—",
-    note: "Site visit required",
-  },
-];
+type SolarTierRow = {
+  range: string;
+  oneTime: string;
+  sixMonth: string;
+  twelveMonth: string;
+  suffix?: string;
+  note?: string;
+};
+
+function formatPanelRange(min: number, max: number | null | undefined) {
+  if (max == null) return `${min}+ Panels`;
+  return `${min}–${max} Panels`;
+}
+
+function cellForSlab(slab: SolarSlab | undefined): string {
+  if (!slab) return "—";
+  if (slab.requiresSiteVisit || slab.pricePerPanel == null) return "—";
+  return `₹${slab.pricePerPanel}`;
+}
+
+/** Build marketing table rows from DB rate card (no hardcoded rates). */
+function buildSolarTiersFromRateCard(slabs: SolarSlab[]): SolarTierRow[] {
+  const bandKey = (s: SolarSlab) => `${s.minPanels}:${s.maxPanels ?? "open"}`;
+  const bands = new Map<string, { min: number; max: number | null; byTerm: Partial<Record<string, SolarSlab>> }>();
+  for (const s of slabs) {
+    if (s.term !== "one_time" && s.term !== "amc_6" && s.term !== "amc_12") continue;
+    const key = bandKey(s);
+    const row = bands.get(key) ?? { min: s.minPanels, max: s.maxPanels ?? null, byTerm: {} };
+    row.byTerm[s.term] = s;
+    bands.set(key, row);
+  }
+  return Array.from(bands.values())
+    .sort((a, b) => a.min - b.min)
+    .map(({ min, max, byTerm }) => {
+      const siteVisit = [byTerm.one_time, byTerm.amc_6, byTerm.amc_12].some(s => s?.requiresSiteVisit);
+      if (siteVisit) {
+        return {
+          range: formatPanelRange(min, max),
+          oneTime: "—",
+          sixMonth: "—",
+          twelveMonth: "—",
+          note: "Site visit required",
+        };
+      }
+      return {
+        range: formatPanelRange(min, max),
+        oneTime: cellForSlab(byTerm.one_time),
+        sixMonth: cellForSlab(byTerm.amc_6),
+        twelveMonth: cellForSlab(byTerm.amc_12),
+        suffix: "per panel",
+      };
+    });
+}
 
 const testimonials = [
   { name: "Arjun Sharma", city: "Varanasi", rating: 5, text: "My BMW has never looked better. The ceramic coating service is truly premium — I've tried services in Delhi and Pune, nothing compares." },
@@ -109,7 +140,25 @@ export default function Landing() {
   const { data: services } = useListServices({ isActive: true });
   const { data: homepagePlans } = useHomepagePlans("varanasi");
   const { data: homepageSections } = useHomepageSections();
+  const { data: solarRateCard } = useSolarRateCard("varanasi");
   const branding = useBranding();
+
+  const solarTiers = useMemo(
+    () => buildSolarTiersFromRateCard(solarRateCard?.slabs ?? []),
+    [solarRateCard?.slabs],
+  );
+
+  const minBillingNote = useMemo(() => {
+    const mins = (solarRateCard?.slabs ?? [])
+      .filter(s => !s.requiresSiteVisit)
+      .map(s => Number(s.minimumBilling))
+      .filter(n => Number.isFinite(n));
+    if (!mins.length) return null;
+    const unique = [...new Set(mins)].sort((a, b) => a - b);
+    return unique.length === 1
+      ? `Minimum billing ₹${unique[0].toLocaleString("en-IN")}`
+      : `Minimum billing from ₹${unique[0].toLocaleString("en-IN")}`;
+  }, [solarRateCard?.slabs]);
 
   const heroSection = homepageSections?.find(s => s.sectionKey === "hero");
   const citiesSection = homepageSections?.find(s => s.sectionKey === "cities");
@@ -400,7 +449,9 @@ export default function Landing() {
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               <div className="bg-amber-500/10 border-b border-amber-500/20 px-5 py-4">
                 <h3 className="font-display font-bold text-base">Services & Rates</h3>
-                <p className="text-muted-foreground text-xs mt-0.5">GST extra applicable</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  GST extra applicable{minBillingNote ? ` · ${minBillingNote}` : ""}
+                </p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -413,7 +464,13 @@ export default function Landing() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {solarTiers.map((tier, i) => (
+                    {solarTiers.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-5 py-6 text-center text-muted-foreground text-sm">
+                          Rate card loading…
+                        </td>
+                      </tr>
+                    ) : solarTiers.map((tier, i) => (
                       <tr key={tier.range} className={i === 1 ? "bg-primary/5" : ""} data-testid={`solar-tier-${i}`}>
                         <td className="px-5 py-4 font-semibold text-sm">{tier.range}</td>
                         {tier.note ? (
@@ -441,30 +498,11 @@ export default function Landing() {
                   </tbody>
                 </table>
               </div>
-              {/* Contract savings highlight */}
               <div className="border-t border-border px-5 py-4 bg-primary/5">
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  {[
-                    { label: "One Time", saving: "Full price", color: "text-foreground" },
-                    { label: "6-Month AMC", saving: "Save ~17%", color: "text-amber-500" },
-                    { label: "12-Month AMC", saving: "Save ~25%", color: "text-primary" },
-                  ].map(({ label, saving, color }) => (
-                    <div key={label}>
-                      <p className="text-xs font-semibold">{label}</p>
-                      <p className={`text-xs font-bold mt-0.5 ${color}`}>{saving}</p>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Larger sites: we schedule a site visit and finalize rates before booking — same service flow afterward.
+                </p>
               </div>
-            </div>
-
-            {/* Example calc */}
-            <div className="mt-4 bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 text-sm">
-              <p className="font-semibold text-amber-600 mb-1">Example: 20 panels, 12-month AMC</p>
-              <p className="text-muted-foreground text-xs">
-                20 panels × ₹45 = <strong className="text-foreground">₹900 per cleaning</strong> × 12 visits = <strong className="text-primary">₹10,800/year</strong>
-                {" "}vs one-time rate of ₹1,200/visit. <span className="text-green-600 font-medium">You save ₹3,600.</span>
-              </p>
             </div>
           </motion.div>
         </div>

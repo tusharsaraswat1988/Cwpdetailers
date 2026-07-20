@@ -72,7 +72,7 @@ router.post("/assets", async (req, res) => {
     if (assetType === "vehicle") {
       const {
         customerId, serviceLocationId, registrationNumber, vehicleType, vehicleModelId,
-        make, model, year, color, notes, effectiveFrom,
+        seatCategoryId, make, model, year, color, notes, effectiveFrom,
       } = req.body;
       if (!customerId || !serviceLocationId || !registrationNumber) {
         return res.status(400).json({ error: "customerId, serviceLocationId, registrationNumber are required" });
@@ -96,6 +96,9 @@ router.post("/assets", async (req, res) => {
           registrationNumber: String(registrationNumber),
           vehicleType,
           vehicleModelId: vehicleModelId != null ? parseInt(String(vehicleModelId), 10) : undefined,
+          seatCategoryId: seatCategoryId != null && seatCategoryId !== ""
+            ? parseInt(String(seatCategoryId), 10)
+            : undefined,
           make,
           model,
           year: year != null ? parseInt(String(year), 10) : undefined,
@@ -116,8 +119,12 @@ router.post("/assets", async (req, res) => {
         customerId, serviceLocationId, siteName, panelCapacityKw, panelCount,
         address, city, notes, effectiveFrom,
       } = req.body;
-      if (!customerId || !serviceLocationId || !siteName || panelCapacityKw == null) {
-        return res.status(400).json({ error: "customerId, serviceLocationId, siteName, panelCapacityKw are required" });
+      if (!customerId || !serviceLocationId || !siteName) {
+        return res.status(400).json({ error: "customerId, serviceLocationId, and siteName are required" });
+      }
+      const panels = panelCount != null ? parseInt(String(panelCount), 10) : NaN;
+      if (!Number.isFinite(panels) || panels < 1) {
+        return res.status(400).json({ error: "panelCount is required and must be at least 1 (used for rate-card quoting)" });
       }
       const customer = await loadIfInScope(req, async () => {
         const { customersTable } = await import("@workspace/db");
@@ -136,8 +143,10 @@ router.post("/assets", async (req, res) => {
           customerId: parseInt(String(customerId), 10),
           serviceLocationId: parseInt(String(serviceLocationId), 10),
           siteName: String(siteName),
-          panelCapacityKw,
-          panelCount,
+          panelCapacityKw: panelCapacityKw != null && String(panelCapacityKw).trim() !== ""
+            ? panelCapacityKw
+            : undefined,
+          panelCount: panels,
           address,
           city,
           notes,
@@ -187,6 +196,16 @@ router.patch("/assets/:id", async (req, res) => {
       if (req.body.year !== undefined) vUpdate.year = req.body.year;
       if (req.body.color !== undefined) vUpdate.color = req.body.color;
       if (req.body.assignedStaffId !== undefined) vUpdate.assignedStaffId = req.body.assignedStaffId;
+      if (req.body.vehicleModelId !== undefined) {
+        vUpdate.vehicleModelId = req.body.vehicleModelId === null || req.body.vehicleModelId === ""
+          ? null
+          : parseInt(String(req.body.vehicleModelId), 10);
+      }
+      if (req.body.seatCategoryId !== undefined) {
+        vUpdate.seatCategoryId = req.body.seatCategoryId === null || req.body.seatCategoryId === ""
+          ? null
+          : parseInt(String(req.body.seatCategoryId), 10);
+      }
       if (Object.keys(vUpdate).length > 1) {
         await db.update(vehiclesTable).set(vUpdate).where(eq(vehiclesTable.id, existing.vehicleId));
       }
@@ -199,6 +218,7 @@ router.patch("/assets/:id", async (req, res) => {
       if (req.body.panelCapacityKw !== undefined) sUpdate.panelCapacityKw = String(req.body.panelCapacityKw);
       if (req.body.address !== undefined) sUpdate.address = req.body.address;
       if (req.body.city !== undefined) sUpdate.city = req.body.city;
+      if (req.body.notes !== undefined) sUpdate.notes = req.body.notes;
       if (Object.keys(sUpdate).length > 1) {
         await db.update(solarSitesTable).set(sUpdate).where(eq(solarSitesTable.id, existing.solarSiteId));
       }

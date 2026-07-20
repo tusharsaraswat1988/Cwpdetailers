@@ -1,8 +1,8 @@
 import { useAuth, type UserRole } from "@/lib/auth";
 
-/** Option A — HQ owns catalog prices and product definitions. */
+/** HQ / ops owns catalog prices and product definitions. */
 export function isHqCatalogEditor(role?: UserRole | null): boolean {
-  return role === "superadmin";
+  return role === "superadmin" || role === "admin";
 }
 
 export function useCatalogGovernance() {

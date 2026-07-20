@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Plus } from "lucide-react";
+import { MapPin, Plus, Pencil } from "lucide-react";
 import {
   listServiceLocations,
   SERVICE_LOCATION_TYPE_LABELS,
@@ -24,6 +24,7 @@ type Props = {
 
 export function LocationSelect({ customerId, preferredLocationId, value, onChange }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<CustomerServiceLocationRow | null>(null);
   const [typeFilter, setTypeFilter] = useState<ServiceLocationType | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
@@ -56,6 +57,7 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
 
   useEffect(() => {
     setShowAddForm(false);
+    setEditingLocation(null);
     setTypeFilter(null);
   }, [customerId]);
 
@@ -97,13 +99,35 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
     );
   }
 
+  if (editingLocation) {
+    return (
+      <div className="space-y-3" data-testid="book-step-location">
+        <InlineServiceAddressForm
+          customerId={customerId}
+          editing={editingLocation}
+          onCreated={loc => {
+            setEditingLocation(null);
+            onChange(loc);
+            void refetch();
+          }}
+          onUpdated={loc => {
+            setEditingLocation(null);
+            onChange(loc);
+            void refetch();
+          }}
+          onCancel={() => setEditingLocation(null)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4" data-testid="book-step-location">
       <div className="flex items-start justify-between gap-2">
         <div>
           <Label className="text-base">Where should CWP perform this service?</Label>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Location types come from the Address Platform. One site is pre-selected when possible.
+            Location types come from the Address Platform. One site is pre-selected when possible — tap Edit to change details.
           </p>
         </div>
         <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs h-8" onClick={() => setShowAddForm(true)}>
@@ -150,12 +174,10 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
           const selected = value?.id === loc.id;
           const fromAsset = preferredLocationId === loc.id;
           return (
-            <button
+            <div
               key={loc.id}
-              type="button"
               role="option"
               aria-selected={selected}
-              onClick={() => onChange(loc)}
               data-testid={`book-location-${loc.id}`}
               className={cn(
                 "text-left border rounded-lg px-4 py-3 transition-colors min-h-14",
@@ -163,7 +185,11 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
               )}
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2 min-w-0">
+                <button
+                  type="button"
+                  className="flex items-start gap-2 min-w-0 flex-1 text-left"
+                  onClick={() => onChange(loc)}
+                >
                   <MapPin size={16} className="text-primary mt-0.5 shrink-0" aria-hidden />
                   <div className="min-w-0">
                     <p className="font-medium text-sm">{loc.label}</p>
@@ -173,14 +199,29 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
                     </p>
                     {loc.address && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{loc.address}</p>}
                   </div>
-                </div>
-                <div className="flex flex-col gap-1 items-end shrink-0">
+                </button>
+                <div className="flex flex-col gap-1.5 items-end shrink-0">
                   {loc.isDefault && <Badge variant="secondary" className="text-xs">Primary</Badge>}
                   {fromAsset && <Badge variant="outline" className="text-xs">Asset site</Badge>}
                   {selected && <Badge className="text-xs">Selected</Badge>}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 gap-1 text-xs"
+                    onClick={e => {
+                      e.stopPropagation();
+                      onChange(loc);
+                      setEditingLocation(loc);
+                    }}
+                    data-testid={`book-location-edit-${loc.id}`}
+                  >
+                    <Pencil size={12} />
+                    Edit
+                  </Button>
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>

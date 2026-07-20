@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { VehicleModelSelect } from "@/components/shared/VehicleModelSelect";
+import { SeatCategorySelect } from "@/components/shared/SeatCategorySelect";
 import { LocationPicker } from "@/components/shared/LocationPicker";
 import type { LocationValue, VehicleModel } from "@/features/master-data/api";
 import { useToast } from "@/hooks/use-toast";
@@ -31,12 +32,14 @@ export function QuickAddAssetSheet({ open, onOpenChange, customerId, kind, onCre
   const { toast } = useToast();
 
   const [selectedModel, setSelectedModel] = useState<VehicleModel | null>(null);
+  const [seatCategoryId, setSeatCategoryId] = useState<number | null>(null);
   const [carForm, setCarForm] = useState({ year: "", color: "", registrationNumber: "" });
   const [location, setLocation] = useState<LocationValue | null>(null);
   const [panelCount, setPanelCount] = useState("");
 
   const reset = () => {
     setSelectedModel(null);
+    setSeatCategoryId(null);
     setCarForm({ year: "", color: "", registrationNumber: "" });
     setLocation(null);
     setPanelCount("");
@@ -70,7 +73,7 @@ export function QuickAddAssetSheet({ open, onOpenChange, customerId, kind, onCre
     },
   });
 
-  const canSaveVehicle = Boolean(selectedModel && carForm.registrationNumber && location);
+  const canSaveVehicle = Boolean(selectedModel && carForm.registrationNumber && location && seatCategoryId);
   const canSaveSolar = Boolean(location && panelCount);
 
   return (
@@ -83,7 +86,19 @@ export function QuickAddAssetSheet({ open, onOpenChange, customerId, kind, onCre
         <div className="space-y-4 mt-4 pb-4">
           {kind === "vehicle" ? (
             <>
-              <VehicleModelSelect selected={selectedModel} modelId={selectedModel?.id} onSelect={setSelectedModel} />
+              <VehicleModelSelect
+                selected={selectedModel}
+                modelId={selectedModel?.id}
+                onSelect={model => {
+                  setSelectedModel(model);
+                  setSeatCategoryId(model?.seatCategoryId ?? null);
+                }}
+              />
+              <SeatCategorySelect
+                value={seatCategoryId}
+                onChange={setSeatCategoryId}
+                model={selectedModel}
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Year</Label>
@@ -109,11 +124,12 @@ export function QuickAddAssetSheet({ open, onOpenChange, customerId, kind, onCre
                 disabled={!canSaveVehicle || createVehicle.isPending}
                 data-testid="btn-quickadd-save-vehicle"
                 onClick={() => {
-                  if (!selectedModel || !location) return;
+                  if (!selectedModel || !location || seatCategoryId == null) return;
                   createVehicle.mutate({
                     data: {
                       customerId,
                       vehicleModelId: selectedModel.id,
+                      seatCategoryId,
                       make: selectedModel.brandName,
                       model: selectedModel.name,
                       year: carForm.year ? parseInt(carForm.year) : undefined,

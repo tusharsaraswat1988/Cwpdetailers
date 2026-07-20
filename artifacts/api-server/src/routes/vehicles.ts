@@ -48,7 +48,7 @@ router.get("/vehicles", async (req, res) => {
 router.post("/vehicles", async (req, res) => {
   try {
     const {
-      customerId, vehicleModelId, make, model, year, color, registrationNumber, vehicleType,
+      customerId, vehicleModelId, seatCategoryId, make, model, year, color, registrationNumber, vehicleType,
       serviceAddress, serviceLat, serviceLng, placeId, locationLabel, serviceLocationId,
     } = req.body;
     if (!customerId || !registrationNumber) {
@@ -62,6 +62,9 @@ router.post("/vehicles", async (req, res) => {
     let resolvedModel = model;
     let resolvedType = normalizeVehicleType(vehicleType);
     let resolvedModelId = vehicleModelId;
+    let resolvedSeatId = seatCategoryId != null && seatCategoryId !== ""
+      ? parseInt(String(seatCategoryId), 10)
+      : null;
 
     if (vehicleModelId) {
       const { vehicleModelsTable, vehicleBrandsTable, vehicleCategoriesTable } = await import("@workspace/db");
@@ -70,6 +73,7 @@ router.post("/vehicles", async (req, res) => {
           modelName: vehicleModelsTable.name,
           brandName: vehicleBrandsTable.name,
           categorySlug: vehicleCategoriesTable.slug,
+          seatCategoryId: vehicleModelsTable.seatCategoryId,
         })
         .from(vehicleModelsTable)
         .innerJoin(vehicleBrandsTable, eq(vehicleModelsTable.brandId, vehicleBrandsTable.id))
@@ -80,6 +84,7 @@ router.post("/vehicles", async (req, res) => {
       resolvedMake = vm.brandName;
       resolvedModel = vm.modelName;
       resolvedType = vehicleTypeFromCategorySlug(vm.categorySlug);
+      if (resolvedSeatId == null) resolvedSeatId = vm.seatCategoryId;
     }
 
     const locationComplete = !!(serviceAddress && serviceLat != null && serviceLng != null);
@@ -98,6 +103,7 @@ router.post("/vehicles", async (req, res) => {
     const values = tenantStamp(req, {
       customerId,
       vehicleModelId: resolvedModelId,
+      seatCategoryId: resolvedSeatId,
       make: resolvedMake,
       model: resolvedModel,
       year,
@@ -139,12 +145,17 @@ router.patch("/vehicles/:id", async (req, res) => {
       return res.status(404).json({ error: "Vehicle not found" });
     }
     const { make, model, year, color, registrationNumber, vehicleType, customerId, assignedStaffId,
-      vehicleModelId, serviceAddress, serviceLat, serviceLng, placeId, locationLabel } = req.body;
+      vehicleModelId, seatCategoryId, serviceAddress, serviceLat, serviceLng, placeId, locationLabel } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (make !== undefined) updateData.make = make;
     if (model !== undefined) updateData.model = model;
     if (year !== undefined) updateData.year = year;
     if (color !== undefined) updateData.color = color;
+    if (seatCategoryId !== undefined) {
+      updateData.seatCategoryId = seatCategoryId === null || seatCategoryId === ""
+        ? null
+        : parseInt(String(seatCategoryId), 10);
+    }
     if (registrationNumber !== undefined) {
       const regNorm = normalizeRegistration(registrationNumber);
       const [dup] = await db.select({ id: vehiclesTable.id }).from(vehiclesTable)

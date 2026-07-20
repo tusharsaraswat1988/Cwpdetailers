@@ -181,6 +181,8 @@ export type CreateVehicleAssetInput = {
   registrationNumber: string;
   vehicleType?: string;
   vehicleModelId?: number;
+  /** Seating override for pricing (5 vs 7 seater). Defaults to model seat when omitted. */
+  seatCategoryId?: number | null;
   make?: string;
   model?: string;
   year?: number;
@@ -202,6 +204,7 @@ export async function createVehicleAsset(req: Request, input: CreateVehicleAsset
   let resolvedModel = input.model;
   let resolvedType = normalizeVehicleType(input.vehicleType);
   let resolvedModelId = input.vehicleModelId;
+  let resolvedSeatId = input.seatCategoryId ?? null;
 
   if (input.vehicleModelId) {
     const { vehicleModelsTable, vehicleBrandsTable, vehicleCategoriesTable } = await import("@workspace/db");
@@ -210,6 +213,7 @@ export async function createVehicleAsset(req: Request, input: CreateVehicleAsset
         modelName: vehicleModelsTable.name,
         brandName: vehicleBrandsTable.name,
         categorySlug: vehicleCategoriesTable.slug,
+        seatCategoryId: vehicleModelsTable.seatCategoryId,
       })
       .from(vehicleModelsTable)
       .innerJoin(vehicleBrandsTable, eq(vehicleModelsTable.brandId, vehicleBrandsTable.id))
@@ -220,6 +224,7 @@ export async function createVehicleAsset(req: Request, input: CreateVehicleAsset
     resolvedMake = vm.brandName;
     resolvedModel = vm.modelName;
     resolvedType = vehicleTypeFromCategorySlug(vm.categorySlug);
+    if (resolvedSeatId == null) resolvedSeatId = vm.seatCategoryId;
   }
 
   if (!resolvedMake || !resolvedModel) throw new Error("vehicleModelId or make+model are required");
@@ -227,6 +232,7 @@ export async function createVehicleAsset(req: Request, input: CreateVehicleAsset
   const vehicleValues = tenantStamp(req, {
     customerId: input.customerId,
     vehicleModelId: resolvedModelId,
+    seatCategoryId: resolvedSeatId,
     make: resolvedMake,
     model: resolvedModel,
     year: input.year,
@@ -265,8 +271,10 @@ export type CreateSolarAssetInput = {
   customerId: number;
   serviceLocationId: number;
   siteName: string;
-  panelCapacityKw: string | number;
-  panelCount?: number;
+  /** Optional metadata — not used for pricing. */
+  panelCapacityKw?: string | number | null;
+  /** Required for rate-card quoting. */
+  panelCount: number;
   address?: string;
   city?: string;
   notes?: string;
@@ -285,8 +293,10 @@ export async function createSolarAsset(req: Request, input: CreateSolarAssetInpu
     siteName: input.siteName.trim(),
     address,
     city: input.city ?? locationRow?.city ?? null,
-    panelCount: input.panelCount ?? 1,
-    panelCapacityKw: String(input.panelCapacityKw),
+    panelCount: input.panelCount,
+    panelCapacityKw: input.panelCapacityKw != null && String(input.panelCapacityKw).trim() !== ""
+      ? String(input.panelCapacityKw)
+      : null,
     notes: input.notes ?? null,
     locationComplete: !!(locationRow?.latitude != null && locationRow?.longitude != null),
     serviceLat: locationRow?.latitude ?? null,
@@ -446,6 +456,7 @@ export async function listAssetsForQuery(params: {
       serviceLocationLabel: serviceLocationsTable.label,
       customerId: customerAssetLinksTable.customerId,
       customerName: customersTable.name,
+      panelCount: solarSitesTable.panelCount,
     })
     .from(assetsTable)
     .leftJoin(locationAssetLinksTable, and(
@@ -458,7 +469,8 @@ export async function listAssetsForQuery(params: {
       activeLinkPredicate(),
       inArray(customerAssetLinksTable.linkType, ["commercial", "operational"]),
     ))
-    .leftJoin(customersTable, eq(customerAssetLinksTable.customerId, customersTable.id));
+    .leftJoin(customersTable, eq(customerAssetLinksTable.customerId, customersTable.id))
+    .leftJoin(solarSitesTable, eq(assetsTable.solarSiteId, solarSitesTable.id));
 
   const rows = await (where ? baseQuery.where(where) : baseQuery)
     .orderBy(desc(assetsTable.updatedAt))

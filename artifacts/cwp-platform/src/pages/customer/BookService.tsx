@@ -8,13 +8,12 @@ import {
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccountScope } from "@/lib/account-scope";
-import { computeSolarCleaningPrice } from "@/lib/solar-pricing";
 import {
   useCatalogServices, useSavedLocations, useCreateSavedLocation,
   usePricingQuote, type LocationValue, type CatalogService,
 } from "@/features/master-data/api";
 import {
-  useCatalogPricingQuote, useSelfBookingCheck,
+  useCatalogPricingQuote, useSelfBookingCheck, type CatalogPricingQuote,
 } from "@/features/service-catalog/api";
 import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
 import { QuickAddAssetSheet } from "@/components/shared/QuickAddAssetSheet";
@@ -115,6 +114,8 @@ export default function BookService() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [successId, setSuccessId] = useState<number | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [callbackLeadId, setCallbackLeadId] = useState<number | null>(null);
+  const [callbackPending, setCallbackPending] = useState(false);
 
   const { data: catalogServices, isLoading: servicesLoading, isError: servicesError, refetch: refetchServices } = useCatalogServices();
   const { data: vehicles } = useListVehicles({ customerId: customerId ?? 0 }, {
@@ -183,21 +184,29 @@ export default function BookService() {
   const { data: catalogQuote } = useCatalogPricingQuote({
     serviceId: serviceId ? parseInt(serviceId) : undefined,
     vehicleModelId: selectedVehicle?.vehicleModelId,
+    vehicleId: selectedVehicle?.id,
     panelCount: selectedSolar?.panelCount,
-    citySlug: "varanasi",
+    term: asset?.kind === "solar" ? "one_time" : undefined,
   });
-  const pricingQuote = catalogQuote ?? pricingQuoteLegacy;
+  const pricingQuote = (catalogQuote as CatalogPricingQuote | undefined) ?? pricingQuoteLegacy;
+  const solarNeedsSiteVisit = asset?.kind === "solar" && catalogQuote?.status === "needs_site_visit";
 
   const coveredByPlan = Boolean(planMode === "plan" && selfBooking?.eligible);
   const estimatedPrice = useMemo(() => {
     if (coveredByPlan) return 0;
-    if (asset?.kind === "solar" && selectedSolar?.panelCount != null) {
-      return computeSolarCleaningPrice(selectedSolar.panelCount);
+    if (solarNeedsSiteVisit) return null;
+    if (catalogQuote?.status === "priced" && catalogQuote.breakdown) {
+      // Show pre-GST when exclusive (GST extra on rate card)
+      return catalogQuote.pricingType === "exclusive"
+        ? catalogQuote.breakdown.baseAmount
+        : catalogQuote.amount;
     }
-    if (pricingQuote) return Number((pricingQuote as { amount?: number }).amount ?? 0);
+    if (pricingQuote && "amount" in (pricingQuote as object)) {
+      return Number((pricingQuote as { amount?: number }).amount ?? 0);
+    }
     if (selectedService) return Number(selectedService.basePrice);
     return null;
-  }, [coveredByPlan, asset, selectedSolar, pricingQuote, selectedService]);
+  }, [coveredByPlan, solarNeedsSiteVisit, catalogQuote, pricingQuote, selectedService]);
 
   const dateOptions = useMemo(() => buildAvailableDates(14), []);
   const { data: slotPayload } = useQuery({
@@ -374,7 +383,51 @@ export default function BookService() {
     setServiceId("");
   };
 
+  const submitCallbackRequest = async () => {
+    if (!customerId || !asset || asset.kind !== "solar") return;
+    setCallbackPending(true);
+    try {
+      const phoneRes = await fetch(`/api/customers/${customerId}`, { credentials: "include" });
+      const customer = phoneRes.ok ? await phoneRes.json() : null;
+      const notesParts = [
+        "Customer self-service: solar site visit / callback",
+        `Panels: ${selectedSolar?.panelCount ?? "unknown"}`,
+        `Service: ${selectedService?.name ?? "solar"}`,
+        bookingLocation ? `Address: ${bookingLocation.address}` : null,
+        notes.trim() || null,
+      ].filter(Boolean).join("\n");
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: customer?.name ?? "Solar customer",
+          phone: customer?.phone ?? customer?.mobile,
+          city: "Varanasi",
+          source: "website",
+          serviceInterest: "solar",
+          notes: notesParts,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Failed to request callback");
+      setCallbackLeadId(body.id);
+      toast({ title: "Callback requested", description: "We’ll call you to schedule a site visit and finalize rates." });
+    } catch (e) {
+      toast({
+        title: e instanceof Error ? e.message : "Could not request callback",
+        variant: "destructive",
+      });
+    } finally {
+      setCallbackPending(false);
+    }
+  };
+
   const submitRequest = () => {
+    if (solarNeedsSiteVisit) {
+      void submitCallbackRequest();
+      return;
+    }
     if (!bookingLocation || !customerId || !asset || !scheduledDate) return;
     const serviceType = asset.kind === "solar"
       ? "solar_cleaning"
@@ -545,7 +598,15 @@ export default function BookService() {
             onChangeAddress={() => setAddressSheetOpen(true)}
             estimatedPrice={estimatedPrice}
             coveredByPlan={coveredByPlan}
+            siteVisitRequired={solarNeedsSiteVisit}
+            gstExtra={catalogQuote?.pricingType === "exclusive"}
           />
+        )}
+
+        {step === "review" && callbackLeadId != null && (
+          <p className="text-sm text-green-700">
+            Callback requested (#{callbackLeadId}). Our team will contact you shortly.
+          </p>
         )}
 
         <div className="flex gap-2 pt-1">
@@ -566,12 +627,14 @@ export default function BookService() {
           ) : (
             <Button
               className="flex-1 h-11 font-semibold"
-              disabled={!canContinue || createMutation.isPending}
+              disabled={!canContinue || createMutation.isPending || callbackPending || callbackLeadId != null}
               onClick={submitRequest}
               data-testid="schedule-request"
             >
-              {createMutation.isPending ? (
+              {createMutation.isPending || callbackPending ? (
                 <><Loader2 size={14} className="animate-spin mr-2" />Submitting…</>
+              ) : solarNeedsSiteVisit ? (
+                callbackLeadId != null ? "Callback requested" : "Request callback"
               ) : (
                 "Request Service"
               )}
@@ -585,10 +648,12 @@ export default function BookService() {
           <div className="max-w-lg mx-auto px-4 py-3">
             <Button
               className="w-full h-12 font-semibold"
-              disabled={!canContinue || createMutation.isPending}
+              disabled={!canContinue || createMutation.isPending || callbackPending || callbackLeadId != null}
               onClick={submitRequest}
             >
-              Request Service
+              {solarNeedsSiteVisit
+                ? (callbackLeadId != null ? "Callback requested" : "Request callback")
+                : "Request Service"}
             </Button>
           </div>
         </div>

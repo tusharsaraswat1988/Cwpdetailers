@@ -8,6 +8,11 @@ export const vehiclesTable = pgTable("vehicles", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull(),
   vehicleModelId: integer("vehicle_model_id"),
+  /**
+   * Optional seating override for pricing (e.g. same model as 5 or 7 seater).
+   * When null, pricing falls back to vehicle_models.seat_category_id.
+   */
+  seatCategoryId: integer("seat_category_id"),
   make: text("make").notNull(),
   model: text("model").notNull(),
   year: integer("year"),

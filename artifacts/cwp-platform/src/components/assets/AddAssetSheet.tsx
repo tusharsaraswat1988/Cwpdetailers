@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LocationPicker } from "@/components/shared/LocationPicker";
 import { VehicleModelSelect } from "@/components/shared/VehicleModelSelect";
+import { SeatCategorySelect } from "@/components/shared/SeatCategorySelect";
 import type { LocationValue, VehicleModel } from "@/features/master-data/api";
 import { Loader2 } from "lucide-react";
 
@@ -18,6 +19,7 @@ interface AddAssetSheetProps {
   onOpenChange: (open: boolean) => void;
   onSaveVehicle: (data: {
     model: VehicleModel;
+    seatCategoryId: number;
     year: string;
     color: string;
     registrationNumber: string;
@@ -37,6 +39,7 @@ export function AddAssetSheet({
 }: AddAssetSheetProps) {
   const isMobile = useIsMobile();
   const [selectedModel, setSelectedModel] = useState<VehicleModel | null>(null);
+  const [seatCategoryId, setSeatCategoryId] = useState<number | null>(null);
   const [carForm, setCarForm] = useState({ year: "", color: "", registrationNumber: "" });
   const [panelCount, setPanelCount] = useState("");
   const [location, setLocation] = useState<LocationValue | null>(null);
@@ -44,6 +47,7 @@ export function AddAssetSheet({
   useEffect(() => {
     if (!open) {
       setSelectedModel(null);
+      setSeatCategoryId(null);
       setCarForm({ year: "", color: "", registrationNumber: "" });
       setPanelCount("");
       setLocation(null);
@@ -52,12 +56,24 @@ export function AddAssetSheet({
 
   const title = kind === "vehicle" ? "Add vehicle" : "Add solar site";
 
-  const canSaveVehicle = selectedModel && carForm.registrationNumber && location;
+  const canSaveVehicle = selectedModel && carForm.registrationNumber && location && seatCategoryId != null;
   const canSaveSolar = location && panelCount;
 
   const body = kind === "vehicle" ? (
     <div className="space-y-4 pb-2">
-      <VehicleModelSelect selected={selectedModel} modelId={selectedModel?.id} onSelect={setSelectedModel} />
+      <VehicleModelSelect
+        selected={selectedModel}
+        modelId={selectedModel?.id}
+        onSelect={model => {
+          setSelectedModel(model);
+          setSeatCategoryId(model?.seatCategoryId ?? null);
+        }}
+      />
+      <SeatCategorySelect
+        value={seatCategoryId}
+        onChange={setSeatCategoryId}
+        model={selectedModel}
+      />
       <div className="grid grid-cols-2 gap-3">
         <div><Label>Year</Label><Input type="number" className="mt-1" value={carForm.year} onChange={e => setCarForm(f => ({ ...f, year: e.target.value }))} /></div>
         <div><Label>Color</Label><Input className="mt-1" value={carForm.color} onChange={e => setCarForm(f => ({ ...f, color: e.target.value }))} /></div>
@@ -70,7 +86,12 @@ export function AddAssetSheet({
       <Button
         className="w-full h-11"
         disabled={!canSaveVehicle || saving}
-        onClick={() => selectedModel && location && onSaveVehicle({ model: selectedModel, ...carForm, location })}
+        onClick={() => selectedModel && location && seatCategoryId != null && onSaveVehicle({
+          model: selectedModel,
+          seatCategoryId,
+          ...carForm,
+          location,
+        })}
         data-testid="btn-add-vehicle"
       >
         {saving ? <Loader2 className="animate-spin" size={16} /> : "Save vehicle"}

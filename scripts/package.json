@@ -29,6 +29,8 @@
     "verify:tier3-customers": "tsx ./src/verify-tier3-customers.ts",
     "verify:customer-ui-backlog": "tsx ./src/verify-customer-ui-backlog.ts",
     "seed:catalog": "tsx ./src/seed-catalog-migration.ts",
+    "seed:solar-rate-card": "tsx ./src/seed-solar-rate-card.ts",
+    "cleanup:solar-catalog": "tsx ./src/cleanup-solar-catalog.ts",
     "verify:catalog": "tsx ./src/verify-catalog.ts",
     "backfill:tenant": "tsx ./src/backfill-tenant-fields.ts",
     "test:staff-alert": "tsx ./src/test-staff-job-alert.ts",

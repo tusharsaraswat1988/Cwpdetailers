@@ -76,7 +76,7 @@ export function AssetCard({ asset, onEdit }: AssetCardProps) {
             onClick={() => onEdit(asset)}
             data-testid={`asset-change-address-${asset.id}`}
           >
-            Change
+            Edit
           </Button>
         </div>
 

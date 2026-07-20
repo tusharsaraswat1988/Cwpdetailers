@@ -49,13 +49,13 @@ function matchesRevenueLine(svc: AdminService, revenueLine: RevenueLine): boolea
   return !cat.includes("solar") && !slug.includes("solar") && cat !== "subscription";
 }
 
-const emptyForm = () => ({
-  name: "",
+const emptyForm = (revenueLine?: RevenueLine) => ({
+  name: revenueLine === "solar" ? "One Time Cleaning" : "",
   description: "",
-  shortDescription: "",
-  basePrice: "",
+  shortDescription: revenueLine === "solar" ? "Quoted from panel count on the solar rate card (GST extra)." : "",
+  basePrice: revenueLine === "solar" ? "0" : "",
   gstRate: "18",
-  pricingType: "inclusive" as AdminService["pricingType"],
+  pricingType: (revenueLine === "solar" ? "exclusive" : "inclusive") as AdminService["pricingType"],
   durationMinutes: "",
   imageUrl: "",
   isActive: true,
@@ -184,9 +184,13 @@ function ServiceCard({
       )}
 
       <div className="flex items-center justify-between text-sm pt-2 mt-auto border-t border-border/60">
-        <span className="flex items-center gap-0.5 font-bold text-primary text-base pt-2">
-          <IndianRupee size={14} />{Number(svc.basePrice).toLocaleString("en-IN")}
-        </span>
+        {svc.pricingModel === "solar_slab" ? (
+          <span className="font-semibold text-primary text-sm pt-2">From rate card</span>
+        ) : (
+          <span className="flex items-center gap-0.5 font-bold text-primary text-base pt-2">
+            <IndianRupee size={14} />{Number(svc.basePrice).toLocaleString("en-IN")}
+          </span>
+        )}
         {svc.durationMinutes ? (
           <span className="flex items-center gap-1 text-muted-foreground text-xs pt-2">
             <Clock size={12} />{svc.durationMinutes} min
@@ -206,7 +210,7 @@ export function ServicesTab({ revenueLine }: Props) {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminService | null>(null);
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState(() => emptyForm(revenueLine));
   const [inactiveOpen, setInactiveOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -238,7 +242,7 @@ export function ServicesTab({ revenueLine }: Props) {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm());
+    setForm(emptyForm(revenueLine));
     setDialogOpen(true);
   };
 
@@ -253,10 +257,11 @@ export function ServicesTab({ revenueLine }: Props) {
     description: form.description.trim() || undefined,
     shortDescription: form.shortDescription.trim() || undefined,
     serviceCategoryId: editing?.serviceCategoryId ?? defaultCategoryId,
+    category: revenueLine === "solar" ? "solar_cleaning" : undefined,
     pricingModel: editing?.pricingModel ?? defaultPricingModel,
-    basePrice: parseFloat(form.basePrice),
+    basePrice: form.basePrice === "" ? 0 : parseFloat(form.basePrice) || 0,
     gstRate: parseFloat(form.gstRate) || 18,
-    pricingType: form.pricingType,
+    pricingType: revenueLine === "solar" ? "exclusive" : form.pricingType,
     durationMinutes: form.durationMinutes ? parseInt(form.durationMinutes) : undefined,
     imageUrl: form.imageUrl.trim() || undefined,
     isActive: form.isActive,
@@ -269,7 +274,11 @@ export function ServicesTab({ revenueLine }: Props) {
       toast({ title: "Contact HQ to add new products", variant: "destructive" });
       return;
     }
-    if (!availabilityOnly && (!form.name.trim() || !form.basePrice)) {
+    if (!availabilityOnly && !form.name.trim()) {
+      toast({ title: "Name is required", variant: "destructive" });
+      return;
+    }
+    if (!availabilityOnly && revenueLine !== "solar" && !form.basePrice) {
       toast({ title: "Name and price are required", variant: "destructive" });
       return;
     }
@@ -431,7 +440,7 @@ export function ServicesTab({ revenueLine }: Props) {
 
       <Dialog open={dialogOpen} onOpenChange={open => {
         setDialogOpen(open);
-        if (!open) { setEditing(null); setForm(emptyForm()); }
+        if (!open) { setEditing(null); setForm(emptyForm(revenueLine)); }
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
