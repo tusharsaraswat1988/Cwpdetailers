@@ -1,0 +1,214 @@
+/**
+ * Scoped landing marketing styles.
+ *
+ * Rules:
+ * - Do NOT redefine global :root / .dark shadcn tokens.
+ * - All landing-specific colors live under .landing-root as --landing-* vars.
+ * - Motion utilities use the cwp-* prefix from the Lovable UI reference.
+ */
+
+.landing-root {
+  /* Defaults (vehicle). Overridden per-division via inline style on content shell. */
+  --landing-accent: oklch(0.58 0.22 258);
+  --landing-ring: oklch(0.58 0.22 258);
+  --landing-surface-tint: oklch(0.975 0.018 250);
+  --landing-brand-vehicle: oklch(0.58 0.22 258);
+  --landing-brand-solar: oklch(0.72 0.18 65);
+
+  /* Hero enter motion (synced with LANDING_MOTION constants) */
+  --hero-enter-duration: 560ms;
+  --hero-enter-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --hero-enter-distance: 14px;
+  --hero-media-fade: 500ms;
+  --hero-selector-transition: 220ms;
+}
+
+/* Hero-only enter — applied to headline, sub, CTA, media, selector, trust */
+.hero-enter {
+  opacity: 0;
+  transform: translateY(var(--hero-enter-distance));
+  transition:
+    opacity var(--hero-enter-duration) var(--hero-enter-ease),
+    transform var(--hero-enter-duration) var(--hero-enter-ease);
+  will-change: opacity, transform;
+}
+.hero-enter-ready {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---------- Scroll reveal ---------- */
+.cwp-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.cwp-reveal.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cwp-stagger > * {
+  transition-delay: 0ms;
+}
+.cwp-stagger.is-in > *:nth-child(1) {
+  transition-delay: 40ms;
+}
+.cwp-stagger.is-in > *:nth-child(2) {
+  transition-delay: 110ms;
+}
+.cwp-stagger.is-in > *:nth-child(3) {
+  transition-delay: 180ms;
+}
+.cwp-stagger.is-in > *:nth-child(4) {
+  transition-delay: 250ms;
+}
+.cwp-stagger.is-in > *:nth-child(5) {
+  transition-delay: 320ms;
+}
+.cwp-stagger.is-in > *:nth-child(6) {
+  transition-delay: 390ms;
+}
+
+/* Hover lift — comprehension of tappable cards */
+.cwp-lift {
+  transition:
+    transform 400ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 400ms ease;
+}
+.cwp-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 60px -30px rgba(15, 23, 42, 0.28);
+}
+
+/* Kenburns for hero image */
+@keyframes cwp-kenburns {
+  0% {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.08) translate3d(-1%, -1%, 0);
+  }
+}
+.cwp-kenburns {
+  animation: cwp-kenburns 18s ease-in-out infinite alternate;
+}
+
+/* Shimmer skeleton overlay */
+@keyframes cwp-skeleton {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+.cwp-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: cwp-skeleton 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Floating toast */
+@keyframes cwp-toast-in {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes cwp-toast-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+/* Division swap fade */
+@keyframes cwp-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.cwp-swap {
+  animation: cwp-swap-in 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes cwp-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.cwp-reveal-step {
+  opacity: 0;
+  animation: cwp-step-in 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes cwp-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+@keyframes cwp-blob {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(20px, -30px, 0) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cwp-reveal,
+  .cwp-lift,
+  .cwp-kenburns,
+  .hero-enter {
+    transition: none;
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+  .cwp-skeleton::after {
+    animation: none;
+  }
+  .cwp-swap {
+    animation: none;
+  }
+  .cwp-reveal-step {
+    animation: none;
+    opacity: 1;
+  }
+}
