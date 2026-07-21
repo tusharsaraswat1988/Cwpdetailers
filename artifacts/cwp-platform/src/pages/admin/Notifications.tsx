@@ -47,7 +47,7 @@ export default function AdminNotifications() {
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="btn-send-notification">
+              <Button data-testid="btn-send-notification">
                 <Plus size={15} className="mr-1.5" />Broadcast
               </Button>
             </DialogTrigger>
@@ -63,7 +63,7 @@ export default function AdminNotifications() {
                   <Input data-testid="input-notif-message" value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} className="mt-1" />
                 </div>
                 <Button onClick={() => createMutation.mutate({ data: { ...form, type: "broadcast" as any } })}
-                  disabled={createMutation.isPending} className="w-full bg-primary text-secondary hover:bg-primary/90" data-testid="btn-submit-notification">
+                  disabled={createMutation.isPending} className="w-full " data-testid="btn-submit-notification">
                   {createMutation.isPending ? "Sending..." : "Send to All"}
                 </Button>
               </div>

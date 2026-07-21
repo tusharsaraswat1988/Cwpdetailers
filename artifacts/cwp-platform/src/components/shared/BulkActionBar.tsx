@@ -30,7 +30,7 @@ export function BulkActionBar({ selectedCount, actions, onClear, className }: Bu
   return (
     <div
       className={cn(
-        "sticky bottom-4 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg",
+        "sticky bottom-4 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 admin-elevated-md shadow-[var(--shadow-md)]",
         className,
       )}
       role="region"

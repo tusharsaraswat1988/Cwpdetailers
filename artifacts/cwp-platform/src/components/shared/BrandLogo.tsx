@@ -83,7 +83,7 @@ export function BrandLogo({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg bg-primary text-secondary",
+        "flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground",
         fallbackClassName ?? VARIANT_FALLBACK_CLASS[variant],
         className,
       )}

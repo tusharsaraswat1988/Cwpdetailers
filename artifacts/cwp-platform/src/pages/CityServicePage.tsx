@@ -1,9 +1,17 @@
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { BrandLogo } from "@/components/shared/BrandLogo";
 import { ArrowLeft, MapPin, IndianRupee } from "lucide-react";
+import {
+  MarketingPageShell,
+  MarketingSection,
+  MarketingHeading,
+  MarketingBadge,
+  MarketingButton,
+  MarketingCard,
+  MarketingCTA,
+  MarketingSpinner,
+  MARKETING_SITE_LINKS,
+} from "@/features/landing/components/marketing";
 
 async function fetchCityService(citySlug: string, serviceSlug: string) {
   const res = await fetch(`/api/catalog/${citySlug}/${serviceSlug}`);
@@ -17,8 +25,18 @@ async function fetchCityService(citySlug: string, serviceSlug: string) {
 }
 
 const RESERVED_SLUGS = new Set([
-  "admin", "customer", "staff", "franchisee", "login", "register",
-  "privacy-policy", "terms-and-conditions", "refund-policy", "data-deletion", "about-us", "contact-us",
+  "admin",
+  "customer",
+  "staff",
+  "franchisee",
+  "login",
+  "register",
+  "privacy-policy",
+  "terms-and-conditions",
+  "refund-policy",
+  "data-deletion",
+  "about-us",
+  "contact-us",
 ]);
 
 export default function CityServicePage() {
@@ -28,9 +46,13 @@ export default function CityServicePage() {
 
   if (RESERVED_SLUGS.has(citySlug)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Link href="/"><Button variant="outline">Back to Home</Button></Link>
-      </div>
+      <MarketingPageShell>
+        <MarketingSection className="flex justify-center">
+          <MarketingButton href="/" variant="outline">
+            Back to Home
+          </MarketingButton>
+        </MarketingSection>
+      </MarketingPageShell>
     );
   }
 
@@ -41,79 +63,107 @@ export default function CityServicePage() {
   });
 
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>;
+    return (
+      <MarketingPageShell showFooter={false}>
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <MarketingSpinner />
+        </div>
+      </MarketingPageShell>
+    );
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-muted-foreground">Service not found in this city.</p>
-        <Link href="/"><Button variant="outline">Back to Home</Button></Link>
-      </div>
+      <MarketingPageShell>
+        <MarketingSection className="flex flex-col items-center gap-4 text-center">
+          <p className="text-muted-foreground">Service not found in this city.</p>
+          <MarketingButton href="/" variant="outline">
+            Back to Home
+          </MarketingButton>
+        </MarketingSection>
+      </MarketingPageShell>
     );
   }
 
   const svc = data.service;
   const content = data.cityContent;
-  const title = (content?.seoTitle as string) ?? (svc.seoTitle as string) ?? (svc.name as string);
-  const description = (content?.shortDescription as string) ?? (content?.longDescription as string) ?? (svc.shortDescription as string) ?? (svc.description as string);
+  const title =
+    (content?.seoTitle as string) ?? (svc.seoTitle as string) ?? (svc.name as string);
+  const description =
+    (content?.shortDescription as string) ??
+    (content?.longDescription as string) ??
+    (svc.shortDescription as string) ??
+    (svc.description as string);
   const benefits = (content?.benefits as string[]) ?? (svc.benefits as string[]) ?? [];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/"><BrandLogo variant="navbar" lazy={false} /></Link>
-          <Badge variant="outline" className="gap-1"><MapPin size={12} />{data.city.name}</Badge>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-        <Link href="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft size={14} /> Home
-        </Link>
-
-        <div>
-          <p className="text-sm text-primary font-medium capitalize">{citySlug.replace(/-/g, " ")}</p>
-          <h1 className="font-display text-3xl font-bold mt-1">{title}</h1>
-          <p className="text-muted-foreground mt-2">{description}</p>
-          <p className="flex items-center gap-1 mt-4 text-2xl font-bold">
-            <IndianRupee size={22} />
-            {String(svc.basePrice ?? "—")}
-            <span className="text-sm font-normal text-muted-foreground ml-1">GST inclusive</span>
-          </p>
+    <MarketingPageShell navLinks={MARKETING_SITE_LINKS}>
+      <MarketingSection narrow>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-foreground"
+          >
+            <ArrowLeft size={14} aria-hidden /> Home
+          </Link>
+          <MarketingBadge variant="outline">
+            <MapPin size={12} aria-hidden />
+            {data.city.name}
+          </MarketingBadge>
         </div>
 
-        {benefits.length > 0 && (
-          <section>
-            <h2 className="font-semibold text-lg mb-3">Benefits</h2>
+        <p className="text-sm font-medium capitalize text-[color:var(--landing-accent)]">
+          {citySlug.replace(/-/g, " ")}
+        </p>
+        <MarketingHeading title={title} description={description} className="mt-1" />
+        <p className="mt-4 flex items-center gap-1 font-display text-2xl font-bold">
+          <IndianRupee size={22} aria-hidden />
+          {String(svc.basePrice ?? "—")}
+          <span className="ml-1 text-sm font-normal text-muted-foreground">GST inclusive</span>
+        </p>
+
+        {benefits.length > 0 ? (
+          <section className="mt-10">
+            <h2 className="mb-3 font-display text-lg font-semibold">Benefits</h2>
             <ul className="space-y-2">
               {benefits.map((b, i) => (
-                <li key={i} className="flex gap-2 text-sm"><span className="text-primary">✓</span>{b}</li>
+                <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                  <span className="text-[color:var(--landing-accent)]" aria-hidden>
+                    ✓
+                  </span>
+                  {b}
+                </li>
               ))}
             </ul>
           </section>
-        )}
+        ) : null}
 
-        {data.addons.length > 0 && (
-          <section>
-            <h2 className="font-semibold text-lg mb-3">Available Add-ons</h2>
+        {data.addons.length > 0 ? (
+          <section className="mt-10">
+            <h2 className="mb-3 font-display text-lg font-semibold">Available Add-ons</h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              {data.addons.map(addon => (
-                <div key={addon.id} className="border rounded-lg p-4">
-                  <p className="font-medium">{addon.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{addon.description}</p>
-                  <p className="text-sm font-semibold mt-2">₹{addon.basePrice}</p>
-                </div>
+              {data.addons.map((addon) => (
+                <MarketingCard key={addon.id} className="p-4 md:p-4">
+                  <p className="font-medium text-foreground">{addon.name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{addon.description}</p>
+                  <p className="mt-2 text-sm font-semibold">₹{addon.basePrice}</p>
+                </MarketingCard>
               ))}
             </div>
           </section>
-        )}
+        ) : null}
 
-        <Link href="/register">
-          <Button className="w-full sm:w-auto bg-primary text-secondary">Book in {data.city.name}</Button>
-        </Link>
-      </main>
-    </div>
+        <div className="mt-10">
+          <MarketingCTA
+            title={`Book in ${data.city.name}`}
+            description="Create an account to schedule this service with photo reports in the app."
+            primaryLabel={`Book in ${data.city.name}`}
+            primaryHref="/register"
+            secondaryLabel="Back to home"
+            secondaryHref="/"
+          />
+        </div>
+      </MarketingSection>
+    </MarketingPageShell>
   );
 }

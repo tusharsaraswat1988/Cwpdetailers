@@ -28,22 +28,22 @@ interface StatCardProps {
 type ReactValue = string | number;
 
 const trendColor: Record<StatCardTrend, string> = {
-  up: "text-green-600",
-  down: "text-red-600",
+  up: "text-[hsl(var(--tone-success-fg,142_72%_28%))]",
+  down: "text-[hsl(var(--tone-destructive-fg,0_72%_40%))]",
   neutral: "text-muted-foreground",
 };
 
 const toneColor: Record<StatCardTone, string> = {
   default: "text-foreground",
-  success: "text-green-600",
-  warning: "text-amber-600",
+  success: "text-[hsl(var(--tone-success-fg,142_72%_28%))]",
+  warning: "text-[hsl(var(--tone-warning-fg,32_90%_32%))]",
   destructive: "text-destructive",
 };
 
 const toneIconColor: Record<StatCardTone, string> = {
   default: "bg-primary/10 text-primary",
-  success: "bg-green-500/10 text-green-600",
-  warning: "bg-amber-500/10 text-amber-600",
+  success: "bg-[hsl(var(--tone-success,142_71%_40%)/0.1)] text-[hsl(var(--tone-success-fg,142_72%_28%))]",
+  warning: "bg-[hsl(var(--tone-warning,38_92%_50%)/0.1)] text-[hsl(var(--tone-warning-fg,32_90%_32%))]",
   destructive: "bg-destructive/10 text-destructive",
 };
 
@@ -62,9 +62,9 @@ export function StatCard({
   const content = (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card shadow-sm",
+        "rounded-xl border border-border bg-card shadow-[var(--shadow-sm)]",
         prominent ? "p-5 sm:p-6" : "p-4 sm:p-5",
-        interactive && "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        interactive && "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
       onClick={onClick}

@@ -2,9 +2,8 @@ import { resolveMediaUrl } from "@/lib/media-url";
 import { MapPin, Phone, ArrowRight, CheckCircle, Loader2, Route, ClipboardCheck, Navigation, Pause, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import { format, parseISO, isValid } from "date-fns";
-import { Button } from "@/components/ui/button";
+import { StaffButton as Button, StaffStatusBadge } from "@/features/staff-ds";
 import { Textarea } from "@/components/ui/textarea";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { GeoPhotoSlotGrid } from "@/components/staff/GeoPhotoSlotGrid";
 import {
   type StaffJob,
@@ -312,7 +311,7 @@ export function StaffServiceJobFlow({
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
-          <StatusBadge status={job.status === "in_progress" ? "in_progress" : "en_route"} />
+          <StaffStatusBadge status={job.status === "in_progress" ? "in_progress" : "en_route"} />
           <p className="text-xs text-muted-foreground">Step 1 — Before photos (dirty car)</p>
         </div>
         <GeoPhotoSlotGrid
@@ -332,7 +331,7 @@ export function StaffServiceJobFlow({
       <div className="space-y-5">
         <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 text-sm space-y-1">
           <div className="flex items-center gap-2">
-            <StatusBadge status="in_progress" pulse />
+            <StaffStatusBadge status="in_progress" pulse />
             <p className="font-medium text-blue-800">Service in progress</p>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -375,7 +374,7 @@ export function StaffServiceJobFlow({
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
-          <StatusBadge status="in_progress" pulse />
+          <StaffStatusBadge status="in_progress" pulse />
           <p className="text-xs text-muted-foreground">Step 3 — After photos (clean car)</p>
         </div>
 
@@ -395,7 +394,7 @@ export function StaffServiceJobFlow({
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
-          <StatusBadge status="in_progress" pulse />
+          <StaffStatusBadge status="in_progress" pulse />
           <p className="text-xs text-muted-foreground">Step 4 — Remark &amp; complete</p>
         </div>
 

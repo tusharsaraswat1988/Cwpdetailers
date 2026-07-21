@@ -418,7 +418,7 @@ export default function BrandIdentity() {
                   <Label>{label}</Label>
                   <p className="text-xs text-muted-foreground mb-1">{hint}</p>
                   <div className="flex gap-2 mt-1.5">
-                    <Input type="color" className="w-14 h-10 p-1" defaultValue={merged[key] ?? "#00cccc"} onChange={e => set(key, e.target.value)} />
+                    <Input type="color" className="w-14 h-10 p-1" defaultValue={merged[key] ?? "#0072f8"} onChange={e => set(key, e.target.value)} />
                     <Input defaultValue={merged[key] ?? ""} onChange={e => set(key, e.target.value)} />
                   </div>
                 </div>
@@ -428,17 +428,17 @@ export default function BrandIdentity() {
               <CardContent className="p-4 mt-2">
                 <p className="text-sm font-medium mb-3">Live Theme Preview</p>
                 <div className="flex flex-wrap gap-3">
-                  <button type="button" className="px-4 py-2 rounded-md text-white text-sm font-medium" style={{ backgroundColor: merged.primaryColor ?? "#00cccc" }}>
+                  <button type="button" className="px-4 py-2 rounded-md text-white text-sm font-medium" style={{ backgroundColor: merged.primaryColor ?? "#0072f8" }}>
                     Primary Button
                   </button>
-                  <button type="button" className="px-4 py-2 rounded-md text-sm font-medium border" style={{ color: merged.primaryColor ?? "#00cccc", borderColor: merged.primaryColor ?? "#00cccc" }}>
+                  <button type="button" className="px-4 py-2 rounded-md text-sm font-medium border" style={{ color: merged.primaryColor ?? "#0072f8", borderColor: merged.primaryColor ?? "#0072f8" }}>
                     Outline Button
                   </button>
-                  <a href="#" className="text-sm underline" style={{ color: merged.primaryColor ?? "#00cccc" }} onClick={e => e.preventDefault()}>
+                  <a href="#" className="text-sm underline" style={{ color: merged.primaryColor ?? "#0072f8" }} onClick={e => e.preventDefault()}>
                     Link Text
                   </a>
                   <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: merged.accentColor ?? "#e0ffff" }}>
-                    <div className="h-full w-2/3 rounded-full" style={{ backgroundColor: merged.primaryColor ?? "#00cccc" }} />
+                    <div className="h-full w-2/3 rounded-full" style={{ backgroundColor: merged.primaryColor ?? "#0072f8" }} />
                   </div>
                 </div>
               </CardContent>

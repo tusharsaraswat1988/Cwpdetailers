@@ -79,6 +79,22 @@ export { MarketingNav } from "./components/MarketingNav";
 export type { MarketingNavProps, MarketingNavLink } from "./components/MarketingNav";
 
 export {
+  MarketingPageShell,
+  MarketingContainer,
+  MarketingSection,
+  MarketingHeading,
+  MarketingButton,
+  MarketingCard,
+  MarketingBadge,
+  MarketingCTA,
+  MarketingSkeleton,
+  MarketingSpinner,
+  MarketingLegalSubnav,
+  MARKETING_SITE_LINKS,
+  MARKETING_LEGAL_LINKS,
+} from "./components/marketing";
+
+export {
   Hero,
   HeroVehicle,
   HeroSolar,

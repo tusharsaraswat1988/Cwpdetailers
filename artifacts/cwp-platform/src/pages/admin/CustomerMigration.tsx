@@ -130,7 +130,7 @@ export default function AdminCustomerMigration() {
                   <Play size={14} className="mr-1.5" />
                   {busy === "dry" ? "Running…" : "Dry run"}
                 </Button>
-                <Button disabled={!file || !preview?.canImport || busy !== null} className="bg-primary text-secondary" onClick={() => void runImport(false)}>
+                <Button disabled={!file || !preview?.canImport || busy !== null} className="bg-primary text-primary-foreground" onClick={() => void runImport(false)}>
                   <Upload size={14} className="mr-1.5" />
                   {busy === "import" ? "Importing…" : "Commit import"}
                 </Button>

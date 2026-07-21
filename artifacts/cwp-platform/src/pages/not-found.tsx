@@ -1,21 +1,31 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import {
+  MarketingPageShell,
+  MarketingSection,
+  MarketingHeading,
+  MarketingCard,
+  MarketingButton,
+} from "@/features/landing/components/marketing";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-gray-900">404 Page Not Found</h1>
+    <MarketingPageShell>
+      <MarketingSection className="flex min-h-[60vh] items-center justify-center">
+        <MarketingCard className="w-full max-w-md">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="marketing-icon-well flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+              <AlertCircle className="h-5 w-5" aria-hidden />
+            </div>
+            <MarketingHeading title="Page not found" as="h1" className="text-left" />
           </div>
-
-          <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
+          <p className="text-sm text-muted-foreground">
+            This page doesn’t exist or may have moved. Head back to the homepage to continue.
           </p>
-        </CardContent>
-      </Card>
-    </div>
+          <MarketingButton href="/" variant="primary" className="mt-6">
+            Back to Home
+          </MarketingButton>
+        </MarketingCard>
+      </MarketingSection>
+    </MarketingPageShell>
   );
 }

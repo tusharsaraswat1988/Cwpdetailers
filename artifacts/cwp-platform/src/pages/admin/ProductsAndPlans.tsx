@@ -170,7 +170,7 @@ export default function ProductsAndPlansPage() {
                       "inline-flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg min-h-10 transition-colors",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                       active
-                        ? "bg-primary text-secondary font-semibold shadow-sm"
+                        ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                         : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >

@@ -130,7 +130,7 @@ export function VehicleModelSelect({ modelId, selected, onSelect, className }: P
                       onClick={() => handleBrandChip(b.id, b.name)}
                       className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                         brandFilterId === b.id
-                          ? "bg-primary text-secondary border-primary"
+                          ? "border-primary bg-primary text-primary-foreground"
                           : "border-border hover:border-primary/50"
                       }`}
                     >

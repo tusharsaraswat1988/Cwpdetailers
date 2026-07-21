@@ -3,6 +3,7 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import { PageActionHeader } from "@/components/layout/PageActionHeader";
 import { PageBreadcrumbs, type BreadcrumbEntry } from "./PageBreadcrumbs";
 import { cn } from "@/lib/utils";
+import { ADMIN_SPACE } from "@/features/admin-ds/tokens";
 
 type PrimaryAction = {
   label: string;
@@ -28,8 +29,7 @@ interface PageTemplateProps {
 /**
  * The one page shell for admin module pages: breadcrumbs → header (with a
  * single primary CTA) → filters → content, inside the standard AdminLayout
- * and a single canonical spacing rhythm. Wrap module pages in this instead
- * of re-implementing the header/padding/spacing per page.
+ * and a single canonical spacing rhythm.
  */
 export function PageTemplate({
   title,
@@ -44,7 +44,7 @@ export function PageTemplate({
 }: PageTemplateProps) {
   return (
     <AdminLayout>
-      <div className={cn("space-y-6", className)}>
+      <div className={cn(ADMIN_SPACE.page, className)}>
         <div>
           {breadcrumbs && breadcrumbs.length > 1 && <PageBreadcrumbs items={breadcrumbs} />}
           <PageActionHeader

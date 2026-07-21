@@ -155,7 +155,7 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
           emptyDescription="Try adjusting your search or create a new customer."
           emptyAction={
             <Can resource="customers" action="create">
-              <Button onClick={() => setOpen(true)} className="bg-primary text-secondary hover:bg-primary/90">
+              <Button onClick={() => setOpen(true)}>
                 <Plus size={14} className="mr-1.5" /> New Customer
               </Button>
             </Can>

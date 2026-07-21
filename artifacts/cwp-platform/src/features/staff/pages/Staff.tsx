@@ -229,7 +229,7 @@ export default function AdminStaff() {
             <Can resource="staff" action="create">
               <Dialog open={open} onOpenChange={setOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="staff-primary-cta">
+                  <Button data-testid="staff-primary-cta">
                     <Plus size={15} className="mr-1.5" />Add staff member
                   </Button>
                 </DialogTrigger>
@@ -349,7 +349,7 @@ export default function AdminStaff() {
                     <Button
                       onClick={handleCreate}
                       disabled={createMutation.isPending || !canSubmit}
-                      className="w-full bg-primary text-secondary hover:bg-primary/90"
+                      className="w-full "
                       data-testid="btn-submit-staff">
                       {createMutation.isPending ? "Creating..." : "Create Staff Member"}
                     </Button>

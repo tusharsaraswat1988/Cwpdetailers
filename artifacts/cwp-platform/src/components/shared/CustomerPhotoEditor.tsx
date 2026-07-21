@@ -16,6 +16,11 @@ type Props = {
   editable?: boolean;
   /** Use PATCH /api/customers/me (customer portal self-service). */
   selfService?: boolean;
+  /**
+   * Avatar-only control: tapping the photo opens the file picker.
+   * Hides the large Change / Remove buttons (premium profile hubs).
+   */
+  avatarOnly?: boolean;
   size?: Size;
   onUpdated?: (photoUrl: string | null) => void;
   className?: string;
@@ -47,6 +52,7 @@ export function CustomerPhotoEditor({
   photoUrl,
   editable = true,
   selfService = false,
+  avatarOnly = false,
   size = "md",
   onUpdated,
   className,
@@ -112,42 +118,75 @@ export function CustomerPhotoEditor({
     );
   }
 
-  return (
-    <div className={cn("flex items-center gap-3", className)} data-testid={`${testIdPrefix}-editor`}>
-      <button
-        type="button"
-        className="relative rounded-full group disabled:opacity-60"
-        onClick={() => fileRef.current?.click()}
-        disabled={busy}
-        aria-label={hasPhoto ? "Change profile photo" : "Upload profile photo"}
-        data-testid={`${testIdPrefix}-trigger`}
-      >
-        {hasPhoto ? (
-          <CustomerAvatar name={name} photoUrl={displayUrl} size={size} />
-        ) : (
-          <div className={cn(
+  const avatarTrigger = (
+    <button
+      type="button"
+      data-size="icon"
+      className={cn(
+        "relative rounded-full group disabled:opacity-60",
+        avatarOnly && "customer-tap shrink-0",
+      )}
+      onClick={() => fileRef.current?.click()}
+      disabled={busy}
+      aria-label={hasPhoto ? "Change profile photo" : "Upload profile photo"}
+      data-testid={`${testIdPrefix}-trigger`}
+    >
+      {hasPhoto ? (
+        <CustomerAvatar name={name} photoUrl={displayUrl} size={size} />
+      ) : (
+        <div
+          className={cn(
             "rounded-full bg-primary/10 flex items-center justify-center border-2 border-dashed border-primary/30",
             size === "lg" ? "w-16 h-16" : size === "md" ? "w-12 h-12" : "w-9 h-9",
-          )}>
-            <User size={size === "lg" ? 24 : size === "md" ? 20 : 16} className="text-primary" />
-          </div>
+          )}
+        >
+          <User size={size === "lg" ? 24 : size === "md" ? 20 : 16} className="text-primary" />
+        </div>
+      )}
+      <span
+        className={cn(
+          "absolute inset-0 rounded-full bg-black/40 flex items-center justify-center transition-opacity",
+          avatarOnly
+            ? "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+            : "opacity-0 group-hover:opacity-100",
         )}
-        <span className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-          {busy ? <Loader2 size={18} className="text-white animate-spin" /> : <Camera size={18} className="text-white" />}
-        </span>
-      </button>
+      >
+        {busy ? (
+          <Loader2 size={18} className="text-white animate-spin" />
+        ) : (
+          <Camera size={18} className="text-white" />
+        )}
+      </span>
+    </button>
+  );
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        className="hidden"
-        onChange={e => {
-          const file = e.target.files?.[0];
-          if (file) void uploadFile(file);
-        }}
-        data-testid={`${testIdPrefix}-input`}
-      />
+  const fileInput = (
+    <input
+      ref={fileRef}
+      type="file"
+      accept="image/jpeg,image/png,image/webp,image/gif"
+      className="hidden"
+      onChange={e => {
+        const file = e.target.files?.[0];
+        if (file) void uploadFile(file);
+      }}
+      data-testid={`${testIdPrefix}-input`}
+    />
+  );
+
+  if (avatarOnly) {
+    return (
+      <div className={cn("relative inline-flex", className)} data-testid={`${testIdPrefix}-editor`}>
+        {avatarTrigger}
+        {fileInput}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("flex items-center gap-3", className)} data-testid={`${testIdPrefix}-editor`}>
+      {avatarTrigger}
+      {fileInput}
 
       <div className="flex flex-col gap-1.5">
         <Button
@@ -170,7 +209,8 @@ export function CustomerPhotoEditor({
             className="text-destructive hover:text-destructive h-8"
             data-testid={`${testIdPrefix}-remove-btn`}
           >
-            <Trash2 size={14} className="mr-1.5" />Remove
+            <Trash2 size={14} className="mr-1.5" />
+            Remove
           </Button>
         )}
       </div>

@@ -22,6 +22,7 @@ import {
   Inbox, Trash2, IndianRupee, BookOpen, Route, GitBranch, Layers,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
+import { ADMIN_CHART } from "@/features/admin-ds";
 import CampaignDetailDialog from "../components/CampaignDetailDialog";
 import HistoryPanel from "../components/HistoryPanel";
 import ConversationInbox from "../components/ConversationInbox";
@@ -185,8 +186,8 @@ export default function CommunicationCenter() {
                         <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
                         <YAxis tick={{ fontSize: 10 }} />
                         <Tooltip />
-                        <Bar dataKey="sent" fill="hsl(180,100%,40%)" name="Sent" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="failed" fill="hsl(0,84%,60%)" name="Failed" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="sent" fill={ADMIN_CHART.primary} name="Sent" radius={ADMIN_CHART.barRadius} />
+                        <Bar dataKey="failed" fill={ADMIN_CHART.colors[3]} name="Failed" radius={ADMIN_CHART.barRadius} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -201,7 +202,7 @@ export default function CommunicationCenter() {
                         <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
                         <YAxis tick={{ fontSize: 10 }} />
                         <Tooltip formatter={(v: number) => `₹${v.toLocaleString("en-IN")}`} />
-                        <Line type="monotone" dataKey="revenue" stroke="hsl(180,100%,40%)" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="revenue" stroke={ADMIN_CHART.primary} strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -220,8 +221,8 @@ export default function CommunicationCenter() {
                         <YAxis type="category" dataKey="channel" width={70} tick={{ fontSize: 10 }} />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="sent" fill="hsl(180,100%,40%)" name="Sent" />
-                        <Bar dataKey="failed" fill="hsl(0,84%,60%)" name="Failed" />
+                        <Bar dataKey="sent" fill={ADMIN_CHART.primary} name="Sent" />
+                        <Bar dataKey="failed" fill={ADMIN_CHART.colors[3]} name="Failed" />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -429,7 +430,7 @@ function CampaignBuilder({
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary text-secondary"><Plus size={15} className="mr-1.5" />New Campaign</Button>
+            <Button className="bg-primary text-primary-foreground"><Plus size={15} className="mr-1.5" />New Campaign</Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>Create Campaign</DialogTitle></DialogHeader>

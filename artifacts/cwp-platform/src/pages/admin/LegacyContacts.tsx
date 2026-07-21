@@ -54,7 +54,7 @@ export default function AdminLegacyContacts() {
                 <Upload size={14} className="mr-1.5" />Import Existing Customers
               </Link>
             </Button>
-            <Button asChild className="bg-primary text-secondary">
+            <Button asChild className="bg-primary text-primary-foreground">
               <Link href="/admin/communications">
                 <Radio size={14} className="mr-1.5" />Send campaign
               </Link>

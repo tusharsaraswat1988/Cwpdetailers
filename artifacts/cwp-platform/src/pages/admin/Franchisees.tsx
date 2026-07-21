@@ -105,7 +105,7 @@ export default function AdminFranchisees() {
             <h1 className="font-display font-bold text-2xl">Franchisees</h1>
             <p className="text-muted-foreground text-sm mt-1">City franchise partners — owned locally, operated by {branding.brandName}</p>
           </div>
-          <Button onClick={() => setShowForm(!showForm)} className="bg-primary text-secondary">
+          <Button onClick={() => setShowForm(!showForm)} className="bg-primary text-primary-foreground">
             <Plus size={14} className="mr-2" />Add Franchisee
           </Button>
         </div>
@@ -149,7 +149,7 @@ export default function AdminFranchisees() {
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/40" />
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleCreate} disabled={createMut.isPending || !form.name || !form.phone} className="bg-primary text-secondary">
+              <Button onClick={handleCreate} disabled={createMut.isPending || !form.name || !form.phone} className="bg-primary text-primary-foreground">
                 {createMut.isPending ? "Saving…" : "Save Franchisee"}
               </Button>
               <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
@@ -252,7 +252,7 @@ export default function AdminFranchisees() {
                 placeholder="Enter a secure password"
               />
               <div className="flex gap-2">
-                <Button className="bg-primary text-secondary flex-1"
+                <Button className="bg-primary text-primary-foreground flex-1"
                   disabled={!newPassword || accountMut.isPending}
                   onClick={() => accountMut.mutate({ id: accountModal.id, password: newPassword })}>
                   {accountMut.isPending ? "Creating…" : "Create Account"}

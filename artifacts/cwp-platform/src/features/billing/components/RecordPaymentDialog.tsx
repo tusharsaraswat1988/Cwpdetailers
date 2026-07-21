@@ -210,7 +210,7 @@ export function RecordPaymentDialog({ open: controlledOpen, onOpenChange, prefil
         <Button
           onClick={submit}
           disabled={submitting || !payCustomer}
-          className="w-full bg-primary text-secondary hover:bg-primary/90"
+          className="w-full "
           data-testid="btn-submit-payment"
         >
           {submitting ? "Recording..." : "Record Payment"}
@@ -230,7 +230,7 @@ export function RecordPaymentDialog({ open: controlledOpen, onOpenChange, prefil
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="btn-record-payment">
+        <Button data-testid="btn-record-payment">
           <PlusCircle size={15} className="mr-1.5" />Record Payment
         </Button>
       </DialogTrigger>

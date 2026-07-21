@@ -1,11 +1,11 @@
 import { Link } from "wouter";
 import { ArrowRight, Phone } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useBranding } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { trackLandingEvent } from "../analytics";
 import { LANDING_LAYOUT, LANDING_Z } from "../constants";
+import { MarketingButton } from "./marketing/MarketingButton";
 
 export type MarketingNavLink = {
   id: string;
@@ -16,6 +16,8 @@ export type MarketingNavLink = {
 export type MarketingNavProps = {
   links?: MarketingNavLink[];
   className?: string;
+  /** Highlight matching href (e.g. current legal page) */
+  activeHref?: string;
 };
 
 const DEFAULT_LINKS: MarketingNavLink[] = [
@@ -26,12 +28,40 @@ const DEFAULT_LINKS: MarketingNavLink[] = [
   { id: "book", label: "Book", href: "#book" },
 ];
 
+function NavAnchor({
+  link,
+  active,
+}: {
+  link: MarketingNavLink;
+  active: boolean;
+}) {
+  const className = cn(
+    "transition hover:text-foreground",
+    active && "font-semibold text-[color:var(--landing-accent)]",
+  );
+
+  if (link.href.startsWith("#")) {
+    return (
+      <a href={link.href} className={className}>
+        {link.label}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={link.href} className={className}>
+      {link.label}
+    </Link>
+  );
+}
+
 /**
  * Public marketing chrome. Uses BrandLogo + BrandingProvider — no Lovable LogoMark.
  */
 export function MarketingNav({
   links = DEFAULT_LINKS,
   className,
+  activeHref,
 }: MarketingNavProps) {
   const branding = useBranding();
   const phone = branding.supportPhone?.replace(/\s/g, "") || "8707488250";
@@ -70,13 +100,11 @@ export function MarketingNav({
           aria-label="Marketing"
         >
           {links.map((link) => (
-            <a
+            <NavAnchor
               key={link.id}
-              href={link.href}
-              className="transition hover:text-foreground"
-            >
-              {link.label}
-            </a>
+              link={link}
+              active={!!activeHref && link.href === activeHref}
+            />
           ))}
         </nav>
 
@@ -88,37 +116,35 @@ export function MarketingNav({
             <Phone className="h-3.5 w-3.5" aria-hidden />
             {phoneDisplay}
           </a>
-          <Link href="/login">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="hidden text-muted-foreground sm:inline-flex"
-              onClick={() =>
-                trackLandingEvent("nav_cta_clicked", {
-                  ctaId: "nav-login",
-                  href: "/login",
-                })
-              }
-            >
-              Sign in
-            </Button>
-          </Link>
-          <Link href="/register">
-            <Button
-              size="sm"
-              className="rounded-full bg-foreground text-background hover:bg-foreground/90"
-              onClick={() =>
-                trackLandingEvent("nav_cta_clicked", {
-                  ctaId: "nav-register",
-                  href: "/register",
-                })
-              }
-              data-testid="nav-book-cta"
-            >
-              Book service
-              <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden />
-            </Button>
-          </Link>
+          <MarketingButton
+            href="/login"
+            variant="ghost"
+            size="sm"
+            className="hidden sm:inline-flex"
+            onClick={() =>
+              trackLandingEvent("nav_cta_clicked", {
+                ctaId: "nav-login",
+                href: "/login",
+              })
+            }
+          >
+            Sign in
+          </MarketingButton>
+          <MarketingButton
+            href="/register"
+            variant="primary"
+            size="sm"
+            data-testid="nav-book-cta"
+            onClick={() =>
+              trackLandingEvent("nav_cta_clicked", {
+                ctaId: "nav-register",
+                href: "/register",
+              })
+            }
+          >
+            Book service
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </MarketingButton>
         </div>
       </div>
     </header>

@@ -9,6 +9,15 @@ Each feature folder may export pages, hooks, and components scoped to that
 domain. Cross-cutting primitives (DataTable, FilterBar, etc.) belong in
 `src/components/shared/`, not here.
 
+Portal design systems (Platform brand + portal density):
+
+| Portal | Folder |
+|--------|--------|
+| Marketing | `features/landing` |
+| Admin | `features/admin-ds` |
+| Customer | `features/customer-ds` |
+| Staff (field workforce) | `features/staff-ds` |
+
 ```
 features/
   customers/    # customer CRUD, customer portal, segments
@@ -16,12 +25,16 @@ features/
   bookings/     # booking workflow, staff task board
   subscriptions/
   staff/        # staff portal + admin staff management
+  staff-ds/     # Staff Design System (field UX)
   billing/      # invoices, payments, quotations
   complaints/
   franchisees/
   churned/
   analytics/
   auth/         # login, register, password reset
+  admin-ds/
+  customer-ds/
+  landing/
 ```
 
 ## Migration pattern

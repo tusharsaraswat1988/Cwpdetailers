@@ -1,0 +1,207 @@
+/**
+ * Customer Design System — enforcement layer.
+ * Consumer-friendly density, large tap targets, platform brand consistency.
+ */
+
+html.customer-theme {
+  color-scheme: light;
+}
+
+/* ---------- Focus / keyboard (AA) ---------- */
+html.customer-theme :focus-visible {
+  outline: 2px solid hsl(var(--customer-focus-ring, var(--ring)));
+  outline-offset: 2px;
+}
+html.customer-theme :focus:not(:focus-visible) {
+  outline: none;
+}
+html.customer-theme input:focus-visible,
+html.customer-theme textarea:focus-visible,
+html.customer-theme select:focus-visible,
+html.customer-theme [role="combobox"]:focus-visible,
+html.customer-theme [data-radix-collection-item]:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(var(--customer-focus-ring, var(--ring)));
+}
+
+/* ---------- Root surfaces ---------- */
+.customer-root {
+  --customer-accent: var(--brand-primary, #0072f8);
+  --customer-surface-tint: var(--brand-accent, #eef8ff);
+  --customer-icon-surface: color-mix(in srgb, var(--customer-accent) 12%, white);
+  font-family: var(--font-sans);
+}
+
+.customer-root .customer-icon-well {
+  background: var(--customer-icon-surface);
+  color: var(--customer-accent);
+}
+
+.customer-root .customer-surface-tint {
+  background-color: color-mix(in srgb, var(--customer-surface-tint) 70%, white);
+}
+
+.customer-root .customer-elevated {
+  box-shadow: var(--customer-card-shadow, var(--shadow-sm));
+  border-radius: var(--customer-radius, var(--radius));
+}
+
+.customer-root .customer-elevated-md {
+  box-shadow: var(--customer-hero-shadow, var(--shadow-md));
+}
+
+.customer-root .customer-transition {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+  transition-duration: var(--duration-fast, 160ms);
+  transition-timing-function: var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+/* ---------- Large tap targets ---------- */
+.customer-root .customer-tap {
+  min-height: var(--customer-tap-min, 2.75rem);
+  min-width: var(--customer-tap-min, 2.75rem);
+}
+
+.customer-root button:not([data-size="icon"]):not(.customer-btn-sm),
+.customer-root a[role="button"]:not([data-size="icon"]) {
+  min-height: var(--customer-control-h, 3rem);
+}
+
+/* ---------- Cards ---------- */
+.customer-root .customer-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--customer-radius-lg, 1.25rem);
+  box-shadow: var(--customer-card-shadow, var(--shadow-sm));
+}
+
+.customer-root .customer-action-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--customer-radius-lg, 1.25rem);
+  box-shadow: var(--customer-card-shadow, var(--shadow-sm));
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast), transform var(--duration-fast);
+}
+.customer-root .customer-action-card:hover {
+  border-color: color-mix(in srgb, var(--customer-accent) 28%, hsl(var(--border)));
+  box-shadow: var(--shadow-md);
+}
+.customer-root .customer-action-card:active {
+  transform: scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .customer-root .customer-action-card:active {
+    transform: none;
+  }
+  .customer-root .customer-transition,
+  .customer-root .customer-skeleton {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ---------- Hero ---------- */
+.customer-root .customer-hero {
+  border-radius: var(--customer-radius-xl, 1.5rem);
+  border: 1px solid color-mix(in srgb, var(--customer-accent) 22%, hsl(var(--border)));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--customer-accent) 10%, white) 0%,
+    hsl(var(--card)) 58%
+  );
+  box-shadow: var(--customer-hero-shadow, var(--shadow-md));
+}
+
+/* ---------- States ---------- */
+.customer-root .customer-state,
+.customer-root [data-testid="empty-state"],
+.customer-root [data-testid="error-state"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem 1.5rem;
+  gap: 0.25rem;
+}
+.customer-root .customer-state-title,
+.customer-root .admin-state-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.0625rem;
+  color: hsl(var(--foreground));
+}
+.customer-root .customer-state-desc,
+.customer-root .admin-state-desc {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+  max-width: 20rem;
+}
+.customer-root .admin-icon-well {
+  background: var(--customer-icon-surface);
+  color: var(--customer-accent);
+}
+
+/* ---------- Skeleton ---------- */
+.customer-root .customer-skeleton {
+  border-radius: var(--customer-radius-sm, 0.75rem);
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    color-mix(in srgb, hsl(var(--muted)) 40%, white) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: customer-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes customer-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ---------- Bottom sticky action ---------- */
+.customer-root .customer-bottom-action {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  padding: 0.75rem 0 calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, hsl(var(--background)) 70%, transparent);
+}
+
+/* ---------- Photo report before/after ---------- */
+.customer-root .customer-photo-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.customer-root .customer-photo-pair img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--customer-radius-sm, 0.75rem);
+  background: hsl(var(--muted));
+}
+
+/* ---------- Notification groups ---------- */
+.customer-root .customer-notif-group-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  padding: 0.25rem 0.125rem;
+}
+
+/* ---------- Auth (light trust panel over dark shell optional) ---------- */
+html.customer-theme .customer-auth-shell {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+}

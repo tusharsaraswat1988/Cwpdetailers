@@ -1,5 +1,6 @@
 import { useGetDashboardStats, getGetDashboardStatsQueryKey, useGetExpiringSoonSubscriptions, useGetSubscriptionHealth } from "@workspace/api-client-react";
 import { PageTemplate, KpiRow, ErrorState, type KpiItem } from "@/components/shared";
+import { ADMIN_CHART_COLORS, ADMIN_CHART } from "@/features/admin-ds";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -8,7 +9,7 @@ import { TrendingUp, Users, CreditCard, AlertCircle, Activity, Clock, BarChart3,
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 
-const COLORS = ["hsl(180,100%,40%)", "hsl(220,40%,60%)", "hsl(40,100%,50%)", "hsl(0,84%,60%)", "hsl(270,60%,60%)"];
+const COLORS = [...ADMIN_CHART_COLORS];
 
 async function fetchLeadStats(): Promise<{ total: number; converted: number; conversionRate: number; bySource: { source: string; count: number }[] }> {
   const res = await fetch("/api/leads/stats");
@@ -243,7 +244,7 @@ export default function AdminDashboard() {
                         <XAxis dataKey="category" tick={{ fontSize: 11 }} />
                         <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${v / 1000}k` : v} />
                         <Tooltip formatter={(v: number) => `₹${v.toLocaleString("en-IN")}`} />
-                        <Bar dataKey="amount" fill="hsl(180,100%,40%)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="amount" fill={ADMIN_CHART.primary} radius={ADMIN_CHART.barRadius} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}

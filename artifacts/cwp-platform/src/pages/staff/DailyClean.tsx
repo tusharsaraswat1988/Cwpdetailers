@@ -1,13 +1,14 @@
 import { StaffDailyRouteSimplified } from "@/features/daily-cleaning/pages/StaffDailyRouteSimplified";
+import { StaffPage, StaffHeader } from "@/features/staff-ds";
 
 export default function StaffDailyCleanPage() {
   return (
-    <div className="space-y-3">
-      <div>
-        <h1 className="font-display font-bold text-xl">Daily Clean</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Aaj ke customers — photo lo, aage badho</p>
-      </div>
+    <StaffPage className="space-y-3">
+      <StaffHeader
+        title="Daily Clean"
+        subtitle="Today's route — plate scan, photos, move on"
+      />
       <StaffDailyRouteSimplified />
-    </div>
+    </StaffPage>
   );
 }

@@ -14,8 +14,9 @@ import {
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { ADMIN_CHART, ADMIN_CHART_COLORS } from "@/features/admin-ds";
 
-const COLORS = ["hsl(180,100%,40%)", "hsl(220,40%,60%)", "hsl(40,100%,50%)", "hsl(0,84%,60%)", "hsl(270,60%,60%)"];
+const COLORS = [...ADMIN_CHART_COLORS];
 
 async function fetchLeadStats() {
   const res = await fetch("/api/leads/stats");
@@ -201,7 +202,7 @@ export default function FounderDashboard() {
                       <XAxis dataKey="category" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${v / 1000}k` : String(v)} />
                       <Tooltip formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Revenue"]} />
-                      <Bar dataKey="amount" fill="hsl(180,100%,40%)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="amount" fill={ADMIN_CHART.primary} radius={ADMIN_CHART.barRadius} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}

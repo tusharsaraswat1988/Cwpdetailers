@@ -7,27 +7,25 @@ interface OperationalHeroProps {
   className?: string;
 }
 
+/** Home operational hero — uses Customer DS hero surface tokens via CSS. */
 export function OperationalHero({ hero, className }: OperationalHeroProps) {
   return (
     <div
-      className={cn(
-        "rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-card px-3.5 py-3 min-h-[4.5rem]",
-        className,
-      )}
+      className={cn("customer-hero px-4 py-4 min-h-[5rem]", className)}
       data-testid="home-operational-hero"
       aria-live="polite"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
           {hero.eyebrow}
         </p>
         {hero.kind !== "clear" && hero.status !== "clear" && (
-          <StatusBadge status={hero.status} pulse={hero.pulse} className="shrink-0 scale-90 origin-right" />
+          <StatusBadge status={hero.status} pulse={hero.pulse} className="shrink-0" />
         )}
       </div>
-      <p className="font-display font-bold text-base leading-snug mt-1 capitalize">{hero.title}</p>
+      <p className="font-display font-bold text-lg leading-snug mt-1.5 capitalize">{hero.title}</p>
       {hero.subtitle && (
-        <p className="text-xs text-muted-foreground mt-0.5 truncate">{hero.subtitle}</p>
+        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{hero.subtitle}</p>
       )}
     </div>
   );

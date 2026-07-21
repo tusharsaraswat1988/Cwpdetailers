@@ -267,14 +267,14 @@ export default function AdminBranches() {
           </div>
           <Dialog open={createOpen} onOpenChange={open => { setCreateOpen(open); if (!open) { setCreateForm(emptyForm()); setCreatePhoneError(null); } }}>
             <DialogTrigger asChild>
-              <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="btn-add-branch">
+              <Button data-testid="btn-add-branch">
                 <Plus size={15} className="mr-1.5" />Add Branch
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>New Branch</DialogTitle></DialogHeader>
               <BranchFormFields form={createForm} setForm={setCreateForm} phoneError={createPhoneError} setPhoneError={setCreatePhoneError} />
-              <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-primary text-secondary hover:bg-primary/90 mt-4" data-testid="btn-submit-branch">
+              <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full  mt-4" data-testid="btn-submit-branch">
                 {createMutation.isPending ? "Creating..." : "Create Branch"}
               </Button>
             </DialogContent>
@@ -285,7 +285,7 @@ export default function AdminBranches() {
           <DialogContent>
             <DialogHeader><DialogTitle>Edit Branch</DialogTitle></DialogHeader>
             <BranchFormFields form={editForm} setForm={setEditForm} phoneError={editPhoneError} setPhoneError={setEditPhoneError} showActiveToggle />
-            <Button onClick={handleUpdate} disabled={updateMutation.isPending} className="w-full bg-primary text-secondary hover:bg-primary/90 mt-4" data-testid="btn-save-branch">
+            <Button onClick={handleUpdate} disabled={updateMutation.isPending} className="w-full  mt-4" data-testid="btn-save-branch">
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogContent>

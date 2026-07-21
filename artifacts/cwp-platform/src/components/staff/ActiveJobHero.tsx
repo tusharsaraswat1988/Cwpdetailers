@@ -1,5 +1,4 @@
-import { MapPin, Phone, Navigation } from "lucide-react";
-import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Phone, Navigation } from "lucide-react";
 import { StaffJobActions } from "@/components/staff/StaffJobActions";
 import { StaffServiceJobFlow } from "@/components/staff/StaffServiceJobFlow";
 import { isOtherServiceJob } from "@/lib/staff-jobs";
@@ -7,12 +6,19 @@ import { resolveMediaUrl } from "@/lib/media-url";
 import type { StaffJob } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { buildNavigateUrl, canNavigateTo } from "@/lib/maps";
+import {
+  StaffStatusBadge,
+  StaffActionBar,
+  StaffMapCard,
+  StaffPhotoPair,
+} from "@/features/staff-ds";
 
 type Mutations = Pick<
   ReturnType<typeof useStaffJobsData>,
   | "transitionJob"
   | "uploadPhoto"
   | "uploadGeoPhoto"
+  | "completeJobWithNotes"
   | "uploadingJobId"
   | "uploadingPhotoIndex"
   | "locatingJobId"
@@ -29,49 +35,47 @@ export function ActiveJobHero({ job, ...actions }: Props) {
 
   return (
     <section
-      className="rounded-2xl border-2 border-primary/30 bg-gradient-to-b from-primary/5 to-card p-5 space-y-4 shadow-sm"
+      className="staff-hero staff-dashboard-hero space-y-4 p-5"
       data-testid={`active-job-hero-${job.id}`}
+      aria-live="polite"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary mb-1">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary">
             {isLive ? "Active job" : "Next job"}
           </p>
-          <h2 className="font-display font-bold text-xl leading-tight truncate">{job.customerName}</h2>
-          <p className="text-sm text-muted-foreground capitalize mt-1">
+          <h2 className="truncate font-display text-xl font-bold leading-tight text-foreground">
+            {job.customerName}
+          </h2>
+          <p className="mt-1 text-sm capitalize text-muted-foreground">
             {job.serviceType?.replace(/_/g, " ")}
             {job.serviceName ? ` · ${job.serviceName}` : ""}
             {job.scheduledTime ? ` · ${job.scheduledTime}` : ""}
           </p>
           {job.vehicleName && (
-            <p className="text-xs text-muted-foreground mt-0.5">{job.vehicleName}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{job.vehicleName}</p>
           )}
         </div>
-        <StatusBadge status={job.status ?? "scheduled"} pulse={isLive} className="shrink-0" />
+        <StaffStatusBadge status={job.status ?? "scheduled"} pulse={isLive} className="shrink-0" />
       </div>
 
-      {addressLine && (
-        <div className="flex items-start gap-2 text-sm text-muted-foreground bg-muted/40 rounded-xl p-3">
-          <MapPin size={16} className="shrink-0 text-primary mt-0.5" />
-          <span>{addressLine}</span>
-        </div>
-      )}
+      {addressLine ? <StaffMapCard address={addressLine} /> : null}
 
       {isLive && (
-        <p className="text-xs text-muted-foreground bg-primary/5 border border-primary/10 rounded-lg px-3 py-2">
+        <p className="rounded-[var(--staff-radius-sm)] border border-primary/15 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
           GPS required for job updates. Start and complete only within 150m of the customer location.
         </p>
       )}
 
       {!isOtherServiceJob(job) && (
-        <div className="flex gap-2">
+        <StaffActionBar>
           {job.customerPhone && (
             <a
               href={`tel:${job.customerPhone}`}
-              className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+              className="staff-tap inline-flex items-center justify-center gap-2 rounded-[var(--staff-radius-sm)] border border-border bg-card text-sm font-semibold hover:bg-muted"
               data-testid={`hero-call-${job.id}`}
             >
-              <Phone size={16} className="text-green-600" />
+              <Phone size={16} className="text-[hsl(var(--tone-success))]" aria-hidden />
               Call
             </a>
           )}
@@ -80,39 +84,21 @@ export function ActiveJobHero({ job, ...actions }: Props) {
               href={buildNavigateUrl(job)}
               target="_blank"
               rel="noreferrer"
-              className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+              className="staff-tap inline-flex items-center justify-center gap-2 rounded-[var(--staff-radius-sm)] border border-primary/30 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10"
               data-testid={`hero-navigate-${job.id}`}
             >
-              <Navigation size={16} className="text-blue-500" />
+              <Navigation size={16} aria-hidden />
               Navigate
             </a>
           )}
-        </div>
+        </StaffActionBar>
       )}
 
       {(job.beforePhotoUrl || job.afterPhotoUrl) && (
-        <div className="flex gap-4 justify-center">
-          {job.beforePhotoUrl && (
-            <div className="text-center">
-              <img
-                src={resolveMediaUrl(job.beforePhotoUrl)}
-                alt="Before"
-                className="h-24 w-24 rounded-xl object-cover border border-border"
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">Before</p>
-            </div>
-          )}
-          {job.afterPhotoUrl && (
-            <div className="text-center">
-              <img
-                src={resolveMediaUrl(job.afterPhotoUrl)}
-                alt="After"
-                className="h-24 w-24 rounded-xl object-cover border border-border"
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">After</p>
-            </div>
-          )}
-        </div>
+        <StaffPhotoPair
+          beforeUrl={job.beforePhotoUrl ? resolveMediaUrl(job.beforePhotoUrl) : null}
+          afterUrl={job.afterPhotoUrl ? resolveMediaUrl(job.afterPhotoUrl) : null}
+        />
       )}
 
       {isOtherServiceJob(job) ? (

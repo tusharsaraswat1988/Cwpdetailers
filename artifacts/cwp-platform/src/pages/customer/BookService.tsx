@@ -18,12 +18,10 @@ import {
 import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
 import { QuickAddAssetSheet } from "@/components/shared/QuickAddAssetSheet";
 import CustomerLayout from "@/components/layout/CustomerLayout";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { moduleError } from "@/lib/moduleErrors";
 import { Loader2, ArrowRight, ArrowLeft } from "lucide-react";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
-import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { cn } from "@/lib/utils";
 import {
   type CustomerPlan, type RawSubscription,
@@ -40,7 +38,6 @@ import {
   plansForAsset, countAssets, resolveActiveStep, nextStep, prevStep,
   filterServicesForCoverage, stepTitle, inferPlanMode, shouldSkipStep,
 } from "@/lib/schedule-journey";
-import { ScheduleStepProgress } from "@/components/schedule/ScheduleStepProgress";
 import { ScheduleAssetStep } from "@/components/schedule/ScheduleAssetStep";
 import { SchedulePlanStep } from "@/components/schedule/SchedulePlanStep";
 import { ScheduleServiceStep } from "@/components/schedule/ScheduleServiceStep";
@@ -49,6 +46,16 @@ import { ScheduleTimeStep } from "@/components/schedule/ScheduleTimeStep";
 import { ScheduleReviewStep } from "@/components/schedule/ScheduleReviewStep";
 import { ScheduleSuccessScreen } from "@/components/schedule/ScheduleSuccessScreen";
 import { loadSelectedAddress, saveSelectedAddress } from "@/lib/selected-address";
+import {
+  CustomerPage,
+  CustomerHeader,
+  CustomerEmptyState,
+  CustomerLoading,
+  CustomerStepper,
+  CustomerButton,
+} from "@/features/customer-ds";
+
+const SCHEDULE_STEPS: ScheduleStep[] = ["asset", "plan", "service", "date", "time", "review"];
 
 type VehicleRow = {
   id: number;
@@ -492,16 +499,26 @@ export default function BookService() {
   }, [skipCtx]);
 
   if (scopeLoading) {
-    return <CustomerLayout><div className="p-6"><Loader2 className="animate-spin" /></div></CustomerLayout>;
+    return (
+      <CustomerLayout>
+        <CustomerPage>
+          <CustomerLoading label="Loading schedule…" />
+        </CustomerPage>
+      </CustomerLayout>
+    );
   }
 
   if (missingCustomerLink || customerId == null) {
     return (
       <CustomerLayout>
-        <div className="p-6 max-w-md mx-auto text-center space-y-2">
-          <p className="font-semibold">Account not linked</p>
-          <NoCustomerProfileMessage />
-        </div>
+        <CustomerPage>
+          <CustomerEmptyState
+            title="Account not linked"
+            description="Your login is not linked to a customer profile yet."
+            action={<NoCustomerProfileMessage />}
+            hint=""
+          />
+        </CustomerPage>
       </CustomerLayout>
     );
   }
@@ -520,22 +537,23 @@ export default function BookService() {
       ? "Could not load services. Check your connection."
       : null;
 
+  const visibleSteps = SCHEDULE_STEPS.filter(s => !hiddenSteps.includes(s));
+  const stepIndex = Math.max(1, visibleSteps.indexOf(step) + 1);
+
   return (
     <CustomerLayout>
-      <div
+      <CustomerPage
         className={cn(
-          "max-w-lg mx-auto space-y-5",
+          "max-w-lg mx-auto",
           step === "review" && "pb-[calc(var(--bottom-nav-height)+5.5rem)]",
         )}
-        data-testid="schedule-page"
       >
-        <header className="space-y-3">
-          <div>
-            <h1 className="font-display font-bold text-2xl">Schedule</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">{stepTitle(step, asset?.kind)}</p>
-          </div>
-          <ScheduleStepProgress step={step} hiddenSteps={hiddenSteps} />
-        </header>
+        <div data-testid="schedule-page" className="space-y-5">
+        <CustomerHeader
+          title="Schedule"
+          subtitle={stepTitle(step, asset?.kind)}
+        />
+        <CustomerStepper step={stepIndex} totalSteps={visibleSteps.length} />
 
         {step === "asset" && (
           <ScheduleAssetStep
@@ -611,22 +629,22 @@ export default function BookService() {
 
         <div className="flex gap-2 pt-1">
           {step !== "asset" && (
-            <Button type="button" variant="outline" className="h-11" onClick={goBack} data-testid="schedule-back">
+            <CustomerButton type="button" variant="outline" onClick={goBack} data-testid="schedule-back">
               <ArrowLeft size={16} className="mr-1" /> Back
-            </Button>
+            </CustomerButton>
           )}
           {step !== "review" ? (
-            <Button
-              className="flex-1 h-11"
+            <CustomerButton
+              className="flex-1"
               disabled={!canContinue}
               onClick={goNext}
               data-testid="schedule-continue"
             >
               Continue <ArrowRight size={16} className="ml-1" />
-            </Button>
+            </CustomerButton>
           ) : (
-            <Button
-              className="flex-1 h-11 font-semibold"
+            <CustomerButton
+              className="flex-1"
               disabled={!canContinue || createMutation.isPending || callbackPending || callbackLeadId != null}
               onClick={submitRequest}
               data-testid="schedule-request"
@@ -638,23 +656,24 @@ export default function BookService() {
               ) : (
                 "Request Service"
               )}
-            </Button>
+            </CustomerButton>
           )}
         </div>
-      </div>
+        </div>
+      </CustomerPage>
 
       {step === "review" && (
         <div className="fixed inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur bottom-[var(--bottom-nav-height)] md:hidden">
           <div className="max-w-lg mx-auto px-4 py-3">
-            <Button
-              className="w-full h-12 font-semibold"
+            <CustomerButton
+              className="w-full"
               disabled={!canContinue || createMutation.isPending || callbackPending || callbackLeadId != null}
               onClick={submitRequest}
             >
               {solarNeedsSiteVisit
                 ? (callbackLeadId != null ? "Callback requested" : "Request callback")
                 : "Request Service"}
-            </Button>
+            </CustomerButton>
           </div>
         </div>
       )}

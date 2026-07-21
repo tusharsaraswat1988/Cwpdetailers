@@ -57,7 +57,7 @@ export function ActiveServicesSummary({ customerId, basePath }: Props) {
           </CardTitle>
           {bookServicesPath && (
             <Link href={bookServicesPath}>
-              <Button size="sm" className="bg-primary text-secondary shrink-0" data-testid="btn-book-service">
+              <Button size="sm" className="bg-primary text-primary-foreground shrink-0" data-testid="btn-book-service">
                 <CalendarCheck size={14} className="mr-1.5" />Create Service Request
               </Button>
             </Link>

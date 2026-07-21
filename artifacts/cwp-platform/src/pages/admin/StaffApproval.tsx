@@ -89,7 +89,7 @@ export default function AdminStaffApproval() {
           {[["pending", "Pending"], ["verified", "Verified"], ["rejected", "Rejected"], ["", "All"]].map(([val, label]) => (
             <button key={val} onClick={() => setFilter(val)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                filter === val ? "bg-primary text-secondary" : "bg-card border border-border text-muted-foreground hover:text-foreground"
+                filter === val ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"
               }`}>
               {label}
             </button>
@@ -179,7 +179,7 @@ export default function AdminStaffApproval() {
                               </div>
                             </div>
                           ) : (
-                            <Button size="sm" className="bg-primary text-secondary" onClick={() => { setNoteFor(s.id); setNoteText(""); }}>
+                            <Button size="sm" className="bg-primary text-primary-foreground" onClick={() => { setNoteFor(s.id); setNoteText(""); }}>
                               <Eye size={12} className="mr-1" />Review & Decide
                             </Button>
                           )}
@@ -210,7 +210,7 @@ export default function AdminStaffApproval() {
                 placeholder="Secure password"
               />
               <div className="flex gap-2">
-                <Button className="bg-primary text-secondary flex-1" disabled={!newPassword || accountMut.isPending}
+                <Button className="bg-primary text-primary-foreground flex-1" disabled={!newPassword || accountMut.isPending}
                   onClick={() => accountMut.mutate({ id: accountModal.id, password: newPassword })}>
                   {accountMut.isPending ? "Creating…" : "Create Account"}
                 </Button>

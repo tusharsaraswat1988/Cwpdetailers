@@ -1,6 +1,7 @@
 import { useGetRevenueAnalytics, getGetRevenueAnalyticsQueryKey, useGetCustomerAnalytics, getGetCustomerAnalyticsQueryKey, useGetStaffLeaderboard, getGetStaffLeaderboardQueryKey, useGetOutstandingDues, getGetOutstandingDuesQueryKey } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { ADMIN_CHART, ADMIN_CHART_COLORS } from "@/features/admin-ds";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, L
 import { Star, TrendingUp, AlertCircle, Trophy, CalendarX } from "lucide-react";
 import { Link } from "wouter";
 
-const COLORS = ["hsl(180,100%,40%)", "hsl(220,70%,60%)", "hsl(40,100%,50%)", "hsl(0,84%,60%)", "hsl(270,60%,60%)"];
+const COLORS = [...ADMIN_CHART_COLORS];
 
 async function fetchCancelledPlans() {
   const res = await fetch("/api/churned", { credentials: "include" });
@@ -66,7 +67,7 @@ export default function AdminAnalytics() {
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${v / 1000}k` : v} />
                   <Tooltip formatter={(v: number) => `₹${v.toLocaleString("en-IN")}`} />
-                  <Line type="monotone" dataKey="revenue" stroke="hsl(180,100%,40%)" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="revenue" stroke={ADMIN_CHART.primary} strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -86,7 +87,7 @@ export default function AdminAnalytics() {
                     <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
-                    <Bar dataKey="count" name="Total" fill="hsl(180,100%,40%)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="count" name="Total" fill={ADMIN_CHART.primary} radius={ADMIN_CHART.barRadius} />
                     <Bar dataKey="newCustomers" name="New" fill="hsl(220,70%,60%)" radius={[3, 3, 0, 0]} />
                     <Legend />
                   </BarChart>

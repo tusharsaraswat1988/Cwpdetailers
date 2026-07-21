@@ -12,6 +12,7 @@ import { submitMobile } from "@/lib/contactForm";
 import { getAuthErrorMessage } from "@/lib/authErrorMessages";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useBranding } from "@/lib/branding";
+import { AdminThemeRoot } from "@/features/admin-ds";
 import { AlertCircle, Loader2, Shield } from "lucide-react";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin", "manager"]);
@@ -62,103 +63,119 @@ export default function AdminLogin() {
   };
 
   return (
-    <div
-      className="min-h-[100dvh] flex flex-col items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-[#1c1410] via-[#231a12] to-[#141820]"
-      data-testid="admin-login-page"
-    >
-      <div className="w-full max-w-md">
-        <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center">
-          <p className="text-amber-200/90 text-sm font-medium flex items-center justify-center gap-2">
-            <Shield size={16} className="text-amber-400 shrink-0" aria-hidden />
-            Admin Portal — management access only
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-amber-500/20 bg-black/25 backdrop-blur-sm p-6 sm:p-8 shadow-xl shadow-amber-950/20">
-          <div className="text-center mb-8">
-            <span className="inline-flex items-center rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-amber-300 mb-4">
-              Administrator
-            </span>
-            <div className="inline-flex items-center justify-center mb-4">
-              <BrandLogo variant="white" lazy={false} />
-            </div>
-            <h1 className="font-display font-bold text-2xl sm:text-3xl text-amber-50">{branding.brandName} Admin</h1>
-            <p className="text-amber-200/55 mt-1 text-sm">Authorized personnel only</p>
+    <AdminThemeRoot className="min-h-[100dvh]">
+      <div
+        className="flex min-h-[100dvh] flex-col items-center justify-center bg-secondary p-4 sm:p-6"
+        data-testid="admin-login-page"
+      >
+        <div className="w-full max-w-md">
+          <div className="mb-6 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-center">
+            <p className="flex items-center justify-center gap-2 text-sm font-medium text-white/90">
+              <Shield size={16} className="shrink-0 text-primary" aria-hidden />
+              Admin Portal — management access only
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {formError && (
-              <div
-                className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 flex items-start gap-2"
-                role="alert"
-                data-testid="admin-login-error"
-              >
-                <AlertCircle size={15} className="text-destructive shrink-0 mt-0.5" aria-hidden />
-                <p className="text-destructive text-sm leading-snug">{formError}</p>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[var(--shadow-xl)] backdrop-blur-sm sm:p-8">
+            <div className="mb-8 text-center">
+              <span className="mb-4 inline-flex items-center rounded-full border border-primary/35 bg-primary/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-primary">
+                Administrator
+              </span>
+              <div className="mb-4 inline-flex items-center justify-center">
+                <BrandLogo variant="white" lazy={false} />
               </div>
-            )}
-            <div className="[&_label]:text-amber-200/75 [&_.text-muted-foreground]:text-amber-200/40">
-              <PhoneInput
-                id="admin-phone"
-                data-testid="input-admin-phone"
-                label="Phone Number"
-                value={phone}
-                onChange={setPhone}
-                error={phoneError}
-                onErrorChange={setPhoneError}
-                className="bg-amber-950/30 border-amber-500/25 text-amber-50 placeholder:text-amber-200/25 focus:border-amber-400"
-              />
+              <h1 className="font-display text-2xl font-bold text-white sm:text-3xl">
+                {branding.brandName} Admin
+              </h1>
+              <p className="mt-1 text-sm text-white/50">Authorized personnel only</p>
             </div>
-            <div>
-              <Label htmlFor="admin-password" className="text-amber-200/75 text-sm">Password</Label>
-              <PasswordInput
-                id="admin-password"
-                data-testid="input-admin-password"
-                value={password}
-                onChange={e => {
-                  setPassword(e.target.value);
-                  if (formError) setFormError(null);
-                }}
-                onKeyUp={e => setCapsLockOn(e.getModifierState("CapsLock"))}
-                onBlur={() => setCapsLockOn(false)}
-                placeholder="••••••••"
-                containerClassName="mt-1.5"
-                className="bg-amber-950/30 border-amber-500/25 text-amber-50 placeholder:text-amber-200/25 focus-visible:border-amber-400 focus-visible:ring-amber-400/30"
-              />
-              {capsLockOn && (
-                <p className="text-amber-300/80 text-xs mt-1.5" role="status">
-                  Caps Lock is on
-                </p>
-              )}
-            </div>
-            <Button
-              type="submit"
-              data-testid="btn-submit-admin-login"
-              disabled={loginMutation.isPending}
-              className="w-full bg-amber-500 text-amber-950 hover:bg-amber-400 font-semibold py-2.5 mt-2 shadow-md shadow-amber-900/30"
-            >
-              {loginMutation.isPending ? <><Loader2 size={14} className="animate-spin mr-2" />Signing in...</> : "Sign In to Admin"}
-            </Button>
-            <p className="text-center">
-              <a href="/admin/forgot-password" className="text-amber-300/70 hover:text-amber-200 text-xs underline underline-offset-2">
-                Forgot password?
-              </a>
-            </p>
-          </form>
 
-          <p className="mt-6 text-center text-amber-200/40 text-xs">
-            Customer or staff? Use the{" "}
-            <a href="/login" className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2">
-              customer login
-            </a>{" "}
-            or{" "}
-            <a href="/staff/login" className="text-amber-300/90 hover:text-amber-200 underline underline-offset-2">
-              staff login
-            </a>
-            .
-          </p>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {formError && (
+                <div
+                  className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5"
+                  role="alert"
+                  data-testid="admin-login-error"
+                >
+                  <AlertCircle size={15} className="mt-0.5 shrink-0 text-destructive" aria-hidden />
+                  <p className="text-sm leading-snug text-destructive">{formError}</p>
+                </div>
+              )}
+              <div className="[&_label]:text-white/70 [&_.text-muted-foreground]:text-white/40">
+                <PhoneInput
+                  id="admin-phone"
+                  data-testid="input-admin-phone"
+                  label="Phone Number"
+                  value={phone}
+                  onChange={setPhone}
+                  error={phoneError}
+                  onErrorChange={setPhoneError}
+                  className="border-white/15 bg-white/5 text-white placeholder:text-white/25 focus:border-primary"
+                />
+              </div>
+              <div>
+                <Label htmlFor="admin-password" className="text-sm text-white/70">
+                  Password
+                </Label>
+                <PasswordInput
+                  id="admin-password"
+                  data-testid="input-admin-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
+                  onKeyUp={(e) => setCapsLockOn(e.getModifierState("CapsLock"))}
+                  onBlur={() => setCapsLockOn(false)}
+                  placeholder="••••••••"
+                  containerClassName="mt-1.5"
+                  className="border-white/15 bg-white/5 text-white placeholder:text-white/25 focus-visible:border-primary focus-visible:ring-primary/30"
+                />
+                {capsLockOn && (
+                  <p className="mt-1.5 text-xs text-primary" role="status">
+                    Caps Lock is on
+                  </p>
+                )}
+              </div>
+              <Button
+                type="submit"
+                data-testid="btn-submit-admin-login"
+                disabled={loginMutation.isPending}
+                className="mt-2 w-full py-2.5 font-semibold"
+              >
+                {loginMutation.isPending ? (
+                  <>
+                    <Loader2 size={14} className="mr-2 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In to Admin"
+                )}
+              </Button>
+              <p className="text-center">
+                <a
+                  href="/admin/forgot-password"
+                  className="text-xs text-white/50 underline underline-offset-2 hover:text-primary"
+                >
+                  Forgot password?
+                </a>
+              </p>
+            </form>
+
+            <p className="mt-6 text-center text-xs text-white/40">
+              Customer or staff? Use the{" "}
+              <a href="/login" className="text-primary underline underline-offset-2 hover:opacity-90">
+                customer login
+              </a>{" "}
+              or{" "}
+              <a href="/staff/login" className="text-primary underline underline-offset-2 hover:opacity-90">
+                staff login
+              </a>
+              .
+            </p>
+          </div>
         </div>
       </div>
-    </div>
+    </AdminThemeRoot>
   );
 }

@@ -568,7 +568,7 @@ export function AddCustomerServiceWizard({
             )}
 
             <Button
-              className="w-full bg-primary text-secondary"
+              className="w-full bg-primary text-primary-foreground"
               disabled={submitting}
               onClick={() => void handleSubmit()}
               data-testid="btn-wizard-submit"
@@ -582,7 +582,7 @@ export function AddCustomerServiceWizard({
           <div className="space-y-4 text-center py-2">
             <CheckCircle size={40} className="mx-auto text-green-500" />
             <p className="font-medium">{doneMessage}</p>
-            <Button className="w-full bg-primary text-secondary" onClick={() => close(false)}>
+            <Button className="w-full bg-primary text-primary-foreground" onClick={() => close(false)}>
               Done
             </Button>
           </div>

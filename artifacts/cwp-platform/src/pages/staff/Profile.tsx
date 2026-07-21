@@ -13,10 +13,7 @@ import { useAccountScope } from "@/lib/account-scope";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffVerificationBanner, StaffVerificationBadge } from "@/features/staff/components/StaffVerificationBanner";
 import { StaffOperationalRoles } from "@/features/staff/components/StaffOperationalRoles";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Loader2, MapPin, Save } from "lucide-react";
 import { todayIso } from "@/lib/staff-jobs";
@@ -26,13 +23,17 @@ import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosys
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { StaffTeamSection } from "@/components/staff/StaffTeamSection";
-
-const statusColors: Record<string, string> = {
-  present: "bg-green-500/10 text-green-600 border-green-500/20",
-  absent: "bg-destructive/10 text-destructive border-destructive/20",
-  late: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-  half_day: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-};
+import {
+  StaffPage,
+  StaffButton,
+  StaffInput,
+  StaffSkeleton,
+  StaffProfileCard,
+  StaffAttendanceCard,
+  StaffMetric,
+  StaffStatusBadge,
+  StaffCard,
+} from "@/features/staff-ds";
 
 function initials(name?: string | null) {
   if (!name) return "?";
@@ -139,43 +140,29 @@ export default function StaffProfile() {
   const avatarUrl = profile?.profilePhotoUrl ? resolveMediaUrl(profile.profilePhotoUrl) : null;
 
   return (
-    <div className="space-y-5 pb-4">
+    <StaffPage className="pb-4">
         {loadingProfile ? (
-          <Skeleton className="h-24 w-full rounded-2xl" />
+          <StaffSkeleton className="h-24 w-full" />
         ) : profile ? (
           <>
             <StaffVerificationBanner status={profile.verificationStatus} notes={profile.verificationNotes} />
           </>
         ) : null}
 
-        <div className="flex items-center gap-4">
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt={user?.name ?? "Staff"}
-              className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-border"
-              data-testid="profile-avatar-photo"
-            />
-          ) : (
-            <div
-              className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center font-display font-bold text-xl text-primary shrink-0"
-              data-testid="profile-avatar"
-            >
-              {initials(user?.name)}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <h1 className="font-display font-bold text-xl truncate">{user?.name}</h1>
-            <div className="flex items-center gap-2 flex-wrap mt-0.5">
-              <p className="text-sm text-muted-foreground">{roleLabel}</p>
-              {profile && <StaffVerificationBadge status={profile.verificationStatus} />}
-            </div>
-            {profile?.employeeCode && (
-              <p className="text-xs text-muted-foreground mt-0.5">{profile.employeeCode}</p>
-            )}
-            {user?.phone && <p className="text-xs text-muted-foreground">{user.phone}</p>}
+        <StaffProfileCard
+          name={user?.name ?? "Staff"}
+          role={roleLabel}
+          avatarUrl={avatarUrl}
+          avatarFallback={initials(user?.name)}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {profile && <StaffVerificationBadge status={profile.verificationStatus} />}
+            {profile?.employeeCode ? (
+              <p className="text-xs text-muted-foreground">{profile.employeeCode}</p>
+            ) : null}
+            {user?.phone ? <p className="text-xs text-muted-foreground">{user.phone}</p> : null}
           </div>
-        </div>
+        </StaffProfileCard>
 
         {profile && !isSupervisor && <StaffOperationalRoles roles={profile.roles} />}
 
@@ -190,35 +177,35 @@ export default function StaffProfile() {
         <StaffTeamSection />
 
         {profile && !isSupervisor && (
-          <section className="rounded-2xl border border-border bg-card p-4 space-y-3">
+          <StaffCard>
             <p className="text-sm font-semibold">Employment (read-only)</p>
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
               <div>
                 <p className="text-muted-foreground">Branch</p>
-                <p className="font-medium mt-0.5">{profile.branchName ?? "—"}</p>
+                <p className="mt-0.5 font-medium">{profile.branchName ?? "—"}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Joined</p>
-                <p className="font-medium mt-0.5">{profile.joiningDate ?? "—"}</p>
+                <p className="mt-0.5 font-medium">{profile.joiningDate ?? "—"}</p>
               </div>
               {profile.partnerName && (
                 <div className="col-span-2">
                   <p className="text-muted-foreground">Partner</p>
-                  <p className="font-medium mt-0.5">{profile.partnerName}</p>
+                  <p className="mt-0.5 font-medium">{profile.partnerName}</p>
                 </div>
               )}
             </div>
-          </section>
+          </StaffCard>
         )}
 
         {profile && !isSupervisor && (
-          <section className="rounded-2xl border border-border bg-card p-4 space-y-3">
+          <StaffCard>
             <p className="text-sm font-semibold">Emergency contact</p>
-            <div className="grid gap-3">
+            <div className="mt-3 grid gap-3">
               <div>
                 <Label className="text-xs text-muted-foreground">Name</Label>
-                <Input
-                  className="mt-1 h-9 text-sm"
+                <StaffInput
+                  className="mt-1"
                   value={emergencyName}
                   onChange={e => setEmergencyName(e.target.value)}
                   placeholder="Contact name"
@@ -226,16 +213,16 @@ export default function StaffProfile() {
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Phone</Label>
-                <Input
-                  className="mt-1 h-9 text-sm"
+                <StaffInput
+                  className="mt-1"
                   value={emergencyPhone}
                   onChange={e => setEmergencyPhone(e.target.value)}
                   placeholder="10-digit mobile"
                 />
               </div>
-              <Button
+              <StaffButton
                 size="sm"
-                className="w-fit h-9"
+                className="staff-btn-sm w-fit"
                 disabled={saveEmergencyMutation.isPending}
                 onClick={() =>
                   saveEmergencyMutation.mutate({
@@ -244,30 +231,43 @@ export default function StaffProfile() {
                   })
                 }
               >
-                {saveEmergencyMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : <Save size={14} className="mr-1" />}
+                {saveEmergencyMutation.isPending ? (
+                  <Loader2 size={14} className="mr-1 animate-spin" />
+                ) : (
+                  <Save size={14} className="mr-1" />
+                )}
                 Save contact
-              </Button>
+              </StaffButton>
             </div>
-          </section>
+          </StaffCard>
         )}
 
         {!isSupervisor && (
-          <section className="rounded-2xl border border-border overflow-hidden">
+          <section className="staff-card staff-elevated overflow-hidden">
             <button
               type="button"
-              className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+              className="staff-tap flex w-full items-center justify-between p-4 text-left hover:bg-muted/50"
               onClick={() => setAddressOpen(v => !v)}
             >
               <span className="text-sm font-semibold">My address</span>
-              {addressOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              {addressOpen ? <ChevronUp size={18} aria-hidden /> : <ChevronDown size={18} aria-hidden />}
             </button>
             {addressOpen && profile && (
-              <div className="px-4 pb-4 text-xs space-y-1 border-t border-border pt-3 text-muted-foreground">
-                <p>{profile.currentHouseNumber} {profile.currentStreet}</p>
-                <p>{profile.currentArea}{profile.currentLandmark ? `, ${profile.currentLandmark}` : ""}</p>
-                <p>{profile.currentCity}, {profile.currentState} — {profile.currentPincode}</p>
-                {!profile.addressComplete && (
-                  <p className="text-amber-600 pt-2">Address incomplete — ask admin to update your profile.</p>
+              <div className="space-y-1 border-t border-border px-4 pb-4 pt-3 text-xs text-muted-foreground">
+                <p>
+                  {profile.currentHouseNumber} {profile.currentStreet}
+                </p>
+                <p>
+                  {profile.currentArea}
+                  {profile.currentLandmark ? `, ${profile.currentLandmark}` : ""}
+                </p>
+                <p>
+                  {profile.currentCity}, {profile.currentState} — {profile.currentPincode}
+                </p>
+                {!(profile as { addressComplete?: boolean }).addressComplete && (
+                  <p className="pt-2 text-[hsl(var(--tone-warning-fg))]">
+                    Address incomplete — ask admin to update your profile.
+                  </p>
                 )}
               </div>
             )}
@@ -275,24 +275,18 @@ export default function StaffProfile() {
         )}
 
         {!isSupervisor && (
-          <section className="rounded-2xl border border-border bg-card p-4 space-y-3" data-testid="profile-attendance-today">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">Today&apos;s attendance</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {todayMarked
-                    ? `Marked ${todayRecord?.status?.replace(/_/g, " ")}${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
-                    : "GPS check-in required before starting field work"}
-                </p>
-              </div>
-              {todayMarked ? (
-                <div className="flex items-center gap-1.5 text-green-600 text-sm font-medium">
-                  <CheckCircle size={16} />
-                  Done
-                </div>
-              ) : (
-                <Button
-                  className="h-12 px-5 font-semibold bg-primary text-secondary hover:bg-primary/90 shrink-0"
+          <StaffAttendanceCard
+            status={todayMarked ? todayRecord?.status ?? "present" : "pending"}
+            dateLabel="Today's attendance"
+            checkInLabel={
+              todayMarked
+                ? `Marked${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
+                : "GPS check-in required before field work"
+            }
+            action={
+              todayMarked ? undefined : (
+                <StaffButton
+                  className="shrink-0 px-4"
                   disabled={markMutation.isPending}
                   data-testid="btn-mark-present"
                   onClick={() =>
@@ -308,81 +302,98 @@ export default function StaffProfile() {
                   ) : (
                     <MapPin size={16} className="mr-2" />
                   )}
-                  {markMutation.isPending ? "Getting GPS…" : "Check in with GPS"}
-                </Button>
-              )}
-            </div>
-          </section>
+                  {markMutation.isPending ? "Getting GPS…" : "Check in"}
+                </StaffButton>
+              )
+            }
+          />
         )}
 
         {!isSupervisor && (
           <div className="grid grid-cols-2 gap-3" data-testid="profile-stats">
-            {[
-              { label: "Jobs this month", value: perf?.jobsCompleted ?? profile?.performance?.completedJobs, icon: Calendar },
-              { label: "Rating", value: (perf?.averageRating ?? profile?.performance?.averageRating)?.toFixed(1), icon: Star, suffix: "/5" },
-              { label: "Present days", value: presentDays, icon: CheckCircle },
-              { label: "Rank", value: myRank > 0 ? `#${myRank}` : "—", icon: Trophy },
-            ].map(({ label, value, icon: Icon, suffix }) => (
-              <div key={label} className="rounded-xl border border-border bg-card p-3">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Icon size={13} className="text-primary" />
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</span>
-                </div>
-                {loadingPerf && label !== "Present days" ? (
-                  <Skeleton className="h-7 w-12" />
-                ) : (
-                  <p className="font-display font-bold text-xl text-primary">
-                    {value ?? 0}
-                    {suffix ?? ""}
-                  </p>
-                )}
-              </div>
-            ))}
+            <StaffMetric
+              label="Jobs this month"
+              value={
+                loadingPerf
+                  ? "…"
+                  : (perf?.jobsCompleted ?? profile?.performance?.completedJobs ?? 0)
+              }
+              icon={<Calendar size={13} className="text-primary" aria-hidden />}
+              tone="primary"
+              className="text-left"
+            />
+            <StaffMetric
+              label="Rating"
+              value={
+                loadingPerf
+                  ? "…"
+                  : `${(perf?.averageRating ?? profile?.performance?.averageRating)?.toFixed(1) ?? "0"}/5`
+              }
+              icon={<Star size={13} className="text-primary" aria-hidden />}
+              tone="primary"
+              className="text-left"
+            />
+            <StaffMetric
+              label="Present days"
+              value={presentDays}
+              icon={<CheckCircle size={13} className="text-primary" aria-hidden />}
+              tone="success"
+              className="text-left"
+            />
+            <StaffMetric
+              label="Rank"
+              value={myRank > 0 ? `#${myRank}` : "—"}
+              icon={<Trophy size={13} className="text-primary" aria-hidden />}
+              tone="primary"
+              className="text-left"
+            />
           </div>
         )}
 
         {!isSupervisor && (
-          <section className="rounded-2xl border border-border overflow-hidden">
+          <section className="staff-card staff-elevated overflow-hidden">
             <button
               type="button"
-              className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+              className="staff-tap flex w-full items-center justify-between p-4 text-left hover:bg-muted/50"
               onClick={() => setCalendarOpen(v => !v)}
               data-testid="profile-calendar-toggle"
             >
               <div className="flex items-center gap-2">
-                <Calendar size={16} className="text-primary" />
+                <Calendar size={16} className="text-primary" aria-hidden />
                 <span className="text-sm font-semibold">Monthly attendance</span>
               </div>
-              {calendarOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              {calendarOpen ? <ChevronUp size={18} aria-hidden /> : <ChevronDown size={18} aria-hidden />}
             </button>
 
             {calendarOpen && (
-              <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+              <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
                 <input
                   type="month"
                   value={month}
                   onChange={e => setMonth(e.target.value)}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card"
+                  className="w-full rounded-[var(--staff-radius-sm)] border border-border bg-card px-3 py-3 text-sm"
                   data-testid="input-month"
                 />
                 {loadingAttendance ? (
                   <div className="grid grid-cols-4 gap-2">
                     {Array.from({ length: 8 }).map((_, i) => (
-                      <Skeleton key={i} className="h-14 rounded-lg" />
+                      <StaffSkeleton key={i} className="h-14 w-full" />
                     ))}
                   </div>
                 ) : (attendance ?? []).length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-6">No records this month</p>
+                  <p className="py-6 text-center text-sm text-muted-foreground">No records this month</p>
                 ) : (
                   <div className="grid grid-cols-4 gap-2">
                     {(attendance ?? []).map(a => (
                       <div
                         key={a.id}
-                        className={`rounded-lg border p-2 text-center ${statusColors[a.status] ?? "border-border"}`}
+                        className="rounded-[var(--staff-radius-sm)] border border-border bg-card p-2 text-center"
                         data-testid={`attendance-${a.date}`}
                       >
-                        <p className="font-bold text-sm">{a.date?.split("-")[2]}</p>
-                        <p className="text-[10px] capitalize mt-0.5">{a.status?.replace(/_/g, " ")}</p>
+                        <p className="text-sm font-bold">{a.date?.split("-")[2]}</p>
+                        <div className="mt-1 flex justify-center">
+                          <StaffStatusBadge status={a.status ?? "pending"} className="scale-90" />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -394,15 +405,15 @@ export default function StaffProfile() {
 
         <PushNotificationSettings variant="staff" />
 
-        <Button
+        <StaffButton
           variant="outline"
-          className="w-full h-12 text-destructive border-destructive/30 hover:bg-destructive/10"
+          className="w-full border-destructive/30 text-destructive hover:bg-destructive/10"
           onClick={logout}
           data-testid="btn-sign-out"
         >
           <LogOut size={16} className="mr-2" />
           Sign out
-        </Button>
-      </div>
+        </StaffButton>
+    </StaffPage>
   );
 }

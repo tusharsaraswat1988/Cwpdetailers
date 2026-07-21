@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useParams, Link, useLocation } from "wouter";
+import { useParams, useLocation } from "wouter";
 import {
   useGetBooking, getGetBookingQueryKey,
   useGetBookingEvents, getGetBookingEventsQueryKey,
@@ -8,15 +8,10 @@ import {
 } from "@workspace/api-client-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import CustomerLayout from "@/components/layout/CustomerLayout";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { StatusBadge } from "@/components/shared/StatusBadge";
-import { ErrorState } from "@/components/shared/ErrorState";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { mapsViewUrl } from "@/lib/maps";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +22,15 @@ import {
   CheckCircle2, XCircle, CalendarClock, Image as ImageIcon, Loader2,
   Car, MessageCircle,
 } from "lucide-react";
+import {
+  CustomerPage,
+  CustomerHero,
+  CustomerCard,
+  CustomerErrorState,
+  CustomerSkeleton,
+  CustomerButton,
+  CustomerPhotoReport,
+} from "@/features/customer-ds";
 
 const CANCELLABLE_STATUSES = new Set(["draft", "confirmed", "scheduled", "waiting_assignment", "rescheduled"]);
 
@@ -39,7 +43,7 @@ function StatusStep({
         <div
           className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 ${
             done || active
-              ? "bg-primary border-primary text-secondary"
+              ? "bg-primary border-primary text-primary-foreground"
               : "bg-muted border-border text-muted-foreground"
           }`}
         >
@@ -116,13 +120,12 @@ export default function BookingDetail() {
     },
   });
 
-  const photos = useMemo(() => {
+  const proofPhotos = useMemo(() => {
     if (!booking) return [] as { url: string; label: string }[];
-    const list: { url: string; label: string }[] = [];
-    if (booking.beforePhotoUrl) list.push({ url: booking.beforePhotoUrl, label: "Before" });
-    if (booking.afterPhotoUrl) list.push({ url: booking.afterPhotoUrl, label: "After" });
-    (booking.proofPhotoUrls ?? []).forEach((u: string, i: number) => list.push({ url: u, label: `Proof ${i + 1}` }));
-    return list;
+    return (booking.proofPhotoUrls ?? []).map((u: string, i: number) => ({
+      url: u,
+      label: `Proof ${i + 1}`,
+    }));
   }, [booking]);
 
   const canCancel = booking ? CANCELLABLE_STATUSES.has(booking.status) : false;
@@ -133,67 +136,51 @@ export default function BookingDetail() {
   if (!Number.isFinite(bookingId)) {
     return (
       <CustomerLayout>
-        <ErrorState title="Invalid link" description="This scheduled service link looks incorrect." />
+        <CustomerPage>
+          <CustomerErrorState title="Invalid link" description="This scheduled service link looks incorrect." />
+        </CustomerPage>
       </CustomerLayout>
     );
   }
 
   return (
     <CustomerLayout>
-      <div className="max-w-lg mx-auto space-y-5 pb-8">
-        <button
+      <CustomerPage className="max-w-lg mx-auto pb-8">
+        <CustomerButton
+          variant="ghost"
+          size="sm"
+          className="h-auto px-0 text-muted-foreground hover:text-foreground"
           onClick={() => navigate(CUSTOMER_ROUTES.serviceHistory)}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           data-testid="btn-back-to-history"
         >
-          <ArrowLeft size={14} /> Back to history
-        </button>
+          <ArrowLeft size={14} className="mr-1.5" /> Back to history
+        </CustomerButton>
 
         {isLoading ? (
           <div className="space-y-3">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-40 rounded-2xl" />
-            <Skeleton className="h-32 rounded-xl" />
+            <CustomerSkeleton className="h-8 w-48" />
+            <CustomerSkeleton className="h-40" />
+            <CustomerSkeleton className="h-32" />
           </div>
         ) : isError || !booking ? (
-          <ErrorState
+          <CustomerErrorState
             title="Couldn't load this scheduled service"
             description="It may have been removed, or you don't have access to it."
             onRetry={() => refetch()}
           />
         ) : (
           <>
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <h1 className="font-display font-bold text-2xl capitalize leading-tight">
-                  {(booking.serviceName ?? booking.serviceType.replace(/_/g, " "))}
-                </h1>
-                <StatusBadge
-                  status={booking.status}
-                  pulse={booking.status === "confirmed" || booking.status === "waiting_assignment"}
-                />
-              </div>
-              <p className="text-muted-foreground text-sm mt-1">Request #{booking.id}</p>
-            </div>
+            <CustomerHero
+              eyebrow={`Request #${booking.id}`}
+              title={booking.serviceName ?? booking.serviceType.replace(/_/g, " ")}
+              status={booking.status}
+              pulse={booking.status === "confirmed" || booking.status === "waiting_assignment"}
+              subtitle={booking.status === "draft" ? "Awaiting CWP confirmation" : undefined}
+            />
 
-            <Card>
-              <CardContent className="p-4 space-y-3 text-sm">
-                <h2 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Current status</h2>
-                <div className="flex items-center justify-between">
-                  <StatusBadge
-                    status={booking.status}
-                    pulse={booking.status === "confirmed" || booking.status === "waiting_assignment"}
-                  />
-                  {booking.status === "draft" && (
-                    <span className="text-xs text-muted-foreground">Awaiting CWP confirmation</span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <h2 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Service details</h2>
+            <CustomerCard>
+              <h2 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-3">Service details</h2>
+              <div className="space-y-3">
                 {booking.vehicleInfo && (
                   <div className="flex items-center gap-3 text-sm">
                     <Car size={15} className="text-primary shrink-0" />
@@ -259,17 +246,25 @@ export default function BookingDetail() {
                     <p>{booking.cancellationReason}</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </CustomerCard>
 
-            {/* Photos */}
-            {photos.length > 0 && (
+            {(booking.beforePhotoUrl || booking.afterPhotoUrl) && (
+              <CustomerPhotoReport
+                title="Service photos"
+                status={booking.status}
+                beforeUrl={booking.beforePhotoUrl ? resolveMediaUrl(booking.beforePhotoUrl) : null}
+                afterUrl={booking.afterPhotoUrl ? resolveMediaUrl(booking.afterPhotoUrl) : null}
+              />
+            )}
+
+            {proofPhotos.length > 0 && (
               <div>
                 <h2 className="font-semibold text-sm mb-2 flex items-center gap-1.5">
-                  <ImageIcon size={14} className="text-primary" /> Service photos
+                  <ImageIcon size={14} className="text-primary" /> Proof photos
                 </h2>
                 <div className="flex flex-wrap gap-2">
-                  {photos.map((p, i) => (
+                  {proofPhotos.map((p, i) => (
                     <button
                       key={i}
                       onClick={() => setLightboxUrl(resolveMediaUrl(p.url))}
@@ -288,38 +283,34 @@ export default function BookingDetail() {
               </div>
             )}
 
-            {/* Timeline */}
             {(events ?? []).length > 0 && (
               <div>
                 <h2 className="font-semibold text-sm mb-2">Timeline</h2>
-                <Card>
-                  <CardContent className="p-4">
-                    {[...(events ?? [])].reverse().map((ev, i, arr) => (
-                      <StatusStep
-                        key={ev.id}
-                        label={
-                          ev.body ??
-                          (ev.toStatus ? `Status changed to ${ev.toStatus.replace(/_/g, " ")}` : ev.type.replace(/_/g, " "))
-                        }
-                        done
-                        active={i === arr.length - 1}
-                        isLast={i === arr.length - 1}
-                      />
-                    ))}
-                  </CardContent>
-                </Card>
+                <CustomerCard>
+                  {[...(events ?? [])].reverse().map((ev, i, arr) => (
+                    <StatusStep
+                      key={ev.id}
+                      label={
+                        ev.body ??
+                        (ev.toStatus ? `Status changed to ${ev.toStatus.replace(/_/g, " ")}` : ev.type.replace(/_/g, " "))
+                      }
+                      done
+                      active={i === arr.length - 1}
+                      isLast={i === arr.length - 1}
+                    />
+                  ))}
+                </CustomerCard>
               </div>
             )}
 
-            {/* Actions — placeholders for future self-serve */}
             {(canCancel || canReschedule) && (
               <div className="space-y-2 pt-2">
                 <p className="text-xs text-muted-foreground text-center">Need to change this visit? Contact CWP or use the options below.</p>
                 <div className="flex gap-2">
                   {canReschedule && (
-                    <Button
+                    <CustomerButton
                       variant="outline"
-                      className="flex-1 h-11 gap-1.5"
+                      className="flex-1 gap-1.5"
                       onClick={() => {
                         setNewDate(booking.scheduledDate);
                         setNewTime(booking.scheduledTime ?? "09:00");
@@ -328,27 +319,25 @@ export default function BookingDetail() {
                       data-testid="btn-open-reschedule"
                     >
                       <CalendarClock size={15} /> Reschedule
-                    </Button>
+                    </CustomerButton>
                   )}
                   {canCancel && (
-                    <Button
+                    <CustomerButton
                       variant="outline"
-                      className="flex-1 h-11 gap-1.5 text-destructive hover:text-destructive"
+                      className="flex-1 gap-1.5 text-destructive hover:text-destructive"
                       onClick={() => setCancelOpen(true)}
                       data-testid="btn-open-cancel"
                     >
                       <XCircle size={15} /> Cancel
-                    </Button>
+                    </CustomerButton>
                   )}
                 </div>
               </div>
             )}
 
-            <Link href={CUSTOMER_ROUTES.support} className="block">
-              <Button variant="ghost" className="w-full h-11 gap-2" data-testid="scheduled-service-support">
-                <MessageCircle size={16} /> Support
-              </Button>
-            </Link>
+            <CustomerButton href={CUSTOMER_ROUTES.support} variant="ghost" className="w-full gap-2" data-testid="scheduled-service-support">
+              <MessageCircle size={16} /> Support
+            </CustomerButton>
 
             {!canCancel && !canReschedule && booking.status !== "completed" && booking.status !== "cancelled" && (
               <p className="text-xs text-muted-foreground text-center">
@@ -357,9 +346,8 @@ export default function BookingDetail() {
             )}
           </>
         )}
-      </div>
+      </CustomerPage>
 
-      {/* Cancel dialog */}
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <DialogContent>
           <DialogHeader>
@@ -375,8 +363,8 @@ export default function BookingDetail() {
             />
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setCancelOpen(false)}>Keep service</Button>
-            <Button
+            <CustomerButton variant="outline" onClick={() => setCancelOpen(false)}>Keep service</CustomerButton>
+            <CustomerButton
               variant="destructive"
               disabled={cancelMutation.isPending}
               data-testid="btn-confirm-cancel"
@@ -384,12 +372,11 @@ export default function BookingDetail() {
             >
               {cancelMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
               Yes, cancel
-            </Button>
+            </CustomerButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Reschedule dialog */}
       <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
         <DialogContent>
           <DialogHeader>
@@ -419,8 +406,8 @@ export default function BookingDetail() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancel</Button>
-            <Button
+            <CustomerButton variant="outline" onClick={() => setRescheduleOpen(false)}>Cancel</CustomerButton>
+            <CustomerButton
               disabled={!newDate || rescheduleMutation.isPending}
               data-testid="btn-confirm-reschedule"
               onClick={() => rescheduleMutation.mutate({
@@ -430,12 +417,11 @@ export default function BookingDetail() {
             >
               {rescheduleMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
               Confirm new time
-            </Button>
+            </CustomerButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Photo lightbox */}
       <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
         <DialogContent className="max-w-2xl p-2 bg-black border-0">
           {lightboxUrl && (

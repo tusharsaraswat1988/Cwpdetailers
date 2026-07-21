@@ -6,13 +6,18 @@ import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
 import { StaffServiceJobFlow } from "@/components/staff/StaffServiceJobFlow";
 import { StaffWalkInPanel } from "@/components/staff/StaffWalkInPanel";
-import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { ErrorState } from "@/components/shared/ErrorState";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Calendar, ChevronDown, ChevronLeft, UserPlus } from "lucide-react";
 import { staffJobKey, type StaffJob } from "@/lib/staff-jobs";
 import { cn } from "@/lib/utils";
+import {
+  StaffSkeleton,
+  StaffEmptyState,
+  StaffErrorState,
+  StaffStatusBadge,
+  StaffCard,
+  StaffSuccessBanner,
+} from "@/features/staff-ds";
 
 type Props = {
   selectedJobKey?: string | null;
@@ -124,37 +129,49 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
             onSelectJob(null);
             setFromWalkIn(false);
           }}
-          className="flex items-center gap-1 text-sm text-primary font-medium"
+          className="staff-tap inline-flex items-center gap-1 text-sm font-semibold text-primary"
         >
-          <ChevronLeft size={16} /> Jobs par wapas
+          <ChevronLeft size={16} aria-hidden /> Back to jobs
         </button>
-        <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-          <div>
-            <h2 className="font-display font-bold text-lg">{selectedJob.customerName}</h2>
-            <p className="text-sm text-muted-foreground capitalize">
-              {(selectedJob.serviceName ?? selectedJob.serviceType)?.replace(/_/g, " ")}
-              {selectedJob.scheduledTime ? ` · ${selectedJob.scheduledTime}` : ""}
-            </p>
+        <StaffCard padded={false} className="overflow-hidden">
+          <div className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate font-display text-lg font-bold">{selectedJob.customerName}</h2>
+                <p className="text-sm capitalize text-muted-foreground">
+                  {(selectedJob.serviceName ?? selectedJob.serviceType)?.replace(/_/g, " ")}
+                  {selectedJob.scheduledTime ? ` · ${selectedJob.scheduledTime}` : ""}
+                </p>
+              </div>
+              <StaffStatusBadge status={selectedJob.status ?? "scheduled"} className="shrink-0" />
+            </div>
+            {loadingDetail ? (
+              <StaffSkeleton className="h-48 w-full" />
+            ) : (
+              <StaffServiceJobFlow job={selectedJob} {...mutations} />
+            )}
           </div>
-          {loadingDetail ? (
-            <Skeleton className="h-48 w-full rounded-xl" />
-          ) : (
-            <StaffServiceJobFlow job={selectedJob} {...mutations} />
-          )}
-        </div>
+        </StaffCard>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      {walkInSuccess ? (
+        <StaffSuccessBanner title="Walk-in ready" description={walkInSuccess} />
+      ) : null}
       <Collapsible open={walkInOpen} onOpenChange={setWalkInOpen}>
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-medium">
+        <CollapsibleTrigger className="staff-action-card staff-tap flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
           <span className="flex items-center gap-2">
-            <UserPlus size={16} className="text-primary" />
+            <UserPlus size={16} className="text-primary" aria-hidden />
             Walk-in Entry
           </span>
-          <ChevronDown size={16} className={cn("text-muted-foreground transition-transform", walkInOpen && "rotate-180")} />
+          <ChevronDown
+            size={16}
+            className={cn("text-muted-foreground transition-transform", walkInOpen && "rotate-180")}
+            aria-hidden
+          />
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-3">
           <StaffWalkInPanel
@@ -181,18 +198,18 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
       </Collapsible>
 
       {jobs.errorToday ? (
-        <ErrorState onRetry={() => jobs.refetchToday()} />
+        <StaffErrorState onRetry={() => jobs.refetchToday()} />
       ) : jobs.loadingToday ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-xl" />
+            <StaffSkeleton key={i} className="h-20 w-full" />
           ))}
         </div>
       ) : jobs.today.length === 0 ? (
-        <EmptyState
-          icon={<Calendar size={20} />}
-          title="Aaj koi service job nahi"
-          description="Admin assign karte hi yahan dikhegi"
+        <StaffEmptyState
+          icon={<Calendar size={20} aria-hidden />}
+          title="No service jobs today"
+          description="Assigned jobs will show up here"
         />
       ) : (
         <div className="space-y-3">
@@ -216,8 +233,8 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
         </div>
       )}
 
-      <Link href="/staff/jobs" className="block text-center text-xs text-primary font-medium">
-        Saari jobs (aane wali & done) →
+      <Link href="/staff/jobs" className="block text-center text-xs font-semibold text-primary">
+        All jobs (upcoming & done) →
       </Link>
     </div>
   );

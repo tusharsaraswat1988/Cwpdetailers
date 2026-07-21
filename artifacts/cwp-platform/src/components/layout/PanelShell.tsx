@@ -26,7 +26,7 @@ export default function PanelShell({ testId, mobileTitle, sidebar, children }: P
 
   return (
     <div
-      className="flex h-[100dvh] bg-background overflow-hidden flex-col lg:flex-row"
+      className="flex h-[100dvh] overflow-hidden flex-col lg:flex-row bg-background"
       data-testid={testId}
     >
       <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-card/95 backdrop-blur shrink-0 z-20 safe-area-top">
@@ -57,7 +57,7 @@ export default function PanelShell({ testId, mobileTitle, sidebar, children }: P
         </SheetContent>
       </Sheet>
 
-      <main className={cn("flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-4 sm:p-6 pb-safe lg:pb-6")}>
+      <main className={cn("flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-4 sm:p-6 pb-safe lg:pb-6 [padding-inline:max(1rem,env(safe-area-inset-left))]")}>
         {children}
       </main>
     </div>

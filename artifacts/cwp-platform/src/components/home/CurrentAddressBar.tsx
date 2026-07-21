@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { MapPin } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
 import type { LocationValue, SavedLocation } from "@/features/master-data/api";
 import type { SelectedAddress } from "@/lib/selected-address";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
+import { CustomerButton } from "@/features/customer-ds";
 import { cn } from "@/lib/utils";
 
 interface CurrentAddressBarProps {
@@ -33,15 +33,15 @@ export function CurrentAddressBar({
     <>
       <div
         className={cn(
-          "flex items-center gap-2 rounded-xl border px-3 py-2.5 min-h-[2.5rem]",
-          address.complete ? "border-border bg-card" : "border-amber-500/30 bg-amber-500/5",
+          "customer-card flex items-center gap-2 px-3.5 py-3 min-h-12",
+          address.complete ? "customer-elevated" : "border-amber-500/30 bg-amber-500/5",
           className,
         )}
         data-testid="home-current-address"
       >
-        <MapPin size={15} className={cn("shrink-0", address.complete ? "text-primary" : "text-amber-600")} aria-hidden />
+        <MapPin size={16} className={cn("shrink-0", address.complete ? "text-primary" : "text-amber-600")} aria-hidden />
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Current address
           </p>
           <p className="text-sm font-medium truncate leading-tight">
@@ -51,17 +51,17 @@ export function CurrentAddressBar({
             )}
           </p>
         </div>
-        <Button
+        <CustomerButton
           type="button"
           variant="ghost"
           size="sm"
-          className="shrink-0 h-8 px-2 text-primary font-medium"
+          className="customer-btn-sm shrink-0 h-10 min-h-10 px-2.5 text-primary font-medium"
           onClick={() => setOpen(true)}
           data-testid="home-change-address"
           aria-label="Change current service address"
         >
           Change
-        </Button>
+        </CustomerButton>
       </div>
 
       <AddressPickerSheet

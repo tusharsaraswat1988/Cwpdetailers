@@ -122,7 +122,7 @@ export default function ServiceLocationsPage() {
             <Button
               onClick={handleCreate}
               disabled={creating}
-              className="w-full bg-primary text-secondary hover:bg-primary/90"
+              className="w-full "
               data-testid="btn-submit-service-location"
             >
               {creating ? "Creating..." : "Save"}

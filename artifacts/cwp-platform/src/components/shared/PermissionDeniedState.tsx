@@ -1,25 +1,36 @@
+import { Link } from "wouter";
 import { ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface PermissionDeniedStateProps {
   title?: string;
   description?: string;
+  homeHref?: string;
 }
 
-/**
- * Standard "you don't have access" placeholder — pairs with EmptyState /
- * ErrorState / OfflineState as one of the universal query-result states.
- */
 export function PermissionDeniedState({
   title = "You don't have access to this",
-  description = "Ask an administrator to grant you permission for this section.",
+  description = "Ask an administrator to grant permission for this section, or return to the dashboard.",
+  homeHref = "/admin/dashboard",
 }: PermissionDeniedStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6 text-center" data-testid="permission-denied-state">
-      <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mb-3 text-amber-600">
-        <ShieldAlert size={20} />
+    <div
+      className="admin-state flex flex-col items-center justify-center gap-1 px-6 py-14 text-center"
+      data-testid="permission-denied-state"
+      role="alert"
+    >
+      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[hsl(var(--tone-warning,38_92%_50%)/0.1)] text-[hsl(var(--tone-warning-fg,32_90%_32%))]">
+        <ShieldAlert size={18} aria-hidden />
       </div>
-      <h3 className="text-foreground font-medium">{title}</h3>
-      <p className="text-muted-foreground text-sm mt-1 max-w-sm">{description}</p>
+      <h3 className="admin-state-title font-medium text-foreground">{title}</h3>
+      <p className="admin-state-desc mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
+      <div className="admin-state-actions mt-4 flex flex-wrap justify-center gap-2">
+        <Link href={homeHref}>
+          <Button type="button" variant="outline">
+            Back to dashboard
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }

@@ -53,10 +53,13 @@ export function ResourceForm<T extends Record<string, unknown>>(props: ResourceF
   };
 
   return (
-    <form className="space-y-4 mt-2" onSubmit={handleSubmit} data-testid={testIdPrefix ? `${testIdPrefix}-form` : undefined}>
+    <form className="mt-2 space-y-4" onSubmit={handleSubmit} data-testid={testIdPrefix ? `${testIdPrefix}-form` : undefined}>
       {fields.map(f => (
-        <div key={f.key}>
-          <Label htmlFor={f.key}>{f.label}{f.required && <span className="text-red-400 ml-0.5">*</span>}</Label>
+        <div key={f.key} className="admin-field">
+          <Label htmlFor={f.key} className="admin-field-label">
+            {f.label}
+            {f.required && <span className="ml-0.5 text-destructive">*</span>}
+          </Label>
           {f.render
             ? f.render(value[f.key] as T[keyof T & string], next => onChange({ ...value, [f.key]: next }))
             : f.type === "password"
@@ -88,7 +91,7 @@ export function ResourceForm<T extends Record<string, unknown>>(props: ResourceF
       <Button
         type="submit"
         disabled={isSubmitting || disabled}
-        className="w-full bg-primary text-secondary hover:bg-primary/90"
+        className="w-full"
         data-testid={testIdPrefix ? `${testIdPrefix}-submit` : undefined}
       >
         {isSubmitting ? "Saving..." : submitLabel}

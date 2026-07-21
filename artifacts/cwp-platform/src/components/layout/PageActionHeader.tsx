@@ -27,13 +27,12 @@ export function PageActionHeader({ title, description, primaryAction, secondaryA
         {primaryAction && (
           primaryAction.href ? (
             <Link href={primaryAction.href}>
-              <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid={primaryAction.testId ?? "page-primary-cta"}>
+              <Button data-testid={primaryAction.testId ?? "page-primary-cta"}>
                 {primaryAction.label}
               </Button>
             </Link>
           ) : (
             <Button
-              className="bg-primary text-secondary hover:bg-primary/90"
               data-testid={primaryAction.testId ?? "page-primary-cta"}
               onClick={primaryAction.onClick}
             >

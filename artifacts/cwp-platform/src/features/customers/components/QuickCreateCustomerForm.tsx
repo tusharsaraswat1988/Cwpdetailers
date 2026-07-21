@@ -245,7 +245,7 @@ export function QuickCreateCustomerForm({
       <Button
         onClick={() => void handleSubmit()}
         disabled={creating || !form.name.trim()}
-        className="w-full bg-primary text-secondary hover:bg-primary/90"
+        className="w-full "
       >
         {creating ? "Creating..." : submitLabel}
       </Button>

@@ -64,7 +64,7 @@ function MasterEntityPanel({ config }: { config: EntityConfig }) {
         />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="bg-primary text-secondary hover:bg-primary/90 gap-1">
+            <Button size="sm" className="gap-1">
               <Plus size={14} /> Add
             </Button>
           </DialogTrigger>

@@ -44,11 +44,11 @@ function NavLink({
         "flex items-center gap-3 rounded-lg text-sm transition-all group",
         nested ? "px-3 py-1.5 ml-2" : "px-3 py-2",
         active
-          ? "bg-primary text-secondary font-semibold"
+          ? "bg-primary text-primary-foreground font-semibold"
           : "text-white/60 hover:text-white hover:bg-white/5",
       )}
     >
-      <Icon size={nested ? 14 : 15} className="flex-shrink-0" />
+      <Icon size={nested ? 14 : 15} strokeWidth={1.75} className="flex-shrink-0" />
       {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   );
@@ -105,7 +105,7 @@ function NavGroup({
               : "text-white/60 hover:text-white hover:bg-white/5",
         )}
       >
-        <Icon size={15} className="flex-shrink-0" />
+        <Icon size={15} strokeWidth={1.75} className="flex-shrink-0" />
         <span className="truncate flex-1 text-left">{group.label}</span>
         <span className={cn("text-white/40 text-xs transition-transform", expanded && "rotate-90")}>›</span>
       </button>

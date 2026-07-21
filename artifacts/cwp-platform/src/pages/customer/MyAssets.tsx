@@ -11,10 +11,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAccountScope } from "@/lib/account-scope";
 import type { LocationValue } from "@/features/master-data/api";
 import CustomerLayout from "@/components/layout/CustomerLayout";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Car, Sun, Plus } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { AssetCard } from "@/components/assets/AssetCard";
 import { AssetEmptyState } from "@/components/assets/AssetEmptyState";
@@ -26,6 +24,13 @@ import {
   type AssetCardModel,
 } from "@/lib/asset-dashboard";
 import type { RawSubscription } from "@/lib/customer-plans";
+import {
+  CustomerPage,
+  CustomerHeader,
+  CustomerEmptyState,
+  CustomerSkeleton,
+  CustomerButton,
+} from "@/features/customer-ds";
 
 type VehicleRecord = {
   id: number;
@@ -183,10 +188,10 @@ export default function MyAssets() {
   if (scopeLoading) {
     return (
       <CustomerLayout>
-        <div className="space-y-3">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-32 rounded-xl" />
-        </div>
+        <CustomerPage>
+          <CustomerSkeleton className="h-8 w-48" />
+          <CustomerSkeleton className="h-32" />
+        </CustomerPage>
       </CustomerLayout>
     );
   }
@@ -194,10 +199,14 @@ export default function MyAssets() {
   if (missingCustomerLink || customerId == null) {
     return (
       <CustomerLayout>
-        <div className="max-w-md mx-auto text-center space-y-2 py-12">
-          <p className="font-semibold">Account not linked</p>
-          <NoCustomerProfileMessage />
-        </div>
+        <CustomerPage>
+          <CustomerEmptyState
+            title="Account not linked"
+            description="Your login is not linked to a customer profile yet."
+            action={<NoCustomerProfileMessage />}
+            hint=""
+          />
+        </CustomerPage>
       </CustomerLayout>
     );
   }
@@ -212,18 +221,17 @@ export default function MyAssets() {
 
   return (
     <CustomerLayout>
-      <div className="space-y-5" data-testid="assets-page">
-        <header>
-          <h1 className="font-display font-bold text-xl">My Vehicles & Solar Sites</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            What CWP takes care of for you — plans, visits, and service addresses in one place.
-          </p>
-        </header>
+      <div data-testid="assets-page">
+      <CustomerPage>
+        <CustomerHeader
+          title="My Vehicles & Solar Sites"
+          subtitle="What CWP takes care of for you — plans, visits, and service addresses in one place."
+        />
 
         {loading || !dashboard ? (
           <div className="space-y-3">
-            <Skeleton className="h-40 rounded-xl" />
-            <Skeleton className="h-40 rounded-xl" />
+            <CustomerSkeleton className="h-40" />
+            <CustomerSkeleton className="h-40" />
           </div>
         ) : dashboard.totalCount === 0 ? (
           <AssetEmptyState
@@ -239,10 +247,10 @@ export default function MyAssets() {
                     <Car size={16} aria-hidden />
                     Vehicles
                   </h2>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1 text-primary" onClick={() => setAddKind("vehicle")}>
+                  <CustomerButton variant="ghost" size="sm" className="h-8 gap-1 text-primary" onClick={() => setAddKind("vehicle")}>
                     <Plus size={14} aria-hidden />
                     Add
-                  </Button>
+                  </CustomerButton>
                 </div>
                 <div className="space-y-3">
                   {dashboard.vehicles.map(asset => (
@@ -259,10 +267,10 @@ export default function MyAssets() {
                     <Sun size={16} aria-hidden />
                     Solar Sites
                   </h2>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1 text-primary" onClick={() => setAddKind("solar")}>
+                  <CustomerButton variant="ghost" size="sm" className="h-8 gap-1 text-primary" onClick={() => setAddKind("solar")}>
                     <Plus size={14} aria-hidden />
                     Add
-                  </Button>
+                  </CustomerButton>
                 </div>
                 <div className="space-y-3">
                   {dashboard.solarSites.map(asset => (
@@ -275,19 +283,20 @@ export default function MyAssets() {
             {(dashboard.vehicles.length === 0 || dashboard.solarSites.length === 0) && (
               <div className="flex flex-wrap gap-2 pt-1">
                 {dashboard.vehicles.length === 0 && (
-                  <Button variant="outline" size="sm" className="gap-1" onClick={() => setAddKind("vehicle")}>
+                  <CustomerButton variant="outline" size="sm" className="gap-1" onClick={() => setAddKind("vehicle")}>
                     <Plus size={14} /> Add Vehicle
-                  </Button>
+                  </CustomerButton>
                 )}
                 {dashboard.solarSites.length === 0 && (
-                  <Button variant="outline" size="sm" className="gap-1" onClick={() => setAddKind("solar")}>
+                  <CustomerButton variant="outline" size="sm" className="gap-1" onClick={() => setAddKind("solar")}>
                     <Plus size={14} /> Add Solar Site
-                  </Button>
+                  </CustomerButton>
                 )}
               </div>
             )}
           </>
         )}
+      </CustomerPage>
       </div>
 
       <AddAssetSheet

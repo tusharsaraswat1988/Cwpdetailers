@@ -125,11 +125,11 @@ function RichTextEditor({
         <div className="flex-1" />
         <div className="flex rounded-md overflow-hidden border border-border">
           <button type="button" onClick={() => setTab("edit")}
-            className={cn("px-3 py-1 text-xs transition-colors", tab === "edit" ? "bg-primary text-secondary" : "text-muted-foreground hover:bg-muted")}>
+            className={cn("px-3 py-1 text-xs transition-colors", tab === "edit" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
             Edit
           </button>
           <button type="button" onClick={() => setTab("preview")}
-            className={cn("px-3 py-1 text-xs transition-colors", tab === "preview" ? "bg-primary text-secondary" : "text-muted-foreground hover:bg-muted")}>
+            className={cn("px-3 py-1 text-xs transition-colors", tab === "preview" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
             Preview
           </button>
         </div>

@@ -4,19 +4,39 @@ import { Inbox } from "lucide-react";
 interface EmptyStateProps {
   icon?: ReactNode;
   title: string;
+  /** What is empty and why it matters. */
   description?: string;
+  /** Required for actionable empty states — primary next step (button/link). */
   action?: ReactNode;
+  /** Optional secondary guidance shown when no action is provided. */
+  hint?: string;
 }
 
-export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+  hint = "Use the actions above to add the first item, or adjust filters.",
+}: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6 text-center" data-testid="empty-state">
-      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3 text-muted-foreground">
-        {icon ?? <Inbox size={20} />}
+    <div
+      className="admin-state flex flex-col items-center justify-center gap-1 px-6 py-14 text-center"
+      data-testid="empty-state"
+      role="status"
+    >
+      <div className="admin-icon-well mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        {icon ?? <Inbox size={18} aria-hidden />}
       </div>
-      <h3 className="text-foreground font-medium">{title}</h3>
-      {description && <p className="text-muted-foreground text-sm mt-1 max-w-sm">{description}</p>}
-      {action && <div className="mt-4">{action}</div>}
+      <h3 className="admin-state-title font-medium text-foreground">{title}</h3>
+      {description ? (
+        <p className="admin-state-desc mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
+      ) : null}
+      {action ? (
+        <div className="admin-state-actions mt-4 flex flex-wrap justify-center gap-2">{action}</div>
+      ) : (
+        <p className="admin-state-desc mt-2 max-w-sm text-xs text-muted-foreground">{hint}</p>
+      )}
     </div>
   );
 }

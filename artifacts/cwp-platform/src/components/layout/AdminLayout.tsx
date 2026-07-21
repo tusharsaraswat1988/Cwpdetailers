@@ -6,6 +6,7 @@ import { useAppStore } from "@/lib/store";
 import { PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/shared/CommandPalette";
+import { AdminThemeRoot } from "@/features/admin-ds";
 
 function CollapsedSidebarExpandButton() {
   const collapsed = useAppStore(s => s.sidebarCollapsed);
@@ -18,7 +19,7 @@ function CollapsedSidebarExpandButton() {
       type="button"
       variant="outline"
       size="icon"
-      className="hidden lg:flex fixed left-[4.25rem] top-4 z-30 h-9 w-9 rounded-full shadow-md border-border bg-card text-foreground hover:bg-accent"
+      className="hidden lg:flex fixed left-[4.25rem] top-4 z-30 h-9 w-9 rounded-full shadow-md border-border bg-card text-foreground hover:bg-accent admin-transition"
       onClick={toggleSidebar}
       aria-label="Expand sidebar"
       title="Expand sidebar"
@@ -33,14 +34,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const branding = useBrandingPortal("admin");
 
   return (
-    <PanelShell
-      testId="admin-layout"
-      mobileTitle={`${branding.brandName} Admin`}
-      sidebar={(props) => <AdminSidebar {...props} />}
-    >
-      <CommandPalette />
-      <CollapsedSidebarExpandButton />
-      {children}
-    </PanelShell>
+    <AdminThemeRoot>
+      <PanelShell
+        testId="admin-layout"
+        mobileTitle={`${branding.brandName} Admin`}
+        sidebar={(props) => <AdminSidebar {...props} />}
+      >
+        <CommandPalette />
+        <CollapsedSidebarExpandButton />
+        {children}
+      </PanelShell>
+    </AdminThemeRoot>
   );
 }

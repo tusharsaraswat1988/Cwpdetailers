@@ -276,6 +276,9 @@ export default function Login() {
             Staff portal
           </Link>
         </p>
+        <p className="text-white/25 text-[11px] leading-relaxed pt-1" data-testid="login-trust-line">
+          Secure sign-in · Your data stays private · OTP never shared
+        </p>
       </div>
 
       <AuthFooter />

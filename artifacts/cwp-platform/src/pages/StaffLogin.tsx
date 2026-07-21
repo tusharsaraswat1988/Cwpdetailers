@@ -3,7 +3,6 @@ import { useLocation, Link } from "wouter";
 import { useLogin } from "@workspace/api-client-react";
 import type { AuthResponse } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -13,6 +12,7 @@ import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useBranding } from "@/lib/branding";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { StaffThemeRoot, StaffButton } from "@/features/staff-ds";
 
 export default function StaffLogin() {
   const [, setLocation] = useLocation();
@@ -59,85 +59,109 @@ export default function StaffLogin() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-secondary flex items-center justify-center p-4 sm:p-6" data-testid="staff-login-page">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8 sm:mb-10">
-          <div className="inline-flex items-center justify-center mb-4">
-            <BrandLogo variant="white" lazy={false} />
+    <StaffThemeRoot>
+      <div
+        className="staff-auth-shell flex min-h-[100dvh] items-center justify-center p-4 sm:p-6"
+        data-testid="staff-login-page"
+      >
+        <div className="w-full max-w-md">
+          <div className="mb-8 text-center sm:mb-10">
+            <div className="mb-4 inline-flex items-center justify-center">
+              <BrandLogo variant="white" lazy={false} />
+            </div>
+            <h1 className="font-display text-2xl font-bold text-white sm:text-3xl">
+              {branding.brandName} Staff
+            </h1>
+            <p className="mt-1 text-sm text-white/55 sm:text-base">Field team sign-in</p>
           </div>
-          <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">{branding.brandName} Staff</h1>
-          <p className="text-white/50 mt-1 text-sm sm:text-base">Field team sign-in</p>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {formError && (
-            <div
-              className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 flex items-start gap-2"
-              role="alert"
-              data-testid="staff-login-error"
-            >
-              <AlertCircle size={15} className="text-destructive shrink-0 mt-0.5" aria-hidden />
-              <p className="text-destructive text-sm leading-snug">{formError}</p>
-            </div>
-          )}
-          <PhoneInput
-            id="staff-phone"
-            data-testid="input-staff-phone"
-            label="Phone Number"
-            dark
-            value={phone}
-            onChange={setPhone}
-            error={phoneError}
-            onErrorChange={setPhoneError}
-            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
-          />
-          <div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="staff-password" className="text-white/70 text-sm">Password</Label>
-              <Link href="/staff/forgot-password" className="text-primary text-xs hover:underline">
-                Forgot password?
-              </Link>
-            </div>
-            <PasswordInput
-              id="staff-password"
-              data-testid="input-staff-password"
-              value={password}
-              onChange={e => {
-                setPassword(e.target.value);
-                if (formError) setFormError(null);
-              }}
-              onKeyUp={e => setCapsLockOn(e.getModifierState("CapsLock"))}
-              onBlur={() => setCapsLockOn(false)}
-              placeholder="••••••••"
-              containerClassName="mt-1.5"
-              className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
-            />
-            {capsLockOn && (
-              <p className="text-amber-400/80 text-xs mt-1.5" role="status">
-                Caps Lock is on
-              </p>
-            )}
-          </div>
-          <Button
-            type="submit"
-            data-testid="btn-submit-staff-login"
-            disabled={loginMutation.isPending}
-            className="w-full bg-primary text-secondary hover:bg-primary/90 font-semibold py-2.5 mt-2"
+          <form
+            onSubmit={handleSubmit}
+            className="staff-auth-panel space-y-4 p-5 sm:p-6"
+            data-testid="staff-login-form"
           >
-            {loginMutation.isPending ? <><Loader2 size={14} className="animate-spin mr-2" />Signing in...</> : "Sign In"}
-          </Button>
-        </form>
+            {formError && (
+              <div
+                className="flex items-start gap-2 rounded-[var(--staff-radius-sm)] border border-destructive/40 bg-destructive/10 px-3 py-2.5"
+                role="alert"
+                data-testid="staff-login-error"
+              >
+                <AlertCircle size={15} className="mt-0.5 shrink-0 text-destructive" aria-hidden />
+                <p className="text-sm leading-snug text-destructive">{formError}</p>
+              </div>
+            )}
+            <PhoneInput
+              id="staff-phone"
+              data-testid="input-staff-phone"
+              label="Mobile Number"
+              value={phone}
+              onChange={setPhone}
+              error={phoneError}
+              onErrorChange={setPhoneError}
+              className="h-[3.25rem] text-base"
+            />
+            <div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="staff-password" className="text-sm text-muted-foreground">
+                  Password
+                </Label>
+                <Link href="/staff/forgot-password" className="text-xs text-primary hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
+              <PasswordInput
+                id="staff-password"
+                data-testid="input-staff-password"
+                value={password}
+                onChange={e => {
+                  setPassword(e.target.value);
+                  if (formError) setFormError(null);
+                }}
+                onKeyUp={e => setCapsLockOn(e.getModifierState("CapsLock"))}
+                onBlur={() => setCapsLockOn(false)}
+                placeholder="••••••••"
+                containerClassName="mt-1.5"
+                className="h-[3.25rem] text-base"
+              />
+              {capsLockOn && (
+                <p className="mt-1.5 text-xs text-amber-600" role="status">
+                  Caps Lock is on
+                </p>
+              )}
+            </div>
+            <StaffButton
+              type="submit"
+              data-testid="btn-submit-staff-login"
+              disabled={loginMutation.isPending}
+              className="mt-2 w-full"
+            >
+              {loginMutation.isPending ? (
+                <>
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                  Signing in…
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </StaffButton>
+            <p className="text-center text-xs text-muted-foreground">
+              Use the mobile number registered by admin. OTP sign-in may be enabled for your team.
+            </p>
+          </form>
 
-        <div className="mt-6 text-center space-y-2">
-          <p className="text-white/30 text-xs px-2">
-            Credentials are created by admin after profile verification.
-          </p>
-          <p className="text-white/40 text-sm">
-            Customer?{" "}
-            <Link href="/login" className="text-primary hover:underline">Customer login</Link>
-          </p>
+          <div className="mt-6 space-y-2 text-center">
+            <p className="px-2 text-xs text-white/35">
+              Credentials are created by admin after profile verification.
+            </p>
+            <p className="text-sm text-white/45">
+              Customer?{" "}
+              <Link href="/login" className="text-primary hover:underline">
+                Customer login
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
-    </div>
+    </StaffThemeRoot>
   );
 }

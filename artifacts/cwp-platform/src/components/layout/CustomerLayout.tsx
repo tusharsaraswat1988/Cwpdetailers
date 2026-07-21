@@ -2,11 +2,11 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { AppShell, type BottomNavItem } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
 import { useBrandingPortal } from "@/lib/branding";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
+import { CustomerThemeRoot, CustomerButton } from "@/features/customer-ds";
 import {
   LogOut, LayoutDashboard, Calendar, ClipboardList, User, Car, Bell,
 } from "lucide-react";
@@ -53,7 +53,13 @@ function resolvePageTitle(location: string, brandingName: string): string {
   return navMatch?.label ?? brandingName;
 }
 
-export default function CustomerLayout({ children }: { children: ReactNode }) {
+type CustomerLayoutProps = {
+  children: ReactNode;
+  /** Override shell width — Account hub uses `hub` for two-column desktop. */
+  maxWidth?: "sm" | "md" | "hub" | "full";
+};
+
+export default function CustomerLayout({ children, maxWidth = "sm" }: CustomerLayoutProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const branding = useBrandingPortal("customer");
@@ -61,45 +67,47 @@ export default function CustomerLayout({ children }: { children: ReactNode }) {
   const pageTitle = resolvePageTitle(location, branding.brandName);
 
   return (
-    <AppShell
-      testId="customer-layout"
-      maxWidth="sm"
-      appBar={{
-        leading: (
-          <Link href={CUSTOMER_ROUTES.home} className="flex items-center gap-2 shrink-0">
-            <BrandLogo variant="mobile" lazy={false} />
-          </Link>
-        ),
-        title: pageTitle,
-        subtitle: user?.name,
-        trailing: (
-          <>
-            <SyncStatusIndicator compact className="hidden sm:inline-flex" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 text-muted-foreground opacity-50 cursor-default"
-              disabled
-              aria-label="Notifications (coming soon)"
-              data-testid="notifications-placeholder"
-            >
-              <Bell size={18} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 text-muted-foreground hover:text-destructive"
-              onClick={logout}
-              aria-label="Sign out"
-            >
-              <LogOut size={18} />
-            </Button>
-          </>
-        ),
-      }}
-      bottomNav={navItems}
-    >
-      {children}
-    </AppShell>
+    <CustomerThemeRoot>
+      <AppShell
+        testId="customer-layout"
+        maxWidth={maxWidth}
+        appBar={{
+          leading: (
+            <Link href={CUSTOMER_ROUTES.home} className="flex items-center gap-2 shrink-0">
+              <BrandLogo variant="mobile" lazy={false} />
+            </Link>
+          ),
+          title: pageTitle,
+          subtitle: user?.name,
+          trailing: (
+            <>
+              <SyncStatusIndicator compact className="hidden sm:inline-flex" />
+              <CustomerButton
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 text-muted-foreground opacity-50 cursor-default"
+                disabled
+                aria-label="Notifications (coming soon)"
+                data-testid="notifications-placeholder"
+              >
+                <Bell size={18} />
+              </CustomerButton>
+              <CustomerButton
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 text-muted-foreground hover:text-destructive"
+                onClick={logout}
+                aria-label="Sign out"
+              >
+                <LogOut size={18} />
+              </CustomerButton>
+            </>
+          ),
+        }}
+        bottomNav={navItems}
+      >
+        {children}
+      </AppShell>
+    </CustomerThemeRoot>
   );
 }

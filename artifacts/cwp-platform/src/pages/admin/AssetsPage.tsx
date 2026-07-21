@@ -223,7 +223,7 @@ export default function AssetsPage() {
               key={t}
               size="sm"
               variant={typeFilter === t ? "default" : "outline"}
-              className={typeFilter === t ? "bg-primary text-secondary" : ""}
+              className={typeFilter === t ? "bg-primary text-primary-foreground" : ""}
               onClick={() => setTypeFilter(t)}
             >
               {t === "all" ? "All" : ASSET_TYPE_LABELS[t]}

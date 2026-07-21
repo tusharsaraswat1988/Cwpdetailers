@@ -14,6 +14,7 @@
   --landing-surface-tint: oklch(0.975 0.018 250);
   --landing-brand-vehicle: oklch(0.58 0.22 258);
   --landing-brand-solar: oklch(0.72 0.18 65);
+  --landing-icon-surface: color-mix(in oklch, var(--landing-accent) 12%, white);
 
   /* Hero enter motion (synced with LANDING_MOTION constants) */
   --hero-enter-duration: 560ms;
@@ -21,6 +22,22 @@
   --hero-enter-distance: 14px;
   --hero-media-fade: 500ms;
   --hero-selector-transition: 220ms;
+}
+
+/* Shared marketing prose (legal / long-form) — uses scoped accent, not global primary cyan */
+.landing-root .marketing-prose {
+  --tw-prose-links: var(--landing-accent);
+}
+.landing-root .marketing-prose a {
+  color: var(--landing-accent);
+  text-decoration: none;
+}
+.landing-root .marketing-prose a:hover {
+  text-decoration: underline;
+}
+.landing-root .marketing-icon-well {
+  background: var(--landing-icon-surface);
+  color: var(--landing-accent);
 }
 
 /* Hero-only enter — applied to headline, sub, CTA, media, selector, trust */

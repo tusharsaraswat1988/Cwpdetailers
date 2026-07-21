@@ -2,12 +2,17 @@ import { useState } from "react";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { useCustomerDcmsGallery } from "../api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { format } from "date-fns";
-import { Link } from "wouter";
 import { ImageOff } from "lucide-react";
+import {
+  CustomerPage,
+  CustomerHeader,
+  CustomerEmptyState,
+  CustomerSkeleton,
+  CustomerButton,
+  CustomerPhotoReport,
+} from "@/features/customer-ds";
 
 export default function CustomerDcmsGalleryPage() {
   const now = new Date();
@@ -19,9 +24,11 @@ export default function CustomerDcmsGalleryPage() {
 
   return (
     <CustomerLayout>
-      <div className="space-y-4">
-        <Link href="/customer/daily-cleaning" className="text-sm text-primary">← Daily Cleaning</Link>
-        <h1 className="font-display font-bold text-xl">Photo Gallery</h1>
+      <CustomerPage>
+        <CustomerButton href="/customer/daily-cleaning" variant="ghost" size="sm" className="h-auto px-0 text-primary">
+          ← Daily Cleaning
+        </CustomerButton>
+        <CustomerHeader title="Photo Gallery" />
 
         <div className="flex gap-2">
           <Select value={month} onValueChange={setMonth}>
@@ -44,33 +51,49 @@ export default function CustomerDcmsGalleryPage() {
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-2 gap-2">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {photos?.map(row => (
-              <div key={row.visit.id} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
-                {row.visit.photoUrl && (
-                  <img
-                    src={resolveMediaUrl(row.visit.photoUrl)}
-                    alt={`${row.vehicleNumber} ${format(new Date(row.visit.visitTime), "dd MMM")}`}
-                    className="w-full h-full object-cover"
-                  />
-                )}
-                <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-xs p-1.5">
-                  {format(new Date(row.visit.visitTime), "dd MMM")} · {row.staffName}
-                </div>
-              </div>
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <CustomerSkeleton key={i} className="h-48 w-full" />
             ))}
-            {photos?.length === 0 && (
-              <div className="col-span-2">
-                <EmptyState icon={<ImageOff size={20} />} title="No photos yet" description="Visit proof photos will appear here" />
-              </div>
-            )}
+          </div>
+        ) : photos?.length === 0 ? (
+          <CustomerEmptyState
+            icon={<ImageOff size={20} />}
+            title="No photos yet"
+            description="Visit proof photos will appear here"
+          />
+        ) : (
+          <div className="space-y-3">
+            {photos?.map(row => {
+              const visit = row.visit as typeof row.visit & {
+                beforePhotoUrl?: string | null;
+                afterPhotoUrl?: string | null;
+              };
+              const beforeUrl = visit.beforePhotoUrl
+                ? resolveMediaUrl(visit.beforePhotoUrl)
+                : null;
+              const afterUrl = visit.afterPhotoUrl
+                ? resolveMediaUrl(visit.afterPhotoUrl)
+                : visit.photoUrl
+                  ? resolveMediaUrl(visit.photoUrl)
+                  : null;
+
+              return (
+                <CustomerPhotoReport
+                  key={row.visit.id}
+                  title={row.vehicleNumber}
+                  status={row.visit.status ?? "completed"}
+                  beforeUrl={beforeUrl}
+                  afterUrl={afterUrl}
+                  beforeLabel="Before"
+                  afterLabel={visit.afterPhotoUrl ? "After" : visit.beforePhotoUrl ? "After" : "Proof"}
+                  completedAt={`${format(new Date(row.visit.visitTime), "dd MMM yyyy")} · ${row.staffName}`}
+                />
+              );
+            })}
           </div>
         )}
-      </div>
+      </CustomerPage>
     </CustomerLayout>
   );
 }

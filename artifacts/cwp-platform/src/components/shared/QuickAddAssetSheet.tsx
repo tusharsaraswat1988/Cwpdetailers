@@ -120,7 +120,7 @@ export function QuickAddAssetSheet({ open, onOpenChange, customerId, kind, onCre
               </div>
               <LocationPicker value={location} onChange={setLocation} required />
               <Button
-                className="w-full h-11 bg-primary text-secondary hover:bg-primary/90"
+                className="w-full h-11"
                 disabled={!canSaveVehicle || createVehicle.isPending}
                 data-testid="btn-quickadd-save-vehicle"
                 onClick={() => {
@@ -162,7 +162,7 @@ export function QuickAddAssetSheet({ open, onOpenChange, customerId, kind, onCre
                 />
               </div>
               <Button
-                className="w-full h-11 bg-primary text-secondary hover:bg-primary/90"
+                className="w-full h-11"
                 disabled={!canSaveSolar || createSolar.isPending}
                 data-testid="btn-quickadd-save-solar"
                 onClick={() => {

@@ -1,15 +1,16 @@
 import { useSearch } from "wouter";
 import { StaffOtherServicesPanel } from "@/components/staff/StaffOtherServicesPanel";
+import { StaffPage, StaffHeader } from "@/features/staff-ds";
 
 export default function StaffBookingsPage() {
   const jobParam = new URLSearchParams(useSearch()).get("job");
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="font-display font-bold text-xl">My Bookings</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Assigned jobs — kholo aur kaam complete karo</p>
-      </div>
+    <StaffPage>
+      <StaffHeader
+        title="Today's Jobs"
+        subtitle="Open a job — navigate, check in, capture photos, complete"
+      />
       <StaffOtherServicesPanel
         selectedJobKey={jobParam}
         onSelectJob={key => {
@@ -18,6 +19,6 @@ export default function StaffBookingsPage() {
           window.dispatchEvent(new PopStateEvent("popstate"));
         }}
       />
-    </div>
+    </StaffPage>
   );
 }

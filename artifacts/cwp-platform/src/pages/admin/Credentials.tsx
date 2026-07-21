@@ -192,11 +192,11 @@ export default function AdminCredentials() {
 
         <div className="flex gap-2 mb-5">
           <button onClick={() => setTab("staff")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === "staff" ? "bg-primary text-secondary" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}>
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === "staff" ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}>
             <UserCog size={14} />Staff
           </button>
           <button onClick={() => setTab("franchisee")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === "franchisee" ? "bg-primary text-secondary" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}>
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === "franchisee" ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}>
             <Building2 size={14} />Franchisees
           </button>
         </div>
@@ -247,7 +247,7 @@ export default function AdminCredentials() {
                         )}
                       </>
                     ) : (
-                      <Button size="sm" className="bg-primary text-secondary" onClick={() => openModal(item, "create")}>
+                      <Button size="sm" className="bg-primary text-primary-foreground" onClick={() => openModal(item, "create")}>
                         <Key size={12} className="mr-1.5" />Create Login
                       </Button>
                     )}
@@ -292,7 +292,7 @@ export default function AdminCredentials() {
               onKeyDown={e => e.key === "Enter" && password.length >= 6 && handleSubmit()}
             />
             <div className="flex gap-2">
-              <Button className="bg-primary text-secondary flex-1" disabled={password.length < 6 || isPending} onClick={handleSubmit}>
+              <Button className="bg-primary text-primary-foreground flex-1" disabled={password.length < 6 || isPending} onClick={handleSubmit}>
                 {isPending ? "Saving…" : isReset ? "Reset Password" : "Create Account"}
               </Button>
               <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>

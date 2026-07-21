@@ -373,16 +373,16 @@ export default function AdminLeads() {
               <BarChart3 size={13} className="mr-1.5" />Analytics
             </Button>
             <div className="flex items-center border border-border rounded-md overflow-hidden">
-              <button onClick={() => setView("kanban")} className={`px-2 py-1.5 text-xs flex items-center gap-1 ${view === "kanban" ? "bg-primary text-secondary" : "text-muted-foreground"}`}>
+              <button onClick={() => setView("kanban")} className={`px-2 py-1.5 text-xs flex items-center gap-1 ${view === "kanban" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
                 <LayoutGrid size={12} />Kanban
               </button>
-              <button onClick={() => setView("list")} className={`px-2 py-1.5 text-xs flex items-center gap-1 ${view === "list" ? "bg-primary text-secondary" : "text-muted-foreground"}`}>
+              <button onClick={() => setView("list")} className={`px-2 py-1.5 text-xs flex items-center gap-1 ${view === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
                 <List size={12} />List
               </button>
             </div>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-primary text-secondary hover:bg-primary/90">
+                <Button>
                   <Plus size={15} className="mr-1.5" />Add Lead
                 </Button>
               </DialogTrigger>
@@ -422,7 +422,7 @@ export default function AdminLeads() {
                     <Label>Notes</Label>
                     <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm resize-none h-20" placeholder="Initial notes..." />
                   </div>
-                  <Button className="w-full bg-primary text-secondary" onClick={() => {
+                  <Button className="w-full bg-primary text-primary-foreground" onClick={() => {
                     const phoneResult = submitMobile(form.phone);
                     const secondaryResult = submitOptionalMobile(form.secondaryPhone);
                     setFormErrors({
@@ -578,7 +578,7 @@ export default function AdminLeads() {
                         </div>
                       )}
                       <div className="flex gap-2">
-                        <Button size="sm" className="bg-primary text-secondary" onClick={() => convertMut.mutate({ id: detail.id, body: convertForm })}><CheckCircle size={13} className="mr-1.5" />Confirm</Button>
+                        <Button size="sm" className="bg-primary text-primary-foreground" onClick={() => convertMut.mutate({ id: detail.id, body: convertForm })}><CheckCircle size={13} className="mr-1.5" />Confirm</Button>
                         <Button size="sm" variant="outline" onClick={() => setShowConvert(false)}>Cancel</Button>
                       </div>
                     </div>
@@ -625,7 +625,7 @@ export default function AdminLeads() {
                     <textarea value={newNote} onChange={e => setNewNote(e.target.value)} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm resize-none h-20" placeholder="Write a note..." />
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2 text-sm"><Calendar size={13} className="text-muted-foreground" /><Input type="datetime-local" value={newFollowUp} onChange={e => setNewFollowUp(e.target.value)} className="w-48 text-sm" /></div>
-                      <Button size="sm" className="bg-primary text-secondary ml-auto" onClick={() => { activityMut.mutate({ id: detail.id, body: { type: "note", body: newNote, followUpAt: newFollowUp } }); setNewNote(""); setNewFollowUp(""); }}>
+                      <Button size="sm" className="bg-primary text-primary-foreground ml-auto" onClick={() => { activityMut.mutate({ id: detail.id, body: { type: "note", body: newNote, followUpAt: newFollowUp } }); setNewNote(""); setNewFollowUp(""); }}>
                         <Send size={13} className="mr-1.5" />Save
                       </Button>
                     </div>
@@ -649,7 +649,7 @@ export default function AdminLeads() {
                   <div className="bg-card border border-border rounded-xl p-4 space-y-3">
                     <h3 className="font-semibold text-sm">Schedule Follow-up</h3>
                     <Input type="datetime-local" value={newFollowUp} onChange={e => setNewFollowUp(e.target.value)} />
-                    <Button size="sm" className="bg-primary text-secondary" onClick={() => { activityMut.mutate({ id: detail.id, body: { type: "follow_up", body: "Follow-up scheduled", followUpAt: newFollowUp } }); setNewFollowUp(""); }}>
+                    <Button size="sm" className="bg-primary text-primary-foreground" onClick={() => { activityMut.mutate({ id: detail.id, body: { type: "follow_up", body: "Follow-up scheduled", followUpAt: newFollowUp } }); setNewFollowUp(""); }}>
                       <Calendar size={13} className="mr-1.5" />Schedule
                     </Button>
                   </div>

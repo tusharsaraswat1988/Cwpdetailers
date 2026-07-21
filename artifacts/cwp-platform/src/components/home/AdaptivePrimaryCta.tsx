@@ -1,6 +1,6 @@
 import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
 import type { HomeAdaptiveCta } from "@/lib/home-dashboard";
+import { CustomerButton } from "@/features/customer-ds";
 
 interface AdaptivePrimaryCtaProps {
   cta: HomeAdaptiveCta;
@@ -8,14 +8,13 @@ interface AdaptivePrimaryCtaProps {
 
 export function AdaptivePrimaryCta({ cta }: AdaptivePrimaryCtaProps) {
   return (
-    <Link href={cta.href} className="block w-full">
-      <Button
-        className="w-full h-11 font-semibold shadow-sm"
-        data-testid={cta.testId}
-      >
-        {cta.label}
-      </Button>
-    </Link>
+    <CustomerButton
+      href={cta.href}
+      className="w-full shadow-sm"
+      data-testid={cta.testId}
+    >
+      {cta.label}
+    </CustomerButton>
   );
 }
 

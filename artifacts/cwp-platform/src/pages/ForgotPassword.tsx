@@ -168,7 +168,7 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
   };
 
   return (
-    <AuthLayout testId="forgot-password-page">
+    <AuthLayout testId="forgot-password-page" customerTheme={portal === "customer"}>
       <AuthHeader title={title} subtitle={stepSubtitle} />
 
       {step === "request" && (
@@ -180,7 +180,7 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] text-sm rounded-md transition-all duration-200",
                 mode === "phone"
-                  ? "bg-primary text-secondary font-medium"
+                  ? "bg-primary text-primary-foreground font-medium"
                   : "text-white/45 hover:text-white/65",
               )}
             >
@@ -193,7 +193,7 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] text-sm rounded-md transition-all duration-200",
                 mode === "email"
-                  ? "bg-primary text-secondary font-medium"
+                  ? "bg-primary text-primary-foreground font-medium"
                   : "text-white/45 hover:text-white/65",
               )}
             >

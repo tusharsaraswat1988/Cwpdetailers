@@ -222,7 +222,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
             <div className="flex flex-wrap gap-2">
               {basePath.startsWith("/admin") && (
                 <Link href={`/admin/book-services?customerId=${id}`}>
-                  <Button className="bg-primary text-secondary hover:bg-primary/90" data-testid="customer-profile-primary-cta">
+                  <Button data-testid="customer-profile-primary-cta">
                     Create Service Request
                   </Button>
                 </Link>
@@ -340,7 +340,6 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                     <Button
                       onClick={handleSaveProfile}
                       disabled={updateCustomerMutation.isPending}
-                      className="bg-primary text-secondary hover:bg-primary/90"
                       data-testid="btn-save-customer-profile"
                     >
                       {updateCustomerMutation.isPending ? "Saving..." : "Save changes"}

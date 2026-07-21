@@ -2,16 +2,21 @@ import { useState } from "react";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { useAccountScope } from "@/lib/account-scope";
 import { useCustomerDcmsDashboard, usePendingFeedback, usePauseMutations } from "../api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, History, Camera, ArrowRight, Pause } from "lucide-react";
 import { CustomerVisitFeedback } from "../components/CustomerVisitFeedback";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  CustomerPage,
+  CustomerHeader,
+  CustomerEmptyState,
+  CustomerSkeleton,
+  CustomerButton,
+  CustomerCard,
+  CustomerSubscriptionCard,
+} from "@/features/customer-ds";
 
 type DcmsStats = {
   subscriptionId?: number;
@@ -39,8 +44,9 @@ export function DcmsHomeCard() {
   const washesTotal = stats.allocatedWashes ?? 0;
 
   return (
-    <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-card" data-testid="dcms-home-card">
-      <CardContent className="p-4 space-y-3">
+    <div data-testid="dcms-home-card">
+    <CustomerSubscriptionCard>
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary flex items-center gap-1">
             <Sparkles size={14} /> My Daily Cleaning Plan
@@ -58,18 +64,19 @@ export function DcmsHomeCard() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Link href="/customer/daily-cleaning/history" className="flex-1">
-            <Button variant="outline" size="sm" className="w-full text-xs">View History</Button>
-          </Link>
-          <Link href="/customer/daily-cleaning/gallery" className="flex-1">
-            <Button variant="outline" size="sm" className="w-full text-xs">View Photos</Button>
-          </Link>
-          <Link href="/customer/daily-cleaning">
-            <Button size="sm" className="text-xs">Open <ArrowRight size={12} className="ml-1" /></Button>
-          </Link>
+          <CustomerButton href="/customer/daily-cleaning/history" variant="outline" size="sm" className="flex-1 text-xs">
+            View History
+          </CustomerButton>
+          <CustomerButton href="/customer/daily-cleaning/gallery" variant="outline" size="sm" className="flex-1 text-xs">
+            View Photos
+          </CustomerButton>
+          <CustomerButton href="/customer/daily-cleaning" size="sm" className="text-xs">
+            Open <ArrowRight size={12} className="ml-1" />
+          </CustomerButton>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </CustomerSubscriptionCard>
+    </div>
   );
 }
 
@@ -86,8 +93,8 @@ export default function CustomerDailyCleaningPage() {
 
   return (
     <CustomerLayout>
-      <div className="space-y-4">
-        <h1 className="font-display font-bold text-xl">Daily Cleaning</h1>
+      <CustomerPage>
+        <CustomerHeader title="Daily Cleaning" />
 
         {(pendingFeedback ?? []).length > 0 && (
           <CustomerVisitFeedback
@@ -98,59 +105,66 @@ export default function CustomerDailyCleaningPage() {
 
         {isLoading ? (
           <div className="space-y-3">
-            <Skeleton className="h-28 w-full rounded-xl" />
-            <Skeleton className="h-11 w-full rounded-xl" />
+            <CustomerSkeleton className="h-28 w-full" />
+            <CustomerSkeleton className="h-11 w-full" />
           </div>
         ) : !stats ? (
-          <Card><CardContent className="p-6 text-center text-muted-foreground">No active daily cleaning subscription</CardContent></Card>
+          <CustomerEmptyState
+            title="No active daily cleaning subscription"
+            description="Your daily cleaning plan will appear here once activated."
+          />
         ) : (
           <>
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-center">
-                  <CardTitle className="text-base">Your Plan</CardTitle>
-                  <Badge>{stats.status}</Badge>
+            <CustomerSubscriptionCard>
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="font-semibold text-base">Your Plan</h2>
+                <Badge>{stats.status}</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="bg-muted rounded-lg p-3">
+                  <p className="text-2xl font-bold">{stats.usedCleanings} / {stats.allocatedCleanings}</p>
+                  <p className="text-xs text-muted-foreground">Cleanings</p>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="bg-muted rounded-lg p-3">
-                    <p className="text-2xl font-bold">{stats.usedCleanings} / {stats.allocatedCleanings}</p>
-                    <p className="text-xs text-muted-foreground">Cleanings</p>
-                  </div>
-                  <div className="bg-muted rounded-lg p-3">
-                    <p className="text-2xl font-bold">{stats.usedWashes} / {stats.allocatedWashes}</p>
-                    <p className="text-xs text-muted-foreground">Washes</p>
-                  </div>
+                <div className="bg-muted rounded-lg p-3">
+                  <p className="text-2xl font-bold">{stats.usedWashes} / {stats.allocatedWashes}</p>
+                  <p className="text-xs text-muted-foreground">Washes</p>
                 </div>
-                {stats.status === "paused" && stats.pauseStartDate && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    Paused {stats.pauseStartDate} — {stats.pauseEndDate}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+              </div>
+              {stats.status === "paused" && stats.pauseStartDate && (
+                <p className="text-xs text-muted-foreground text-center mt-3">
+                  Paused {stats.pauseStartDate} — {stats.pauseEndDate}
+                </p>
+              )}
+            </CustomerSubscriptionCard>
 
             <div className="flex gap-2">
-              <Link href="/customer/daily-cleaning/history" className="flex-1">
-                <Button variant="outline" className="w-full"><History className="h-4 w-4 mr-1" /> Visit History</Button>
-              </Link>
-              <Link href="/customer/daily-cleaning/gallery" className="flex-1">
-                <Button variant="outline" className="w-full"><Camera className="h-4 w-4 mr-1" /> Photo Gallery</Button>
-              </Link>
+              <CustomerButton href="/customer/daily-cleaning/history" variant="outline" className="flex-1">
+                <History className="h-4 w-4 mr-1" /> Visit History
+              </CustomerButton>
+              <CustomerButton href="/customer/daily-cleaning/gallery" variant="outline" className="flex-1">
+                <Camera className="h-4 w-4 mr-1" /> Photo Gallery
+              </CustomerButton>
             </div>
 
             {stats.status === "active" && stats.subscriptionId && (
-              <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-1"><Pause size={14} /> Request Pause</CardTitle></CardHeader>
-                <CardContent className="space-y-2">
+              <CustomerCard>
+                <h2 className="font-semibold text-base flex items-center gap-1 mb-2">
+                  <Pause size={14} /> Request Pause
+                </h2>
+                <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">Admin approval required. No visits or missed counts during pause.</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-xs">From</Label><Input type="date" value={pauseForm.pauseStartDate} onChange={e => setPauseForm(f => ({ ...f, pauseStartDate: e.target.value }))} /></div>
-                    <div><Label className="text-xs">To</Label><Input type="date" value={pauseForm.pauseEndDate} onChange={e => setPauseForm(f => ({ ...f, pauseEndDate: e.target.value }))} /></div>
+                    <div>
+                      <Label className="text-xs">From</Label>
+                      <Input type="date" value={pauseForm.pauseStartDate} onChange={e => setPauseForm(f => ({ ...f, pauseStartDate: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">To</Label>
+                      <Input type="date" value={pauseForm.pauseEndDate} onChange={e => setPauseForm(f => ({ ...f, pauseEndDate: e.target.value }))} />
+                    </div>
                   </div>
                   <Input placeholder="Reason (e.g. out of town)" value={pauseForm.pauseReason} onChange={e => setPauseForm(f => ({ ...f, pauseReason: e.target.value }))} />
-                  <Button
+                  <CustomerButton
                     size="sm"
                     className="w-full"
                     disabled={requestPause.isPending || !pauseForm.pauseStartDate || !pauseForm.pauseEndDate}
@@ -165,13 +179,13 @@ export default function CustomerDailyCleaningPage() {
                     }}
                   >
                     Submit Pause Request
-                  </Button>
-                </CardContent>
-              </Card>
+                  </CustomerButton>
+                </div>
+              </CustomerCard>
             )}
           </>
         )}
-      </div>
+      </CustomerPage>
     </CustomerLayout>
   );
 }

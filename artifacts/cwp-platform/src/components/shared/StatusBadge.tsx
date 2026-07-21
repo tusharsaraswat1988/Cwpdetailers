@@ -2,29 +2,21 @@ import { cn } from "@/lib/utils";
 
 export type StatusTone = "info" | "warning" | "success" | "destructive" | "neutral" | "progress";
 
+/** Token-driven tones — CSS vars set by AdminThemeRoot; fallbacks for other portals. */
 const toneStyles: Record<StatusTone, string> = {
-  info: "bg-sky-500/10 text-sky-700 border-sky-500/20",
-  warning: "bg-amber-500/10 text-amber-700 border-amber-500/20",
-  success: "bg-green-500/10 text-green-700 border-green-500/20",
-  destructive: "bg-red-500/10 text-red-700 border-red-500/20",
+  info: "bg-[hsl(var(--tone-info,212_100%_49%)/0.1)] text-[hsl(var(--tone-info-fg,212_100%_35%))] border-[hsl(var(--tone-info,212_100%_49%)/0.2)]",
+  warning:
+    "bg-[hsl(var(--tone-warning,38_92%_50%)/0.1)] text-[hsl(var(--tone-warning-fg,32_90%_32%))] border-[hsl(var(--tone-warning,38_92%_50%)/0.2)]",
+  success:
+    "bg-[hsl(var(--tone-success,142_71%_40%)/0.1)] text-[hsl(var(--tone-success-fg,142_72%_28%))] border-[hsl(var(--tone-success,142_71%_40%)/0.2)]",
+  destructive:
+    "bg-[hsl(var(--tone-destructive,0_84%_60%)/0.1)] text-[hsl(var(--tone-destructive-fg,0_72%_40%))] border-[hsl(var(--tone-destructive,0_84%_60%)/0.2)]",
   neutral: "bg-muted text-muted-foreground border-border",
-  progress: "bg-violet-500/10 text-violet-700 border-violet-500/20",
+  progress:
+    "bg-[hsl(var(--tone-progress,262_60%_55%)/0.1)] text-[hsl(var(--tone-progress-fg,262_55%_38%))] border-[hsl(var(--tone-progress,262_60%_55%)/0.2)]",
 };
 
-/**
- * Single source of truth for status → color across every admin module
- * (bookings, jobs, assignments, invoices, attendance, leads, complaints).
- * Extend this map instead of introducing a new local status color map in
- * feature code — see docs/PHASE_6_ADMIN_UX_CONSOLIDATION.md and
- * docs/UI_CONSTITUTION.md.
- *
- * Covers the universal status vocabulary: open, pending, assigned, ready,
- * started, paused, completed, cancelled, approved, rejected, paid, draft,
- * outstanding, overdue, blocked, warning, success, error — plus the
- * domain-specific synonyms already in use across modules today.
- */
 const statusTone: Record<string, StatusTone> = {
-  // Universal lifecycle vocabulary
   open: "info",
   pending: "warning",
   assigned: "info",
@@ -43,13 +35,19 @@ const statusTone: Record<string, StatusTone> = {
   warning: "warning",
   success: "success",
   error: "destructive",
-  // Scheduling / bookings synonyms
   scheduled: "info",
   confirmed: "info",
   en_route: "warning",
+  travelling: "warning",
+  arrived: "info",
+  checked_in: "info",
   in_progress: "progress",
+  verified: "success",
+  present: "success",
+  absent: "destructive",
+  late: "warning",
+  half_day: "info",
   rescheduled: "progress",
-  // Generic lifecycle synonyms (jobs, complaints, leads, subscriptions)
   waiting: "warning",
   waiting_assignment: "warning",
   ready_for_execution: "progress",
@@ -58,7 +56,6 @@ const statusTone: Record<string, StatusTone> = {
   active: "success",
   inactive: "neutral",
   escalated: "destructive",
-  // Billing / invoice synonyms
   unpaid: "destructive",
   partially_paid: "warning",
   refunded: "progress",
@@ -68,16 +65,18 @@ const statusTone: Record<string, StatusTone> = {
   sent: "info",
   payment_pending: "warning",
   commercially_closed: "success",
-  // Quotation lifecycle synonyms
   accepted: "success",
   converted: "progress",
   expired: "neutral",
+  offline: "neutral",
+  sync_pending: "warning",
+  uploading: "progress",
+  upload_failed: "destructive",
 };
 
 interface StatusBadgeProps {
   status: string;
   label?: string;
-  /** Override the tone lookup when a status string isn't in the map yet. */
   tone?: StatusTone;
   pulse?: boolean;
   className?: string;
@@ -91,7 +90,7 @@ export function StatusBadge({ status, label, tone, pulse, className }: StatusBad
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize",
         toneStyles[resolvedTone],
         className,
       )}
@@ -100,8 +99,8 @@ export function StatusBadge({ status, label, tone, pulse, className }: StatusBad
     >
       {pulse && (
         <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[hsl(var(--tone-success,142_71%_45%))] opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-[hsl(var(--tone-success,142_71%_45%))]" />
         </span>
       )}
       {display}

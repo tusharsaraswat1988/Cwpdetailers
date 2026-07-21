@@ -88,7 +88,7 @@ export default function AdminChurnedCustomers() {
             </p>
           </div>
           {selected.length > 0 && (
-            <Button onClick={() => setShowCompose(true)} className="bg-primary text-secondary">
+            <Button onClick={() => setShowCompose(true)} className="bg-primary text-primary-foreground">
               <Send size={14} className="mr-2" />Message {selected.length} selected
             </Button>
           )}
@@ -124,7 +124,7 @@ export default function AdminChurnedCustomers() {
             </div>
             <div className="flex gap-2">
               <Button onClick={() => bulkMut.mutate({ subscriptionIds: selected, message })}
-                disabled={bulkMut.isPending || !message.trim()} className="bg-primary text-secondary">
+                disabled={bulkMut.isPending || !message.trim()} className="bg-primary text-primary-foreground">
                 <Send size={13} className="mr-1.5" />
                 {bulkMut.isPending ? "Sending…" : `Send to ${selected.length} customers`}
               </Button>
@@ -138,7 +138,7 @@ export default function AdminChurnedCustomers() {
           <div className="flex items-center gap-3 mb-3">
             <button onClick={selectAll}
               className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-full border transition-all ${
-                selected.length === churned.length ? "bg-primary text-secondary border-primary" : "border-border text-muted-foreground hover:text-foreground"
+                selected.length === churned.length ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"
               }`}>
               <Check size={12} />{selected.length === churned.length ? "Deselect all" : `Select all (${churned.length})`}
             </button>
@@ -180,7 +180,7 @@ export default function AdminChurnedCustomers() {
                         <input value={editRemark.text} onChange={e => setEditRemark({ id: c.id, text: e.target.value })}
                           className="flex-1 bg-background border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40"
                           placeholder="Add a remark..." />
-                        <Button size="sm" className="h-6 text-xs bg-primary text-secondary" onClick={() => remarkMut.mutate({ id: c.id, remark: editRemark!.text })}>Save</Button>
+                        <Button size="sm" className="h-6 text-xs bg-primary text-primary-foreground" onClick={() => remarkMut.mutate({ id: c.id, remark: editRemark!.text })}>Save</Button>
                         <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => setEditRemark(null)}>×</Button>
                       </div>
                     ) : (
