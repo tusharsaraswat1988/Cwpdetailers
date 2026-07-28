@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { VehicleModelSelect } from "@/components/shared/VehicleModelSelect";
 import { SeatCategorySelect } from "@/components/shared/SeatCategorySelect";
 import type { VehicleModel } from "@/features/master-data/api";
+import { categorySlugToVehicleType } from "@/lib/vehicleMaster";
 import { Plus } from "lucide-react";
 
 const VEHICLE_TYPES = ["sedan", "suv", "hatchback", "luxury", "van", "truck"] as const;
@@ -59,6 +60,9 @@ export function VehicleForm({
 }: VehicleFormProps) {
   const set = (patch: Partial<VehicleAssetFormValues>) => onChange({ ...values, ...patch });
   const lockedLocation = serviceLocations.find(l => String(l.id) === values.serviceLocationId);
+  const derivedVehicleType = selectedModel
+    ? categorySlugToVehicleType(selectedModel.categorySlug)
+    : values.vehicleType;
 
   return (
     <div className="space-y-4">
@@ -113,9 +117,14 @@ export function VehicleForm({
         modelId={selectedModel?.id}
         onSelect={model => {
           onModelSelect(model);
-          // Default seater from model; advisor can still change for 5 vs 7 variants
-          if (model?.seatCategoryId != null) {
-            set({ seatCategoryId: String(model.seatCategoryId) });
+          if (model) {
+            set({
+              vehicleType: categorySlugToVehicleType(model.categorySlug),
+              seatCategoryId:
+                model.seatCategoryId != null ? String(model.seatCategoryId) : values.seatCategoryId,
+            });
+          } else {
+            set({ vehicleType: "sedan", seatCategoryId: "" });
           }
         }}
       />
@@ -139,7 +148,7 @@ export function VehicleForm({
           <Label>Vehicle type</Label>
           {selectedModel ? (
             <p className="mt-1.5 text-sm capitalize rounded-md border border-border bg-muted/30 px-3 py-2">
-              {values.vehicleType}
+              {derivedVehicleType}
               <span className="text-xs text-muted-foreground block normal-case">From master data category</span>
             </p>
           ) : (

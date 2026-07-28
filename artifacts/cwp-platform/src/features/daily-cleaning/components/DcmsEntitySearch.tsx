@@ -23,6 +23,7 @@ type Props = {
   onChange: (option: SearchOption | null) => void;
   placeholder?: string;
   disabled?: boolean;
+  className?: string;
   vehicleFilters?: { customerId?: number; registration?: string; brand?: string; model?: string };
 };
 
@@ -55,7 +56,7 @@ async function fetchOptions(type: Props["type"], query: string, vehicleFilters?:
   }));
 }
 
-export function DcmsEntitySearch({ type, value, onChange, placeholder, disabled, vehicleFilters }: Props) {
+export function DcmsEntitySearch({ type, value, onChange, placeholder, disabled, className, vehicleFilters }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<SearchOption[]>([]);
@@ -90,7 +91,7 @@ export function DcmsEntitySearch({ type, value, onChange, placeholder, disabled,
           variant="outline"
           role="combobox"
           disabled={disabled}
-          className={cn("w-full justify-between font-normal", !value && "text-muted-foreground")}
+          className={cn("w-full justify-between font-normal h-9 px-3 text-sm", !value && "text-muted-foreground", className)}
         >
           {value?.label ?? placeholder ?? hints[type]}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

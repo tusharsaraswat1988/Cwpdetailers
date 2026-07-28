@@ -1,16 +1,10 @@
-import { useState, useEffect } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { useEffect, useState } from "react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { searchCustomers } from "../api";
+import { Loader2, MapPin, Phone, Search, UserRound, X } from "lucide-react";
+import { searchCustomers, type CustomerSearchRow } from "../api";
 
-export type CustomerSearchValue = {
-  id: number;
-  name: string;
-  phone: string;
-};
+export type CustomerSearchValue = Pick<CustomerSearchRow, "id" | "name" | "phone">;
 
 type Props = {
   value: CustomerSearchValue | null;
@@ -21,10 +15,45 @@ type Props = {
   testId?: string;
 };
 
-function toLabel(c: CustomerSearchValue) {
-  return `${c.name} · ${c.phone}`;
+function toValue(row: CustomerSearchRow): CustomerSearchValue {
+  return { id: row.id, name: row.name, phone: row.phone };
 }
 
+function CustomerResultRow({
+  row,
+  onPick,
+}: {
+  row: CustomerSearchRow;
+  onPick: () => void;
+}) {
+  const meta = [row.phone, row.email?.trim(), row.city?.trim()].filter(Boolean);
+
+  return (
+    <button
+      type="button"
+      onMouseDown={e => e.preventDefault()}
+      onClick={onPick}
+      data-testid={`customer-search-result-${row.id}`}
+      className="w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors border-b border-border/60 last:border-b-0 hover:bg-muted/60"
+    >
+      <UserRound className="h-4 w-4 text-primary mt-0.5 shrink-0" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium truncate">{row.name}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+          {meta.join(" · ")}
+        </p>
+        {row.branchName && (
+          <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1 truncate">
+            <MapPin className="h-3 w-3 shrink-0" aria-hidden />
+            {row.branchName}
+          </p>
+        )}
+      </div>
+    </button>
+  );
+}
+
+/** Inline customer search — type directly, results appear below with details. */
 export function CustomerSearchSelect({
   value,
   onChange,
@@ -33,13 +62,12 @@ export function CustomerSearchSelect({
   id,
   testId = "customer-search-select",
 }: Props) {
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<CustomerSearchValue[]>([]);
+  const [options, setOptions] = useState<CustomerSearchRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
     const t = setTimeout(async () => {
       if (query.trim().length < 2) {
         setOptions([]);
@@ -47,8 +75,7 @@ export function CustomerSearchSelect({
       }
       setLoading(true);
       try {
-        const rows = await searchCustomers(query.trim());
-        setOptions(rows.map(r => ({ id: r.id, name: r.name, phone: r.phone })));
+        setOptions(await searchCustomers(query.trim()));
       } catch {
         setOptions([]);
       } finally {
@@ -56,49 +83,100 @@ export function CustomerSearchSelect({
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [query, open]);
+  }, [query]);
+
+  const showResults = focused && !value;
+  const showPanel = showResults && (query.trim().length >= 2 || loading);
+
+  if (value) {
+    return (
+      <div
+        className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 flex items-start justify-between gap-3"
+        data-testid={`${testId}-selected`}
+      >
+        <div className="flex items-start gap-2 min-w-0">
+          <UserRound className="h-4 w-4 text-primary mt-0.5 shrink-0" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">{value.name}</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+              <Phone className="h-3 w-3 shrink-0" aria-hidden />
+              {value.phone}
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 shrink-0 px-2"
+          onClick={() => {
+            onChange(null);
+            setQuery("");
+          }}
+          data-testid={`${testId}-clear`}
+        >
+          <X className="h-4 w-4" />
+          <span className="sr-only">Change customer</span>
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
+    <div className="space-y-0" data-testid={testId}>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
+        <Input
           id={id}
-          variant="outline"
-          role="combobox"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => window.setTimeout(() => setFocused(false), 150)}
+          placeholder={placeholder}
           disabled={disabled}
-          data-testid={testId}
-          className={cn("w-full justify-between font-normal", !value && "text-muted-foreground")}
+          autoComplete="off"
+          className="pl-9"
+          data-testid={`${testId}-input`}
+        />
+      </div>
+
+      {showResults && query.trim().length < 2 && !loading && (
+        <p className="text-xs text-muted-foreground px-1 pt-2">
+          Type at least 2 characters — name, phone, or email.
+        </p>
+      )}
+
+      {showPanel && (
+        <div
+          className="mt-2 rounded-lg border border-border bg-card shadow-sm overflow-hidden"
+          data-testid={`${testId}-results`}
         >
-          {value ? toLabel(value) : placeholder}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <Command shouldFilter={false}>
-          <CommandInput placeholder={placeholder} value={query} onValueChange={setQuery} />
-          <CommandList>
-            <CommandEmpty>{loading ? "Searching…" : query.length < 2 ? "Type 2+ characters" : "No customers found"}</CommandEmpty>
-            <CommandGroup>
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 px-3 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Searching…
+            </div>
+          ) : options.length === 0 ? (
+            <p className="px-3 py-6 text-sm text-muted-foreground text-center">
+              No customers found for &ldquo;{query.trim()}&rdquo;
+            </p>
+          ) : (
+            <div className="max-h-[280px] overflow-y-auto">
               {options.map(opt => (
-                <CommandItem
+                <CustomerResultRow
                   key={opt.id}
-                  value={toLabel(opt)}
-                  onSelect={() => {
-                    onChange(opt);
-                    setOpen(false);
+                  row={opt}
+                  onPick={() => {
+                    onChange(toValue(opt));
+                    setQuery("");
+                    setFocused(false);
                   }}
-                >
-                  <Check className={cn("mr-2 h-4 w-4", value?.id === opt.id ? "opacity-100" : "opacity-0")} />
-                  <div>
-                    <p>{opt.name}</p>
-                    <p className="text-xs text-muted-foreground">{opt.phone}</p>
-                  </div>
-                </CommandItem>
+                />
               ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

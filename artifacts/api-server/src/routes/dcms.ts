@@ -9,7 +9,7 @@ import {
   updateSubscriptionLocation, renewSubscription,
   getCustomerActiveSubscription,
 } from "../lib/dcms/subscriptionService";
-import { completeVisit, listVisits, listWashes } from "../lib/dcms/visitService";
+import { completeVisit, listVisits, listWashes, listServiceHistory } from "../lib/dcms/visitService";
 import { searchVehicleByRegistration, searchVehicleFromOcrText } from "../lib/dcms/vehicleSearch";
 import { recognizePlateFromOcrText, shouldAutoSelectFromOcrConfidence } from "../lib/dcms/plateOcrEngine";
 import { searchCustomers, searchVehicles, searchStaff, searchSubscriptions } from "../lib/dcms/entitySearch";
@@ -331,6 +331,9 @@ router.get(
         month: req.query.month ? Number(req.query.month) : undefined,
         year: req.query.year ? Number(req.query.year) : undefined,
         vehicleId: req.query.vehicleId ? Number(req.query.vehicleId) : undefined,
+        customerId: req.query.customerId ? Number(req.query.customerId) : undefined,
+        from: typeof req.query.from === "string" ? req.query.from : undefined,
+        to: typeof req.query.to === "string" ? req.query.to : undefined,
       });
       return res.json(visits);
     } catch (err) {
@@ -495,6 +498,35 @@ router.get("/daily-cleaning/staff/daily-route", requireAuth, requirePermission("
     return res.json(await getStaffDailyRoute(staffId, date));
   } catch (err) { return handleError(req, res, err); }
 });
+
+// ─── Service History (cleaning + wash, grouped by day) ───────────────────────
+
+router.get(
+  "/daily-cleaning/service-history",
+  requireAuth,
+  requirePermission("daily_cleaning", "view"),
+  async (req, res) => {
+    try {
+      const from = typeof req.query.from === "string" ? req.query.from : undefined;
+      const to = typeof req.query.to === "string" ? req.query.to : undefined;
+      if (from && to && from > to) {
+        return res.status(400).json({ error: "from must be on or before to" });
+      }
+      return res.json(await listServiceHistory({
+        customerId: req.query.customerId ? Number(req.query.customerId) : undefined,
+        vehicleId: req.query.vehicleId ? Number(req.query.vehicleId) : undefined,
+        subscriptionId: req.query.subscriptionId ? Number(req.query.subscriptionId) : undefined,
+        staffId: req.query.staffId ? Number(req.query.staffId) : undefined,
+        status: req.query.status as "completed" | "rejected" | undefined,
+        from,
+        to,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      }));
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
 
 // ─── Wash History ────────────────────────────────────────────────────────────
 

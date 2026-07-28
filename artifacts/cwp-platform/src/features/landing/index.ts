@@ -1,5 +1,10 @@
 export type { Division } from "./types";
-export { DIVISION_STORAGE_KEY } from "./types";
+export {
+  DIVISION_STORAGE_KEY,
+  DIVISION_PATHS,
+  pathForDivision,
+  divisionFromPath,
+} from "./types";
 export { landingImages } from "./assets";
 
 export {

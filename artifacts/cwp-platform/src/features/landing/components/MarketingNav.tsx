@@ -18,6 +18,8 @@ export type MarketingNavProps = {
   className?: string;
   /** Highlight matching href (e.g. current legal page) */
   activeHref?: string;
+  /** Logo target — defaults to vehicle landing */
+  homeHref?: string;
 };
 
 const DEFAULT_LINKS: MarketingNavLink[] = [
@@ -62,6 +64,7 @@ export function MarketingNav({
   links = DEFAULT_LINKS,
   className,
   activeHref,
+  homeHref = "/vehicle",
 }: MarketingNavProps) {
   const branding = useBranding();
   const phone = branding.supportPhone?.replace(/\s/g, "") || "8707488250";
@@ -83,7 +86,7 @@ export function MarketingNav({
           LANDING_LAYOUT.navHeight,
         )}
       >
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href={homeHref} className="flex items-center gap-2.5">
           <BrandLogo variant="navbar" lazy={false} />
           <div className="leading-tight">
             <div className="text-[15px] font-semibold tracking-tight">

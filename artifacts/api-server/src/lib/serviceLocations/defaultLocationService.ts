@@ -16,7 +16,12 @@ type DbLike = typeof db;
 export type DefaultLocationInput = Pick<
   Customer,
   "id" | "address" | "city" | "companyId" | "franchiseeId" | "branchId" | "customerSince"
->;
+> & {
+  latitude?: number | null;
+  longitude?: number | null;
+  placeId?: string | null;
+  serviceLocationLabel?: string | null;
+};
 
 function inferLocationType(address: string | null | undefined): InsertServiceLocation["locationType"] {
   if (address && address.trim()) return "residence";
@@ -48,9 +53,12 @@ export async function ensureDefaultServiceLocation(
   const [location] = await tx
     .insert(serviceLocationsTable)
     .values({
-      label: DEFAULT_LOCATION_LABEL,
+      label: customer.serviceLocationLabel?.trim() || DEFAULT_LOCATION_LABEL,
       address: customer.address ?? null,
       city: customer.city ?? null,
+      latitude: customer.latitude ?? null,
+      longitude: customer.longitude ?? null,
+      placeId: customer.placeId ?? null,
       locationType: inferLocationType(customer.address),
       status: "active",
       isAutoCreated: true,

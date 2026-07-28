@@ -36,15 +36,10 @@ export default function BookServicesPage() {
 
   return (
     <AdminLayout>
-      <div className="max-w-3xl mx-auto space-y-6 p-6">
+      <div className="max-w-3xl mx-auto space-y-6">
         <PageActionHeader
           title="Create Service Request"
           description="Operational entry for every CWP service — walk-in, phone, WhatsApp, or existing customer. Creates quotation, booking, and assignment queue entry."
-          primaryAction={{
-            label: "Leads & CRM",
-            href: "/admin/leads",
-            testId: "book-service-leads-cta",
-          }}
         />
 
         <Card>

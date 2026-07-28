@@ -20,7 +20,7 @@ import { eq, and, sql, inArray, isNotNull } from "drizzle-orm";
 
 import { logDcmsActivity } from "./auditLog";
 
-import { getVehiclePlanContext, planMatchesVehicle } from "./vehiclePlanMatch";
+import { getVehiclePlanContext, getPlanInapplicableReason, planMatchesVehicle } from "./vehiclePlanMatch";
 
 import { getSeatPricingTier, getSeatTierLabel, SEAT_TIER_CANONICAL_SLUGS, type SeatPricingTier } from "./seatPricingTier";
 
@@ -59,6 +59,10 @@ export type DcmsPlanRow = DcmsPlan & {
   scopeVehicleLabel?: string | null;
 
   scopeSeatLabel?: string | null;
+
+  applicable?: boolean;
+
+  inapplicableReason?: string | null;
 
 };
 
@@ -194,13 +198,19 @@ export async function listPlans(
 
     const vehicle = await getVehiclePlanContext(vehicleId);
     if (!vehicle) {
-      // Vehicle missing model/category linkage — offer the same sellable plans as catalog.
-      return active;
+      return active.map(p => ({ ...p, applicable: true, inapplicableReason: null }));
     }
 
-    const matched = active.filter(p => planMatchesVehicle(p, vehicle, p.seatCount));
-    // Prefer vehicle-matched pricing; fall back so daily cleaning is never hidden in Book Service.
-    return matched.length > 0 ? matched : active;
+    return active.map(p => {
+      const applicable = planMatchesVehicle(p, vehicle, p.seatCount);
+      return {
+        ...p,
+        applicable,
+        inapplicableReason: applicable
+          ? null
+          : getPlanInapplicableReason(p, vehicle, p.seatCount, p.scopeSeatLabel ?? p.seatCategoryName),
+      };
+    });
   }
 
 

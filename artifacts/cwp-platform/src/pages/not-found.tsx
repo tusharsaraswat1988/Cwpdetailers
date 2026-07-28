@@ -21,7 +21,7 @@ export default function NotFound() {
           <p className="text-sm text-muted-foreground">
             This page doesn’t exist or may have moved. Head back to the homepage to continue.
           </p>
-          <MarketingButton href="/" variant="primary" className="mt-6">
+          <MarketingButton href="/vehicle" variant="primary" className="mt-6">
             Back to Home
           </MarketingButton>
         </MarketingCard>

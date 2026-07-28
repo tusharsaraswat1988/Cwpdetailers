@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,12 +19,20 @@ type Props = {
   preferredLocationId?: number | null;
   value: CustomerServiceLocationRow | null;
   onChange: (location: CustomerServiceLocationRow | null) => void;
+  /** Fired when inline add/edit panel opens — wizard can disable Next. */
+  onInlinePanelOpenChange?: (open: boolean) => void;
 };
 
-export function LocationSelect({ customerId, preferredLocationId, value, onChange }: Props) {
+export function LocationSelect({ customerId, preferredLocationId, value, onChange, onInlinePanelOpenChange }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingLocation, setEditingLocation] = useState<CustomerServiceLocationRow | null>(null);
   const [typeFilter, setTypeFilter] = useState<ServiceLocationType | null>(null);
+
+  const inlinePanelOpen = showAddForm || editingLocation != null;
+
+  useEffect(() => {
+    onInlinePanelOpenChange?.(inlinePanelOpen);
+  }, [inlinePanelOpen, onInlinePanelOpenChange]);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["book-services", "locations", customerId],
@@ -70,15 +77,14 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
   if (addresses.length === 0 && !showAddForm) {
     return (
       <div className="space-y-3" data-testid="book-step-location">
-        <div>
-          <Label className="text-base">Where should CWP perform this service?</Label>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Add a service location to continue — you stay in this request.
-          </p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => setShowAddForm(true)} data-testid="btn-add-service-address-inline">
-          <Plus size={14} className="mr-1.5" /> Add service location
-        </Button>
+        <p className="text-sm text-muted-foreground">
+          This customer has no service locations yet. Add one to continue — you stay in this request.
+        </p>
+        <AddLocationCard
+          title="Add service location"
+          hint="Required to continue"
+          onClick={() => setShowAddForm(true)}
+        />
       </div>
     );
   }
@@ -123,17 +129,9 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
 
   return (
     <div className="space-y-4" data-testid="book-step-location">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <Label className="text-base">Where should CWP perform this service?</Label>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Location types come from the Address Platform. One site is pre-selected when possible — tap Edit to change details.
-          </p>
-        </div>
-        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs h-8" onClick={() => setShowAddForm(true)}>
-          <Plus size={12} className="mr-1" /> Add location
-        </Button>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Tap a site to select it. We pre-select the asset&apos;s location when available.
+      </p>
 
       {availableTypes.length > 1 && (
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Location type">
@@ -201,9 +199,11 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
                   </div>
                 </button>
                 <div className="flex flex-col gap-1.5 items-end shrink-0">
-                  {loc.isDefault && <Badge variant="secondary" className="text-xs">Primary</Badge>}
-                  {fromAsset && <Badge variant="outline" className="text-xs">Asset site</Badge>}
-                  {selected && <Badge className="text-xs">Selected</Badge>}
+                  {fromAsset ? (
+                    <Badge variant="outline" className="text-xs">Asset site</Badge>
+                  ) : loc.isDefault ? (
+                    <Badge variant="secondary" className="text-xs">Primary</Badge>
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
@@ -224,7 +224,40 @@ export function LocationSelect({ customerId, preferredLocationId, value, onChang
             </div>
           );
         })}
+        <AddLocationCard
+          title="Add another location"
+          hint="New site for this customer"
+          onClick={() => setShowAddForm(true)}
+        />
       </div>
     </div>
+  );
+}
+
+function AddLocationCard({
+  title,
+  hint,
+  onClick,
+}: {
+  title: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid="btn-add-service-address-inline"
+      className={cn(
+        "w-full flex items-start gap-3 rounded-lg border border-dashed px-4 py-3 text-left transition-colors min-h-14",
+        "border-primary/40 bg-primary/5 hover:bg-primary/10 hover:border-primary/60",
+      )}
+    >
+      <Plus size={18} className="text-primary mt-0.5 shrink-0" aria-hidden />
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-primary">{title}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>
+      </div>
+    </button>
   );
 }

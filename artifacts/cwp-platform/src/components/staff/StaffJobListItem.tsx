@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import type { StaffJob } from "@/lib/staff-jobs";
 import { jobAmount } from "@/lib/staff-jobs";
+import { formatStaffAddressLine } from "@/features/customers/lib/serviceAddress";
 import { buildNavigateUrl, canNavigateTo } from "@/lib/maps";
 import { StaffJobCard } from "@/features/staff-ds";
 
@@ -12,7 +13,7 @@ interface Props {
 }
 
 export function StaffJobListItem({ job, compact, showAmount, linkToDashboard }: Props) {
-  const where = job.area ? `${job.area}, ${job.address}` : job.address ?? undefined;
+  const where = formatStaffAddressLine(job.address, job.area) || undefined;
   const subtitle = [
     (job.serviceName ?? job.serviceType)?.replace(/_/g, " "),
     job.scheduledTime,

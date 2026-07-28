@@ -119,7 +119,9 @@ export function billingActionLabel(action: BillingActionChoice): string {
 
 export function buildRequestNotes(draft: BookServicesDraft): string | undefined {
   const parts: string[] = [];
-  parts.push(`Source: ${requestSourceLabel(draft.requestSource)}`);
+  if (draft.requestSource !== "walk_in") {
+    parts.push(`Source: ${requestSourceLabel(draft.requestSource)}`);
+  }
   if (draft.requestNotes.trim()) parts.push(draft.requestNotes.trim());
   return parts.length ? parts.join("\n") : undefined;
 }

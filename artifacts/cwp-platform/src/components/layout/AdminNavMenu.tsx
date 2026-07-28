@@ -20,6 +20,31 @@ type Props = {
   collapsed?: boolean;
 };
 
+const STICKY_SECTION_HEADER =
+  "sticky top-0 z-10 bg-secondary py-1 -mx-2 px-2 shadow-[0_1px_0_0_rgba(255,255,255,0.06)]";
+
+function initialExpandedSections(sections: AdminNavSection[], location: string): Record<string, boolean> {
+  const initial: Record<string, boolean> = {};
+  for (const section of sections) {
+    if (section.defaultCollapsed && isAdminNavSectionActive(location, section)) {
+      initial[section.label] = true;
+    }
+  }
+  return initial;
+}
+
+function initialExpandedGroups(sections: AdminNavSection[], location: string): Record<string, boolean> {
+  const initial: Record<string, boolean> = {};
+  for (const section of sections) {
+    for (const entry of section.entries) {
+      if (isAdminNavGroup(entry) && isAdminNavGroupActive(location, entry)) {
+        initial[entry.id] = true;
+      }
+    }
+  }
+  return initial;
+}
+
 function NavLink({
   item,
   active,
@@ -164,6 +189,7 @@ function NavSection({
           onClick={() => onToggleSection(section.label)}
           className={cn(
             "w-full flex items-center gap-2 px-3 mb-1.5 rounded-md transition-colors",
+            STICKY_SECTION_HEADER,
             isLegacy && "hover:bg-amber-500/10",
           )}
         >
@@ -181,7 +207,7 @@ function NavSection({
           <div className="space-y-0.5">
             {section.entries.map(entry => {
               if (isAdminNavGroup(entry)) {
-                const expanded = expandedGroups[entry.id] ?? isAdminNavGroupActive(location, entry);
+                const expanded = expandedGroups[entry.id] ?? false;
                 return (
                   <NavGroup
                     key={entry.id}
@@ -214,7 +240,7 @@ function NavSection({
   return (
     <div className={collapsed ? "mb-2" : undefined}>
       {!collapsed && (
-        <div className="flex items-center gap-2 px-3 mb-1.5">
+        <div className={cn("flex items-center gap-2 px-3 mb-1.5", STICKY_SECTION_HEADER)}>
           <div className="w-0.5 h-3 rounded-full bg-primary/40 shrink-0" />
           <p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest">{section.label}</p>
         </div>
@@ -222,7 +248,7 @@ function NavSection({
       <div className="space-y-0.5">
         {section.entries.map(entry => {
           if (isAdminNavGroup(entry)) {
-            const expanded = expandedGroups[entry.id] ?? isAdminNavGroupActive(location, entry);
+            const expanded = expandedGroups[entry.id] ?? false;
             return (
               <NavGroup
                 key={entry.id}
@@ -255,24 +281,41 @@ export function AdminNavMenu({ onNavigate, hasPermission, collapsed = false }: P
   const [location] = useLocation();
   const sections = filterAdminNavSections(ADMIN_NAV_SECTIONS, hasPermission);
 
-  const legacyActive = sections.some(section =>
-    section.variant === "legacy" && isAdminNavSectionActive(location, section),
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
+    initialExpandedGroups(sections, location),
   );
 
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => ({
-    ...(legacyActive ? { [LEGACY_GROUP_ID]: true } : {}),
-  }));
-
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => ({
-    ...(legacyActive ? { Legacy: true } : {}),
-  }));
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() =>
+    initialExpandedSections(sections, location),
+  );
 
   useEffect(() => {
-    if (legacyActive) {
-      setExpandedGroups(prev => ({ ...prev, [LEGACY_GROUP_ID]: true }));
-      setExpandedSections(prev => ({ ...prev, Legacy: true }));
-    }
-  }, [location, legacyActive]);
+    setExpandedSections(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const section of sections) {
+        if (section.defaultCollapsed && isAdminNavSectionActive(location, section) && !next[section.label]) {
+          next[section.label] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    setExpandedGroups(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const section of sections) {
+        for (const entry of section.entries) {
+          if (isAdminNavGroup(entry) && isAdminNavGroupActive(location, entry) && !next[entry.id]) {
+            next[entry.id] = true;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [location, sections]);
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));

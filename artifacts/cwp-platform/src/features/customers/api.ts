@@ -8,6 +8,15 @@ export type CreateCustomerPayload = {
   password?: string;
   gstin?: string | null;
   billingName?: string | null;
+  latitude?: number;
+  longitude?: number;
+  placeId?: string;
+  serviceLocationLabel?: string;
+  houseNumber?: string;
+  buildingName?: string;
+  area?: string;
+  landmark?: string;
+  pincode?: string;
 };
 
 export type CreateCustomerResult = {
@@ -127,11 +136,20 @@ export async function fetchCustomerNetwork(customerId: number): Promise<Customer
   return res.json();
 }
 
-export async function searchCustomers(q: string) {
+export type CustomerSearchRow = {
+  id: number;
+  name: string;
+  phone: string;
+  email?: string | null;
+  city?: string | null;
+  branchName?: string | null;
+};
+
+export async function searchCustomers(q: string): Promise<CustomerSearchRow[]> {
   const res = await fetch(`/api/customers?search=${encodeURIComponent(q)}&limit=10`, { credentials: "include" });
   if (!res.ok) return [];
   const body = await res.json();
-  return (body.data ?? []) as Array<{ id: number; name: string; phone: string }>;
+  return (body.data ?? []) as CustomerSearchRow[];
 }
 
 export async function updateCustomerTier3Fields(customerId: number, fields: {

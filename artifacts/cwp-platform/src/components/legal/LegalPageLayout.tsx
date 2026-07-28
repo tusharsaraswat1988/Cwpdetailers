@@ -76,7 +76,7 @@ export default function LegalPageLayout({ slug }: Props) {
       <MarketingPageShell>
         <MarketingSection narrow className="flex flex-col items-center text-center">
           <MarketingHeading title="Page Not Found" description="This legal page is not available yet." />
-          <MarketingButton href="/" variant="primary" className="mt-6">
+          <MarketingButton href="/vehicle" variant="primary" className="mt-6">
             Back to Home
           </MarketingButton>
         </MarketingSection>

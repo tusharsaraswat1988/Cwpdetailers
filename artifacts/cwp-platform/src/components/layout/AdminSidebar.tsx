@@ -23,14 +23,14 @@ export default function AdminSidebar({ onNavigate, embedded = false, className }
     <aside
       data-testid="admin-sidebar"
       className={cn(
-        "flex flex-col h-full bg-secondary transition-all duration-300 border-r border-white/5 overflow-y-auto",
+        "flex flex-col h-full min-h-0 bg-secondary transition-all duration-300 border-r border-white/5 overflow-hidden",
         embedded ? "w-full border-r-0" : showCollapsed ? "w-16" : "w-60",
         className,
       )}
     >
       <div
         className={cn(
-          "border-b border-white/10",
+          "shrink-0 border-b border-white/10",
           showCollapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "flex items-center gap-3 px-4 py-5",
         )}
       >
@@ -68,7 +68,7 @@ export default function AdminSidebar({ onNavigate, embedded = false, className }
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+      <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-3 px-2 space-y-4">
         <AdminNavMenu
           onNavigate={onNavigate}
           hasPermission={hasPermission}
@@ -76,7 +76,7 @@ export default function AdminSidebar({ onNavigate, embedded = false, className }
         />
       </nav>
 
-      <div className="border-t border-white/10 p-3">
+      <div className="shrink-0 border-t border-white/10 p-3">
         {!showCollapsed && user && (
           <div className="px-2 py-1 mb-2">
             <p className="text-white text-xs font-medium truncate">{user.name}</p>

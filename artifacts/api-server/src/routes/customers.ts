@@ -17,6 +17,8 @@ import { normalizeGstin } from "../lib/gstin";
 import { resolveSupervisorForCustomer } from "../lib/supervisor/supervisorContact";
 import { isLegacyDormantCustomer, tryReactivateLegacyCustomer } from "../lib/customerReactivation";
 import { ensureDefaultServiceLocation } from "../lib/serviceLocations/defaultLocationService";
+import { addressCapability } from "../lib/address/capability/AddressCapability";
+import { composeSavedAddress, toCreateAddressBody, hasRequiredAddressParts } from "@workspace/address-model";
 
 const router = Router();
 
@@ -176,7 +178,11 @@ router.get("/customers/reactivated", async (req, res) => {
 
 router.post("/customers", async (req, res) => {
   try {
-    const { name, phone, email, address, city, branchId, password, gstin, billingName, referredByCustomerId } = req.body;
+    const {
+      name, phone, email, address, city, branchId, password, gstin, billingName, referredByCustomerId,
+      latitude, longitude, placeId, serviceLocationLabel,
+      houseNumber, buildingName, area, landmark, pincode, postalCode,
+    } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
 
     const phoneResult = parseRequiredMobile(phone);
@@ -185,6 +191,36 @@ router.post("/customers", async (req, res) => {
     const emailResult = parseOptionalEmail(email);
     if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
 
+    const parseCoord = (value: unknown) => {
+      if (value === null || value === undefined || value === "") return undefined;
+      const n = typeof value === "number" ? value : parseFloat(String(value));
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const parsedLatitude = parseCoord(latitude);
+    const parsedLongitude = parseCoord(longitude);
+    const parsedPlaceId = typeof placeId === "string" && placeId.trim() ? placeId.trim() : undefined;
+    const parsedLocationLabel = typeof serviceLocationLabel === "string" && serviceLocationLabel.trim()
+      ? serviceLocationLabel.trim()
+      : undefined;
+
+    const structuredParts = {
+      houseNumber: typeof houseNumber === "string" ? houseNumber : "",
+      buildingName: typeof buildingName === "string" ? buildingName : "",
+      area: typeof area === "string" ? area : "",
+      landmark: typeof landmark === "string" ? landmark : "",
+      pincode: typeof pincode === "string" ? pincode : (typeof postalCode === "string" ? postalCode : ""),
+      city: typeof city === "string" ? city : "",
+    };
+    const composedFromParts = hasRequiredAddressParts(structuredParts)
+      ? composeSavedAddress(structuredParts)
+      : "";
+    const resolvedAddress = composedFromParts || (typeof address === "string" ? address.trim() : "") || undefined;
+    const resolvedCity = structuredParts.city.trim() || (typeof city === "string" ? city.trim() : "") || undefined;
+
+    if ((parsedLatitude != null) !== (parsedLongitude != null)) {
+      return res.status(400).json({ error: "latitude and longitude must be provided together" });
+    }
+
     const identityCheck = await assertContactIdentityAvailable(
       phoneResult.value,
       emailResult.value,
@@ -192,14 +228,15 @@ router.post("/customers", async (req, res) => {
     if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
 
     const stamp = tenantStamp(req, {
-      name, phone: identityCheck.identity.phone, email: identityCheck.identity.email, address, city,
+      name, phone: identityCheck.identity.phone, email: identityCheck.identity.email,
+      address: resolvedAddress, city: resolvedCity,
       branchId: branchId || null,
       status: "active" as const,
     });
     const values: typeof customersTable.$inferInsert = { ...stamp };
 
     try {
-      if (gstin !== undefined) values.gstin = normalizeGstin(gstin);
+      if (gstin !== undefined && String(gstin).trim() !== "") values.gstin = normalizeGstin(gstin);
       if (billingName !== undefined) values.billingName = billingName?.trim() || null;
       if (referredByCustomerId) {
         const [referrer] = await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.id, referredByCustomerId)).limit(1);
@@ -215,9 +252,35 @@ router.post("/customers", async (req, res) => {
     const [customer] = await db.insert(customersTable).values(values).returning();
 
     try {
-      await ensureDefaultServiceLocation(customer);
+      await ensureDefaultServiceLocation({
+        ...customer,
+        address: resolvedAddress ?? customer.address,
+        city: resolvedCity ?? customer.city,
+        latitude: parsedLatitude ?? null,
+        longitude: parsedLongitude ?? null,
+        placeId: parsedPlaceId ?? null,
+        serviceLocationLabel: parsedLocationLabel ?? null,
+      });
     } catch (locErr) {
       req.log.warn({ err: locErr, customerId: customer.id }, "Customer created but default service location failed");
+    }
+
+    if (hasRequiredAddressParts(structuredParts)) {
+      try {
+        await addressCapability.createAddress(
+          toCreateAddressBody({
+            customerId: customer.id,
+            ...structuredParts,
+            serviceLocationLabel: parsedLocationLabel,
+            latitude: parsedLatitude ?? null,
+            longitude: parsedLongitude ?? null,
+            placeId: parsedPlaceId ?? null,
+          }),
+          { logger: req.log },
+        );
+      } catch (addrErr) {
+        req.log.warn({ err: addrErr, customerId: customer.id }, "Customer created but structured address save failed");
+      }
     }
 
     let loginAccount: { userId: number; phone: string } | null = null;

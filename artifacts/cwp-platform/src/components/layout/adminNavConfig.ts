@@ -110,6 +110,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   },
   {
     label: "Operations",
+    defaultCollapsed: true,
     entries: [
       {
         id: "book-services",
@@ -160,6 +161,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   },
   {
     label: "Commercial",
+    defaultCollapsed: true,
     entries: [
       {
         id: "billing",
@@ -199,6 +201,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   },
   {
     label: "People",
+    defaultCollapsed: true,
     entries: [
       { id: "staff", href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
       { id: "staff-approval", href: "/admin/staff-approval", label: "Verify Staff", icon: ShieldCheck, perm: { resource: "staff", action: "approve" } },
@@ -209,6 +212,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   },
   {
     label: "Reports",
+    defaultCollapsed: true,
     entries: [
       { id: "analytics", href: "/admin/analytics", label: "Analytics", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
       { id: "founder", href: "/admin/founder", label: "Founder Dashboard", icon: Crown, perm: null },

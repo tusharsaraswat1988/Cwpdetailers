@@ -58,6 +58,8 @@ export type DcmsPlan = {
   showOnHomepage?: boolean;
   isActive: boolean;
   hasSubscriptions?: boolean;
+  applicable?: boolean;
+  inapplicableReason?: string | null;
 };
 
 export type CreatePlansResult = DcmsPlan | { plans: DcmsPlan[]; count: number };
@@ -104,6 +106,31 @@ export type DcmsVisitRow = {
   staffName: string;
   vehicleNumber: string;
   customerName: string;
+};
+
+export type ServiceHistoryVisitCell = {
+  visitId: number;
+  time: string;
+  staffName: string;
+  photoUrl?: string | null;
+  status: string;
+  rejectionReason?: string | null;
+};
+
+export type ServiceHistoryRow = {
+  vehicleId: number;
+  vehicleNumber: string;
+  customerId: number;
+  customerName: string;
+  subscriptionId: number;
+  planName: string;
+  cleaning?: ServiceHistoryVisitCell;
+  wash?: ServiceHistoryVisitCell;
+};
+
+export type ServiceHistoryDay = {
+  date: string;
+  rows: ServiceHistoryRow[];
 };
 
 export type DashboardStats = {
@@ -193,6 +220,15 @@ export function useDcmsVisits(filters?: Record<string, string | number>) {
   return useQuery({
     queryKey: ["dcms", "visits", filters],
     queryFn: () => dcmsFetch<DcmsVisitRow[]>(`/daily-cleaning/visits${qs}`),
+  });
+}
+
+export function useDcmsServiceHistory(filters?: Record<string, string | number>) {
+  const qs = filters ? "?" + new URLSearchParams(Object.entries(filters).map(([k, v]) => [k, String(v)])).toString() : "";
+  return useQuery({
+    queryKey: ["dcms", "service-history", filters],
+    queryFn: () => dcmsFetch<ServiceHistoryDay[]>(`/daily-cleaning/service-history${qs}`),
+    enabled: !!filters,
   });
 }
 

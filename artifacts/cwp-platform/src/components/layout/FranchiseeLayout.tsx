@@ -39,13 +39,13 @@ function FranchiseeSidebar({ onNavigate, embedded = false, className }: SidebarR
   return (
     <aside
       className={cn(
-        "flex flex-col h-full bg-secondary border-r border-white/5 w-60",
+        "flex flex-col h-full min-h-0 bg-secondary border-r border-white/5 overflow-hidden w-60",
         embedded && "w-full border-r-0",
         className,
       )}
       data-testid="franchisee-sidebar"
     >
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
+      <div className="shrink-0 flex items-center gap-3 px-4 py-5 border-b border-white/10">
         <BrandLogo variant="navbar" lazy={false} />
         <div className="min-w-0">
           <p className="text-white font-display font-bold text-sm leading-tight">Franchisee Portal</p>
@@ -53,7 +53,7 @@ function FranchiseeSidebar({ onNavigate, embedded = false, className }: SidebarR
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4 space-y-0.5 px-2">
+      <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 space-y-0.5 px-2">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = location === href || location.startsWith(href + "/");
           return (
@@ -73,7 +73,7 @@ function FranchiseeSidebar({ onNavigate, embedded = false, className }: SidebarR
         })}
       </nav>
 
-      <div className="border-t border-white/10 p-3">
+      <div className="shrink-0 border-t border-white/10 p-3">
         {user && (
           <div className="px-2 py-1 mb-2">
             <p className="text-white text-xs font-medium truncate">{user.name}</p>

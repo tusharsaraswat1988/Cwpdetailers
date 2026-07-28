@@ -36,40 +36,46 @@ function OptionButton({ option, active, onSelect }: OptionButtonProps) {
       tabIndex={active ? 0 : -1}
       onClick={onSelect}
       className={cn(
-        "group relative flex items-center gap-4 rounded-2xl border p-4 text-left md:p-5",
+        "group relative flex w-full items-center gap-4 rounded-2xl border p-5 text-left transition-all",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--landing-ring)] focus-visible:ring-offset-2",
+        "lg:min-h-[7.5rem] lg:gap-5 lg:p-6",
         active
           ? cn(
-              "border-transparent bg-[color:var(--landing-surface-tint)] ring-2 ring-foreground/8",
+              "border-[color:var(--landing-accent)]/25 bg-[color:var(--landing-surface-tint)] ring-2 ring-[color:var(--landing-accent)]/12",
               HERO_SHADOW.optionActive,
             )
-          : "border-border bg-white hover:border-foreground/20",
+          : "border-border/80 bg-white hover:border-foreground/20 hover:bg-muted/20",
       )}
       style={{ transitionDuration: `${LANDING_MOTION.selectorTransitionMs}ms` }}
       data-testid={`hero-selector-${option.id}`}
     >
+      {active ? (
+        <span className="absolute right-4 top-4 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+          Selected
+        </span>
+      ) : null}
+
       <div
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm lg:h-14 lg:w-14"
         style={{ backgroundColor: option.accent }}
         aria-hidden
       >
-        <Icon className="h-5 w-5" />
+        <Icon className="h-5 w-5 lg:h-6 lg:w-6" />
       </div>
-      <div className="flex-1">
-        <div className="flex items-center gap-2 font-semibold">
-          {option.title}
-          {active ? (
-            <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
-              Selected
-            </span>
-          ) : null}
-        </div>
-        <div className="mt-1 text-[13px] leading-snug text-muted-foreground">
+
+      <div className="min-w-0 flex-1 pr-2 lg:pr-4">
+        <div className="font-semibold text-base lg:text-lg">{option.title}</div>
+        <div className="mt-1.5 text-sm leading-relaxed text-muted-foreground lg:text-[15px]">
           {option.description}
         </div>
       </div>
+
       <ArrowRight
-        className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground"
+        className={cn(
+          "h-5 w-5 shrink-0 text-muted-foreground transition",
+          "group-hover:translate-x-0.5 group-hover:text-foreground",
+          active && "text-[color:var(--landing-accent)]",
+        )}
         aria-hidden
       />
     </button>
@@ -115,14 +121,14 @@ export function HeroSelector({
       style={enter.style}
       className={cn(
         enter.className,
-        "mt-10 border border-border bg-white p-6 md:p-7",
+        "border border-border/70 bg-white/95 p-6 backdrop-blur-sm md:p-8 lg:p-10",
         HERO_SHADOW.selector,
         LANDING_LAYOUT.sectionRadius,
         className,
       )}
       data-testid="hero-selector"
     >
-      <div className="text-center">
+      <div className="mx-auto max-w-3xl text-center lg:max-w-4xl">
         <div
           id={labelId}
           className={cn(
@@ -132,7 +138,13 @@ export function HeroSelector({
         >
           {content.label}
         </div>
-        <div id={titleId} className={cn("mt-2 font-display", LANDING_TYPE.selectorTitle)}>
+        <div
+          id={titleId}
+          className={cn(
+            "mt-2.5 text-balance font-display",
+            LANDING_TYPE.selectorTitle,
+          )}
+        >
           {content.title}
         </div>
       </div>
@@ -140,7 +152,7 @@ export function HeroSelector({
       <div
         role="radiogroup"
         aria-labelledby={`${labelId} ${titleId}`}
-        className="mt-6 grid gap-3 md:grid-cols-[1fr_auto_1fr]"
+        className="relative mx-auto mt-8 grid max-w-5xl gap-4 lg:mt-10 lg:grid-cols-2 lg:gap-x-10"
         onKeyDown={onKeyDown}
       >
         <OptionButton
@@ -148,17 +160,27 @@ export function HeroSelector({
           active={value === vehicleOption.id}
           onSelect={() => onChange(vehicleOption.id, { method: "click" })}
         />
-        <div
-          className="hidden items-center justify-center text-xs font-medium text-muted-foreground md:flex"
-          aria-hidden
-        >
-          {content.orLabel}
+
+        <div className="flex items-center justify-center py-0.5 lg:hidden" aria-hidden>
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {content.orLabel}
+          </span>
         </div>
+
         <OptionButton
           option={solarOption}
           active={value === solarOption.id}
           onSelect={() => onChange(solarOption.id, { method: "click" })}
         />
+
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 lg:block"
+          aria-hidden
+        >
+          <span className="rounded-full border border-border bg-white px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground shadow-sm">
+            {content.orLabel}
+          </span>
+        </div>
       </div>
     </div>
   );

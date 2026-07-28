@@ -5,6 +5,7 @@ import {
   LandingShell,
   MarketingNav,
   Hero,
+  pathForDivision,
   useExperience,
 } from "@/features/landing";
 import { Contact } from "@/features/landing/experiences/shared/Contact";
@@ -38,6 +39,11 @@ function ExperienceSwitch() {
   );
 }
 
+function BrandedNav() {
+  const { division } = useExperience();
+  return <MarketingNav homeHref={pathForDivision(division)} />;
+}
+
 /**
  * Marketing homepage orchestrator — refined journey, no hybrid legacy sections.
  * App story is woven inside experiences; Stats strip removed to cut trust repetition.
@@ -53,7 +59,7 @@ export default function Landing() {
     <LandingShell>
       <ExperienceProvider>
         <ThemedFrame>
-          <MarketingNav />
+          <BrandedNav />
           <Hero />
           <ExperienceSwitch />
           <Contact />

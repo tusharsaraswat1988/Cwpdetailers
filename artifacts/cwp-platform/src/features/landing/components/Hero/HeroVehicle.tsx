@@ -29,36 +29,43 @@ export function HeroVehicle({
   return (
     <div
       className={cn(
-        "relative mx-auto grid",
+        "relative mx-auto",
         LANDING_LAYOUT.maxWidth,
         LANDING_LAYOUT.padX,
         LANDING_LAYOUT.heroPadY,
-        LANDING_LAYOUT.heroGap,
-        LANDING_LAYOUT.heroGrid,
         className,
       )}
       data-testid="hero-vehicle"
       data-content-key={content.contentKey}
     >
-      <div className="flex flex-col justify-center">
-        <HeroContent
-          locationLabel={content.locationLabel}
-          headline={content.headline}
-          subheading={content.subheading}
-          socialProof={content.socialProof}
+      <div
+        className={cn(
+          "grid",
+          LANDING_LAYOUT.heroGap,
+          LANDING_LAYOUT.heroGrid,
+        )}
+      >
+        <div className="flex flex-col justify-center">
+          <HeroContent
+            locationLabel={content.locationLabel}
+            headline={content.headline}
+            subheading={content.subheading}
+            socialProof={content.socialProof}
+            enterReady={enterReady}
+          />
+          <HeroTrustBar pills={content.trustPills} enterReady={enterReady} />
+          <HeroCTA ctas={content.ctas} enterReady={enterReady} />
+        </div>
+
+        <HeroMedia
+          media={content.media}
+          liveChip={content.liveChip}
           enterReady={enterReady}
+          overlay={content.stats ? <HeroStats stats={content.stats} /> : undefined}
         />
-        <HeroTrustBar pills={content.trustPills} enterReady={enterReady} />
-        <HeroCTA ctas={content.ctas} enterReady={enterReady} />
-        {selectorSlot}
       </div>
 
-      <HeroMedia
-        media={content.media}
-        liveChip={content.liveChip}
-        enterReady={enterReady}
-        overlay={content.stats ? <HeroStats stats={content.stats} /> : undefined}
-      />
+      <div className="mt-10 lg:mt-14">{selectorSlot}</div>
     </div>
   );
 }

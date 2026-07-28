@@ -1,10 +1,9 @@
 export { default as DcmsDashboardPage } from "./pages/DcmsDashboardPage";
 export { default as DcmsPlansPage } from "./pages/DcmsPlansPage";
 export { default as DcmsSubscriptionsPage } from "./pages/DcmsSubscriptionsPage";
-export { default as DcmsVisitsPage } from "./pages/DcmsVisitsPage";
+export { default as DcmsServiceHistoryPage } from "./pages/DcmsServiceHistoryPage";
 export { default as CustomerDailyCleaningPage } from "./pages/CustomerDailyCleaningPage";
 export { default as CustomerDcmsHistoryPage } from "./pages/CustomerDcmsHistoryPage";
-export { default as DcmsWashHistoryPage } from "./pages/DcmsWashHistoryPage";
 export { default as CustomerDcmsGalleryPage } from "./pages/CustomerDcmsGalleryPage";
 export { default as DcmsStaffPerformancePage } from "./pages/DcmsStaffPerformancePage";
 export { StaffDailyRouteSimplified } from "./pages/StaffDailyRouteSimplified";

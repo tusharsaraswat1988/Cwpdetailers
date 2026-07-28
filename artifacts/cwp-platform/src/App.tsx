@@ -93,9 +93,8 @@ import FranchiseeCustomerDetail from "@/pages/franchisee/CustomerDetail";
 import OperationsWall from "@/pages/admin/OperationsWall";
 import FounderDashboard from "@/pages/admin/FounderDashboard";
 import {
-  DcmsDashboardPage, DcmsSubscriptionsPage, DcmsVisitsPage, DcmsStaffPerformancePage,
+  DcmsDashboardPage, DcmsSubscriptionsPage, DcmsServiceHistoryPage, DcmsStaffPerformancePage,
   CustomerDailyCleaningPage, CustomerDcmsHistoryPage, CustomerDcmsGalleryPage,
-  DcmsWashHistoryPage,
 } from "@/features/daily-cleaning";
 
 const queryClient = new QueryClient({
@@ -145,11 +144,20 @@ function RedirectPreserveSearch({ to }: { to: string }) {
   return <Redirect to={`${to}${search}`} />;
 }
 
+function LandingDivisionRedirect() {
+  const legacyDivision = new URLSearchParams(window.location.search).get("division");
+  if (legacyDivision === "solar") return <Redirect to="/solar" />;
+  if (legacyDivision === "vehicle") return <Redirect to="/vehicle" />;
+  return <Redirect to="/vehicle" />;
+}
+
 function Router() {
   return (
     <Switch>
       {/* Public */}
-      <Route path="/" component={Landing} />
+      <Route path="/" component={LandingDivisionRedirect} />
+      <Route path="/vehicle" component={Landing} />
+      <Route path="/solar" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/verify-otp" component={VerifyOtp} />
@@ -181,8 +189,9 @@ function Router() {
 
       <Route path="/admin/daily-cleaning/plans" component={() => <Redirect to="/admin/services?tab=daily-cleaning" />} />
       <Route path="/admin/daily-cleaning/subscriptions" component={() => <ProtectedRoute component={DcmsSubscriptionsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "manage_subscriptions" }} loginPath="/admin/login" />} />
-      <Route path="/admin/daily-cleaning/visits" component={() => <ProtectedRoute component={DcmsVisitsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view" }} loginPath="/admin/login" />} />
-      <Route path="/admin/daily-cleaning/washes" component={() => <ProtectedRoute component={DcmsWashHistoryPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning/history" component={() => <ProtectedRoute component={DcmsServiceHistoryPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/daily-cleaning/visits" component={() => <Redirect to="/admin/daily-cleaning/history" />} />
+      <Route path="/admin/daily-cleaning/washes" component={() => <Redirect to="/admin/daily-cleaning/history" />} />
       <Route path="/admin/daily-cleaning/staff-performance" component={() => <ProtectedRoute component={DcmsStaffPerformancePage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view_reports" }} loginPath="/admin/login" />} />
       <Route path="/admin/daily-cleaning/assignments" component={() => <Redirect to="/admin/assign-services" />} />
       <Route path="/admin/daily-cleaning" component={() => <ProtectedRoute component={DcmsDashboardPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view_reports" }} loginPath="/admin/login" />} />
@@ -284,11 +293,15 @@ function App() {
           <BrandingProvider>
             <AppSplashGate />
             <TooltipProvider>
-              <ConnectivityBanner className="sticky top-0 z-40" />
-              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-                <PwaRouteHeadSync />
-                <Router />
-              </WouterRouter>
+              <div className="flex h-[100dvh] flex-col overflow-hidden">
+                <ConnectivityBanner className="shrink-0 z-40" />
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                  <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                    <PwaRouteHeadSync />
+                    <Router />
+                  </WouterRouter>
+                </div>
+              </div>
               <Toaster />
             </TooltipProvider>
           </BrandingProvider>

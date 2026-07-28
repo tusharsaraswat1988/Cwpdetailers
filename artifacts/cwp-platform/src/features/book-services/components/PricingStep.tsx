@@ -1,4 +1,3 @@
-import { Label } from "@/components/ui/label";
 import { useCatalogAddons } from "@/features/service-catalog/api";
 import { AddOnSelect } from "./AddOnSelect";
 import { DiscountStep } from "./DiscountStep";
@@ -27,12 +26,9 @@ export function PricingStep({ draft, onChange }: Props) {
 
   return (
     <div className="space-y-8" data-testid="book-step-pricing">
-      <div>
-        <Label className="text-base">What are we selling?</Label>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Confirm extras, discount, and payment terms. Solar prices come from the rate card; GST is applied on create.
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Confirm extras, discount, and payment terms. Solar prices come from the rate card; GST is applied on create.
+      </p>
 
       {isSolar && <SolarQuotePanel draft={draft} onChange={onChange} />}
 

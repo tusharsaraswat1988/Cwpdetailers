@@ -17,6 +17,7 @@
   "dependencies": {
     "@swc/helpers": "^0.5.23",
     "@workspace/api-zod": "workspace:*",
+    "@workspace/address-model": "workspace:*",
     "@workspace/customer-model": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/validation": "workspace:*",

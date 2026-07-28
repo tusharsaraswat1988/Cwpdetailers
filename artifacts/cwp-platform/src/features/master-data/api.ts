@@ -121,6 +121,13 @@ export function useCities(opts?: { q?: string; stateId?: number }) {
   });
 }
 
+export async function searchCities(q: string, stateId?: number): Promise<City[]> {
+  const params = new URLSearchParams({ isActive: "true" });
+  if (q.trim()) params.set("q", q.trim());
+  if (stateId) params.set("stateId", String(stateId));
+  return masterFetch<City[]>(`/masters/cities?${params}`);
+}
+
 export function useServiceAreas(opts?: { q?: string; cityId?: number }) {
   const params = new URLSearchParams({ isActive: "true" });
   if (opts?.q) params.set("q", opts.q);

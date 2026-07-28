@@ -4,9 +4,14 @@ import { QuickCreateCustomerForm } from "@/features/customers/components/QuickCr
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, UserRound } from "lucide-react";
-import { cn } from "@/lib/utils";
 import {
   REQUEST_SOURCE_OPTIONS,
   type RequestSource,
@@ -18,6 +23,8 @@ type Props = {
   requestNotes: string;
   onChange: (customer: CustomerSearchValue | null) => void;
   onMetaChange: (patch: { requestSource?: RequestSource; requestNotes?: string }) => void;
+  /** Fired when inline create panel opens/closes — wizard hides Next while open. */
+  onInlineCreateOpenChange?: (open: boolean) => void;
 };
 
 export function CustomerSelect({
@@ -26,17 +33,28 @@ export function CustomerSelect({
   requestNotes,
   onChange,
   onMetaChange,
+  onInlineCreateOpenChange,
 }: Props) {
   const [showCreate, setShowCreate] = useState(false);
+  /** True only when the customer was created inline in this session (first-time intake). */
+  const [newIntake, setNewIntake] = useState(false);
+
+  const setCreateOpen = (open: boolean) => {
+    setShowCreate(open);
+    onInlineCreateOpenChange?.(open);
+  };
+
+  const handleExistingSelect = (customer: CustomerSearchValue | null) => {
+    setNewIntake(false);
+    if (customer) onMetaChange({ requestSource: "walk_in" });
+    onChange(customer);
+  };
 
   return (
     <div className="space-y-5" data-testid="book-step-customer">
-      <div>
-        <Label className="text-base">Who is requesting service?</Label>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Search an existing customer, or create one here without leaving this request.
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Search an existing customer, or create one here without leaving this request.
+      </p>
 
       {value && !showCreate ? (
         <div
@@ -55,7 +73,10 @@ export function CustomerSelect({
             variant="ghost"
             size="sm"
             className="shrink-0 h-8 text-xs"
-            onClick={() => onChange(null)}
+            onClick={() => {
+              setNewIntake(false);
+              onChange(null);
+            }}
             data-testid="book-customer-change"
           >
             Change
@@ -65,14 +86,14 @@ export function CustomerSelect({
         <div className="space-y-3">
           <CustomerSearchSelect
             value={value}
-            onChange={onChange}
+            onChange={handleExistingSelect}
             placeholder="Search by name or phone…"
             testId="book-customer-select"
           />
           <Button
             type="button"
             variant="outline"
-            onClick={() => setShowCreate(true)}
+            onClick={() => setCreateOpen(true)}
             data-testid="btn-create-customer-inline"
             className="w-full sm:w-auto"
           >
@@ -89,7 +110,7 @@ export function CustomerSelect({
               variant="ghost"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => setShowCreate(false)}
+              onClick={() => setCreateOpen(false)}
             >
               Back to search
             </Button>
@@ -99,8 +120,9 @@ export function CustomerSelect({
             submitLabel="Save customer & continue"
             showBillingFields
             onCreated={(c) => {
+              setNewIntake(true);
               onChange({ id: c.id, name: c.name, phone: c.phone });
-              setShowCreate(false);
+              setCreateOpen(false);
             }}
             onDuplicate={(existing) => {
               if (!existing.id) return;
@@ -109,8 +131,12 @@ export function CustomerSelect({
                   const res = await fetch(`/api/customers/${existing.id}`, { credentials: "include" });
                   if (res.ok) {
                     const row = await res.json() as { id: number; name: string; phone: string };
+                    setNewIntake(false);
+                    onMetaChange({ requestSource: "walk_in" });
                     onChange({ id: row.id, name: row.name, phone: row.phone });
                   } else {
+                    setNewIntake(false);
+                    onMetaChange({ requestSource: "walk_in" });
                     onChange({
                       id: existing.id,
                       name: existing.name ?? "Existing customer",
@@ -118,46 +144,48 @@ export function CustomerSelect({
                     });
                   }
                 } catch {
+                  setNewIntake(false);
+                  onMetaChange({ requestSource: "walk_in" });
                   onChange({
                     id: existing.id,
                     name: existing.name ?? "Existing customer",
                     phone: "",
                   });
                 }
-                setShowCreate(false);
+                setCreateOpen(false);
               })();
             }}
           />
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label>How did this request come in?</Label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="listbox" aria-label="Request source">
-          {REQUEST_SOURCE_OPTIONS.map(opt => {
-            const selected = requestSource === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                onClick={() => onMetaChange({ requestSource: opt.id })}
-                data-testid={`book-source-${opt.id}`}
-                className={cn(
-                  "min-h-11 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
-                  selected
-                    ? "border-primary bg-primary/5 font-medium"
-                    : "border-border hover:border-primary/40",
-                )}
-              >
-                {opt.label}
-                {selected && <Badge className="ml-1.5 text-[10px] align-middle">Selected</Badge>}
-              </button>
-            );
-          })}
+      {value && newIntake && (
+        <div className="space-y-1.5">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+            <Label htmlFor="book-request-source" className="text-sm shrink-0 sm:min-w-[10rem]">
+              How did they reach us?
+            </Label>
+            <Select
+              value={requestSource}
+              onValueChange={v => onMetaChange({ requestSource: v as RequestSource })}
+            >
+              <SelectTrigger id="book-request-source" className="h-9 sm:max-w-xs" data-testid="book-request-source">
+                <SelectValue placeholder="Select channel" />
+              </SelectTrigger>
+              <SelectContent>
+                {REQUEST_SOURCE_OPTIONS.map(opt => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            New customer intake — records how this lead first arrived.
+          </p>
         </div>
-      </div>
+      )}
 
       <div>
         <Label htmlFor="sx-request-notes">Notes for the team (optional)</Label>

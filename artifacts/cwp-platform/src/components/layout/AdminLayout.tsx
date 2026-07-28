@@ -34,7 +34,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const branding = useBrandingPortal("admin");
 
   return (
-    <AdminThemeRoot>
+    <AdminThemeRoot className="h-full min-h-0 overflow-hidden">
       <PanelShell
         testId="admin-layout"
         mobileTitle={`${branding.brandName} Admin`}

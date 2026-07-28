@@ -17,6 +17,8 @@ type ServiceOption = SelectedBookService & {
   /** Master-data service category slug (or synthetic key for catalog packages/plans). */
   categorySlug: string;
   categoryName: string;
+  applicable: boolean;
+  inapplicableReason?: string | null;
 };
 
 const KIND_LABELS: Record<BookServiceKind, string> = {
@@ -141,6 +143,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
         description: s.shortDescription ?? s.description,
         categorySlug: slug,
         categoryName: name,
+        applicable: true,
       });
     }
 
@@ -162,6 +165,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
           description: p.description ?? undefined,
           categorySlug: cat?.slug ?? "uncategorized",
           categoryName: cat?.name ?? "Other",
+          applicable: true,
         });
       }
       // Prefer the master category of any daily-clean catalog service (skipped as one-time above).
@@ -182,6 +186,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
 
       for (const plan of (plans ?? []) as DcmsPlan[]) {
         if (!plan.isActive) continue;
+        const applicable = plan.applicable !== false;
         out.push({
           kind: "plan",
           id: plan.id,
@@ -190,6 +195,8 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
           description: plan.description ?? `${plan.includedCleanings} visits included`,
           categorySlug: planCategory?.slug ?? "uncategorized",
           categoryName: planCategory?.name ?? "Other",
+          applicable,
+          inapplicableReason: applicable ? null : (plan.inapplicableReason ?? "Seater tier mismatch"),
         });
       }
     } else {
@@ -209,6 +216,7 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
           description: p.description ?? undefined,
           categorySlug: cat?.slug ?? "uncategorized",
           categoryName: cat?.name ?? "Other",
+          applicable: true,
         });
       }
     }
@@ -249,10 +257,14 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
   }, [options, bookingCategories]);
 
   const filtered = useMemo(() => {
-    return options.filter(opt => {
+    const list = options.filter(opt => {
       if (categorySlug && opt.categorySlug !== categorySlug) return false;
       if (kindFilter !== "all" && opt.kind !== kindFilter) return false;
       return true;
+    });
+    return list.sort((a, b) => {
+      if (a.applicable !== b.applicable) return a.applicable ? -1 : 1;
+      return a.name.localeCompare(b.name);
     });
   }, [options, categorySlug, kindFilter]);
 
@@ -275,8 +287,15 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
   }, [asset, availableCategories, categorySlug]);
 
   useEffect(() => {
+    if (!value) return;
+    const current = options.find(o => o.kind === value.kind && o.id === value.id);
+    if (current && !current.applicable) onChange(null);
+  }, [options, value, onChange]);
+
+  useEffect(() => {
     if (value || !categorySlug || filtered.length !== 1) return;
     const only = filtered[0]!;
+    if (!only.applicable) return;
     onChange({
       kind: only.kind,
       id: only.id,
@@ -305,12 +324,9 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
   if (!categorySlug) {
     return (
       <div className="space-y-4" data-testid="book-step-service">
-        <div>
-          <Label className="text-base">What would the customer like today?</Label>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Categories come from Master Data — only offerings that fit this asset are shown.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Categories come from Master Data — only offerings that fit this asset are shown.
+        </p>
         <div className="grid grid-cols-2 gap-3">
           {availableCategories.map(cat => (
             <button
@@ -405,6 +421,52 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
           {filtered.map(opt => {
             const selected = value?.kind === opt.kind && value?.id === opt.id;
             const key = `${opt.kind}-${opt.id}`;
+            const disabled = !opt.applicable;
+            const cardClass = cn(
+              "text-left border rounded-lg px-4 py-3 min-h-14 transition-colors",
+              disabled && "opacity-60 cursor-not-allowed bg-muted/30 border-border",
+              !disabled && selected && "border-primary bg-primary/5",
+              !disabled && !selected && "border-border hover:border-primary/40",
+            );
+            const inner = (
+              <>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className={cn("font-medium text-sm", disabled && "text-muted-foreground")}>{opt.name}</p>
+                    {opt.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{opt.description}</p>
+                    )}
+                    {disabled && opt.inapplicableReason && (
+                      <p className="text-xs text-destructive/90 mt-1.5">
+                        Inapplicable due to — {opt.inapplicableReason}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <Badge variant="outline" className="text-xs mb-1">{KIND_LABELS[opt.kind]}</Badge>
+                    <p className={cn("text-sm font-semibold", disabled && "text-muted-foreground")}>
+                      {formatPrice(opt.price)}
+                    </p>
+                  </div>
+                </div>
+              </>
+            );
+
+            if (disabled) {
+              return (
+                <div
+                  key={key}
+                  role="option"
+                  aria-disabled="true"
+                  aria-selected={false}
+                  data-testid={`book-service-option-${key}`}
+                  className={cardClass}
+                >
+                  {inner}
+                </div>
+              );
+            }
+
             return (
               <button
                 key={key}
@@ -419,23 +481,9 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
                   catalogServiceId: opt.catalogServiceId,
                 })}
                 data-testid={`book-service-option-${key}`}
-                className={cn(
-                  "text-left border rounded-lg px-4 py-3 transition-colors min-h-14",
-                  selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
-                )}
+                className={cardClass}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm">{opt.name}</p>
-                    {opt.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{opt.description}</p>
-                    )}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <Badge variant="outline" className="text-xs mb-1">{KIND_LABELS[opt.kind]}</Badge>
-                    <p className="text-sm font-semibold">{formatPrice(opt.price)}</p>
-                  </div>
-                </div>
+                {inner}
               </button>
             );
           })}

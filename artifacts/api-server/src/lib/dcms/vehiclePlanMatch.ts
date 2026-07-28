@@ -6,9 +6,10 @@ import {
   seatCategoriesTable,
   type DcmsPlan,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   getSeatPricingTier,
+  getSeatTierLabel,
   seatCountsShareTier,
   type SeatPricingTier,
 } from "./seatPricingTier";
@@ -30,7 +31,7 @@ export async function getVehiclePlanContext(vehicleId: number): Promise<VehicleP
       vehicleId: vehiclesTable.id,
       vehicleModelId: vehiclesTable.vehicleModelId,
       vehicleCategoryId: vehicleModelsTable.vehicleCategoryId,
-      seatCategoryId: vehicleModelsTable.seatCategoryId,
+      seatCategoryId: sql<number>`coalesce(${vehiclesTable.seatCategoryId}, ${vehicleModelsTable.seatCategoryId})`,
       vehicleCategoryName: vehicleCategoriesTable.name,
       seatCategoryName: seatCategoriesTable.name,
       seatCount: seatCategoriesTable.seatCount,
@@ -38,7 +39,10 @@ export async function getVehiclePlanContext(vehicleId: number): Promise<VehicleP
     .from(vehiclesTable)
     .innerJoin(vehicleModelsTable, eq(vehiclesTable.vehicleModelId, vehicleModelsTable.id))
     .innerJoin(vehicleCategoriesTable, eq(vehicleModelsTable.vehicleCategoryId, vehicleCategoriesTable.id))
-    .innerJoin(seatCategoriesTable, eq(vehicleModelsTable.seatCategoryId, seatCategoriesTable.id))
+    .innerJoin(
+      seatCategoriesTable,
+      sql`${seatCategoriesTable.id} = coalesce(${vehiclesTable.seatCategoryId}, ${vehicleModelsTable.seatCategoryId})`,
+    )
     .where(eq(vehiclesTable.id, vehicleId))
     .limit(1);
 
@@ -60,6 +64,21 @@ export function planMatchesVehicle(
     if (!seatCountsShareTier(planSeatCount, vehicle.seatCount)) return false;
   }
   return true;
+}
+
+export function getPlanInapplicableReason(
+  plan: Pick<DcmsPlan, "seatCategoryId">,
+  vehicle: VehiclePlanContext,
+  planSeatCount?: number | null,
+  planSeatLabel?: string | null,
+): string {
+  const vehicleLabel = `${vehicle.seatCategoryName} (${getSeatTierLabel(vehicle.seatPricingTier)})`;
+  if (plan.seatCategoryId == null) {
+    return `Vehicle is ${vehicleLabel}`;
+  }
+  const planLabel = planSeatLabel
+    ?? (planSeatCount != null ? getSeatTierLabel(getSeatPricingTier(planSeatCount)) : "another seater tier");
+  return `Vehicle is ${vehicleLabel}; plan is for ${planLabel}`;
 }
 
 export function assertPlanMatchesVehicle(

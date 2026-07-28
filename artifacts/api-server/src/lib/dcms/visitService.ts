@@ -2,6 +2,7 @@ import {
   db,
   dcmsVisitsTable,
   dcmsSubscriptionsTable,
+  dcmsPlansTable,
   dcmsSubscriptionLocationsTable,
   dcmsStaffAssignmentsTable,
   vehiclesTable,
@@ -16,7 +17,7 @@ import { uploadWatermarkedVisitPhoto } from "./watermark";
 import { validateCameraPhoto, sanitizeExifForStorage, ImageValidationError, type ExifPayload } from "./imageValidation";
 import { emitNotificationEvent } from "./notificationEvents";
 import { isSubscriptionPausedOnDate } from "./pauseService";
-import { todayStrInIST } from "./dateUtils";
+import { dayBoundsIST, todayStrInIST } from "./dateUtils";
 import { isRenewalEligible } from "./missedVisitService";
 import { logger } from "../logger";
 import { traceVisitFailure, traceVisitStep } from "./visitCompleteTrace";
@@ -317,6 +318,9 @@ export async function listVisits(filters?: {
   month?: number;
   year?: number;
   vehicleId?: number;
+  customerId?: number;
+  from?: string;
+  to?: string;
   limit?: number;
 }) {
   const conditions = [];
@@ -324,6 +328,13 @@ export async function listVisits(filters?: {
   if (filters?.staffId) conditions.push(eq(dcmsVisitsTable.staffId, filters.staffId));
   if (filters?.status) conditions.push(eq(dcmsVisitsTable.status, filters.status));
   if (filters?.vehicleId) conditions.push(eq(dcmsVisitsTable.vehicleId, filters.vehicleId));
+  if (filters?.customerId) conditions.push(eq(dcmsSubscriptionsTable.customerId, filters.customerId));
+  if (filters?.from) {
+    conditions.push(gte(dcmsVisitsTable.visitTime, dayBoundsIST(filters.from).start));
+  }
+  if (filters?.to) {
+    conditions.push(lte(dcmsVisitsTable.visitTime, dayBoundsIST(filters.to).end));
+  }
   if (filters?.month && filters?.year) {
     const start = new Date(filters.year, filters.month - 1, 1);
     const end = new Date(filters.year, filters.month, 0, 23, 59, 59);
@@ -337,12 +348,15 @@ export async function listVisits(filters?: {
       staffName: staffTable.name,
       vehicleNumber: vehiclesTable.registrationNumber,
       customerName: customersTable.name,
+      customerId: customersTable.id,
+      planName: dcmsPlansTable.name,
     })
     .from(dcmsVisitsTable)
     .innerJoin(staffTable, eq(dcmsVisitsTable.staffId, staffTable.id))
     .innerJoin(vehiclesTable, eq(dcmsVisitsTable.vehicleId, vehiclesTable.id))
     .innerJoin(dcmsSubscriptionsTable, eq(dcmsVisitsTable.subscriptionId, dcmsSubscriptionsTable.id))
     .innerJoin(customersTable, eq(dcmsSubscriptionsTable.customerId, customersTable.id))
+    .innerJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(dcmsVisitsTable.visitTime))
     .limit(filters?.limit ?? 200);
@@ -408,6 +422,117 @@ export async function listWashes(filters?: Parameters<typeof listVisits>[0]) {
     .where(and(...conditions))
     .orderBy(desc(dcmsVisitsTable.visitTime))
     .limit(filters?.limit ?? 200);
+}
+
+export type ServiceHistoryVisitCell = {
+  visitId: number;
+  time: string;
+  staffName: string;
+  photoUrl?: string | null;
+  status: string;
+  rejectionReason?: string | null;
+};
+
+export type ServiceHistoryRow = {
+  vehicleId: number;
+  vehicleNumber: string;
+  customerId: number;
+  customerName: string;
+  subscriptionId: number;
+  planName: string;
+  cleaning?: ServiceHistoryVisitCell;
+  wash?: ServiceHistoryVisitCell;
+};
+
+export type ServiceHistoryDay = {
+  date: string;
+  rows: ServiceHistoryRow[];
+};
+
+function visitDateKey(visit: DcmsVisit): string {
+  if (visit.visitDate) return visit.visitDate;
+  return new Date(visit.visitTime).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+function toVisitCell(
+  visit: DcmsVisit,
+  staffName: string,
+): ServiceHistoryVisitCell {
+  return {
+    visitId: visit.id,
+    time: visit.visitTime instanceof Date ? visit.visitTime.toISOString() : String(visit.visitTime),
+    staffName,
+    photoUrl: visit.photoUrl,
+    status: visit.status,
+    rejectionReason: visit.rejectionReason,
+  };
+}
+
+function assignVisitCell(
+  row: ServiceHistoryRow,
+  visit: DcmsVisit,
+  staffName: string,
+) {
+  const cell = toVisitCell(visit, staffName);
+  if (visit.visitType === "cleaning") {
+    if (!row.cleaning || new Date(cell.time) > new Date(row.cleaning.time)) {
+      row.cleaning = cell;
+    }
+    return;
+  }
+  if (visit.visitType === "wash") {
+    if (!row.wash || new Date(cell.time) > new Date(row.wash.time)) {
+      row.wash = cell;
+    }
+  }
+}
+
+/** Group cleaning + wash visits by calendar day and vehicle for admin service history. */
+export async function listServiceHistory(filters?: {
+  customerId?: number;
+  vehicleId?: number;
+  subscriptionId?: number;
+  staffId?: number;
+  status?: "completed" | "rejected";
+  from?: string;
+  to?: string;
+  limit?: number;
+}): Promise<ServiceHistoryDay[]> {
+  const visits = await listVisits({
+    ...filters,
+    limit: Math.min(filters?.limit ?? 500, 1000),
+  });
+
+  const dayMap = new Map<string, Map<string, ServiceHistoryRow>>();
+
+  for (const row of visits) {
+    const dateKey = visitDateKey(row.visit);
+    const rowKey = `${row.visit.vehicleId}:${row.visit.subscriptionId}`;
+    if (!dayMap.has(dateKey)) dayMap.set(dateKey, new Map());
+    const vehicleMap = dayMap.get(dateKey)!;
+
+    if (!vehicleMap.has(rowKey)) {
+      vehicleMap.set(rowKey, {
+        vehicleId: row.visit.vehicleId,
+        vehicleNumber: row.vehicleNumber,
+        customerId: row.customerId,
+        customerName: row.customerName,
+        subscriptionId: row.visit.subscriptionId,
+        planName: row.planName,
+      });
+    }
+
+    assignVisitCell(vehicleMap.get(rowKey)!, row.visit, row.staffName);
+  }
+
+  return Array.from(dayMap.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([date, vehicleMap]) => ({
+      date,
+      rows: Array.from(vehicleMap.values()).sort((a, b) =>
+        a.vehicleNumber.localeCompare(b.vehicleNumber),
+      ),
+    }));
 }
 
 export async function getFraudMetrics() {

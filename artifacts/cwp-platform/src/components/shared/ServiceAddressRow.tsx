@@ -2,6 +2,7 @@ import { MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { LocationValue } from "@/features/master-data/api";
+import { FormattedAddressDisplay } from "@/components/shared/FormattedAddressDisplay";
 
 type Props = {
   value: LocationValue | null;
@@ -37,7 +38,7 @@ export function ServiceAddressRow({
         <div className="min-w-0 flex-1">
           {value ? (
             <>
-              <p className="text-sm font-medium leading-snug line-clamp-2">{value.address}</p>
+              <FormattedAddressDisplay value={value.address} compact />
               <p className="text-xs text-muted-foreground mt-0.5">Tap to change</p>
             </>
           ) : (

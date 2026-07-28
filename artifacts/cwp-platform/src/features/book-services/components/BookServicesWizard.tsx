@@ -77,6 +77,8 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
   });
   const [restoredNotice, setRestoredNotice] = useState(!!saved?.draft?.customer);
   const [stepError, setStepError] = useState<string | null>(null);
+  const [inlineCustomerCreateOpen, setInlineCustomerCreateOpen] = useState(false);
+  const [inlineLocationPanelOpen, setInlineLocationPanelOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [contractResult, setContractResult] = useState<ServiceContractResult | null>(null);
@@ -220,7 +222,25 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
 
   const currentStep = WIZARD_STEPS[stepIndex]!;
   const isReview = currentStep.id === "review";
-  const isLastNavigable = stepIndex === WIZARD_STEPS.length - 1;
+  const nextStepBlock = useMemo(() => {
+    if (inlineCustomerCreateOpen) {
+      return "Finish creating the customer above, then continue.";
+    }
+    if (inlineLocationPanelOpen) {
+      return "Finish adding or editing the location above, then continue.";
+    }
+    return validateStep(currentStep.id, draft);
+  }, [inlineCustomerCreateOpen, inlineLocationPanelOpen, currentStep.id, draft]);
+  const canGoNext = !nextStepBlock;
+
+  useEffect(() => {
+    if (currentStep.id !== "customer") {
+      setInlineCustomerCreateOpen(false);
+    }
+    if (currentStep.id !== "location") {
+      setInlineLocationPanelOpen(false);
+    }
+  }, [currentStep.id]);
 
   const patchDraft = useCallback((patch: Partial<BookServicesDraft>) => {
     setDraft(prev => ({ ...prev, ...patch }));
@@ -292,7 +312,11 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
   }, [draft]);
 
   const goNext = useCallback(() => {
-    const err = validateStep(currentStep.id, draft);
+    const err = inlineCustomerCreateOpen
+      ? "Finish creating the customer above, then continue."
+      : inlineLocationPanelOpen
+        ? "Finish adding or editing the location above, then continue."
+        : validateStep(currentStep.id, draft);
     if (err) {
       setStepError(err);
       return;
@@ -301,7 +325,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
       setStepIndex(stepIndex + 1);
       setStepError(null);
     }
-  }, [currentStep.id, draft, stepIndex]);
+  }, [inlineCustomerCreateOpen, inlineLocationPanelOpen, currentStep.id, draft, stepIndex]);
 
   const goBack = useCallback(() => {
     if (stepIndex > 0) {
@@ -400,6 +424,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
             requestNotes={draft.requestNotes}
             onChange={handleCustomerChange}
             onMetaChange={patch => patchDraft(patch)}
+            onInlineCreateOpenChange={setInlineCustomerCreateOpen}
           />
         );
       case "asset":
@@ -417,6 +442,7 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
             preferredLocationId={draft.asset?.serviceLocationId ?? null}
             value={draft.location}
             onChange={handleLocationChange}
+            onInlinePanelOpenChange={setInlineLocationPanelOpen}
           />
         );
       case "service":
@@ -546,15 +572,26 @@ export function BookServicesWizard({ initialCustomer = null }: Props) {
           Back
         </Button>
         {!isReview && (
-          <Button
-            type="button"
-            onClick={goNext}
-            disabled={isLastNavigable}
-            data-testid="book-wizard-next"
-          >
-            Next
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+          <div className="flex items-center gap-3 min-w-0">
+            {!canGoNext && nextStepBlock && (
+              <p
+                className="text-xs text-muted-foreground text-right hidden sm:block max-w-[240px] leading-snug"
+                data-testid="book-wizard-next-hint"
+              >
+                {nextStepBlock}
+              </p>
+            )}
+            <Button
+              type="button"
+              onClick={goNext}
+              disabled={!canGoNext}
+              title={nextStepBlock ?? undefined}
+              data-testid="book-wizard-next"
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         )}
         {isReview && (
           <p className="text-sm text-muted-foreground text-right flex-1">

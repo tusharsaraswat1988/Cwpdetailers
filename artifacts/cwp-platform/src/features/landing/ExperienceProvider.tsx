@@ -9,9 +9,15 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { useLocation } from "wouter";
 import { trackLandingEvent } from "./analytics";
 import { getDivisionThemeStyle } from "./hooks/useDivision";
-import { DIVISION_STORAGE_KEY, type Division } from "./types";
+import {
+  DIVISION_STORAGE_KEY,
+  divisionFromPath,
+  pathForDivision,
+  type Division,
+} from "./types";
 
 export type ExperiencePersonalization = {
   /** Future CMS / A-B content variant key */
@@ -50,7 +56,7 @@ function writeStoredDivision(division: Division) {
   }
 }
 
-function readDivisionFromUrl(): Division | null {
+function readLegacyDivisionQuery(): Division | null {
   try {
     const param = new URLSearchParams(window.location.search).get("division");
     if (param === "vehicle" || param === "solar") return param;
@@ -60,25 +66,15 @@ function readDivisionFromUrl(): Division | null {
   return null;
 }
 
-function writeDivisionToUrl(division: Division) {
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.set("division", division);
-    window.history.replaceState(window.history.state, "", url.toString());
-  } catch {
-    /* ignore */
-  }
-}
-
-function resolveInitialDivision(defaultDivision: Division): Division {
-  return readDivisionFromUrl() ?? readStoredDivision() ?? defaultDivision;
+function resolveInitialDivision(location: string, defaultDivision: Division): Division {
+  return divisionFromPath(location) ?? readLegacyDivisionQuery() ?? readStoredDivision() ?? defaultDivision;
 }
 
 export type ExperienceProviderProps = {
   children: ReactNode;
   defaultDivision?: Division;
   persist?: boolean;
-  /** Sync `?division=` via history.replaceState — does not alter Wouter routes */
+  /** Sync `/vehicle` and `/solar` via Wouter */
   syncUrl?: boolean;
   personalization?: ExperiencePersonalization;
 };
@@ -94,8 +90,11 @@ export function ExperienceProvider({
   syncUrl = true,
   personalization = {},
 }: ExperienceProviderProps) {
+  const [location, setLocation] = useLocation();
   const [division, setDivisionState] = useState<Division>(() =>
-    typeof window === "undefined" ? defaultDivision : resolveInitialDivision(defaultDivision),
+    typeof window === "undefined"
+      ? defaultDivision
+      : resolveInitialDivision(location, defaultDivision),
   );
   const divisionRef = useRef(division);
   divisionRef.current = division;
@@ -110,7 +109,7 @@ export function ExperienceProvider({
 
       setDivisionState(next);
       if (persist) writeStoredDivision(next);
-      if (syncUrl) writeDivisionToUrl(next);
+      if (syncUrl) setLocation(pathForDivision(next));
 
       const method = meta.method === "keyboard" ? "keyboard" : "click";
       trackLandingEvent("hero_division_selected", {
@@ -122,26 +121,17 @@ export function ExperienceProvider({
         trackLandingEvent("hero_selector_keyboard", { division: next, method });
       }
     },
-    [persist, syncUrl],
+    [persist, syncUrl, setLocation],
   );
-
-  // Align URL on first paint when landing without query
-  useEffect(() => {
-    if (syncUrl) writeDivisionToUrl(division);
-  }, [division, syncUrl]);
 
   useEffect(() => {
     if (!syncUrl) return;
-    const onPop = () => {
-      const fromUrl = readDivisionFromUrl();
-      if (fromUrl && fromUrl !== divisionRef.current) {
-        setDivisionState(fromUrl);
-        if (persist) writeStoredDivision(fromUrl);
-      }
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [syncUrl, persist]);
+    const fromPath = divisionFromPath(location);
+    if (fromPath && fromPath !== divisionRef.current) {
+      setDivisionState(fromPath);
+      if (persist) writeStoredDivision(fromPath);
+    }
+  }, [location, syncUrl, persist]);
 
   const value = useMemo<ExperienceContextValue>(
     () => ({

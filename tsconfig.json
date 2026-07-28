@@ -20,6 +20,9 @@
     },
     {
       "path": "./lib/customer-model"
+    },
+    {
+      "path": "./lib/address-model"
     }
   ]
 }

@@ -48,12 +48,9 @@ export function ReviewSummaryStep({
 
   return (
     <div className="space-y-5" data-testid="book-step-review">
-      <div>
-        <h2 className="font-display font-semibold text-lg">Ready to create this service request?</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Review like an invoice. Creating the request opens quotation/billing and the assignment queue.
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Review like an invoice. Creating the request opens quotation/billing and the assignment queue.
+      </p>
 
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="bg-muted/40 px-4 py-3 border-b border-border flex items-center justify-between gap-2">
@@ -68,9 +65,11 @@ export function ReviewSummaryStep({
           <Section title="Customer">
             <p className="font-medium">{draft.customer?.name ?? "—"}</p>
             <p className="text-muted-foreground">{draft.customer?.phone}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Source: {requestSourceLabel(draft.requestSource)}
-            </p>
+            {draft.requestSource !== "walk_in" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Source: {requestSourceLabel(draft.requestSource)}
+              </p>
+            )}
             {draft.requestNotes.trim() && (
               <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{draft.requestNotes}</p>
             )}

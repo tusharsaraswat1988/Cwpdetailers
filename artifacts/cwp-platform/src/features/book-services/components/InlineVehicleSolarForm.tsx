@@ -13,7 +13,6 @@ import {
 } from "@/features/assets/components/AssetForms";
 import type { VehicleModel } from "@/features/master-data/api";
 import type { CustomerServiceLocationRow } from "@/features/service-locations/api";
-import { categorySlugToVehicleType } from "@/lib/vehicleMaster";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 export type ServiceLocationOption = {
@@ -96,13 +95,6 @@ export function InlineVehicleSolarForm({
 
   const handleModelSelect = (model: VehicleModel | null) => {
     setSelectedModel(model);
-    if (model) {
-      setVehicleForm(prev => ({
-        ...prev,
-        vehicleType: categorySlugToVehicleType(model.categorySlug),
-        seatCategoryId: model.seatCategoryId != null ? String(model.seatCategoryId) : prev.seatCategoryId,
-      }));
-    }
   };
 
   const resolveLocationId = (): number | null => {

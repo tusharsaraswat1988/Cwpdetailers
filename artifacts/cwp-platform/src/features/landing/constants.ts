@@ -31,7 +31,7 @@ export const LANDING_TYPE = {
   heroLeading: "leading-[1.05]",
   sub: "text-[17px]",
   eyebrow: "text-xs",
-  selectorTitle: "text-2xl md:text-[26px]",
+  selectorTitle: "text-xl sm:text-2xl lg:text-[28px] lg:leading-snug",
   selectorLabel: "text-[11px]",
   trust: "text-xs",
   statValue: "text-3xl",

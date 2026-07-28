@@ -3,16 +3,20 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { GoogleMapPicker } from "@/components/shared/GoogleMapPicker";
+import { FormattedAddressDisplay } from "@/components/shared/FormattedAddressDisplay";
+import {
+  CustomerServiceAddressSection,
+  type CustomerServiceAddressValue,
+} from "@/features/customers/components/CustomerServiceAddressSection";
+import {
+  composeSavedAddress,
+  hasRequiredAddressParts,
+  parseComposedAddress,
+} from "@/features/customers/lib/serviceAddress";
 import { isGoogleMapsConfigured } from "@/lib/maps";
 import type { LocationValue, SavedLocation } from "@/features/master-data/api";
-import { Check, Loader2, MapPin, Navigation, Plus } from "lucide-react";
+import { Check, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const LOCATION_LABELS = ["Home", "Office", "Factory", "Solar Site", "Other"];
 
 type Props = {
   open: boolean;
@@ -22,6 +26,53 @@ type Props = {
   savedLocations?: SavedLocation[];
   onSaveNew?: (label: string, loc: LocationValue) => void;
 };
+
+function emptyAddressValue(label = "Home"): CustomerServiceAddressValue {
+  return {
+    serviceLocationLabel: label,
+    houseNumber: "",
+    buildingName: "",
+    area: "",
+    landmark: "",
+    pincode: "",
+    city: "",
+    latitude: "",
+    longitude: "",
+    placeId: "",
+  };
+}
+
+function locationToAddressForm(loc: LocationValue | null, label: string): CustomerServiceAddressValue {
+  if (!loc) return emptyAddressValue(label);
+  const parts = parseComposedAddress(loc.address);
+  return {
+    serviceLocationLabel: label,
+    houseNumber: parts.houseNumber,
+    buildingName: parts.buildingName,
+    area: parts.area,
+    landmark: parts.landmark,
+    pincode: parts.pincode,
+    city: parts.city,
+    latitude: Number.isFinite(loc.latitude) ? String(loc.latitude) : "",
+    longitude: Number.isFinite(loc.longitude) ? String(loc.longitude) : "",
+    placeId: loc.placeId ?? "",
+  };
+}
+
+function addressFormToLocation(form: CustomerServiceAddressValue): LocationValue | null {
+  if (!hasRequiredAddressParts(form)) return null;
+  const lat = parseFloat(form.latitude);
+  const lng = parseFloat(form.longitude);
+  const mapsEnabled = isGoogleMapsConfigured();
+  if (mapsEnabled && (!Number.isFinite(lat) || !Number.isFinite(lng))) return null;
+
+  return {
+    address: composeSavedAddress(form),
+    latitude: Number.isFinite(lat) ? lat : 0,
+    longitude: Number.isFinite(lng) ? lng : 0,
+    placeId: form.placeId.trim() || undefined,
+  };
+}
 
 export function AddressPickerSheet({
   open,
@@ -36,27 +87,27 @@ export function AddressPickerSheet({
   const [mode, setMode] = useState<"list" | "new">(
     savedLocations && savedLocations.length > 0 ? "list" : "new",
   );
-  const [draft, setDraft] = useState<LocationValue | null>(value);
-  const [newLabel, setNewLabel] = useState("Home");
-  const [manualAddress, setManualAddress] = useState(value?.address ?? "");
-  const [manualLat, setManualLat] = useState(value?.latitude?.toString() ?? "");
-  const [manualLng, setManualLng] = useState(value?.longitude?.toString() ?? "");
-  const [locating, setLocating] = useState(false);
+  const [addressForm, setAddressForm] = useState<CustomerServiceAddressValue>(() =>
+    locationToAddressForm(value, "Home"),
+  );
 
   useEffect(() => {
     if (!open) return;
-    setDraft(value);
-    setManualAddress(value?.address ?? "");
-    setManualLat(value?.latitude?.toString() ?? "");
-    setManualLng(value?.longitude?.toString() ?? "");
+    setAddressForm(locationToAddressForm(value, "Home"));
     setMode(savedLocations && savedLocations.length > 0 ? "list" : "new");
   }, [open, value, savedLocations]);
+
+  const draft = addressFormToLocation(addressForm);
+  const dispatchReady = Boolean(draft) && (
+    !mapsEnabled
+    || (addressForm.latitude.trim() && addressForm.longitude.trim())
+  );
 
   const confirmDraft = () => {
     if (!draft) return;
     onSelect(draft);
     if (onSaveNew && mode === "new") {
-      onSaveNew(newLabel, draft);
+      onSaveNew(addressForm.serviceLocationLabel.trim() || "Home", draft);
     }
     onOpenChange(false);
   };
@@ -70,32 +121,6 @@ export function AddressPickerSheet({
     };
     onSelect(next);
     onOpenChange(false);
-  };
-
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const latitude = pos.coords.latitude;
-        const longitude = pos.coords.longitude;
-        const address = manualAddress.trim() || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-        const next = { address, latitude, longitude };
-        setDraft(next);
-        setManualLat(latitude.toFixed(6));
-        setManualLng(longitude.toFixed(6));
-        setLocating(false);
-      },
-      () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 12000 },
-    );
-  };
-
-  const applyManual = () => {
-    const latitude = parseFloat(manualLat);
-    const longitude = parseFloat(manualLng);
-    if (!manualAddress.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-    setDraft({ address: manualAddress.trim(), latitude, longitude });
   };
 
   const body = (
@@ -115,9 +140,8 @@ export function AddressPickerSheet({
             size="sm"
             variant={mode === "new" ? "default" : "outline"}
             onClick={() => setMode("new")}
-            className="gap-1"
           >
-            <Plus size={14} /> New address
+            New address
           </Button>
         </div>
       )}
@@ -126,9 +150,9 @@ export function AddressPickerSheet({
         <div className="space-y-2 max-h-[50vh] overflow-y-auto">
           {savedLocations.map(loc => {
             const selected =
-              value &&
-              Math.abs(value.latitude - loc.latitude) < 1e-6 &&
-              Math.abs(value.longitude - loc.longitude) < 1e-6;
+              value
+              && Math.abs(value.latitude - loc.latitude) < 1e-6
+              && Math.abs(value.longitude - loc.longitude) < 1e-6;
             return (
               <button
                 key={loc.id}
@@ -142,8 +166,11 @@ export function AddressPickerSheet({
               >
                 <MapPin size={16} className="shrink-0 text-primary mt-0.5" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{loc.label}{loc.isDefault ? " · Default" : ""}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{loc.address}</p>
+                  <FormattedAddressDisplay
+                    value={loc.address}
+                    siteLabel={loc.label}
+                    compact
+                  />
                 </div>
                 {selected && <Check size={16} className="shrink-0 text-primary" />}
               </button>
@@ -152,83 +179,16 @@ export function AddressPickerSheet({
         </div>
       ) : (
         <div className="space-y-3">
-          {onSaveNew && (
-            <div>
-              <Label className="text-xs text-muted-foreground">Save as</Label>
-              <Select value={newLabel} onValueChange={setNewLabel}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {LOCATION_LABELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {mapsEnabled ? (
-            <GoogleMapPicker
-              value={draft}
-              onChange={setDraft}
-              mapHeightClass="h-40"
-            />
-          ) : (
-            <>
-              <div>
-                <Label>Address</Label>
-                <Input
-                  className="mt-1"
-                  value={manualAddress}
-                  onChange={e => {
-                    setManualAddress(e.target.value);
-                    const latitude = parseFloat(manualLat);
-                    const longitude = parseFloat(manualLng);
-                    if (e.target.value.trim() && Number.isFinite(latitude) && Number.isFinite(longitude)) {
-                      setDraft({ address: e.target.value.trim(), latitude, longitude });
-                    }
-                  }}
-                  placeholder="Full address with landmark"
-                  data-testid="input-location-address"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Latitude</Label>
-                  <Input
-                    className="mt-1"
-                    value={manualLat}
-                    onChange={e => setManualLat(e.target.value)}
-                    onBlur={applyManual}
-                    data-testid="input-location-lat"
-                  />
-                </div>
-                <div>
-                  <Label>Longitude</Label>
-                  <Input
-                    className="mt-1"
-                    value={manualLng}
-                    onChange={e => setManualLng(e.target.value)}
-                    onBlur={applyManual}
-                    data-testid="input-location-lng"
-                  />
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={useCurrentLocation}
-                disabled={locating}
-                className="gap-1.5"
-              >
-                {locating ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
-                Use current location
-              </Button>
-            </>
-          )}
+          <CustomerServiceAddressSection
+            idPrefix="address-picker"
+            value={addressForm}
+            onChange={patch => setAddressForm(prev => ({ ...prev, ...patch }))}
+          />
 
           <Button
             type="button"
             className="w-full h-11"
-            disabled={!draft}
+            disabled={!dispatchReady}
             onClick={confirmDraft}
             data-testid="btn-confirm-address"
           >
@@ -258,7 +218,7 @@ export function AddressPickerSheet({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" data-testid="address-picker-dialog">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" data-testid="address-picker-dialog">
         <DialogHeader>
           <DialogTitle className="font-display">Where should we arrive?</DialogTitle>
         </DialogHeader>

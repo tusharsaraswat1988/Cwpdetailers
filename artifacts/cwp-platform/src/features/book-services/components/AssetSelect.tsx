@@ -273,12 +273,9 @@ export function AssetSelect({ customerId, value, onChange }: Props) {
   return (
     <div className="space-y-4" data-testid="book-step-asset">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <Label className="text-base">What needs service today?</Label>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Pick an existing asset, or register one without leaving this request.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Pick an existing asset, or register one without leaving this request.
+        </p>
         <Button
           type="button"
           variant="ghost"

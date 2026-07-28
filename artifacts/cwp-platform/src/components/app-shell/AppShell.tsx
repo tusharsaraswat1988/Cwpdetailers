@@ -44,7 +44,7 @@ export function AppShell({
   return (
     <div
       className={cn(
-        "h-[100dvh] overflow-hidden bg-background flex flex-col mx-auto w-full",
+        "h-full min-h-0 overflow-hidden bg-background flex flex-col mx-auto w-full",
         maxWidthClass[maxWidth],
         className,
       )}

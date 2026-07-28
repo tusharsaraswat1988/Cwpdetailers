@@ -48,7 +48,7 @@ export default function CityServicePage() {
     return (
       <MarketingPageShell>
         <MarketingSection className="flex justify-center">
-          <MarketingButton href="/" variant="outline">
+          <MarketingButton href="/vehicle" variant="outline">
             Back to Home
           </MarketingButton>
         </MarketingSection>
@@ -77,7 +77,7 @@ export default function CityServicePage() {
       <MarketingPageShell>
         <MarketingSection className="flex flex-col items-center gap-4 text-center">
           <p className="text-muted-foreground">Service not found in this city.</p>
-          <MarketingButton href="/" variant="outline">
+          <MarketingButton href="/vehicle" variant="outline">
             Back to Home
           </MarketingButton>
         </MarketingSection>
@@ -101,7 +101,7 @@ export default function CityServicePage() {
       <MarketingSection narrow>
         <div className="mb-6 flex items-center justify-between gap-3">
           <Link
-            href="/"
+            href="/vehicle"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-foreground"
           >
             <ArrowLeft size={14} aria-hidden /> Home

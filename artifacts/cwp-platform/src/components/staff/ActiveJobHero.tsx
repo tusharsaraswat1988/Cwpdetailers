@@ -6,6 +6,7 @@ import { resolveMediaUrl } from "@/lib/media-url";
 import type { StaffJob } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { buildNavigateUrl, canNavigateTo } from "@/lib/maps";
+import { formatStaffAddressLine } from "@/features/customers/lib/serviceAddress";
 import {
   StaffStatusBadge,
   StaffActionBar,
@@ -31,7 +32,7 @@ interface Props extends Mutations {
 
 export function ActiveJobHero({ job, ...actions }: Props) {
   const isLive = job.status === "en_route" || job.status === "in_progress";
-  const addressLine = job.area ? `${job.area}, ${job.address}` : job.address;
+  const addressLine = formatStaffAddressLine(job.address, job.area);
 
   return (
     <section
@@ -59,7 +60,7 @@ export function ActiveJobHero({ job, ...actions }: Props) {
         <StaffStatusBadge status={job.status ?? "scheduled"} pulse={isLive} className="shrink-0" />
       </div>
 
-      {addressLine ? <StaffMapCard address={addressLine} /> : null}
+      {addressLine ? <StaffMapCard address={addressLine} navigateHref={canNavigateTo(job) ? buildNavigateUrl(job) : undefined} /> : null}
 
       {isLive && (
         <p className="rounded-[var(--staff-radius-sm)] border border-primary/15 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">

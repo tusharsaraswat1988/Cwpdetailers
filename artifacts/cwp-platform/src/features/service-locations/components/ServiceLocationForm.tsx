@@ -32,28 +32,13 @@ export const EMPTY_SERVICE_LOCATION_FORM: ServiceLocationFormValues = {
   placeId: "",
 };
 
+import { guessCityFromAddress } from "@/features/customers/lib/serviceAddress";
+
 type ServiceLocationFormProps = {
   values: ServiceLocationFormValues;
   onChange: (values: ServiceLocationFormValues) => void;
   idPrefix?: string;
 };
-
-function guessCityFromAddress(address: string): string | undefined {
-  // "…, Varanasi, Uttar Pradesh 221001, India" → Varanasi
-  const parts = address.split(",").map(p => p.trim()).filter(Boolean);
-  if (parts.length < 2) return undefined;
-  // Prefer a part that looks like a city (not a PIN, not India/state-only)
-  for (let i = parts.length - 2; i >= 0; i--) {
-    const p = parts[i]!;
-    if (/^\d{5,6}/.test(p)) continue;
-    if (/india/i.test(p)) continue;
-    if (/pradesh|bengal|nadu|rashtra|gujarat|rajasthan|karnataka|kerala|bihar|odisha|punjab|haryana|delhi/i.test(p) && parts.length > 3) {
-      continue;
-    }
-    return p;
-  }
-  return parts[parts.length - 3] ?? parts[0];
-}
 
 export function ServiceLocationForm({
   values,

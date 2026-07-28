@@ -147,6 +147,7 @@ export function executionToStaffJob(e: {
   const serviceName = taskLabel
     ? `${baseName ?? "Service"} — ${taskLabel}${e.isSubstitute ? " (substitute)" : ""}`
     : baseName;
+  const addressText = e.serviceLocationAddress ?? e.serviceLocationLabel ?? null;
 
   return {
     source: "execution",
@@ -159,7 +160,8 @@ export function executionToStaffJob(e: {
     scheduledDate: e.scheduledDate.slice(0, 10),
     scheduledTime: e.scheduledTime,
     status: EXECUTION_STATUS_MAP[e.status] ?? e.status,
-    address: e.serviceLocationAddress ?? e.serviceLocationLabel,
+    address: addressText,
+    area: null,
     locationLat: e.locationLatitude,
     locationLng: e.locationLongitude,
     vehicleName: e.assetLabel,
