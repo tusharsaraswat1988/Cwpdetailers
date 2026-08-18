@@ -123,8 +123,9 @@ export default function StaffDashboardPage() {
   }
 
   const routeStops = (routeData?.stops ?? []) as { todayStatus?: string }[];
-  const dailyPending = routeStops.filter(s => s.todayStatus === "pending").length;
+  const dailyPending = routeStops.filter(s => s.todayStatus === "pending" || s.todayStatus === "rejected").length;
   const dailyDone = routeStops.filter(s => s.todayStatus === "completed").length;
+  const dailyUnavailable = routeStops.filter(s => s.todayStatus === "car_not_available").length;
 
   const otherToday = jobs.today;
   const otherCompleted = otherToday.filter(j => j.status === "completed").length;
@@ -193,6 +194,7 @@ export default function StaffDashboardPage() {
           stats={[
             { label: "route", value: routeStops.length, tone: "primary" },
             { label: "done", value: dailyDone, tone: "success" },
+            { label: "car n/a", value: dailyUnavailable, tone: "warning" },
             { label: "pending", value: dailyPending, tone: "warning" },
           ]}
         >
@@ -203,8 +205,10 @@ export default function StaffDashboardPage() {
           ) : (
             <p className="text-xs text-muted-foreground">
               {dailyPending > 0
-                ? `${dailyPending} vehicle${dailyPending !== 1 ? "s" : ""} pending — plate scan + photo upload`
-                : "All daily cleaning complete for today"}
+                ? `${dailyPending} vehicle${dailyPending !== 1 ? "s" : ""} pending`
+                : dailyUnavailable > 0
+                  ? `Route complete — ${dailyDone} cleaned, ${dailyUnavailable} car not available`
+                  : "All daily cleaning complete for today"}
             </p>
           )}
         </DashboardSection>

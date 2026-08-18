@@ -27,6 +27,8 @@ type DcmsStats = {
   usedWashes?: number;
   remainingWashes?: number;
   status?: string;
+  todayVisitStatus?: string;
+  todayVisitHeadline?: string | null;
 };
 
 /** Compact card for customer home dashboard. */
@@ -136,6 +138,17 @@ export default function CustomerDailyCleaningPage() {
                 </p>
               )}
             </CustomerSubscriptionCard>
+
+            {stats.todayVisitHeadline && (stats.todayVisitStatus === "completed" || stats.todayVisitStatus === "car_not_available") && (
+              <CustomerCard>
+                <p className="text-sm font-medium">{stats.todayVisitHeadline}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats.todayVisitStatus === "completed"
+                    ? "Your car was cleaned today."
+                    : "CWP staff visited, but the car was not available. This visit did not use a cleaning credit."}
+                </p>
+              </CustomerCard>
+            )}
 
             <div className="flex gap-2">
               <CustomerButton href="/customer/daily-cleaning/history" variant="outline" className="flex-1">

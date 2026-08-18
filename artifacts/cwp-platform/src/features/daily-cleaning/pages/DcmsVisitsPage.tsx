@@ -31,7 +31,9 @@ export default function DcmsVisitsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold">{row.vehicleNumber}</span>
-                      <Badge variant={row.visit.status === "completed" ? "default" : "destructive"}>{row.visit.status}</Badge>
+                      <Badge variant={row.visit.status === "completed" ? "default" : row.visit.status === "car_not_available" ? "secondary" : "destructive"}>
+                        {row.visit.status === "car_not_available" ? "Car Not Available" : row.visit.status}
+                      </Badge>
                       <Badge variant="outline">{row.visit.visitType}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">{row.customerName} · {row.staffName}</p>

@@ -10,6 +10,8 @@ export type AuditAction =
   | "assignment_changed"
   | "visit_uploaded"
   | "visit_rejected"
+  | "visit_car_not_available"
+  | "visit_recovered_from_car_not_available"
   | "wash_consumed"
   | "cleaning_consumed"
   | "location_changed"

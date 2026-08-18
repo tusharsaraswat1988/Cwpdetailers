@@ -74,7 +74,7 @@ export type WalkInDcmsStop = {
   planName: string;
   remainingCleanings: number;
   remainingWashes: number;
-  todayStatus: "pending" | "completed" | "rejected";
+  todayStatus: "pending" | "completed" | "rejected" | "car_not_available";
   visitType: "cleaning" | "wash";
 };
 

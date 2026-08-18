@@ -2,63 +2,34 @@ import "./load-env.js";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  PENDING_MIGRATIONS,
+  filesThrough,
+  inferBaselineFilename,
+  isMigrationAlreadyApplied,
+  type Queryable,
+} from "./migration-state.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const migrationsDir = path.join(root, "lib/db/migrations");
 
-/** Apply SQL migrations in numeric order (005+). Safe to re-run — migrations use IF NOT EXISTS. */
-const PENDING = [
-  "005_legal_cms.sql",
-  "006_master_data.sql",
-  "007_staff_ecosystem.sql",
-  "008_service_catalog.sql",
-  "009_legacy_migration.sql",
-  "010_dcms.sql",
-  "011_dcms_enhancements.sql",
-  "012_vehicle_reference_photos.sql",
-  "013_dcms_production.sql",
-  "014_visit_plate_ocr.sql",
-  "015_push_notifications.sql",
-  "016_push_notification_logs.sql",
-  "017_staff_location_logs.sql",
-  "018_dcms_plan_vehicle_type.sql",
-  "019_customer_tier3.sql",
-  "020_dcms_plan_addons.sql",
-  "021_staff_category.sql",
-  "022_complaints_supervisor.sql",
-  "023_customer_reactivation.sql",
-  "024_remove_legacy_daily_wash.sql",
-  "025_customer_contracts.sql",
-  "026_products_homepage.sql",
-  "027_contact_identity_unique.sql",
-  "028_gst_invoicing.sql",
-  "029_service_locations.sql",
-  "030_assets.sql",
-  "031_service_contracts_sprint4b.sql",
-  "032_sprint4c_billing_integration.sql",
-  "033_sprint6_service_assignments.sql",
-  "034_sprint7_service_executions.sql",
-  "035_auth_google_password_reset.sql",
-  "036_wallet_transactions.sql",
-  "037_vehicles_assigned_staff.sql",
-  "038_dcms_plan_seater_only.sql",
-  "039_service_assignment_task_types.sql",
-  "040_backfill_assignment_tenant.sql",
-  "041_execution_photo_geo.sql",
-  "042_remove_legacy_daily_booking_data.sql",
-  "043_auth_otp_codes.sql",
-  "044_branding_settings_bms.sql",
-  "045_branding_theme_defaults.sql",
-  "046_catalog_package_addons.sql",
-  "047_addresses.sql",
-  "048_booking_platform.sql",
-  "049_booking_engine_phase52.sql",
-  "050_booking_time_model_and_type.sql",
-  "051_assignment_platform_phase53.sql",
-  "052_field_execution_phase54.sql",
-  "053_execution_ready_backfill.sql",
-  "054_job_orchestration_phase55.sql",
-];
+const TRACKING_DDL = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  filename TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+`;
+
+async function recordedFiles(db: Queryable): Promise<Set<string>> {
+  const { rows } = await db.query("SELECT filename FROM schema_migrations");
+  return new Set(rows.map(r => String(r.filename)));
+}
+
+async function recordApplied(db: Queryable, filename: string) {
+  await db.query(
+    `INSERT INTO schema_migrations (filename) VALUES ('${filename.replace(/'/g, "''")}') ON CONFLICT (filename) DO NOTHING`,
+  );
+}
 
 async function main() {
   if (!process.env.DATABASE_URL) {
@@ -66,17 +37,45 @@ async function main() {
   }
 
   const { pool } = await import("@workspace/db");
+  const db = pool as unknown as Queryable;
   const available = new Set(readdirSync(migrationsDir));
 
   try {
-    for (const file of PENDING) {
+    await db.query(TRACKING_DDL);
+    let recorded = await recordedFiles(db);
+
+    if (recorded.size === 0) {
+      const baseline = await inferBaselineFilename(db);
+      if (baseline) {
+        const already = filesThrough(PENDING_MIGRATIONS, baseline);
+        console.log(`Tracking empty — recording ${already.length} already-applied files through ${baseline}.`);
+        for (const file of already) {
+          await recordApplied(db, file);
+        }
+        recorded = await recordedFiles(db);
+      }
+    }
+
+    for (const file of PENDING_MIGRATIONS) {
       if (!available.has(file)) {
         console.warn(`Skip missing migration: ${file}`);
         continue;
       }
+      if (recorded.has(file)) {
+        console.log(`Skip ${file} (already recorded)`);
+        continue;
+      }
+      if (await isMigrationAlreadyApplied(db, file)) {
+        await recordApplied(db, file);
+        console.log(`Skip ${file} (already applied in schema)`);
+        continue;
+      }
+
       const sql = readFileSync(path.join(migrationsDir, file), "utf8");
       console.log(`Applying ${file}…`);
-      await pool.query(sql);
+      await db.query(sql);
+      await recordApplied(db, file);
+      recorded.add(file);
       console.log(`  ✓ ${file}`);
     }
     console.log("All pending migrations applied.");

@@ -798,7 +798,7 @@ export type WalkInDcmsStop = {
   planName: string;
   remainingCleanings: number;
   remainingWashes: number;
-  todayStatus: "pending" | "completed" | "rejected";
+  todayStatus: "pending" | "completed" | "rejected" | "car_not_available";
   visitType: "cleaning" | "wash";
 };
 
@@ -839,6 +839,7 @@ export async function getWalkInDcmsStop(
 
   let todayStatus: WalkInDcmsStop["todayStatus"] = "pending";
   if (visit?.status === "completed") todayStatus = "completed";
+  else if (visit?.status === "car_not_available") todayStatus = "car_not_available";
   else if (visit?.status === "rejected") todayStatus = "rejected";
 
   return {

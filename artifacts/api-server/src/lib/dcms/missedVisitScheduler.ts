@@ -12,6 +12,7 @@ import { eq, and, sql, gte, lte } from "drizzle-orm";
 import { logDcmsActivity } from "./auditLog";
 import { emitNotificationEvent } from "./notificationEvents";
 import { todayStrInIST, dayBoundsIST, isWeeklyOffDay, isDateInPauseRange } from "./dateUtils";
+import { isPresentVisitStatus, shouldRecordMissedVisit } from "./visitOutcomes";
 
 const JOB_TYPE = "dcms_missed_visit_sync";
 const IDEMPOTENCY_HOURS = 20;
@@ -70,18 +71,16 @@ export async function isCleaningExpectedToday(
   return true;
 }
 
-async function hasCompletedCleaningToday(subscriptionId: number, dateStr: string): Promise<boolean> {
+async function hasStaffPresentToday(subscriptionId: number, dateStr: string): Promise<boolean> {
   const { start, end } = dayBoundsIST(dateStr);
-  const [visit] = await db.select({ id: dcmsVisitsTable.id }).from(dcmsVisitsTable)
+  const visits = await db.select({ status: dcmsVisitsTable.status }).from(dcmsVisitsTable)
     .where(and(
       eq(dcmsVisitsTable.subscriptionId, subscriptionId),
       eq(dcmsVisitsTable.visitType, "cleaning"),
-      eq(dcmsVisitsTable.status, "completed"),
       gte(dcmsVisitsTable.visitTime, start),
       lte(dcmsVisitsTable.visitTime, end),
-    ))
-    .limit(1);
-  return Boolean(visit);
+    ));
+  return visits.some(v => isPresentVisitStatus(v.status));
 }
 
 /** Idempotent end-of-day missed visit processing for all active subscriptions. */
@@ -112,7 +111,10 @@ export async function runMissedVisitScheduler(dateStr?: string) {
         continue;
       }
 
-      if (await hasCompletedCleaningToday(subscription.id, date)) {
+      if (!shouldRecordMissedVisit({
+        expectedToday: expected,
+        hasPresentVisit: await hasStaffPresentToday(subscription.id, date),
+      })) {
         skipped++;
         continue;
       }

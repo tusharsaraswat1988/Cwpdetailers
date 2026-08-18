@@ -149,7 +149,16 @@ export type DashboardStats = {
   }>;
   completionPercentage: number;
   washConsumption: { used: number; allocated: number };
-  staffProductivity: Array<{ staffId: number; staffName: string; completed: number; rejected: number }>;
+  staffProductivity: Array<{ staffId: number; staffName: string; completed: number; carNotAvailable?: number; rejected: number }>;
+  todayOps?: {
+    date: string;
+    scheduled: number;
+    completed: number;
+    carNotAvailable: number;
+    otherException: number;
+    stillPending: number;
+  };
+  carNotAvailableVisits?: number;
   feedback?: {
     negativeFeedbackCount: number;
     pendingFeedback: number;
@@ -181,6 +190,7 @@ export type StaffPerformanceRow = {
   staffName: string;
   assignedVehicles: number;
   completedVisits: number;
+  carNotAvailableVisits?: number;
   missedVisits: number;
   rejectedVisits: number;
   completionPercentage: number;
@@ -295,6 +305,15 @@ export function useCompleteVisit() {
   return useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       dcmsFetch("/daily-cleaning/visits/complete", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dcms"] }),
+  });
+}
+
+export function useRecordCarNotAvailable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      dcmsFetch("/daily-cleaning/visits/car-not-available", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dcms"] }),
   });
 }

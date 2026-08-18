@@ -21,6 +21,9 @@ function StaffTable({ title, rows }: { title: string; rows: StaffPerformanceRow[
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Badge variant="outline">{s.assignedVehicles} vehicles</Badge>
                   <span className="text-green-600">{s.completedVisits} done</span>
+                  {(s.carNotAvailableVisits ?? 0) > 0 && (
+                    <span className="text-amber-700">{s.carNotAvailableVisits} car n/a</span>
+                  )}
                   <span className="text-red-600">{s.missedVisits} missed</span>
                   <span>{s.completionPercentage}%</span>
                   <span>Rating {s.customerRating}%</span>
@@ -60,7 +63,7 @@ export default function DcmsStaffPerformancePage() {
                       <div key={s.staffId} className="flex flex-wrap justify-between gap-2 text-sm border-b pb-2">
                         <span className="font-medium">{s.staffName}</span>
                         <span className="text-xs text-muted-foreground">
-                          {s.completedVisits} completed · {s.missedVisits} missed · {s.rejectedVisits} rejected · {s.completionPercentage}%
+                          {s.completedVisits} completed · {s.carNotAvailableVisits ?? 0} car not available · {s.missedVisits} missed · {s.rejectedVisits} rejected · {s.completionPercentage}%
                         </span>
                       </div>
                     ))}

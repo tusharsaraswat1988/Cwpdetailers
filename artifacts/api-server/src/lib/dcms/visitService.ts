@@ -10,7 +10,7 @@ import {
   customersTable,
   type DcmsVisit,
 } from "@workspace/db";
-import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte, inArray } from "drizzle-orm";
 import { logDcmsActivity } from "./auditLog";
 import { isWithinRadius } from "./geoFence";
 import { uploadWatermarkedVisitPhoto } from "./watermark";
@@ -21,6 +21,12 @@ import { dayBoundsIST, todayStrInIST } from "./dateUtils";
 import { isRenewalEligible } from "./missedVisitService";
 import { logger } from "../logger";
 import { traceVisitFailure, traceVisitStep } from "./visitCompleteTrace";
+import {
+  applyEntitlementDelta,
+  planCarNotAvailable,
+  planCompleteCleaning,
+  type DcmsVisitStatus,
+} from "./visitOutcomes";
 
 export type CompleteVisitInput = {
   subscriptionId: number;
@@ -41,10 +47,47 @@ export type CompleteVisitInput = {
   walkIn?: boolean;
 };
 
+export type RecordCarNotAvailableInput = {
+  subscriptionId: number;
+  staffId: number;
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  performedBy: number;
+  walkIn?: boolean;
+};
+
+async function todaysCleaningVisits(subscriptionId: number, dateStr: string): Promise<DcmsVisit[]> {
+  const { start, end } = dayBoundsIST(dateStr);
+  return db
+    .select()
+    .from(dcmsVisitsTable)
+    .where(and(
+      eq(dcmsVisitsTable.subscriptionId, subscriptionId),
+      eq(dcmsVisitsTable.visitType, "cleaning"),
+      gte(dcmsVisitsTable.visitTime, start),
+      lte(dcmsVisitsTable.visitTime, end),
+    ))
+    .orderBy(desc(dcmsVisitsTable.visitTime));
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  let current: unknown = err;
+  for (let i = 0; i < 5 && current; i++) {
+    if (typeof current === "object" && current && "code" in current && (current as { code: string }).code === "23505") {
+      return true;
+    }
+    current = typeof current === "object" && current && "cause" in current
+      ? (current as { cause: unknown }).cause
+      : null;
+  }
+  return false;
+}
+
 export async function completeVisit(
   input: CompleteVisitInput,
   opts?: { log?: typeof logger },
-): Promise<{ visit: DcmsVisit; consumed: boolean }> {
+): Promise<{ visit: DcmsVisit; consumed: boolean; idempotent?: boolean }> {
   const log = opts?.log ?? logger;
   traceVisitStep(log, "request_received", {
     subscriptionId: input.subscriptionId,
@@ -102,8 +145,25 @@ export async function completeVisit(
   const [vehicle] = await db.select().from(vehiclesTable)
     .where(eq(vehiclesTable.id, sub.vehicleId)).limit(1);
 
+  const existingToday = input.visitType === "cleaning"
+    ? await todaysCleaningVisits(input.subscriptionId, today)
+    : [];
+  const completePlan = input.visitType === "cleaning"
+    ? planCompleteCleaning(existingToday)
+    : null;
+  if (completePlan?.action === "return") {
+    const existing = existingToday.find(v => v.id === completePlan.visitId);
+    if (existing) {
+      traceVisitStep(log, "response_ready", { visitId: existing.id, idempotent: true });
+      return { visit: existing, consumed: false, idempotent: true };
+    }
+  }
+  if (completePlan?.action === "reject") {
+    traceVisitFailure(log, "assignment_verified", new Error(completePlan.error));
+  }
+
   const now = new Date();
-  const visitDateStr = now.toISOString().slice(0, 10);
+  const visitDateStr = today;
 
   const [location] = await db.select().from(dcmsSubscriptionLocationsTable)
     .where(eq(dcmsSubscriptionLocationsTable.subscriptionId, input.subscriptionId)).limit(1);
@@ -195,39 +255,71 @@ export async function completeVisit(
 
   try {
     traceVisitStep(log, "db_transaction_started");
+    const recoverVisitId = completePlan?.action === "update" ? completePlan.visitId : null;
     const result = await db.transaction(async (tx) => {
-      const [visit] = await tx.insert(dcmsVisitsTable).values({
-        subscriptionId: input.subscriptionId,
-        vehicleId: sub.vehicleId,
-        staffId: input.staffId,
-        visitType: input.visitType,
-        photoUrl,
-        visitTime: now,
-        visitDate: visitDateStr,
-        status: "completed",
-        latitude: input.latitude,
-        longitude: input.longitude,
-        accuracy: input.accuracy ?? null,
-        exifJson: exifData,
-        ocrText: input.ocrText ?? null,
-        ocrConfidence: input.ocrConfidence ?? null,
-        confirmedRegistration: input.confirmedRegistration ?? null,
-      }).returning();
+      let visit: DcmsVisit | undefined;
+      if (recoverVisitId != null) {
+        const [updated] = await tx.update(dcmsVisitsTable)
+          .set({
+            photoUrl,
+            visitTime: now,
+            status: "completed",
+            latitude: input.latitude,
+            longitude: input.longitude,
+            accuracy: input.accuracy ?? null,
+            exifJson: exifData,
+            ocrText: input.ocrText ?? null,
+            ocrConfidence: input.ocrConfidence ?? null,
+            confirmedRegistration: input.confirmedRegistration ?? null,
+            rejectionReason: null,
+          })
+          .where(and(
+            eq(dcmsVisitsTable.id, recoverVisitId),
+            eq(dcmsVisitsTable.status, "car_not_available"),
+          ))
+          .returning();
+        visit = updated;
+        if (!visit) {
+          const [current] = await tx.select().from(dcmsVisitsTable)
+            .where(eq(dcmsVisitsTable.id, recoverVisitId)).limit(1);
+          if (current?.status === "completed") {
+            return { visit: current, consumed: false, idempotent: true as const };
+          }
+          throw new Error("Visit already completed today");
+        }
+      } else {
+        const [inserted] = await tx.insert(dcmsVisitsTable).values({
+          subscriptionId: input.subscriptionId,
+          vehicleId: sub.vehicleId,
+          staffId: input.staffId,
+          visitType: input.visitType,
+          photoUrl,
+          visitTime: now,
+          visitDate: visitDateStr,
+          status: "completed",
+          latitude: input.latitude,
+          longitude: input.longitude,
+          accuracy: input.accuracy ?? null,
+          exifJson: exifData,
+          ocrText: input.ocrText ?? null,
+          ocrConfidence: input.ocrConfidence ?? null,
+          confirmedRegistration: input.confirmedRegistration ?? null,
+        }).returning();
+        visit = inserted;
+      }
 
       const updates: Partial<typeof sub> = { updatedAt: now };
-      if (input.visitType === "cleaning") {
-        updates.usedCleanings = sub.usedCleanings + 1;
-        updates.remainingCleanings = sub.remainingCleanings - 1;
-      } else {
-        updates.usedWashes = sub.usedWashes + 1;
-        updates.remainingWashes = sub.remainingWashes - 1;
-      }
+      const delta = applyEntitlementDelta(sub, input.visitType, "completed");
+      updates.usedCleanings = delta.usedCleanings;
+      updates.remainingCleanings = delta.remainingCleanings;
+      updates.usedWashes = delta.usedWashes;
+      updates.remainingWashes = delta.remainingWashes;
 
       if (updates.remainingCleanings === 0 && updates.remainingWashes === 0) {
         updates.status = "completed";
       }
 
-      await tx.update(dcmsSubscriptionsTable)
+      const [consumedSub] = await tx.update(dcmsSubscriptionsTable)
         .set({ ...updates, version: sub.version + 1 })
         .where(and(
           eq(dcmsSubscriptionsTable.id, input.subscriptionId),
@@ -235,10 +327,25 @@ export async function completeVisit(
           input.visitType === "cleaning"
             ? sql`${dcmsSubscriptionsTable.remainingCleanings} > 0`
             : sql`${dcmsSubscriptionsTable.remainingWashes} > 0`,
-        ));
+        ))
+        .returning({ id: dcmsSubscriptionsTable.id });
+      if (!consumedSub) {
+        throw new Error("Visit already completed today");
+      }
 
       const updatedRemainingCleanings = updates.remainingCleanings ?? sub.remainingCleanings;
       const updatedRemainingWashes = updates.remainingWashes ?? sub.remainingWashes;
+
+      if (recoverVisitId != null) {
+        await logDcmsActivity({
+          subscriptionId: input.subscriptionId,
+          action: "visit_recovered_from_car_not_available",
+          entityType: "visit",
+          entityId: visit!.id,
+          performedBy: input.performedBy,
+          metadata: { visitType: input.visitType },
+        });
+      }
 
       await logDcmsActivity({
         subscriptionId: input.subscriptionId,
@@ -301,12 +408,185 @@ export async function completeVisit(
         });
       }
 
-      return { visit: visit!, consumed: true };
+      return { visit: visit!, consumed: true, idempotent: false as const };
     });
-    traceVisitStep(log, "db_insert_passed", { visitId: result.visit.id });
+    traceVisitStep(log, "db_insert_passed", { visitId: result.visit.id, recovered: recoverVisitId != null });
     traceVisitStep(log, "response_ready", { visitId: result.visit.id });
     return result;
   } catch (e) {
+    if (isUniqueViolation(e) && input.visitType === "cleaning") {
+      const again = await todaysCleaningVisits(input.subscriptionId, today);
+      const completed = again.find(v => v.status === "completed");
+      if (completed) {
+        traceVisitStep(log, "response_ready", { visitId: completed.id, idempotent: true });
+        return { visit: completed, consumed: false, idempotent: true };
+      }
+    }
+    traceVisitFailure(log, "db_transaction_started", e);
+  }
+}
+
+export async function recordCarNotAvailable(
+  input: RecordCarNotAvailableInput,
+  opts?: { log?: typeof logger },
+): Promise<{ visit: DcmsVisit; consumed: false; attendance: "present"; idempotent?: boolean }> {
+  const log = opts?.log ?? logger;
+  traceVisitStep(log, "request_received", {
+    subscriptionId: input.subscriptionId,
+    staffId: input.staffId,
+    outcome: "car_not_available",
+    latitude: input.latitude,
+    longitude: input.longitude,
+    accuracy: input.accuracy,
+  });
+
+  if (input.latitude == null || input.longitude == null) {
+    traceVisitFailure(log, "input_validated", new Error("Location required"));
+  }
+  traceVisitStep(log, "input_validated");
+
+  let sub;
+  try {
+    [sub] = await db.select().from(dcmsSubscriptionsTable)
+      .where(eq(dcmsSubscriptionsTable.id, input.subscriptionId)).limit(1);
+    if (!sub) throw new Error("Subscription not found");
+    if (sub.status !== "active") throw new Error("Subscription is not active");
+    traceVisitStep(log, "subscription_loaded", { status: sub.status });
+  } catch (e) {
+    traceVisitFailure(log, "subscription_loaded", e);
+  }
+
+  const today = todayStrInIST();
+  if (isSubscriptionPausedOnDate(sub, today)) {
+    traceVisitFailure(log, "subscription_loaded", new Error("Subscription is paused — visits not allowed"));
+  }
+
+  const [assignment] = await db.select().from(dcmsStaffAssignmentsTable)
+    .where(and(
+      eq(dcmsStaffAssignmentsTable.subscriptionId, input.subscriptionId),
+      eq(dcmsStaffAssignmentsTable.staffId, input.staffId),
+      eq(dcmsStaffAssignmentsTable.isActive, true),
+    )).limit(1);
+  if (!input.walkIn && !assignment) {
+    traceVisitFailure(log, "assignment_verified", new Error("Staff not assigned to this subscription"));
+  }
+  traceVisitStep(log, "assignment_verified", { walkIn: Boolean(input.walkIn) });
+
+  const existing = await todaysCleaningVisits(input.subscriptionId, today);
+  const plan = planCarNotAvailable(existing);
+  if (plan.action === "reject") {
+    traceVisitFailure(log, "assignment_verified", new Error(plan.error));
+  }
+  if (plan.action === "return") {
+    const visit = existing.find(v => v.id === plan.visitId);
+    if (visit) {
+      traceVisitStep(log, "response_ready", { visitId: visit.id, idempotent: true });
+      return { visit, consumed: false, attendance: "present", idempotent: true };
+    }
+  }
+
+  const [vehicle] = await db.select().from(vehiclesTable)
+    .where(eq(vehiclesTable.id, sub.vehicleId)).limit(1);
+
+  const now = new Date();
+  const [location] = await db.select().from(dcmsSubscriptionLocationsTable)
+    .where(eq(dcmsSubscriptionLocationsTable.subscriptionId, input.subscriptionId)).limit(1);
+
+  if (location && !isWithinRadius(
+    input.latitude, input.longitude,
+    location.latitude, location.longitude,
+    location.radiusMeters,
+  )) {
+    traceVisitStep(log, "geofence_passed", { withinRadius: false });
+    const [rejected] = await db.insert(dcmsVisitsTable).values({
+      subscriptionId: input.subscriptionId,
+      vehicleId: sub.vehicleId,
+      staffId: input.staffId,
+      visitType: "cleaning",
+      status: "rejected",
+      photoUrl: null,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      accuracy: input.accuracy ?? null,
+      rejectionReason: "Outside Service Area",
+      visitDate: today,
+    }).returning();
+
+    await logDcmsActivity({
+      subscriptionId: input.subscriptionId,
+      action: "visit_rejected",
+      entityType: "visit",
+      entityId: rejected!.id,
+      performedBy: input.performedBy,
+      metadata: { reason: "Outside Service Area", outcome: "car_not_available" },
+    });
+
+    await emitNotificationEvent({
+      eventType: "visit_rejected",
+      entityType: "visit",
+      entityId: rejected!.id,
+      payload: {
+        visitId: rejected!.id,
+        subscriptionId: input.subscriptionId,
+        staffId: input.staffId,
+        customerId: sub.customerId,
+        vehicleNumber: vehicle?.registrationNumber ?? "UNKNOWN",
+        reason: "Outside Service Area",
+      },
+    });
+
+    traceVisitFailure(log, "geofence_passed", new Error("Outside Service Area"));
+  }
+  traceVisitStep(log, "geofence_passed", { withinRadius: true });
+
+  try {
+    traceVisitStep(log, "db_transaction_started");
+    const result = await db.transaction(async (tx) => {
+      const [visit] = await tx.insert(dcmsVisitsTable).values({
+        subscriptionId: input.subscriptionId,
+        vehicleId: sub.vehicleId,
+        staffId: input.staffId,
+        visitType: "cleaning",
+        photoUrl: null,
+        visitTime: now,
+        visitDate: today,
+        status: "car_not_available",
+        latitude: input.latitude,
+        longitude: input.longitude,
+        accuracy: input.accuracy ?? null,
+        exifJson: null,
+      }).returning();
+
+      await logDcmsActivity({
+        subscriptionId: input.subscriptionId,
+        action: "visit_car_not_available",
+        entityType: "visit",
+        entityId: visit!.id,
+        performedBy: input.performedBy,
+        metadata: {
+          remainingCleanings: sub.remainingCleanings,
+          remainingWashes: sub.remainingWashes,
+        },
+      });
+
+      return { visit: visit!, consumed: false as const, attendance: "present" as const };
+    });
+    traceVisitStep(log, "db_insert_passed", { visitId: result.visit.id, outcome: "car_not_available" });
+    traceVisitStep(log, "response_ready", { visitId: result.visit.id });
+    return result;
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      const again = await todaysCleaningVisits(input.subscriptionId, today);
+      const cna = again.find(v => v.status === "car_not_available");
+      if (cna) {
+        traceVisitStep(log, "response_ready", { visitId: cna.id, idempotent: true });
+        return { visit: cna, consumed: false, attendance: "present", idempotent: true };
+      }
+      const completed = again.find(v => v.status === "completed");
+      if (completed) {
+        traceVisitFailure(log, "db_transaction_started", new Error("Cleaning already completed today"));
+      }
+    }
     traceVisitFailure(log, "db_transaction_started", e);
   }
 }
@@ -314,7 +594,8 @@ export async function completeVisit(
 export async function listVisits(filters?: {
   subscriptionId?: number;
   staffId?: number;
-  status?: "completed" | "rejected";
+  status?: DcmsVisitStatus;
+  statuses?: DcmsVisitStatus[];
   month?: number;
   year?: number;
   vehicleId?: number;
@@ -326,7 +607,11 @@ export async function listVisits(filters?: {
   const conditions = [];
   if (filters?.subscriptionId) conditions.push(eq(dcmsVisitsTable.subscriptionId, filters.subscriptionId));
   if (filters?.staffId) conditions.push(eq(dcmsVisitsTable.staffId, filters.staffId));
-  if (filters?.status) conditions.push(eq(dcmsVisitsTable.status, filters.status));
+  if (filters?.statuses?.length) {
+    conditions.push(inArray(dcmsVisitsTable.status, filters.statuses));
+  } else if (filters?.status) {
+    conditions.push(eq(dcmsVisitsTable.status, filters.status));
+  }
   if (filters?.vehicleId) conditions.push(eq(dcmsVisitsTable.vehicleId, filters.vehicleId));
   if (filters?.customerId) conditions.push(eq(dcmsSubscriptionsTable.customerId, filters.customerId));
   if (filters?.from) {
@@ -493,7 +778,8 @@ export async function listServiceHistory(filters?: {
   vehicleId?: number;
   subscriptionId?: number;
   staffId?: number;
-  status?: "completed" | "rejected";
+  status?: DcmsVisitStatus;
+  statuses?: DcmsVisitStatus[];
   from?: string;
   to?: string;
   limit?: number;

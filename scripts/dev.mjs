@@ -10,8 +10,7 @@ loadEnvFile(findEnvFile(root), { override: process.env.NODE_ENV !== "production"
 Object.assign(baseEnv, process.env);
 baseEnv.NODE_ENV = "development";
 
-/** Stop stale listeners so `pnpm dev` can restart after Ctrl+C left orphans (common on Windows). */
-function freePort(port) {
+function listeningPids(port) {
   try {
     if (process.platform === "win32") {
       const out = execSync(`netstat -ano | findstr ":${port}.*LISTENING"`, {
@@ -23,19 +22,48 @@ function freePort(port) {
         const m = line.trim().match(/\s(\d+)\s*$/);
         if (m && m[1] !== "0") pids.add(m[1]);
       }
-      for (const pid of pids) {
-        console.log(`Stopping previous process on port ${port} (PID ${pid})…`);
-        execSync(`taskkill /PID ${pid} /F`, { stdio: "ignore" });
-      }
-      return;
+      return [...pids];
     }
-    execSync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`, {
+    const out = execSync(`lsof -ti:${port} || true`, {
+      encoding: "utf8",
       shell: true,
-      stdio: "ignore",
+      stdio: ["pipe", "pipe", "ignore"],
     });
+    return out.split(/\s+/).filter(Boolean);
   } catch {
-    // Port already free
+    return [];
   }
+}
+
+/** Stop stale listeners so `pnpm dev` can restart after Ctrl+C left orphans (common on Windows). */
+function freePort(port) {
+  for (const pid of listeningPids(port)) {
+    console.log(`Stopping previous process on port ${port} (PID ${pid})…`);
+    try {
+      if (process.platform === "win32") {
+        execSync(`taskkill /PID ${pid} /F`, { stdio: "ignore" });
+      } else {
+        execSync(`kill -9 ${pid}`, { stdio: "ignore" });
+      }
+    } catch {
+      // Access denied (Windows service) or process already gone
+    }
+  }
+  return listeningPids(port).length === 0;
+}
+
+function pickApiPort() {
+  const preferred = Number(process.env.API_PORT || 8080);
+  const fallback = preferred === 8081 ? 8082 : 8081;
+  if (freePort(preferred)) return String(preferred);
+  if (freePort(fallback)) {
+    console.warn(
+      `Port ${preferred} is in use and could not be freed (often a Windows service such as PEMHTTPD). Using ${fallback} for the API.`,
+    );
+    return String(fallback);
+  }
+  console.error(`Could not bind API on port ${preferred} or ${fallback}.`);
+  process.exit(1);
 }
 
 function prefixStream(name, color, stream) {
@@ -84,24 +112,26 @@ execSync("pnpm --filter @workspace/scripts exec tsx src/ensure-master-data.ts", 
   shell: true,
 });
 
+const apiPort = pickApiPort();
+
 execSync("pnpm --filter @workspace/api-server run build", {
   cwd: root,
-  env: { ...baseEnv, PORT: "8080" },
+  env: { ...baseEnv, PORT: apiPort },
   stdio: "inherit",
   shell: true,
 });
 
-console.log("Starting API (http://127.0.0.1:8080) + frontend (http://127.0.0.1:21456) ...");
+console.log(`Starting API (http://127.0.0.1:${apiPort}) + frontend (http://127.0.0.1:21456) ...`);
 
-freePort(8080);
 freePort(21456);
 
 children.push(
   run("api", "pnpm", ["--filter", "@workspace/api-server", "run", "start"], {
-    PORT: "8080",
+    PORT: apiPort,
   }, "36"),
   run("web", "pnpm", ["--filter", "@workspace/cwp-platform", "run", "dev"], {
     PORT: "21456",
+    API_PORT: apiPort,
     BASE_PATH: "/",
   }, "32"),
 );

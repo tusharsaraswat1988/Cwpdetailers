@@ -3,7 +3,7 @@ import { DcmsAdminNav } from "../components/DcmsAdminNav";
 import { useDcmsDashboard } from "../api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, CheckCircle, Clock, PauseCircle, RefreshCw, ThumbsDown, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, PauseCircle, RefreshCw, ThumbsDown, Users, Car } from "lucide-react";
 
 function StatCard({ title, value, icon: Icon, sub }: { title: string; value: number | string; icon: typeof Users; sub?: string }) {
   return (
@@ -37,10 +37,26 @@ export default function DcmsDashboardPage() {
           <p className="text-destructive">Failed to load dashboard</p>
         ) : data ? (
           <>
+            {data.todayOps && (
+              <div>
+                <h2 className="font-display font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-2">
+                  Today · {data.todayOps.date}
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <StatCard title="Scheduled" value={data.todayOps.scheduled} icon={Users} />
+                  <StatCard title="Completed" value={data.todayOps.completed} icon={CheckCircle} />
+                  <StatCard title="Car Not Available" value={data.todayOps.carNotAvailable} icon={Car} />
+                  <StatCard title="Other Exception" value={data.todayOps.otherException} icon={AlertTriangle} />
+                  <StatCard title="Still Pending" value={data.todayOps.stillPending} icon={Clock} />
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard title="Active Subscriptions" value={data.activeSubscriptions} icon={Users} />
               <StatCard title="Pending Visits" value={data.pendingVisits} icon={Clock} />
               <StatCard title="Completed Visits" value={data.completedVisits} icon={CheckCircle} />
+              <StatCard title="Car Not Available" value={data.carNotAvailableVisits ?? 0} icon={Car} />
               <StatCard title="Missed Visits" value={data.missedVisits} icon={AlertTriangle} />
               <StatCard title="Renewal Eligible" value={ops?.renewalEligible ?? data.renewalsDue} icon={RefreshCw} />
               <StatCard title="Renewal Due Soon" value={ops?.renewalDueSoon ?? 0} icon={RefreshCw} sub="≤3 cleanings left" />

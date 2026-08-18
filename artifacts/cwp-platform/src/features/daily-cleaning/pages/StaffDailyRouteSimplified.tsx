@@ -3,14 +3,16 @@ import { useSearch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
-import { useStaffDailyRoute, useCompleteVisit } from "../api";
+import { useStaffDailyRoute, useCompleteVisit, useRecordCarNotAvailable } from "../api";
 import { fetchWalkInDcmsStop } from "@/features/staff-walk-in/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine, Navigation, MapPin } from "lucide-react";
+import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine, Navigation, MapPin, Car } from "lucide-react";
 import { extractClientExif, validateCameraFile, readFileAsDataUrl } from "../lib/cameraCapture";
 import { visitUploadErrorMessage } from "../lib/visitUploadError";
+import { staffVisitLabel } from "../lib/visitLabels";
 import { getStaffLocation } from "@/lib/location";
 import { buildNavigateUrl } from "@/lib/maps";
 import { PlateScanFlow, type PlateScanMeta } from "../components/PlateScanFlow";
@@ -22,17 +24,18 @@ type RouteStop = {
   vehicleNumber: string;
   vehicleMake: string;
   vehicleModel: string;
-  todayStatus: "pending" | "completed" | "missed" | "rejected";
+  todayStatus: "pending" | "completed" | "missed" | "rejected" | "car_not_available";
   remainingCleanings: number;
   remainingWashes?: number;
   location?: { latitude: number; longitude: number; radiusMeters: number } | null;
 };
 
 const statusLabel: Record<string, string> = {
-  pending: "Pending",
-  completed: "Done",
-  missed: "Missed",
-  rejected: "Rejected",
+  pending: staffVisitLabel("pending"),
+  completed: staffVisitLabel("completed"),
+  missed: staffVisitLabel("missed"),
+  rejected: staffVisitLabel("rejected"),
+  car_not_available: staffVisitLabel("car_not_available"),
 };
 
 export function StaffDailyRouteSimplified() {
@@ -52,11 +55,13 @@ export function StaffDailyRouteSimplified() {
   });
 
   const completeVisit = useCompleteVisit();
+  const recordCarNotAvailable = useRecordCarNotAvailable();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [scanOpen, setScanOpen] = useState(false);
   const [plateScanMeta, setPlateScanMeta] = useState<PlateScanMeta | null>(null);
+  const [confirmUnavailable, setConfirmUnavailable] = useState(false);
 
   const routeStops = (data?.stops ?? []) as RouteStop[];
   const walkInStop = walkInStopQuery.data;
@@ -68,7 +73,7 @@ export function StaffDailyRouteSimplified() {
         vehicleNumber: walkInStop.vehicleNumber,
         vehicleMake: walkInStop.vehicleMake,
         vehicleModel: walkInStop.vehicleModel,
-        todayStatus: walkInStop.todayStatus === "rejected" ? "rejected" : walkInStop.todayStatus,
+        todayStatus: walkInStop.todayStatus,
         remainingCleanings: walkInStop.remainingCleanings,
         remainingWashes: walkInStop.remainingWashes,
       }]
@@ -83,7 +88,11 @@ export function StaffDailyRouteSimplified() {
 
   const current = stops[activeIdx];
   const doneCount = stops.filter(s => s.todayStatus === "completed").length;
+  const unavailableCount = stops.filter(s => s.todayStatus === "car_not_available").length;
   const visitType = walkInMode ? walkInVisitType : "cleaning";
+  const showPendingActions = current?.todayStatus === "pending" || current?.todayStatus === "rejected";
+  const showSameDayRecovery = current?.todayStatus === "car_not_available" && visitType === "cleaning";
+  const actionPending = completeVisit.isPending || recordCarNotAvailable.isPending;
 
   const handlePlateConfirmed = useCallback(({ subscriptionId, scanMeta }: {
     subscriptionId: number;
@@ -131,6 +140,31 @@ export function StaffDailyRouteSimplified() {
       toast({ title: "Upload failed", description: visitUploadErrorMessage(err), variant: "destructive" });
     }
   }, [current, completeVisit, toast, refetch, plateScanMeta, activeIdx, stops.length, visitType, walkInMode, navigate]);
+
+  const markCarNotAvailable = useCallback(async () => {
+    if (!current) return;
+    try {
+      const gps = await getStaffLocation("action");
+      await recordCarNotAvailable.mutateAsync({
+        subscriptionId: current.subscriptionId,
+        walkIn: walkInMode,
+        ...gps,
+      });
+      toast({
+        title: "Visit record ho gaya",
+        description: `${current.vehicleNumber} — car nahi mili, cleaning count nahi kata`,
+      });
+      setConfirmUnavailable(false);
+      if (walkInMode) {
+        navigate("/staff/bookings?walkInSuccess=1");
+        return;
+      }
+      refetch();
+      if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
+    } catch (err) {
+      toast({ title: "Record failed", description: visitUploadErrorMessage(err), variant: "destructive" });
+    }
+  }, [current, recordCarNotAvailable, toast, refetch, activeIdx, stops.length, walkInMode, navigate]);
 
   if (!user?.staffId) {
     return (
@@ -183,7 +217,10 @@ export function StaffDailyRouteSimplified() {
 
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {walkInMode ? "Walk-in" : data?.date} · <span className="font-medium text-foreground">{doneCount}/{stops.length}</span> done
+          {walkInMode ? "Walk-in" : data?.date} · <span className="font-medium text-foreground">{doneCount}/{stops.length}</span> cleaned
+          {unavailableCount > 0 && (
+            <> · <span className="font-medium text-foreground">{unavailableCount}</span> car nahi mili</>
+          )}
         </p>
         {!walkInMode && (
           <Button variant="outline" size="sm" onClick={() => setScanOpen(true)}>
@@ -205,6 +242,8 @@ export function StaffDailyRouteSimplified() {
               className={cn(
                 current.todayStatus === "completed" && "bg-green-600",
                 current.todayStatus === "pending" && "bg-amber-500/15 text-amber-800 border-amber-500/30",
+                current.todayStatus === "car_not_available" && "bg-amber-500/15 text-amber-900 border-amber-500/30",
+                current.todayStatus === "rejected" && "bg-destructive/15 text-destructive",
               )}
             >
               {statusLabel[current.todayStatus]}
@@ -228,23 +267,62 @@ export function StaffDailyRouteSimplified() {
             </a>
           )}
 
-          {current.todayStatus === "pending" ? (
-            <Button
-              className="w-full h-14 text-base font-semibold"
-              onClick={() => fileRef.current?.click()}
-              disabled={completeVisit.isPending}
-            >
-              {completeVisit.isPending ? (
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              ) : (
-                <Camera className="h-5 w-5 mr-2" />
+          {showPendingActions ? (
+            <div className="space-y-2">
+              <Button
+                className="w-full h-14 text-base font-semibold"
+                onClick={() => fileRef.current?.click()}
+                disabled={actionPending}
+              >
+                {completeVisit.isPending ? (
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                ) : (
+                  <Camera className="h-5 w-5 mr-2" />
+                )}
+                Car available — photo lein & complete
+              </Button>
+              {visitType === "cleaning" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-12"
+                  onClick={() => setConfirmUnavailable(true)}
+                  disabled={actionPending}
+                >
+                  {recordCarNotAvailable.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Car className="h-4 w-4 mr-2" />
+                  )}
+                  Car nahi mili
+                </Button>
               )}
-              Photo lein & complete
-            </Button>
+            </div>
+          ) : showSameDayRecovery ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-center gap-2 text-sm font-medium rounded-xl w-full py-3 text-amber-800 bg-amber-500/10">
+                <CheckCircle size={18} />
+                Car nahi mili — visit record ho gaya, cleaning nahi
+              </div>
+              <Button
+                className="w-full h-14 text-base font-semibold"
+                onClick={() => fileRef.current?.click()}
+                disabled={actionPending}
+                data-testid="dcms-same-day-complete"
+              >
+                {completeVisit.isPending ? (
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                ) : (
+                  <Camera className="h-5 w-5 mr-2" />
+                )}
+                Car mil gayi — complete cleaning
+              </Button>
+            </div>
           ) : (
             <div className="flex flex-col items-center gap-3 py-3">
-              <div className="flex items-center justify-center gap-2 text-green-600 text-sm font-medium bg-green-500/10 rounded-xl w-full py-3">
-                <CheckCircle size={18} /> Is car ka kaam ho chuka hai
+              <div className="flex items-center justify-center gap-2 text-sm font-medium rounded-xl w-full py-3 text-green-600 bg-green-500/10">
+                <CheckCircle size={18} />
+                Is car ka kaam ho chuka hai
               </div>
               {walkInMode && (
                 <Button
@@ -294,6 +372,7 @@ export function StaffDailyRouteSimplified() {
                 s.todayStatus === "completed" && "bg-green-500/10 border-green-500/30 text-green-800",
                 s.todayStatus === "pending" && "bg-card border-border",
                 s.todayStatus === "rejected" && "bg-destructive/10 border-destructive/30",
+                s.todayStatus === "car_not_available" && "bg-amber-500/10 border-amber-500/30 text-amber-900",
               )}
             >
               {s.vehicleNumber.slice(-4)}
@@ -319,6 +398,17 @@ export function StaffDailyRouteSimplified() {
           onVehicleConfirmed={handlePlateConfirmed}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmUnavailable}
+        onOpenChange={setConfirmUnavailable}
+        title="Car nahi mili?"
+        description="Visit record hogi aur aap present count honge. Cleaning credit nahi katega. Vehicle photo ki zaroorat nahi."
+        confirmLabel="Haan, car nahi mili"
+        cancelLabel="Wapas"
+        onConfirm={() => void markCarNotAvailable()}
+        isConfirming={recordCarNotAvailable.isPending}
+      />
     </div>
   );
 }

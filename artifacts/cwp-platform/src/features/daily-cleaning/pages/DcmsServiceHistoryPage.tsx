@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   Table,
   TableBody,
@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { format, parseISO } from "date-fns";
 import { Search } from "lucide-react";
+import { adminVisitLabel } from "../lib/visitLabels";
 
 function istDateString(date: Date): string {
   return date.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -51,12 +52,16 @@ function VisitCell({ cell, label }: { cell?: ServiceHistoryVisitCell; label: str
     <div className="space-y-1 min-w-[140px]">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-medium">{formatVisitTime(cell.time)}</span>
-        <Badge variant={cell.status === "completed" ? "default" : "destructive"} className="text-[10px] px-1.5 py-0">
-          {cell.status}
-        </Badge>
+        <StatusBadge
+          status={cell.status}
+          label={adminVisitLabel(cell.status)}
+          tone={cell.status === "car_not_available" ? "warning" : undefined}
+        />
       </div>
       <p className="text-xs text-muted-foreground">{cell.staffName}</p>
-      {cell.photoUrl ? (
+      {cell.status === "car_not_available" ? (
+        <p className="text-[11px] text-muted-foreground">No vehicle photo — car was not available</p>
+      ) : cell.photoUrl ? (
         <a href={resolveMediaUrl(cell.photoUrl)} target="_blank" rel="noreferrer" className="inline-block">
           <img
             src={resolveMediaUrl(cell.photoUrl)}

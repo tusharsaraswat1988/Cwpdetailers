@@ -14,8 +14,9 @@ import {
   type VehicleReferencePhotos,
 } from "../vehicles/referencePhotos";
 import { isDateInPauseRange, todayStrInIST, dayBoundsIST } from "./dateUtils";
+import { classifyRouteStop, type RouteStopStatus } from "./visitOutcomes";
 
-export type RouteStopStatus = "pending" | "completed" | "missed" | "rejected";
+export type { RouteStopStatus };
 
 export type DailyRouteStop = {
   subscriptionId: number;
@@ -99,11 +100,7 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
       .limit(1);
 
     const visit = visitsToday[0];
-    let todayStatus: RouteStopStatus = "pending";
-
-    if (visit?.status === "completed") todayStatus = "completed";
-    else if (visit?.status === "rejected") todayStatus = "rejected";
-    else if (isPastDay) todayStatus = "missed";
+    const todayStatus = classifyRouteStop(visit?.status, isPastDay);
 
     stops.push({
       subscriptionId: row.subscription.id,

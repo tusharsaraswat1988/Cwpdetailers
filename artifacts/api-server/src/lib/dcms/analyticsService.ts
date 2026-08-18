@@ -3,8 +3,9 @@ import {
   dcmsSubscriptionsTable,
   dcmsVisitsTable,
   dcmsStaffAssignmentsTable,
+  dcmsPlansTable,
 } from "@workspace/db";
-import { eq, and, sql, desc, gt, lte } from "drizzle-orm";
+import { eq, and, sql, desc, gt, lte, gte, inArray } from "drizzle-orm";
 import { getFraudMetrics } from "./visitService";
 import {
   isRenewalEligible,
@@ -14,6 +15,75 @@ import {
 import { getFeedbackStats } from "./feedbackService";
 import { getStaffPerformanceMetrics } from "./staffPerformanceService";
 import { listPendingPauseRequests } from "./pauseService";
+import { isCleaningExpectedToday } from "./missedVisitScheduler";
+import { classifyTodayOutcome, customerVisitHeadline } from "./visitOutcomes";
+import { dayBoundsIST, todayStrInIST } from "./dateUtils";
+
+export async function getTodayOperationalSummary(dateStr?: string) {
+  const date = dateStr ?? todayStrInIST();
+  const { start, end } = dayBoundsIST(date);
+
+  const rows = await db
+    .select({
+      subscription: dcmsSubscriptionsTable,
+      weeklyOffs: dcmsPlansTable.weeklyOffs,
+    })
+    .from(dcmsSubscriptionsTable)
+    .innerJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
+    .where(eq(dcmsSubscriptionsTable.status, "active"));
+
+  const expectedIds: number[] = [];
+  for (const row of rows) {
+    if (await isCleaningExpectedToday(row.subscription, row.weeklyOffs, date)) {
+      expectedIds.push(row.subscription.id);
+    }
+  }
+
+  const visits = expectedIds.length === 0
+    ? []
+    : await db
+      .select({
+        subscriptionId: dcmsVisitsTable.subscriptionId,
+        status: dcmsVisitsTable.status,
+        visitTime: dcmsVisitsTable.visitTime,
+      })
+      .from(dcmsVisitsTable)
+      .where(and(
+        eq(dcmsVisitsTable.visitType, "cleaning"),
+        gte(dcmsVisitsTable.visitTime, start),
+        lte(dcmsVisitsTable.visitTime, end),
+        inArray(dcmsVisitsTable.subscriptionId, expectedIds),
+      ))
+      .orderBy(desc(dcmsVisitsTable.visitTime));
+
+  const latestBySub = new Map<number, string>();
+  for (const visit of visits) {
+    if (!latestBySub.has(visit.subscriptionId)) {
+      latestBySub.set(visit.subscriptionId, visit.status);
+    }
+  }
+
+  let completed = 0;
+  let carNotAvailable = 0;
+  let otherException = 0;
+  let stillPending = 0;
+  for (const id of expectedIds) {
+    const outcome = classifyTodayOutcome(latestBySub.get(id));
+    if (outcome === "completed") completed++;
+    else if (outcome === "car_not_available") carNotAvailable++;
+    else if (outcome === "other_exception") otherException++;
+    else stillPending++;
+  }
+
+  return {
+    date,
+    scheduled: expectedIds.length,
+    completed,
+    carNotAvailable,
+    otherException,
+    stillPending,
+  };
+}
 
 export async function getRenewalOperationsStats() {
   const renewalEligible = await db
@@ -116,10 +186,18 @@ export async function getAdminDashboardStats() {
     .from(dcmsSubscriptionsTable)
     .where(eq(dcmsSubscriptionsTable.status, "active"));
 
+  const [carNotAvailableVisits] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(dcmsVisitsTable)
+    .where(eq(dcmsVisitsTable.status, "car_not_available"));
+
+  const todayOps = await getTodayOperationalSummary();
+
   return {
     activeSubscriptions: activeSubs?.count ?? 0,
     pendingVisits: pendingVisits?.total ?? 0,
     completedVisits: completedVisits?.count ?? 0,
+    carNotAvailableVisits: carNotAvailableVisits?.count ?? 0,
     renewalsDue: renewalOps.renewalEligible,
     missedVisits: missedTotal?.total ?? 0,
     completionPercentage,
@@ -128,6 +206,7 @@ export async function getAdminDashboardStats() {
       allocated: washStats?.allocated ?? 0,
     },
     activeAssignments: activeAssignments[0]?.count ?? 0,
+    todayOps,
     fraud,
     feedback,
     renewalOps,
@@ -136,6 +215,7 @@ export async function getAdminDashboardStats() {
       staffId: s.staffId,
       staffName: s.staffName,
       completed: s.completedVisits,
+      carNotAvailable: s.carNotAvailableVisits,
       rejected: s.rejectedVisits,
     })),
     outstandingCount: renewalOps.outstandingVisits,
@@ -165,6 +245,20 @@ export async function getCustomerDashboardStats(customerId: number, vehicleId?: 
 
   const pendingFeedback = await import("./feedbackService").then(m => m.getPendingFeedbackForCustomer(customerId));
 
+  const today = todayStrInIST();
+  const { start, end } = dayBoundsIST(today);
+  const [todayVisit] = await db
+    .select()
+    .from(dcmsVisitsTable)
+    .where(and(
+      eq(dcmsVisitsTable.subscriptionId, sub.id),
+      eq(dcmsVisitsTable.visitType, "cleaning"),
+      gte(dcmsVisitsTable.visitTime, start),
+      lte(dcmsVisitsTable.visitTime, end),
+    ))
+    .orderBy(desc(dcmsVisitsTable.visitTime))
+    .limit(1);
+
   return {
     planId: sub.planId,
     subscriptionId: sub.id,
@@ -184,5 +278,9 @@ export async function getCustomerDashboardStats(customerId: number, vehicleId?: 
     renewalEligible: isRenewalEligible(sub),
     renewalBlocked: !isRenewalEligible(sub),
     pendingFeedbackVisits: pendingFeedback,
+    todayVisitStatus: todayVisit?.status ?? "pending",
+    todayVisitHeadline: todayVisit
+      ? customerVisitHeadline(todayVisit.status, todayVisit.visitType)
+      : null,
   };
 }

@@ -1,13 +1,14 @@
 -- Migration 024: Remove legacy daily_wash subscription type (DCMS is the sole daily cleaning system)
--- Safe to re-run: uses text casts and checks enum labels before altering type.
+-- Safe to re-run: compares status/type as text so it remains valid after later booking_status
+-- enum shrinks (049 removed 'en_route' / 'in_progress').
 
 DELETE FROM subscriptions WHERE type::text = 'daily_wash';
 
 UPDATE bookings
 SET status = 'cancelled',
     updated_at = NOW()
-WHERE service_type = 'daily_cleaning'
-  AND status IN ('scheduled', 'confirmed', 'en_route', 'in_progress');
+WHERE service_type::text = 'daily_cleaning'
+  AND status::text IN ('scheduled', 'confirmed', 'en_route', 'in_progress');
 
 ALTER TABLE subscriptions DROP COLUMN IF EXISTS daily_rate;
 ALTER TABLE subscriptions DROP COLUMN IF EXISTS off_days;

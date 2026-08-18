@@ -9,7 +9,7 @@ import {
   updateSubscriptionLocation, renewSubscription,
   getCustomerActiveSubscription,
 } from "../lib/dcms/subscriptionService";
-import { completeVisit, listVisits, listWashes, listServiceHistory } from "../lib/dcms/visitService";
+import { completeVisit, recordCarNotAvailable, listVisits, listWashes, listServiceHistory } from "../lib/dcms/visitService";
 import { searchVehicleByRegistration, searchVehicleFromOcrText } from "../lib/dcms/vehicleSearch";
 import { recognizePlateFromOcrText, shouldAutoSelectFromOcrConfidence } from "../lib/dcms/plateOcrEngine";
 import { searchCustomers, searchVehicles, searchStaff, searchSubscriptions } from "../lib/dcms/entitySearch";
@@ -39,7 +39,7 @@ function handleError(req: Request, res: Response, err: unknown, fallback = "Requ
   if (msg === "Outside Service Area") return res.status(422).json({ error: msg });
   if (err instanceof ImageValidationError) return res.status(422).json({ error: msg });
   if (msg.includes("not found") || msg.includes("not assigned")) return res.status(404).json({ error: msg });
-  if (msg.includes("blocked") || msg.includes("No remaining")) return res.status(400).json({ error: msg });
+  if (msg.includes("blocked") || msg.includes("No remaining") || msg.includes("already completed") || msg.includes("already recorded")) return res.status(400).json({ error: msg });
   if (msg.includes("does not match") || msg.includes("must be linked")) return res.status(400).json({ error: msg });
   return res.status(500).json({ error: msg });
 }
@@ -327,7 +327,7 @@ router.get(
       const visits = await listVisits({
         subscriptionId: req.query.subscriptionId ? Number(req.query.subscriptionId) : undefined,
         staffId: req.query.staffId ? Number(req.query.staffId) : undefined,
-        status: req.query.status as "completed" | "rejected" | undefined,
+        status: req.query.status as "completed" | "rejected" | "car_not_available" | undefined,
         month: req.query.month ? Number(req.query.month) : undefined,
         year: req.query.year ? Number(req.query.year) : undefined,
         vehicleId: req.query.vehicleId ? Number(req.query.vehicleId) : undefined,
@@ -392,6 +392,36 @@ router.post(
         stack: error.stack,
         dcmsVisitComplete: "http_handler_failed",
       }, `POST /daily-cleaning/visits/complete failed: ${error.message}`);
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.post(
+  "/daily-cleaning/visits/car-not-available",
+  requireAuth,
+  requirePermission("daily_cleaning", "complete_visits"),
+  dcmsRateLimit(30, 60_000),
+  async (req, res) => {
+    const { subscriptionId, latitude, longitude, accuracy, walkIn } = req.body ?? {};
+    try {
+      if (!subscriptionId || latitude == null || longitude == null) {
+        return res.status(400).json({ error: "subscriptionId, latitude, and longitude are required" });
+      }
+      const staffId = req.user!.staffId;
+      if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+      const result = await recordCarNotAvailable({
+        subscriptionId: Number(subscriptionId),
+        staffId,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        accuracy: accuracy != null ? Number(accuracy) : undefined,
+        performedBy: req.user!.id,
+        walkIn: Boolean(walkIn),
+      }, { log: req.log });
+      return res.status(201).json(result);
+    } catch (err) {
       return handleError(req, res, err);
     }
   },
@@ -517,7 +547,7 @@ router.get(
         vehicleId: req.query.vehicleId ? Number(req.query.vehicleId) : undefined,
         subscriptionId: req.query.subscriptionId ? Number(req.query.subscriptionId) : undefined,
         staffId: req.query.staffId ? Number(req.query.staffId) : undefined,
-        status: req.query.status as "completed" | "rejected" | undefined,
+        status: req.query.status as "completed" | "rejected" | "car_not_available" | undefined,
         from,
         to,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
@@ -746,7 +776,7 @@ router.get(
         month: req.query.month ? Number(req.query.month) : undefined,
         year: req.query.year ? Number(req.query.year) : undefined,
         vehicleId: req.query.vehicleId ? Number(req.query.vehicleId) : undefined,
-        status: "completed",
+        statuses: ["completed", "car_not_available"],
       });
       return res.json(visits);
     } catch (err) {

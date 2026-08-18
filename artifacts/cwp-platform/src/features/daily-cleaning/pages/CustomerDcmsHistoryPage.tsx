@@ -6,6 +6,7 @@ import { resolveMediaUrl } from "@/lib/media-url";
 import { format } from "date-fns";
 import { ExternalLink, CalendarClock } from "lucide-react";
 import { mapsViewUrl } from "@/lib/maps";
+import { customerVisitHeadline } from "../lib/visitLabels";
 import {
   CustomerPage,
   CustomerHeader,
@@ -62,6 +63,8 @@ export default function CustomerDcmsHistoryPage() {
                 beforePhotoUrl?: string | null;
                 afterPhotoUrl?: string | null;
               };
+              const headline = customerVisitHeadline(row.visit.status, row.visit.visitType);
+              const isUnavailable = row.visit.status === "car_not_available";
               const beforeUrl = visit.beforePhotoUrl
                 ? resolveMediaUrl(visit.beforePhotoUrl)
                 : null;
@@ -69,11 +72,11 @@ export default function CustomerDcmsHistoryPage() {
                 ? resolveMediaUrl(visit.afterPhotoUrl)
                 : null;
 
-              if (beforeUrl || afterUrl) {
+              if (!isUnavailable && (beforeUrl || afterUrl)) {
                 return (
                   <CustomerPhotoReport
                     key={row.visit.id}
-                    title={`${row.vehicleNumber} · ${row.visit.visitType}`}
+                    title={headline}
                     status={row.visit.status}
                     beforeUrl={beforeUrl}
                     afterUrl={afterUrl ?? (visit.photoUrl ? resolveMediaUrl(visit.photoUrl) : null)}
@@ -100,13 +103,14 @@ export default function CustomerDcmsHistoryPage() {
               return (
                 <CustomerCard key={row.visit.id}>
                   <div className="flex gap-3">
-                    {row.visit.photoUrl && (
+                    {!isUnavailable && row.visit.photoUrl && (
                       <img src={resolveMediaUrl(row.visit.photoUrl)} alt="Proof" className="w-16 h-16 rounded object-cover" />
                     )}
                     <div>
-                      <p className="font-medium">{format(new Date(row.visit.visitTime), "dd MMM yyyy, hh:mm a")}</p>
+                      <p className="font-medium">{headline}</p>
+                      <p className="text-sm text-muted-foreground">{format(new Date(row.visit.visitTime), "dd MMM yyyy, hh:mm a")}</p>
                       <p className="text-sm text-muted-foreground">Staff: {row.staffName}</p>
-                      <p className="text-xs text-muted-foreground">{row.visit.visitType} · {row.vehicleNumber}</p>
+                      <p className="text-xs text-muted-foreground">{row.vehicleNumber}</p>
                       {row.visit.latitude != null && row.visit.longitude != null && (
                         <a
                           href={mapsViewUrl(row.visit.latitude, row.visit.longitude)}

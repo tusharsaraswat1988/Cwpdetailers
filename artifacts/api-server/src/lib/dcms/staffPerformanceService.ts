@@ -9,12 +9,14 @@ import {
 } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { OPERATIONAL_ROLE_SLUGS, getStaffIdsWithOperationalRole } from "../staffEcosystem/operationalRoles";
+import { staffPerformanceFromCounts } from "./visitOutcomes";
 
 export type StaffPerformanceRow = {
   staffId: number;
   staffName: string;
   assignedVehicles: number;
   completedVisits: number;
+  carNotAvailableVisits: number;
   missedVisits: number;
   rejectedVisits: number;
   completionPercentage: number;
@@ -53,6 +55,7 @@ export async function getStaffPerformanceMetrics(): Promise<{
       staffId: dcmsVisitsTable.staffId,
       completed: sql<number>`count(*) filter (where ${dcmsVisitsTable.status} = 'completed')::int`,
       rejected: sql<number>`count(*) filter (where ${dcmsVisitsTable.status} = 'rejected')::int`,
+      carNotAvailable: sql<number>`count(*) filter (where ${dcmsVisitsTable.status} = 'car_not_available')::int`,
     })
     .from(dcmsVisitsTable)
     .groupBy(dcmsVisitsTable.staffId);
@@ -101,9 +104,14 @@ export async function getStaffPerformanceMetrics(): Promise<{
 
     const completed = v?.completed ?? 0;
     const rejected = v?.rejected ?? 0;
+    const carNotAvailable = v?.carNotAvailable ?? 0;
     const missed = m?.missed ?? 0;
-    const total = completed + rejected + missed;
-    const completionPercentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const scored = staffPerformanceFromCounts({
+      completed,
+      carNotAvailable,
+      rejected,
+      missed,
+    });
     const feedbackTotal = f?.total ?? 0;
     const customerRating = feedbackTotal > 0
       ? Math.round(((f?.positive ?? 0) / feedbackTotal) * 100)
@@ -113,10 +121,11 @@ export async function getStaffPerformanceMetrics(): Promise<{
       staffId,
       staffName: a?.staffName ?? "Unknown",
       assignedVehicles: a?.count ?? 0,
-      completedVisits: completed,
-      missedVisits: missed,
-      rejectedVisits: rejected,
-      completionPercentage,
+      completedVisits: scored.completedVisits,
+      carNotAvailableVisits: scored.carNotAvailableVisits,
+      missedVisits: scored.missedVisits,
+      rejectedVisits: scored.rejectedVisits,
+      completionPercentage: scored.completionPercentage,
       customerComplaints: f?.complaints ?? 0,
       customerRating,
     });

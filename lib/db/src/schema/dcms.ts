@@ -30,7 +30,7 @@ export const dcmsVisitTypeEnum = pgEnum("dcms_visit_type", ["cleaning", "wash"])
 
 
 
-export const dcmsVisitStatusEnum = pgEnum("dcms_visit_status", ["completed", "rejected"]);
+export const dcmsVisitStatusEnum = pgEnum("dcms_visit_status", ["completed", "rejected", "car_not_available"]);
 
 
 

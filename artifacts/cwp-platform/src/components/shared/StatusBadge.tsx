@@ -27,6 +27,8 @@ const statusTone: Record<string, StatusTone> = {
   cancelled: "destructive",
   approved: "success",
   rejected: "destructive",
+  car_not_available: "warning",
+  missed: "destructive",
   paid: "success",
   draft: "neutral",
   outstanding: "warning",
