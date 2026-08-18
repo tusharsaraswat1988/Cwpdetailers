@@ -72,4 +72,17 @@ describe("buildHomeDashboard", () => {
     });
     expect(model.cta.label).toBe("View Your Bill");
   });
+
+  it("shows the plan vehicle address as current location", () => {
+    const model = buildHomeDashboard({
+      recentBookings: [],
+      pendingDues: 0,
+      subscriptions: [sub({ id: 1, vehicleId: 7, serviceName: "Daily Clean + 1 Full Wash" })],
+      hasPendingFeedback: false,
+      vehicles: [{ id: 7, registrationNumber: "UP32AB1234", serviceAddress: "12 MG Road, Sigra" }],
+      solarSites: [],
+    });
+    expect(model.currentAddress.line).toBe("12 MG Road, Sigra");
+    expect(model.currentAddress.line.toLowerCase()).not.toContain("vehicle");
+  });
 });

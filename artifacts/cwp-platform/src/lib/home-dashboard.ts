@@ -58,6 +58,8 @@ type VehicleLike = {
   model?: string;
   serviceAddress?: string | null;
   address?: string | null;
+  serviceLat?: number | null;
+  serviceLng?: number | null;
 };
 
 type SolarLike = {
@@ -325,14 +327,15 @@ export function buildHomeDashboard(input: {
   const primaryPlan = pickPrimaryPlan(plans);
   const upcoming = findUpcomingBooking(input.recentBookings);
   const pendingDues = Number(input.pendingDues ?? 0);
-  const hasAssets = input.vehicles.length > 0 || input.solarSites.length > 0;
   const effectiveAddress = input.selectedAddress ?? resolveDefaultAddress({
     recentBookings: input.recentBookings,
     vehicles: input.vehicles,
     solarSites: input.solarSites,
+    planVehicleId: primaryPlan?.vehicleId,
+    planSolarSiteId: primaryPlan?.solarSiteId,
   });
 
-  const addressView = selectedToHomeAddress(effectiveAddress, hasAssets);
+  const addressView = selectedToHomeAddress(effectiveAddress);
   const currentAddress: HomeCurrentAddress = {
     line: addressView.line,
     assetLabel: addressView.assetLabel,

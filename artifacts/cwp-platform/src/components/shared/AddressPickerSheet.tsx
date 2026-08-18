@@ -15,6 +15,7 @@ import {
 } from "@/features/customers/lib/serviceAddress";
 import { isGoogleMapsConfigured } from "@/lib/maps";
 import type { LocationValue, SavedLocation } from "@/features/master-data/api";
+import { addressesMatch } from "@/lib/selected-address";
 import { Check, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +23,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   value: LocationValue | null;
-  onSelect: (loc: LocationValue) => void;
+  onSelect: (loc: LocationValue, meta?: { assetLabel?: string }) => void;
   savedLocations?: SavedLocation[];
   onSaveNew?: (label: string, loc: LocationValue) => void;
 };
@@ -105,7 +106,7 @@ export function AddressPickerSheet({
 
   const confirmDraft = () => {
     if (!draft) return;
-    onSelect(draft);
+    onSelect(draft, { assetLabel: addressForm.serviceLocationLabel.trim() || "Home" });
     if (onSaveNew && mode === "new") {
       onSaveNew(addressForm.serviceLocationLabel.trim() || "Home", draft);
     }
@@ -119,7 +120,7 @@ export function AddressPickerSheet({
       longitude: loc.longitude,
       placeId: loc.placeId,
     };
-    onSelect(next);
+    onSelect(next, { assetLabel: loc.label });
     onOpenChange(false);
   };
 
@@ -149,10 +150,7 @@ export function AddressPickerSheet({
       {mode === "list" && savedLocations && savedLocations.length > 0 ? (
         <div className="space-y-2 max-h-[50vh] overflow-y-auto">
           {savedLocations.map(loc => {
-            const selected =
-              value
-              && Math.abs(value.latitude - loc.latitude) < 1e-6
-              && Math.abs(value.longitude - loc.longitude) < 1e-6;
+            const selected = addressesMatch(value, loc);
             return (
               <button
                 key={loc.id}

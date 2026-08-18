@@ -32,6 +32,8 @@ export type CustomerPlan = {
   expiryDate: string | null;
   nextVisitDate: string | null;
   vehicleOrSite: string | null;
+  vehicleId: number | null;
+  solarSiteId: number | null;
   dueAmount: number;
   source?: "subscription" | "dcms";
   detailHref: string;
@@ -148,6 +150,8 @@ export function subscriptionToPlan(sub: RawSubscription): CustomerPlan {
     expiryDate: formatExpiry(sub.endDate),
     nextVisitDate: sub.nextServiceDate ?? sub.nextDueDate ?? null,
     vehicleOrSite: sub.vehicleName ?? null,
+    vehicleId: sub.vehicleId ?? null,
+    solarSiteId: sub.solarSiteId ?? null,
     dueAmount: Number(sub.dueAmount ?? 0),
     source: sub.source,
     detailHref,

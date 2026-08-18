@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import {
+  useGetCustomer,
+  getGetCustomerQueryKey,
   useGetCustomerSummary,
   getGetCustomerSummaryQueryKey,
   useListSubscriptions,
@@ -10,14 +12,15 @@ import {
   getListSolarSitesQueryKey,
 } from "@workspace/api-client-react";
 import { useAccountScope } from "@/lib/account-scope";
-import { useSavedLocations } from "@/features/master-data/api";
+import { useSavedLocations, useCreateSavedLocation } from "@/features/master-data/api";
 import { useSelectedAddress } from "@/hooks/use-selected-address";
+import { useCustomerLocationSources } from "@/hooks/use-customer-location-sources";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
 import { PasswordSetupNudge } from "@/components/auth/PasswordSetupNudge";
 import { usePendingFeedback } from "@/features/daily-cleaning/api";
-import { buildHomeDashboard } from "@/lib/home-dashboard";
-import type { RawSubscription } from "@/lib/customer-plans";
+import { buildHomeDashboard, pickPrimaryPlan } from "@/lib/home-dashboard";
+import { activePlans, type RawSubscription } from "@/lib/customer-plans";
 import { CurrentAddressBar } from "@/components/home/CurrentAddressBar";
 import { OperationalHero } from "@/components/home/OperationalHero";
 import { AdaptivePrimaryCta } from "@/components/home/AdaptivePrimaryCta";
@@ -52,17 +55,21 @@ type SolarRow = {
   placeId?: string | null;
 };
 
+function querySettled(q: { isFetched: boolean; isError: boolean }): boolean {
+  return q.isFetched || q.isError;
+}
+
 export default function CustomerDashboard() {
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
 
-  const { data: summary, isLoading: summaryLoading } = useGetCustomerSummary(customerId ?? 0, {
+  const summaryQuery = useGetCustomerSummary(customerId ?? 0, {
     query: {
       queryKey: getGetCustomerSummaryQueryKey(customerId ?? 0),
       enabled: customerId != null,
     },
   });
 
-  const { data: subs, isLoading: subsLoading } = useListSubscriptions(
+  const subsQuery = useListSubscriptions(
     { customerId: String(customerId ?? "") } as Parameters<typeof useListSubscriptions>[0],
     {
       query: {
@@ -72,45 +79,95 @@ export default function CustomerDashboard() {
     },
   );
 
-  const { data: vehicles } = useListVehicles(
+  const vehiclesQuery = useListVehicles(
     { customerId: customerId ?? 0 },
     { query: { queryKey: getListVehiclesQueryKey({ customerId: customerId ?? 0 }), enabled: customerId != null } },
   );
 
-  const { data: solarSites } = useListSolarSites(
+  const solarQuery = useListSolarSites(
     { customerId: customerId ?? 0 },
     { query: { queryKey: getListSolarSitesQueryKey({ customerId: customerId ?? 0 }), enabled: customerId != null } },
   );
 
-  const { data: savedLocations } = useSavedLocations(customerId ?? undefined);
-  const { data: pendingFeedback } = usePendingFeedback();
+  const customerQuery = useGetCustomer(customerId ?? 0, {
+    query: {
+      queryKey: getGetCustomerQueryKey(customerId ?? 0),
+      enabled: customerId != null,
+    },
+  });
 
-  const vehicleRows = (vehicles ?? []) as VehicleRow[];
-  const solarRows = (solarSites ?? []) as SolarRow[];
+  const savedQuery = useSavedLocations(customerId ?? undefined);
+  const { serviceLocations, structuredAddresses, ready: locationCatalogReady } = useCustomerLocationSources(customerId);
+  const { data: pendingFeedback } = usePendingFeedback();
+  const createSavedLocation = useCreateSavedLocation();
+
+  const vehicleRows = useMemo(
+    () => (vehiclesQuery.data ?? []) as VehicleRow[],
+    [vehiclesQuery.data],
+  );
+  const solarRows = useMemo(
+    () => (solarQuery.data ?? []) as SolarRow[],
+    [solarQuery.data],
+  );
+  const subscriptions = useMemo(
+    () => (subsQuery.data?.data ?? []) as RawSubscription[],
+    [subsQuery.data],
+  );
+  const primaryPlan = useMemo(
+    () => pickPrimaryPlan(activePlans(subscriptions)),
+    [subscriptions],
+  );
+  const planVehicleId = primaryPlan?.vehicleId ?? subscriptions.find(s => s.vehicleId != null)?.vehicleId ?? null;
+  const planSolarSiteId = primaryPlan?.solarSiteId ?? subscriptions.find(s => s.solarSiteId != null)?.solarSiteId ?? null;
+
+  const addressSourcesReady = customerId == null || (
+    locationCatalogReady
+    && querySettled(vehiclesQuery)
+    && querySettled(solarQuery)
+    && querySettled(savedQuery)
+    && querySettled(customerQuery)
+  );
 
   const addressContext = useMemo(() => ({
-    recentBookings: summary?.recentBookings,
+    ready: addressSourcesReady,
+    recentBookings: summaryQuery.data?.recentBookings,
     vehicles: vehicleRows,
     solarSites: solarRows,
-    savedLocations,
-  }), [summary?.recentBookings, vehicleRows, solarRows, savedLocations]);
+    savedLocations: savedQuery.data,
+    serviceLocations,
+    structuredAddresses,
+    profileAddress: customerQuery.data?.address ?? null,
+    planVehicleId,
+    planSolarSiteId,
+  }), [
+    addressSourcesReady,
+    summaryQuery.data?.recentBookings,
+    vehicleRows,
+    solarRows,
+    savedQuery.data,
+    serviceLocations,
+    structuredAddresses,
+    customerQuery.data?.address,
+    planVehicleId,
+    planSolarSiteId,
+  ]);
 
-  const { selected, selectLocation, savedLocations: saved } = useSelectedAddress(customerId, addressContext);
+  const { selected, initialized, selectLocation, savedLocations: saved } = useSelectedAddress(customerId, addressContext);
 
   const dashboard = useMemo(() => {
     if (customerId == null) return null;
     return buildHomeDashboard({
-      recentBookings: summary?.recentBookings,
-      pendingDues: summary?.pendingDues,
-      subscriptions: (subs?.data ?? []) as RawSubscription[],
+      recentBookings: summaryQuery.data?.recentBookings,
+      pendingDues: summaryQuery.data?.pendingDues,
+      subscriptions,
       hasPendingFeedback: (pendingFeedback?.length ?? 0) > 0,
       vehicles: vehicleRows,
       solarSites: solarRows,
       selectedAddress: selected,
     });
-  }, [customerId, summary, subs, pendingFeedback, vehicleRows, solarRows, selected]);
+  }, [customerId, summaryQuery.data, subscriptions, pendingFeedback, vehicleRows, solarRows, selected]);
 
-  const loading = summaryLoading || subsLoading;
+  const loading = summaryQuery.isLoading || subsQuery.isLoading || !addressSourcesReady || !initialized;
 
   if (scopeLoading) {
     return (
@@ -161,6 +218,17 @@ export default function CustomerDashboard() {
                   selected={selected}
                   savedLocations={saved}
                   onSelectAddress={selectLocation}
+                  onSaveNew={(label, loc) => {
+                    createSavedLocation.mutate({
+                      customerId,
+                      label,
+                      address: loc.address,
+                      latitude: loc.latitude,
+                      longitude: loc.longitude,
+                      placeId: loc.placeId,
+                      isDefault: saved.length === 0,
+                    });
+                  }}
                 />
                 <OperationalHero hero={dashboard.hero} />
                 <AdaptivePrimaryCta cta={dashboard.cta} />

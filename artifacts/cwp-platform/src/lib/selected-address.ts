@@ -7,6 +7,42 @@ export type SelectedAddress = LocationValue & {
   assetLabel?: string;
 };
 
+export type SavedLocationLike = {
+  id: number;
+  customerId?: number;
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  placeId?: string;
+  isDefault?: boolean;
+};
+
+export type ServiceLocationLike = {
+  id: number;
+  label: string;
+  address?: string | null;
+  city?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  placeId?: string | null;
+  isDefault?: boolean;
+};
+
+export type StructuredAddressLike = {
+  id: number;
+  nickname?: string | null;
+  formattedAddress?: string | null;
+  houseNumber?: string | null;
+  buildingName?: string | null;
+  area?: string | null;
+  postalCode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  placeId?: string | null;
+  isDefault?: boolean;
+};
+
 type VehicleLike = {
   id: number;
   registrationNumber?: string;
@@ -27,10 +63,52 @@ type SolarLike = {
   placeId?: string | null;
 };
 
+type AddressCandidate = SelectedAddress & {
+  isDefault?: boolean;
+};
+
+export type ResolveAddressInput = {
+  recentBookings?: Booking[];
+  vehicles: VehicleLike[];
+  solarSites: SolarLike[];
+  savedLocations?: SavedLocationLike[];
+  serviceLocations?: ServiceLocationLike[];
+  structuredAddresses?: StructuredAddressLike[];
+  profileAddress?: string | null;
+  planVehicleId?: number | null;
+  planSolarSiteId?: number | null;
+};
+
 const STORAGE_PREFIX = "cwp:selected-address:";
+const EMPTY_HOME_LINE = "Add where we should arrive";
 
 function storageKey(customerId: number): string {
   return `${STORAGE_PREFIX}${customerId}`;
+}
+
+export function hasMapPin(loc: { latitude?: number | null; longitude?: number | null }): boolean {
+  const lat = loc.latitude;
+  const lng = loc.longitude;
+  return lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+}
+
+function normalizeLine(line: string): string {
+  return line.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function addressKey(line: string, lat?: number | null, lng?: number | null): string {
+  const n = normalizeLine(line);
+  if (hasMapPin({ latitude: lat, longitude: lng })) {
+    return `${n}|${Number(lat).toFixed(5)}|${Number(lng).toFixed(5)}`;
+  }
+  return n;
+}
+
+function coords(lat?: number | null, lng?: number | null): { latitude: number; longitude: number } {
+  if (hasMapPin({ latitude: lat, longitude: lng })) {
+    return { latitude: lat as number, longitude: lng as number };
+  }
+  return { latitude: 0, longitude: 0 };
 }
 
 export function loadSelectedAddress(customerId: number): SelectedAddress | null {
@@ -53,14 +131,11 @@ export function saveSelectedAddress(customerId: number, address: SelectedAddress
 
 function locationFromVehicle(v: VehicleLike): SelectedAddress | null {
   const line = (v.serviceAddress ?? v.address ?? "").trim();
-  const lat = v.serviceLat;
-  const lng = v.serviceLng;
-  if (!line || lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (!line) return null;
   const assetLabel = [v.registrationNumber, v.make, v.model].filter(Boolean).join(" · ");
   return {
     address: line,
-    latitude: lat,
-    longitude: lng,
+    ...coords(v.serviceLat, v.serviceLng),
     placeId: v.placeId ?? undefined,
     assetId: v.id,
     assetType: "vehicle",
@@ -70,23 +145,21 @@ function locationFromVehicle(v: VehicleLike): SelectedAddress | null {
 
 function locationFromSolar(s: SolarLike): SelectedAddress | null {
   const line = (s.address ?? "").trim();
-  const lat = s.serviceLat;
-  const lng = s.serviceLng;
-  if (!line || lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-    if (line) {
-      return { address: line, latitude: 0, longitude: 0, assetId: s.id, assetType: "solar", assetLabel: "Solar site" };
-    }
-    return null;
-  }
+  if (!line) return null;
   return {
     address: line,
-    latitude: lat,
-    longitude: lng,
+    ...coords(s.serviceLat, s.serviceLng),
     placeId: s.placeId ?? undefined,
     assetId: s.id,
     assetType: "solar",
     assetLabel: "Solar site",
   };
+}
+
+function lineFromStructured(row: StructuredAddressLike): string {
+  const formatted = (row.formattedAddress ?? "").trim();
+  if (formatted) return formatted;
+  return [row.houseNumber, row.buildingName, row.area, row.postalCode].filter(Boolean).join(", ").trim();
 }
 
 function findUpcomingBooking(bookings: Booking[] | undefined): Booking | undefined {
@@ -100,47 +173,150 @@ function findUpcomingBooking(bookings: Booking[] | undefined): Booking | undefin
   );
 }
 
-/** Resolve default service address from booking → vehicle → solar. */
-export function resolveDefaultAddress(input: {
-  recentBookings?: Booking[];
-  vehicles: VehicleLike[];
-  solarSites: SolarLike[];
-}): SelectedAddress | null {
+function pushCandidate(list: AddressCandidate[], seen: Set<string>, next: AddressCandidate | null) {
+  const line = next?.address?.trim();
+  if (!next || !line) return;
+  const key = addressKey(line, next.latitude, next.longitude);
+  if (seen.has(key)) return;
+  seen.add(key);
+  list.push({ ...next, address: line });
+}
+
+/** Known service locations for this customer, de-duplicated, default first. */
+export function collectAddressCandidates(input: ResolveAddressInput): AddressCandidate[] {
+  const list: AddressCandidate[] = [];
+  const seen = new Set<string>();
+
+  for (const loc of input.savedLocations ?? []) {
+    pushCandidate(list, seen, {
+      address: loc.address,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      placeId: loc.placeId,
+      assetLabel: loc.label || undefined,
+      isDefault: loc.isDefault,
+    });
+  }
+
+  for (const loc of input.serviceLocations ?? []) {
+    const line = [loc.address?.trim(), loc.city?.trim()].filter(Boolean).join(", ");
+    if (!line) continue;
+    pushCandidate(list, seen, {
+      address: line,
+      ...coords(loc.latitude, loc.longitude),
+      placeId: loc.placeId ?? undefined,
+      assetLabel: loc.label || undefined,
+      isDefault: loc.isDefault,
+    });
+  }
+
+  for (const row of input.structuredAddresses ?? []) {
+    pushCandidate(list, seen, {
+      address: lineFromStructured(row),
+      ...coords(row.latitude, row.longitude),
+      placeId: row.placeId ?? undefined,
+      assetLabel: row.nickname?.trim() || undefined,
+      isDefault: row.isDefault,
+    });
+  }
+
+  if (input.planVehicleId != null) {
+    const vehicle = input.vehicles.find(v => v.id === input.planVehicleId);
+    if (vehicle) pushCandidate(list, seen, locationFromVehicle(vehicle));
+  }
+  if (input.planSolarSiteId != null) {
+    const solar = input.solarSites.find(s => s.id === input.planSolarSiteId);
+    if (solar) pushCandidate(list, seen, locationFromSolar(solar));
+  }
+
+  for (const v of input.vehicles) {
+    pushCandidate(list, seen, locationFromVehicle(v));
+  }
+  for (const s of input.solarSites) {
+    pushCandidate(list, seen, locationFromSolar(s));
+  }
+
+  const profile = (input.profileAddress ?? "").trim();
+  if (profile) {
+    pushCandidate(list, seen, { address: profile, latitude: 0, longitude: 0, assetLabel: "Home" });
+  }
+
   const upcoming = findUpcomingBooking(input.recentBookings);
   if (upcoming?.address?.trim()) {
-    return {
+    pushCandidate(list, seen, {
       address: upcoming.address.trim(),
       latitude: upcoming.locationLat ?? 0,
       longitude: upcoming.locationLng ?? 0,
       assetLabel: upcoming.vehicleInfo?.trim() || undefined,
-    };
+    });
   }
 
-  const vehicle = input.vehicles.find(v => (v.serviceAddress ?? v.address ?? "").trim().length > 0);
-  const fromVehicle = vehicle ? locationFromVehicle(vehicle) : null;
-  if (fromVehicle) return fromVehicle;
+  return list;
+}
 
-  const solar = input.solarSites.find(s => (s.address ?? "").trim().length > 0);
-  if (solar) return locationFromSolar(solar);
+/**
+ * Urban Company-style location: last choice → default → single address →
+ * active plan asset → first known location.
+ */
+export function resolveDefaultAddress(input: ResolveAddressInput): SelectedAddress | null {
+  const candidates = collectAddressCandidates(input);
 
-  return null;
+  const preferred = candidates.find(c => c.isDefault);
+  if (preferred) return preferred;
+  if (candidates.length === 1) return candidates[0] ?? null;
+
+  if (input.planVehicleId != null) {
+    const fromPlan = candidates.find(c => c.assetType === "vehicle" && c.assetId === input.planVehicleId);
+    if (fromPlan) return fromPlan;
+  }
+  if (input.planSolarSiteId != null) {
+    const fromPlan = candidates.find(c => c.assetType === "solar" && c.assetId === input.planSolarSiteId);
+    if (fromPlan) return fromPlan;
+  }
+
+  return candidates[0] ?? null;
+}
+
+export function toPickerLocations(
+  customerId: number,
+  input: ResolveAddressInput,
+): SavedLocationLike[] {
+  return collectAddressCandidates(input).map((c, index) => ({
+    id: index + 1,
+    customerId,
+    label: c.assetLabel?.trim() || "Saved",
+    address: c.address,
+    latitude: c.latitude,
+    longitude: c.longitude,
+    placeId: c.placeId,
+    isDefault: Boolean(c.isDefault),
+  }));
+}
+
+export function addressesMatch(
+  a: { address?: string; latitude?: number; longitude?: number } | null | undefined,
+  b: { address?: string; latitude?: number; longitude?: number } | null | undefined,
+): boolean {
+  if (!a?.address?.trim() || !b?.address?.trim()) return false;
+  if (hasMapPin(a) && hasMapPin(b)) {
+    return Math.abs((a.latitude ?? 0) - (b.latitude ?? 0)) < 1e-6
+      && Math.abs((a.longitude ?? 0) - (b.longitude ?? 0)) < 1e-6;
+  }
+  return normalizeLine(a.address) === normalizeLine(b.address);
 }
 
 export function selectedToHomeAddress(
   selected: SelectedAddress | null,
-  hasAssets: boolean,
 ): { line: string; assetLabel?: string; complete: boolean } {
   if (selected?.address?.trim()) {
     return {
       line: selected.address.trim(),
       assetLabel: selected.assetLabel,
-      complete: selected.latitude !== 0 || selected.longitude !== 0
-        ? Number.isFinite(selected.latitude) && Number.isFinite(selected.longitude)
-        : true,
+      complete: hasMapPin(selected),
     };
   }
   return {
-    line: hasAssets ? "Add where we should arrive" : "Add your vehicle or solar site",
+    line: EMPTY_HOME_LINE,
     complete: false,
   };
 }

@@ -5,7 +5,12 @@ import {
   loadSelectedAddress,
   resolveDefaultAddress,
   saveSelectedAddress,
+  toPickerLocations,
+  addressesMatch,
+  type SavedLocationLike,
   type SelectedAddress,
+  type ServiceLocationLike,
+  type StructuredAddressLike,
 } from "@/lib/selected-address";
 
 type VehicleLike = {
@@ -28,29 +33,66 @@ type SolarLike = {
   placeId?: string | null;
 };
 
+export type SelectedAddressContext = {
+  ready: boolean;
+  recentBookings?: Booking[];
+  vehicles: VehicleLike[];
+  solarSites: SolarLike[];
+  savedLocations?: SavedLocation[];
+  serviceLocations?: ServiceLocationLike[];
+  structuredAddresses?: StructuredAddressLike[];
+  profileAddress?: string | null;
+  planVehicleId?: number | null;
+  planSolarSiteId?: number | null;
+};
+
 export function useSelectedAddress(
   customerId: number | null,
-  context: {
-    recentBookings?: Booking[];
-    vehicles: VehicleLike[];
-    solarSites: SolarLike[];
-    savedLocations?: SavedLocation[];
-  },
+  context: SelectedAddressContext,
 ) {
   const [selected, setSelected] = useState<SelectedAddress | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  const defaultAddress = useMemo(
-    () => resolveDefaultAddress(context),
-    [context.recentBookings, context.vehicles, context.solarSites],
+  const resolveInput = useMemo(() => ({
+    recentBookings: context.recentBookings,
+    vehicles: context.vehicles,
+    solarSites: context.solarSites,
+    savedLocations: context.savedLocations,
+    serviceLocations: context.serviceLocations,
+    structuredAddresses: context.structuredAddresses,
+    profileAddress: context.profileAddress,
+    planVehicleId: context.planVehicleId,
+    planSolarSiteId: context.planSolarSiteId,
+  }), [
+    context.recentBookings,
+    context.vehicles,
+    context.solarSites,
+    context.savedLocations,
+    context.serviceLocations,
+    context.structuredAddresses,
+    context.profileAddress,
+    context.planVehicleId,
+    context.planSolarSiteId,
+  ]);
+
+  const inferred = useMemo(
+    () => resolveDefaultAddress(resolveInput),
+    [resolveInput],
   );
 
+  const pickerLocations = useMemo((): SavedLocation[] => {
+    if (customerId == null) return context.savedLocations ?? [];
+    return toPickerLocations(customerId, resolveInput) as SavedLocation[];
+  }, [customerId, resolveInput, context.savedLocations]);
+
   useEffect(() => {
-    if (customerId == null) return;
+    if (customerId == null || !context.ready) return;
     const stored = loadSelectedAddress(customerId);
-    setSelected(stored ?? defaultAddress);
+    const next = stored ?? inferred;
+    setSelected(prev => (next && addressesMatch(prev, next) ? prev : next));
+    if (!stored && inferred) saveSelectedAddress(customerId, inferred);
     setInitialized(true);
-  }, [customerId, defaultAddress]);
+  }, [customerId, context.ready, inferred]);
 
   const setAddress = useCallback((next: SelectedAddress) => {
     if (customerId == null) return;
@@ -58,11 +100,14 @@ export function useSelectedAddress(
     saveSelectedAddress(customerId, next);
   }, [customerId]);
 
-  const selectLocation = useCallback((loc: LocationValue, meta?: Pick<SelectedAddress, "assetId" | "assetType" | "assetLabel">) => {
+  const selectLocation = useCallback((
+    loc: LocationValue,
+    meta?: Pick<SelectedAddress, "assetId" | "assetType" | "assetLabel">,
+  ) => {
     setAddress({ ...loc, ...meta });
   }, [setAddress]);
 
-  const selectFromSaved = useCallback((loc: SavedLocation) => {
+  const selectFromSaved = useCallback((loc: SavedLocationLike) => {
     selectLocation({
       address: loc.address,
       latitude: loc.latitude,
@@ -77,6 +122,6 @@ export function useSelectedAddress(
     setAddress,
     selectLocation,
     selectFromSaved,
-    savedLocations: context.savedLocations ?? [],
+    savedLocations: pickerLocations,
   };
 }
