@@ -19,6 +19,9 @@ const toneStyles: Record<StatusTone, string> = {
 const statusTone: Record<string, StatusTone> = {
   open: "info",
   pending: "warning",
+  pending_customer_approval: "warning",
+  customer_approved: "success",
+  otp_verified: "success",
   assigned: "info",
   ready: "progress",
   started: "progress",

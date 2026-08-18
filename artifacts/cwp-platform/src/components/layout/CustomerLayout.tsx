@@ -7,6 +7,7 @@ import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicat
 import { useBrandingPortal } from "@/lib/branding";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { CustomerThemeRoot, CustomerButton } from "@/features/customer-ds";
+import { CustomerExtraServiceApprovalHost } from "@/features/extra-service/components/CustomerExtraServiceApprovalHost";
 import {
   LogOut, LayoutDashboard, Calendar, ClipboardList, User, Car, Bell,
 } from "lucide-react";
@@ -107,6 +108,7 @@ export default function CustomerLayout({ children, maxWidth = "sm" }: CustomerLa
         bottomNav={navItems}
       >
         {children}
+        <CustomerExtraServiceApprovalHost />
       </AppShell>
     </CustomerThemeRoot>
   );

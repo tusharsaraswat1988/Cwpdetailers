@@ -31,6 +31,8 @@ export type DailyRouteStop = {
   planName: string;
   subscriptionStatus: string;
   remainingCleanings: number;
+  remainingWashes: number;
+  customerId: number;
   referencePhotos: VehicleReferencePhotos;
   referencePhotosComplete: boolean;
   location: { latitude: number; longitude: number; radiusMeters: number } | null;
@@ -58,6 +60,7 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
       subscription: dcmsSubscriptionsTable,
       planName: dcmsPlansTable.name,
       customerName: customersTable.name,
+      customerId: customersTable.id,
       vehicleNumber: vehiclesTable.registrationNumber,
       vehicleMake: vehiclesTable.make,
       vehicleModel: vehiclesTable.model,
@@ -115,6 +118,8 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
       planName: row.planName,
       subscriptionStatus: row.subscription.status,
       remainingCleanings: row.subscription.remainingCleanings,
+      remainingWashes: row.subscription.remainingWashes,
+      customerId: row.customerId,
       referencePhotos: mapVehicleReferencePhotos(row),
       referencePhotosComplete: Boolean(row.refPhotoFrontUrl && row.refPhotoRearUrl),
       location: row.location ? {

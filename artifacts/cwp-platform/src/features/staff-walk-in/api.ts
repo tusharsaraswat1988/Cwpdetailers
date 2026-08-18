@@ -67,6 +67,8 @@ export type WalkInCustomerContext = {
 
 export type WalkInDcmsStop = {
   subscriptionId: number;
+  customerId: number;
+  vehicleId: number;
   customerName: string;
   vehicleNumber: string;
   vehicleMake: string;

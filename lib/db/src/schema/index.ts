@@ -51,5 +51,6 @@ export * from "./assets";
 export * from "./service-management";
 export * from "./legacy-migration";
 export * from "./dcms";
+export * from "./extra-service-requests";
 export * from "./push-notifications";
 export * from "./staff-location";

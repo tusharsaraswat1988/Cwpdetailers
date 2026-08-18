@@ -761,6 +761,15 @@ export async function completeExecution(
   }
 
   const actor = actorFromReq(req);
+  const staffId = req.scope?.staffId ?? null;
+  try {
+    const { consumeExtraServiceOnCompletion } = await import("../extra-service/consumeOnCompletion");
+    await consumeExtraServiceOnCompletion(executionId, actor.actorId ?? staffId ?? 0);
+  } catch (err) {
+    req.log.error({ err, executionId }, "Extra-service completion consume failed");
+    throw err;
+  }
+
   const now = new Date();
   await db.update(serviceExecutionsTable)
     .set({
@@ -775,7 +784,6 @@ export async function completeExecution(
     })
     .where(eq(serviceExecutionsTable.id, executionId));
 
-  const staffId = req.scope?.staffId ?? null;
   if (input.photos?.length) {
     for (const p of input.photos) {
       if (p.latitude == null || p.longitude == null) {

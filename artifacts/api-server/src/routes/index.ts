@@ -12,6 +12,7 @@ import bookingsRouter from "./bookings";
 import staffRouter from "./staff";
 import staffEcosystemRouter from "./staff-ecosystem";
 import staffWalkInRouter from "./staff-walk-in";
+import extraServiceRouter from "./extra-service";
 import complaintsRouter from "./complaints";
 import paymentsRouter from "./payments";
 import branchesRouter from "./branches";
@@ -46,7 +47,7 @@ import assignmentsRouter from "./assignments";
 import serviceExecutionsRouter from "./service-executions";
 import jobsRouter from "./jobs";
 import bookingPlatformRouter from "./booking-platform";
-import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX } from "../middlewares/permissions";
+import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
 
@@ -163,8 +164,9 @@ router.use(
   ]),
   bookingPlatformRouter,
 );
-// Walk-in must be registered before staff CRUD guards — dedicated guard, not staff:create.
+// Walk-in / extra-service must be registered before staff CRUD guards.
 router.use(guardWalkInRoutes(), staffWalkInRouter);
+router.use(extraServiceRouter);
 router.use(
   guardResource("staff", [
     { match: /\/verify$/, method: "POST", action: "approve" },
@@ -179,7 +181,7 @@ router.use(
     { match: /\/documents$/, method: "POST", action: "edit" },
     { match: /\/documents\/\d+\/replace$/, method: "POST", action: "edit" },
     { match: /\/notes$/, method: "POST", action: "edit" },
-  ], [WALK_IN_PATH_PREFIX]),
+  ], [WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX]),
   staffRouter,
 );
 router.use(
@@ -193,7 +195,7 @@ router.use(
     { match: /\/me\/ecosystem$/, method: "PATCH", action: "view" },
     { match: /\/me\/documents/, method: "POST", action: "view" },
     { match: /\/me\/team-complaints\/\d+$/, method: "PATCH", action: "view" },
-  ], [WALK_IN_PATH_PREFIX]),
+  ], [WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX]),
   staffEcosystemRouter,
 );
 router.use(guardResource("complaints"), complaintsRouter);

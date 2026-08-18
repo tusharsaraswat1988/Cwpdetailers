@@ -12,6 +12,7 @@ const METHOD_TO_ACTION: Record<string, string> = {
 
 /** Walk-in routes share the /staff URL prefix but are not staff CRUD. */
 export const WALK_IN_PATH_PREFIX = /^\/staff\/walk-in(?:\/|$)/;
+export const EXTRA_SERVICE_STAFF_PATH_PREFIX = /^\/staff\/extra-service(?:\/|$)/;
 
 export type PermissionOverride = { match: RegExp; method?: string; action: string };
 

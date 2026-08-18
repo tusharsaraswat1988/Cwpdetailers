@@ -791,6 +791,8 @@ function consolidateWalkInPackages(packages: WalkInPackageCard[]): WalkInPackage
 
 export type WalkInDcmsStop = {
   subscriptionId: number;
+  customerId: number;
+  vehicleId: number;
   customerName: string;
   vehicleNumber: string;
   vehicleMake: string;
@@ -844,6 +846,8 @@ export async function getWalkInDcmsStop(
 
   return {
     subscriptionId: row.sub.id,
+    customerId: row.sub.customerId,
+    vehicleId: row.sub.vehicleId,
     customerName: row.customerName,
     vehicleNumber: row.vehicleNumber,
     vehicleMake: row.vehicleMake,

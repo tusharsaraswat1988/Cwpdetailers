@@ -61,6 +61,10 @@ function isStaffSelfService(req: Request): boolean {
     return method === "GET" || method === "PATCH" || method === "POST";
   }
 
+  if (path.startsWith("/staff/extra-service/")) {
+    return method === "GET" || method === "POST";
+  }
+
   const ownStaff = path.match(/^\/staff\/(\d+)\/(attendance|performance)(\/|$)/);
   if (ownStaff && parseInt(ownStaff[1]!, 10) === staffId) {
     if (path.includes("/attendance") && (method === "GET" || method === "POST")) return true;
@@ -82,6 +86,10 @@ function isCustomerSelfService(req: Request): boolean {
 
   if (path === "/customers/me" || path.startsWith("/customers/me/")) {
     return method === "GET" || method === "PATCH";
+  }
+
+  if (path.startsWith("/customer/extra-service/")) {
+    return method === "GET" || method === "POST";
   }
 
   const ownCustomer = path.match(/^\/customers\/(\d+)$/);

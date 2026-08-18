@@ -17,9 +17,21 @@ import { getStaffLocation } from "@/lib/location";
 import { buildNavigateUrl } from "@/lib/maps";
 import { PlateScanFlow, type PlateScanMeta } from "../components/PlateScanFlow";
 import { cn } from "@/lib/utils";
+import {
+  ExtraServiceStatusCard,
+  StaffAddServiceButton,
+  StaffAddServiceSheet,
+} from "@/features/extra-service/components/StaffAddServiceSheet";
+import {
+  useStaffExtraServiceRequests,
+  useVerifyExtraServiceOtp,
+  type ExtraServiceRequestView,
+} from "@/features/extra-service/api";
 
 type RouteStop = {
   subscriptionId: number;
+  customerId?: number;
+  vehicleId?: number;
   customerName: string;
   vehicleNumber: string;
   vehicleMake: string;
@@ -62,6 +74,9 @@ export function StaffDailyRouteSimplified() {
   const [scanOpen, setScanOpen] = useState(false);
   const [plateScanMeta, setPlateScanMeta] = useState<PlateScanMeta | null>(null);
   const [confirmUnavailable, setConfirmUnavailable] = useState(false);
+  const [addServiceOpen, setAddServiceOpen] = useState(false);
+  const [extraOtp, setExtraOtp] = useState("");
+  const [extraOtpError, setExtraOtpError] = useState<string | null>(null);
 
   const routeStops = (data?.stops ?? []) as RouteStop[];
   const walkInStop = walkInStopQuery.data;
@@ -69,6 +84,8 @@ export function StaffDailyRouteSimplified() {
   const stops: RouteStop[] = walkInMode && walkInStop
     ? [{
         subscriptionId: walkInStop.subscriptionId,
+        customerId: walkInStop.customerId,
+        vehicleId: walkInStop.vehicleId,
         customerName: walkInStop.customerName,
         vehicleNumber: walkInStop.vehicleNumber,
         vehicleMake: walkInStop.vehicleMake,
@@ -93,6 +110,15 @@ export function StaffDailyRouteSimplified() {
   const showPendingActions = current?.todayStatus === "pending" || current?.todayStatus === "rejected";
   const showSameDayRecovery = current?.todayStatus === "car_not_available" && visitType === "cleaning";
   const actionPending = completeVisit.isPending || recordCarNotAvailable.isPending;
+  const extraRequests = useStaffExtraServiceRequests(current?.customerId, {
+    enabled: current?.customerId != null,
+    refetchInterval: 3000,
+  });
+  const verifyExtra = useVerifyExtraServiceOtp();
+  const extraRequest = extraRequests.data?.requests.find((r: ExtraServiceRequestView) =>
+    r.vehicleId === current?.vehicleId
+    || (current?.vehicleId == null && r.customerId === current?.customerId),
+  ) ?? extraRequests.data?.requests[0];
 
   const handlePlateConfirmed = useCallback(({ subscriptionId, scanMeta }: {
     subscriptionId: number;
@@ -335,6 +361,38 @@ export function StaffDailyRouteSimplified() {
             </div>
           )}
 
+          {extraRequest && extraRequest.status !== "rejected" && extraRequest.status !== "cancelled" && (
+            <ExtraServiceStatusCard
+              request={extraRequest}
+              otp={extraOtp}
+              onOtpChange={(v) => { setExtraOtp(v); setExtraOtpError(null); }}
+              verifying={verifyExtra.isPending}
+              error={extraOtpError}
+              onVerify={() => {
+                verifyExtra.mutate(
+                  { id: extraRequest.id, code: extraOtp },
+                  {
+                    onSuccess: (res: { request: ExtraServiceRequestView }) => {
+                      setExtraOtp("");
+                      const executionId = res.request.executionId;
+                      if (executionId) {
+                        navigate(`/staff/bookings?job=execution-${executionId}`);
+                      }
+                    },
+                    onError: (err: Error) => setExtraOtpError(err instanceof Error ? err.message : "Could not verify"),
+                  },
+                );
+              }}
+            />
+          )}
+
+          {(!extraRequest
+            || extraRequest.status === "otp_verified"
+            || extraRequest.status === "rejected"
+            || extraRequest.status === "cancelled") && (
+            <StaffAddServiceButton onClick={() => setAddServiceOpen(true)} disabled={actionPending} />
+          )}
+
           {!walkInMode && (
             <div className="flex items-center justify-between pt-1">
               <Button
@@ -408,6 +466,14 @@ export function StaffDailyRouteSimplified() {
         cancelLabel="Wapas"
         onConfirm={() => void markCarNotAvailable()}
         isConfirming={recordCarNotAvailable.isPending}
+      />
+
+      <StaffAddServiceSheet
+        open={addServiceOpen}
+        onOpenChange={setAddServiceOpen}
+        customerId={current?.customerId}
+        subscriptionId={current?.subscriptionId}
+        vehicleId={current?.vehicleId}
       />
     </div>
   );
