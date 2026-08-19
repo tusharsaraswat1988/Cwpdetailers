@@ -28,6 +28,9 @@ import {
   recordStaffLocation,
 } from "../lib/staffLocation/locationService";
 import { assertContactIdentityAvailable } from "../lib/contactIdentity";
+import { uploadWatermarkedVisitPhoto } from "../lib/dcms/watermark";
+import { validateCameraPhoto, ImageValidationError, type ExifPayload } from "../lib/dcms/imageValidation";
+import { AttendanceSelfieError, assertSelfCheckInSelfie, selfCheckInProofRequired } from "../lib/staffAttendance/attendanceSelfie";
 
 const router = Router();
 
@@ -499,34 +502,81 @@ router.get("/staff/:id/attendance", async (req, res) => {
 router.post("/staff/:id/attendance", async (req, res) => {
   try {
     const staffId = parseInt(req.params.id);
-    if (!(await loadStaffInScope(req, staffId))) return res.status(404).json({ error: "Staff not found" });
-    const { date, status, checkInTime, checkOutTime, notes } = req.body;
+    const staff = await loadStaffInScope(req, staffId);
+    if (!staff) return res.status(404).json({ error: "Staff not found" });
+    const { date, status, checkInTime, checkOutTime, notes, imageBase64, exif, capturedAt } = req.body as {
+      date?: string;
+      status?: string;
+      checkInTime?: string;
+      checkOutTime?: string;
+      notes?: string;
+      imageBase64?: unknown;
+      exif?: ExifPayload | null;
+      capturedAt?: string;
+    };
     if (!date || !status) return res.status(400).json({ error: "date and status are required" });
 
-    const isSelfCheckIn =
-      req.user?.role === "staff"
-      && req.user.staffId === staffId
-      && ["present", "late"].includes(status);
+    const roles = await getStaffOperationalRoles(staffId);
+    const proofRequired = selfCheckInProofRequired({
+      actorRole: req.user?.role,
+      actorStaffId: req.user?.staffId ?? null,
+      targetStaffId: staffId,
+      status,
+      roleSlugs: roles.map(r => r.roleSlug),
+    });
 
-    if (isSelfCheckIn) {
+    const [already] = await db.select({ id: attendanceTable.id }).from(attendanceTable)
+      .where(and(eq(attendanceTable.staffId, staffId), eq(attendanceTable.date, date)))
+      .limit(1);
+    if (already) {
+      return res.status(409).json({ error: "Attendance already marked for this date" });
+    }
+
+    let selfiePhotoUrl: string | null = null;
+
+    if (proofRequired) {
       try {
+        const selfie = assertSelfCheckInSelfie(imageBase64);
         const location = parseStaffLocation(req.body as Record<string, unknown>, { required: true });
+        validateCameraPhoto(selfie, exif, { capturedAt });
+        const now = new Date();
+        selfiePhotoUrl = await uploadWatermarkedVisitPhoto({
+          imageBase64: selfie,
+          dateTime: now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+          latitude: location!.latitude,
+          longitude: location!.longitude,
+          staffName: staff.name,
+          outcomeLabel: "ATTENDANCE CHECK-IN",
+          tags: ["attendance-selfie"],
+          folder: "cwp/attendance-selfies",
+        });
         await recordStaffLocation({
           staffId,
           action: "attendance",
           latitude: location!.latitude,
           longitude: location!.longitude,
           accuracy: location!.accuracy,
-          metadata: { status, date },
+          metadata: { status, date, selfiePhotoUrl },
         });
-      } catch (locErr) {
-        const handled = handleLocationError(locErr);
+      } catch (checkInErr) {
+        if (checkInErr instanceof AttendanceSelfieError) {
+          return res.status(400).json({ error: checkInErr.message, code: checkInErr.code });
+        }
+        if (checkInErr instanceof ImageValidationError) {
+          return res.status(422).json({ error: checkInErr.message, code: "INVALID_SELFIE" });
+        }
+        const handled = handleLocationError(checkInErr);
         if (handled) return res.status(handled.status).json(handled.body);
-        throw locErr;
+        if (checkInErr instanceof Error && /cloudinary/i.test(checkInErr.message)) {
+          return res.status(503).json({ error: "Photo upload is not configured. Try again later." });
+        }
+        throw checkInErr;
       }
     }
 
-    const [attendance] = await db.insert(attendanceTable).values({ staffId, date, status, checkInTime, checkOutTime, notes }).returning();
+    const [attendance] = await db.insert(attendanceTable).values({
+      staffId, date, status, checkInTime, checkOutTime, notes, selfiePhotoUrl,
+    }).returning();
     return res.status(201).json(attendance);
   } catch (err) {
     req.log.error({ err }, "Mark attendance error");

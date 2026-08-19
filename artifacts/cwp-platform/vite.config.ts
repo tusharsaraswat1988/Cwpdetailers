@@ -107,6 +107,9 @@ export default defineConfig({
       },
       devOptions: {
         enabled: true,
+        // sw.ts is ESM — classic scripts fail to install in `pnpm dev`,
+        // which leaves navigator.serviceWorker.ready pending forever (Enabling… spinner).
+        type: "module",
         navigateFallback: "/index.html",
       },
     }),

@@ -6,7 +6,10 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+/** Only DOM cleanup after the close animation — not how long the toast stays visible. */
+const TOAST_REMOVE_DELAY = 400
+const DEFAULT_TOAST_DURATION = 4000
+const ERROR_TOAST_DURATION = 6000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -139,7 +142,7 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
-function toast({ ...props }: Toast) {
+function toast({ duration, ...props }: Toast) {
   const id = genId()
 
   const update = (props: ToasterToast) =>
@@ -149,10 +152,15 @@ function toast({ ...props }: Toast) {
     })
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
+  const resolvedDuration =
+    duration ??
+    (props.variant === "destructive" ? ERROR_TOAST_DURATION : DEFAULT_TOAST_DURATION)
+
   dispatch({
     type: "ADD_TOAST",
     toast: {
       ...props,
+      duration: resolvedDuration,
       id,
       open: true,
       onOpenChange: (open) => {
@@ -160,6 +168,12 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+
+  // Radix pauses its own timer on hover/focus. Full-width mobile toasts stay
+  // under the pointer, so we dismiss ourselves and do not rely on that timer.
+  if (resolvedDuration !== Infinity) {
+    setTimeout(dismiss, resolvedDuration)
+  }
 
   return {
     id: id,
@@ -188,4 +202,4 @@ function useToast() {
   }
 }
 
-export { useToast, toast }
+export { useToast, toast, DEFAULT_TOAST_DURATION }

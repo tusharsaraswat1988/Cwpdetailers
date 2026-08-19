@@ -403,10 +403,10 @@ router.post(
   requirePermission("daily_cleaning", "complete_visits"),
   dcmsRateLimit(30, 60_000),
   async (req, res) => {
-    const { subscriptionId, latitude, longitude, accuracy, walkIn } = req.body ?? {};
+    const { subscriptionId, latitude, longitude, accuracy, walkIn, imageBase64, exif, capturedAt } = req.body ?? {};
     try {
-      if (!subscriptionId || latitude == null || longitude == null) {
-        return res.status(400).json({ error: "subscriptionId, latitude, and longitude are required" });
+      if (!subscriptionId || !imageBase64 || latitude == null || longitude == null) {
+        return res.status(400).json({ error: "subscriptionId, imageBase64, latitude, and longitude are required" });
       }
       const staffId = req.user!.staffId;
       if (!staffId) return res.status(403).json({ error: "Staff account required" });
@@ -414,11 +414,15 @@ router.post(
       const result = await recordCarNotAvailable({
         subscriptionId: Number(subscriptionId),
         staffId,
+        staffName: req.user!.name,
         latitude: Number(latitude),
         longitude: Number(longitude),
         accuracy: accuracy != null ? Number(accuracy) : undefined,
         performedBy: req.user!.id,
         walkIn: Boolean(walkIn),
+        imageBase64,
+        exif: exif ?? null,
+        capturedAt: typeof capturedAt === "string" ? capturedAt : undefined,
       }, { log: req.log });
       return res.status(201).json(result);
     } catch (err) {

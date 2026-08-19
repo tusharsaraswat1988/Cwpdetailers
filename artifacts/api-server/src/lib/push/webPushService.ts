@@ -3,16 +3,31 @@ import { logger } from "../logger";
 
 let configured = false;
 
+function readEnv(name: string): string | undefined {
+  const raw = process.env[name];
+  if (!raw) return undefined;
+  const trimmed = raw.trim().replace(/^["']|["']$/g, "").trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function vapidPublicKey(): string | undefined {
+  return readEnv("VAPID_PUBLIC_KEY");
+}
+
+function vapidPrivateKey(): string | undefined {
+  return readEnv("VAPID_PRIVATE_KEY");
+}
+
+function vapidSubject(): string | undefined {
+  return readEnv("VAPID_SUBJECT");
+}
+
 export function isWebPushConfigured(): boolean {
-  return Boolean(
-    process.env.VAPID_PUBLIC_KEY
-    && process.env.VAPID_PRIVATE_KEY
-    && process.env.VAPID_SUBJECT,
-  );
+  return Boolean(vapidPublicKey() && vapidPrivateKey() && vapidSubject());
 }
 
 export function getVapidPublicKey(): string | null {
-  return process.env.VAPID_PUBLIC_KEY ?? null;
+  return vapidPublicKey() ?? null;
 }
 
 export function ensureWebPushConfigured(): boolean {
@@ -20,11 +35,12 @@ export function ensureWebPushConfigured(): boolean {
   if (!isWebPushConfigured()) return false;
 
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT!,
-    process.env.VAPID_PUBLIC_KEY!,
-    process.env.VAPID_PRIVATE_KEY!,
+    vapidSubject()!,
+    vapidPublicKey()!,
+    vapidPrivateKey()!,
   );
   configured = true;
+  logger.info("Web Push (VAPID) configured");
   return true;
 }
 

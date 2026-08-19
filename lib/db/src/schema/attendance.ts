@@ -12,6 +12,7 @@ export const attendanceTable = pgTable("attendance", {
   checkInTime: text("check_in_time"),
   checkOutTime: text("check_out_time"),
   notes: text("notes"),
+  selfiePhotoUrl: text("selfie_photo_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

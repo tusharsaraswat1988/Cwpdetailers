@@ -1,8 +1,8 @@
 import { createRoot } from "react-dom/client";
-import { registerSW } from "virtual:pwa-register";
+import { initPwa } from "./lib/pwa/register";
 import App from "./App";
 import "./index.css";
 
-registerSW({ immediate: true });
+initPwa();
 
 createRoot(document.getElementById("root")!).render(<App />);

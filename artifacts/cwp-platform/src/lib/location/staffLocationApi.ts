@@ -25,9 +25,20 @@ export async function transitionBookingWithLocation(
   return res.json();
 }
 
+export type MarkAttendancePayload = {
+  date: string;
+  status: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  notes?: string;
+  imageBase64: string;
+  exif?: Record<string, unknown> | null;
+  capturedAt?: string;
+};
+
 export async function markAttendanceWithLocation(
   staffId: number,
-  body: { date: string; status: string; checkInTime?: string; checkOutTime?: string; notes?: string },
+  body: MarkAttendancePayload,
 ): Promise<unknown> {
   const coords = await getStaffLocation("action");
   const payload = { ...body, ...toLocationPayload(coords) };

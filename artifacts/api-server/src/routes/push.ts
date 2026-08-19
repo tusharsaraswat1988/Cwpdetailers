@@ -12,10 +12,10 @@ const router = Router();
 
 router.get("/push/vapid-public-key", (_req, res) => {
   const key = getVapidPublicKey();
-  if (!key) {
-    return res.status(503).json({ error: "Push notifications not configured", configured: false });
-  }
-  return res.json({ publicKey: key, configured: isWebPushConfigured() });
+  return res.json({
+    publicKey: key,
+    configured: Boolean(key) && isWebPushConfigured(),
+  });
 });
 
 router.get("/push/status", requireAuth, async (req, res) => {

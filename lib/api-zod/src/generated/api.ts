@@ -2245,6 +2245,7 @@ export const GetStaffAttendanceResponseItem = zod.object({
   checkInTime: zod.string().optional(),
   checkOutTime: zod.string().optional(),
   notes: zod.string().optional(),
+  selfiePhotoUrl: zod.string().nullish(),
 });
 export const GetStaffAttendanceResponse = zod.array(
   GetStaffAttendanceResponseItem,

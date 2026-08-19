@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import {
   useGetStaffAttendance,
@@ -15,11 +15,13 @@ import { StaffVerificationBanner, StaffVerificationBadge } from "@/features/staf
 import { StaffOperationalRoles } from "@/features/staff/components/StaffOperationalRoles";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Loader2, MapPin, Save } from "lucide-react";
+import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Loader2, Camera, Pencil, Save } from "lucide-react";
 import { todayIso } from "@/lib/staff-jobs";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 import { markAttendanceWithLocation } from "@/lib/location";
+import { extractClientExif, validateCameraFile, readFileAsDataUrl } from "@/features/daily-cleaning/lib/cameraCapture";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
+import { isDailyCleanOnlyStaff } from "@/lib/staff-ecosystem/roles";
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { StaffTeamSection } from "@/components/staff/StaffTeamSection";
@@ -47,9 +49,10 @@ export default function StaffProfile() {
   const { staffId, isLoading: scopeLoading, missingStaffLink } = useAccountScope();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [addressOpen, setAddressOpen] = useState(false);
   const [emergencyName, setEmergencyName] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
+  const [editingEmergency, setEditingEmergency] = useState(false);
+  const selfieInputRef = useRef<HTMLInputElement>(null);
 
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-profile"],
@@ -91,16 +94,20 @@ export default function StaffProfile() {
   );
 
   const markMutation = useMutation({
-    mutationFn: (payload: { date: string; status: string; checkInTime?: string }) =>
-      markAttendanceWithLocation(staffId!, payload),
+    mutationFn: (payload: {
+      date: string;
+      status: string;
+      checkInTime?: string;
+      imageBase64: string;
+      exif?: Record<string, unknown> | null;
+      capturedAt?: string;
+    }) => markAttendanceWithLocation(staffId!, payload),
     onSuccess: () => {
       if (staffId != null) {
         qc.invalidateQueries({ queryKey: getGetStaffAttendanceQueryKey(staffId) });
       }
-      toast({ title: "Attendance marked", description: "Location recorded for shift check-in" });
+      toast({ title: "Attendance marked", description: "Selfie and GPS recorded for shift check-in" });
     },
-    onError: (err: Error) =>
-      toast({ title: "Check-in failed", description: err.message, variant: "destructive" }),
   });
 
   const saveEmergencyMutation = useMutation({
@@ -108,6 +115,7 @@ export default function StaffProfile() {
       staffEcosystemApi.patchMyProfile(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-profile"] });
+      setEditingEmergency(false);
       toast({ title: "Emergency contact saved" });
     },
     onError: (err: Error) =>
@@ -121,6 +129,11 @@ export default function StaffProfile() {
     }
   }, [profile?.emergencyContactName, profile?.emergencyContactPhone]);
 
+  const savedEmergencyName = (profile?.emergencyContactName ?? "").trim();
+  const savedEmergencyPhone = (profile?.emergencyContactPhone ?? "").trim();
+  const hasSavedEmergency = Boolean(savedEmergencyName || savedEmergencyPhone);
+  const showEmergencyForm = !hasSavedEmergency || editingEmergency;
+
   const roleLabel = myContext?.staffCategory === "supervisor" ? "Supervisor" : "Cleaning Staff";
   const todayStr = todayIso();
   const todayRecord = (attendance ?? []).find(a => a.date === todayStr);
@@ -128,6 +141,36 @@ export default function StaffProfile() {
   const presentDays = (attendance ?? []).filter(a => a.status === "present").length;
   const myRank = staffId != null ? (leaderboard ?? []).findIndex(s => s.staffId === staffId) + 1 : 0;
   const isSupervisor = myContext?.staffCategory === "supervisor";
+  const isDailyCleanOnly = isDailyCleanOnlyStaff((profile?.roles ?? []).map(r => r.roleSlug));
+  const showShiftAttendance = Boolean(profile) && !isSupervisor && !isDailyCleanOnly;
+  const todaySelfieUrl = resolveMediaUrl(todayRecord?.selfiePhotoUrl) || null;
+
+  async function handleAttendanceSelfie(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      validateCameraFile(file);
+      const [imageBase64, exif] = await Promise.all([
+        readFileAsDataUrl(file),
+        extractClientExif(file),
+      ]);
+      await markMutation.mutateAsync({
+        date: todayStr,
+        status: "present",
+        checkInTime: new Date().toTimeString().slice(0, 5),
+        imageBase64,
+        exif,
+        capturedAt: new Date(file.lastModified).toISOString(),
+      });
+    } catch (err) {
+      toast({
+        title: "Check-in failed",
+        description: err instanceof Error ? err.message : "Selfie capture failed",
+        variant: "destructive",
+      });
+    }
+  }
 
   if (scopeLoading || missingStaffLink || staffId == null) {
     return (
@@ -200,113 +243,128 @@ export default function StaffProfile() {
 
         {profile && !isSupervisor && (
           <StaffCard>
-            <p className="text-sm font-semibold">Emergency contact</p>
-            <div className="mt-3 grid gap-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">Name</Label>
-                <StaffInput
-                  className="mt-1"
-                  value={emergencyName}
-                  onChange={e => setEmergencyName(e.target.value)}
-                  placeholder="Contact name"
-                />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Phone</Label>
-                <StaffInput
-                  className="mt-1"
-                  value={emergencyPhone}
-                  onChange={e => setEmergencyPhone(e.target.value)}
-                  placeholder="10-digit mobile"
-                />
-              </div>
-              <StaffButton
-                size="sm"
-                className="staff-btn-sm w-fit"
-                disabled={saveEmergencyMutation.isPending}
-                onClick={() =>
-                  saveEmergencyMutation.mutate({
-                    emergencyContactName: emergencyName.trim(),
-                    emergencyContactPhone: emergencyPhone.trim(),
-                  })
-                }
-              >
-                {saveEmergencyMutation.isPending ? (
-                  <Loader2 size={14} className="mr-1 animate-spin" />
-                ) : (
-                  <Save size={14} className="mr-1" />
-                )}
-                Save contact
-              </StaffButton>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-semibold">Emergency contact</p>
+              {hasSavedEmergency && !showEmergencyForm && (
+                <StaffButton
+                  variant="ghost"
+                  size="sm"
+                  className="staff-btn-sm h-8 px-2 text-xs"
+                  onClick={() => {
+                    setEmergencyName(savedEmergencyName);
+                    setEmergencyPhone(savedEmergencyPhone);
+                    setEditingEmergency(true);
+                  }}
+                >
+                  <Pencil size={13} className="mr-1" />
+                  Edit
+                </StaffButton>
+              )}
             </div>
+            {showEmergencyForm ? (
+              <div className="mt-3 grid gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Name</Label>
+                  <StaffInput
+                    className="mt-1"
+                    value={emergencyName}
+                    onChange={e => setEmergencyName(e.target.value)}
+                    placeholder="Contact name"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Phone</Label>
+                  <StaffInput
+                    className="mt-1"
+                    value={emergencyPhone}
+                    onChange={e => setEmergencyPhone(e.target.value)}
+                    placeholder="10-digit mobile"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StaffButton
+                    size="sm"
+                    className="staff-btn-sm w-fit"
+                    disabled={saveEmergencyMutation.isPending}
+                    onClick={() =>
+                      saveEmergencyMutation.mutate({
+                        emergencyContactName: emergencyName.trim(),
+                        emergencyContactPhone: emergencyPhone.trim(),
+                      })
+                    }
+                  >
+                    {saveEmergencyMutation.isPending ? (
+                      <Loader2 size={14} className="mr-1 animate-spin" />
+                    ) : (
+                      <Save size={14} className="mr-1" />
+                    )}
+                    Save contact
+                  </StaffButton>
+                  {hasSavedEmergency && (
+                    <StaffButton
+                      variant="outline"
+                      size="sm"
+                      className="staff-btn-sm w-fit"
+                      disabled={saveEmergencyMutation.isPending}
+                      onClick={() => {
+                        setEmergencyName(savedEmergencyName);
+                        setEmergencyPhone(savedEmergencyPhone);
+                        setEditingEmergency(false);
+                      }}
+                    >
+                      Cancel
+                    </StaffButton>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-1 text-sm">
+                <p className="font-medium">{savedEmergencyName || "—"}</p>
+                <p className="text-muted-foreground">{savedEmergencyPhone || "—"}</p>
+              </div>
+            )}
           </StaffCard>
         )}
 
-        {!isSupervisor && (
-          <section className="staff-card staff-elevated overflow-hidden">
-            <button
-              type="button"
-              className="staff-tap flex w-full items-center justify-between p-4 text-left hover:bg-muted/50"
-              onClick={() => setAddressOpen(v => !v)}
-            >
-              <span className="text-sm font-semibold">My address</span>
-              {addressOpen ? <ChevronUp size={18} aria-hidden /> : <ChevronDown size={18} aria-hidden />}
-            </button>
-            {addressOpen && profile && (
-              <div className="space-y-1 border-t border-border px-4 pb-4 pt-3 text-xs text-muted-foreground">
-                <p>
-                  {profile.currentHouseNumber} {profile.currentStreet}
-                </p>
-                <p>
-                  {profile.currentArea}
-                  {profile.currentLandmark ? `, ${profile.currentLandmark}` : ""}
-                </p>
-                <p>
-                  {profile.currentCity}, {profile.currentState} — {profile.currentPincode}
-                </p>
-                {!(profile as { addressComplete?: boolean }).addressComplete && (
-                  <p className="pt-2 text-[hsl(var(--tone-warning-fg))]">
-                    Address incomplete — ask admin to update your profile.
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-
-        {!isSupervisor && (
-          <StaffAttendanceCard
-            status={todayMarked ? todayRecord?.status ?? "present" : "pending"}
-            dateLabel="Today's attendance"
-            checkInLabel={
-              todayMarked
-                ? `Marked${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
-                : "GPS check-in required before field work"
-            }
-            action={
-              todayMarked ? undefined : (
-                <StaffButton
-                  className="shrink-0 px-4"
-                  disabled={markMutation.isPending}
-                  data-testid="btn-mark-present"
-                  onClick={() =>
-                    markMutation.mutate({
-                      date: todayStr,
-                      status: "present",
-                      checkInTime: new Date().toTimeString().slice(0, 5),
-                    })
-                  }
-                >
-                  {markMutation.isPending ? (
-                    <Loader2 size={16} className="mr-2 animate-spin" />
-                  ) : (
-                    <MapPin size={16} className="mr-2" />
-                  )}
-                  {markMutation.isPending ? "Getting GPS…" : "Check in"}
-                </StaffButton>
-              )
-            }
-          />
+        {showShiftAttendance && (
+          <>
+            <input
+              ref={selfieInputRef}
+              type="file"
+              accept="image/*"
+              capture="user"
+              className="hidden"
+              data-testid="input-attendance-selfie"
+              onChange={e => void handleAttendanceSelfie(e)}
+            />
+            <StaffAttendanceCard
+              status={todayMarked ? todayRecord?.status ?? "present" : "pending"}
+              dateLabel="Today's attendance"
+              selfieUrl={todayMarked ? todaySelfieUrl : null}
+              checkInLabel={
+                todayMarked
+                  ? `Marked${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
+                  : "Selfie + GPS check-in required before field work"
+              }
+              action={
+                todayMarked ? undefined : (
+                  <StaffButton
+                    className="shrink-0 px-4"
+                    disabled={markMutation.isPending}
+                    data-testid="btn-mark-present"
+                    onClick={() => selfieInputRef.current?.click()}
+                  >
+                    {markMutation.isPending ? (
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                    ) : (
+                      <Camera size={16} className="mr-2" />
+                    )}
+                    {markMutation.isPending ? "Selfie + GPS…" : "Check in"}
+                  </StaffButton>
+                )
+              }
+            />
+          </>
         )}
 
         {!isSupervisor && (
@@ -333,6 +391,7 @@ export default function StaffProfile() {
               tone="primary"
               className="text-left"
             />
+            {showShiftAttendance && (
             <StaffMetric
               label="Present days"
               value={presentDays}
@@ -340,6 +399,7 @@ export default function StaffProfile() {
               tone="success"
               className="text-left"
             />
+            )}
             <StaffMetric
               label="Rank"
               value={myRank > 0 ? `#${myRank}` : "—"}
@@ -350,7 +410,7 @@ export default function StaffProfile() {
           </div>
         )}
 
-        {!isSupervisor && (
+        {showShiftAttendance && (
           <section className="staff-card staff-elevated overflow-hidden">
             <button
               type="button"

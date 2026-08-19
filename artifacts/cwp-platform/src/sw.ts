@@ -5,6 +5,20 @@ import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
 import { registerRoute, NavigationRoute } from "workbox-routing";
 import { NetworkFirst } from "workbox-strategies";
 
+// Activate immediately so PushManager.subscribe() can run on the first tap.
+// Without this, navigator.serviceWorker.ready can hang forever on first install.
+self.addEventListener("install", () => {
+  void self.skipWaiting();
+});
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    void self.skipWaiting();
+  }
+});
+
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
@@ -26,7 +40,7 @@ self.addEventListener("push", (event: PushEvent) => {
   const pushData = payload.data ?? {};
   const title = payload.title ?? "Notification";
   const iconUrl = (pushData.icon as string | undefined) ?? undefined;
-  const options: NotificationOptions = {
+  const options: NotificationOptions & { vibrate?: number[] } = {
     body: payload.body ?? "",
     ...(iconUrl ? { icon: iconUrl, badge: (pushData.badge as string | undefined) ?? iconUrl } : {}),
     tag: payload.tag ?? "cwp-push",

@@ -57,7 +57,7 @@ function recordCarNotAvailable(state: DayState) {
   const plan = planCarNotAvailable(state.visits);
   if (plan.action === "reject") throw new Error(plan.error);
   if (plan.action === "return") return { visitId: plan.visitId, idempotent: true };
-  const visit = { id: state.nextId++, status: "car_not_available", photoRequired: false };
+  const visit = { id: state.nextId++, status: "car_not_available", photoRequired: true };
   state.visits.push(visit);
   state.activity.push("visit_car_not_available");
   return { visitId: visit.id, idempotent: false };
@@ -117,7 +117,7 @@ describe("DCC lifecycle A — car not available is not missed", () => {
     expect(day.visits).toHaveLength(1);
     expect(day.visits[0]!.id).toBe(first.visitId);
     expect(day.visits[0]!.status).toBe("car_not_available");
-    expect(day.visits[0]!.photoRequired).toBe(false);
+    expect(day.visits[0]!.photoRequired).toBe(true);
     expect(day.remainingCleanings).toBe(16);
     expect(day.remainingWashes).toBe(3);
     expect(day.missed).toBe(false);

@@ -3,11 +3,17 @@ import {
   autoSubscribeStaffPushIfNeeded,
   getBrowserNotificationPermission,
   isPushSupported,
+  warmUpPushInfrastructure,
 } from "@/lib/pushNotifications";
 
 /** Attempts to register staff for push job alerts once per session (and on permission grant). */
 export function useStaffPushAutoSubscribe(active: boolean) {
   const running = useRef(false);
+
+  useEffect(() => {
+    if (!active) return;
+    void warmUpPushInfrastructure();
+  }, [active]);
 
   useEffect(() => {
     if (!active || running.current) return;

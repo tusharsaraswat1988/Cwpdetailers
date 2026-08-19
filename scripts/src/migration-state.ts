@@ -56,6 +56,7 @@ export const PENDING_MIGRATIONS = [
   "058_dcms_visit_car_not_available.sql",
   "059_dcms_one_present_cleaning_per_day.sql",
   "060_staff_extra_service_requests.sql",
+  "061_attendance_selfie.sql",
 ] as const;
 
 export type Queryable = {
@@ -147,6 +148,8 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
     }
     case "060_staff_extra_service_requests.sql":
       return hasTable(db, "extra_service_requests");
+    case "061_attendance_selfie.sql":
+      return hasColumn(db, "attendance", "selfie_photo_url");
     default:
       return false;
   }

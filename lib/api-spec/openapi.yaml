@@ -2980,6 +2980,9 @@ components:
           type: string
         notes:
           type: string
+        selfiePhotoUrl:
+          type: string
+          nullable: true
       required: [id, staffId, date, status]
 
     MarkAttendanceBody:
@@ -2997,6 +3000,18 @@ components:
           type: string
         notes:
           type: string
+        imageBase64:
+          type: string
+          description: Live selfie (data URL or base64). Required for staff self check-in.
+        capturedAt:
+          type: string
+          format: date-time
+        latitude:
+          type: number
+        longitude:
+          type: number
+        accuracy:
+          type: number
       required: [date, status]
 
     # COMPLAINTS

@@ -55,3 +55,9 @@ export function roleLabelForSlug(slug: OperationalRoleSlug): string {
   };
   return labels[slug] ?? slug.replace(/_/g, " ");
 }
+
+/** True when the staff member only does daily car cleaning (no wash/solar/detailing roles). */
+export function isDailyCleanOnlyStaff(roleSlugs: readonly string[]): boolean {
+  const slugs = [...new Set(roleSlugs.filter(Boolean))];
+  return slugs.length > 0 && slugs.every(s => s === OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
+}

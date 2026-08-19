@@ -59,16 +59,16 @@ function VisitCell({ cell, label }: { cell?: ServiceHistoryVisitCell; label: str
         />
       </div>
       <p className="text-xs text-muted-foreground">{cell.staffName}</p>
-      {cell.status === "car_not_available" ? (
-        <p className="text-[11px] text-muted-foreground">No vehicle photo — car was not available</p>
-      ) : cell.photoUrl ? (
+      {cell.photoUrl ? (
         <a href={resolveMediaUrl(cell.photoUrl)} target="_blank" rel="noreferrer" className="inline-block">
           <img
             src={resolveMediaUrl(cell.photoUrl)}
-            alt={`${label} proof`}
+            alt={cell.status === "car_not_available" ? "Car not available proof" : `${label} proof`}
             className="h-12 w-12 rounded-md object-cover border border-border"
           />
         </a>
+      ) : cell.status === "car_not_available" ? (
+        <p className="text-[11px] text-muted-foreground">No site photo</p>
       ) : (
         <p className="text-[11px] text-muted-foreground">No photo</p>
       )}

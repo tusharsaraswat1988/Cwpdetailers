@@ -48,9 +48,9 @@ describe("DCC completed visit", () => {
 });
 
 describe("DCC car not available", () => {
-  it("records presence without photos, cleaning, wash, or absence", () => {
+  it("records presence with a proof photo, without cleaning, wash, or absence", () => {
     expect(attendanceFromVisitStatus("car_not_available")).toBe("present");
-    expect(photosRequiredForOutcome("car_not_available")).toBe(false);
+    expect(photosRequiredForOutcome("car_not_available")).toBe(true);
     expect(consumesCleaningEntitlement("cleaning", "car_not_available")).toBe(false);
     expect(consumesWashEntitlement("cleaning", "car_not_available")).toBe(false);
     expect(consumesWashEntitlement("wash", "car_not_available")).toBe(false);

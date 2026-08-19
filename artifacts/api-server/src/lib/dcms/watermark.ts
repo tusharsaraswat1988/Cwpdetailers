@@ -14,20 +14,25 @@ function getCloudinaryConfig() {
 export type WatermarkInput = {
   imageBase64: string;
   dateTime: string;
-  vehicleNumber: string;
+  vehicleNumber?: string;
   latitude: number;
   longitude: number;
   staffName: string;
+  /** Shown on the photo strip, e.g. CAR NOT AVAILABLE */
+  outcomeLabel?: string;
+  tags?: string[];
+  folder?: string;
 };
 
 function buildWatermarkText(input: WatermarkInput): string {
   const coords = `${input.latitude.toFixed(6)}, ${input.longitude.toFixed(6)}`;
   return [
+    input.outcomeLabel,
     input.dateTime,
     input.vehicleNumber,
     coords,
     input.staffName,
-  ].join(" | ");
+  ].filter((part): part is string => Boolean(part)).join(" | ");
 }
 
 /**
@@ -35,7 +40,7 @@ function buildWatermarkText(input: WatermarkInput): string {
  */
 export async function uploadWatermarkedVisitPhoto(input: WatermarkInput): Promise<string> {
   getCloudinaryConfig();
-  const folder = process.env.CLOUDINARY_FOLDER ?? "cwp/dcms-visits";
+  const folder = input.folder ?? process.env.CLOUDINARY_FOLDER ?? "cwp/dcms-visits";
   const watermarkText = buildWatermarkText(input);
 
   const dataUri = input.imageBase64.startsWith("data:")
@@ -45,6 +50,8 @@ export async function uploadWatermarkedVisitPhoto(input: WatermarkInput): Promis
   const result = await cloudinary.uploader.upload(dataUri, {
     folder,
     resource_type: "image",
+    ...(input.tags?.length ? { tags: input.tags } : {}),
+    ...(input.outcomeLabel ? { context: `outcome=${input.outcomeLabel.replace(/\s+/g, "_")}` } : {}),
     transformation: [
       {
         overlay: {

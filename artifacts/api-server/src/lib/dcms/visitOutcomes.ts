@@ -27,6 +27,7 @@ export type DcmsVisitType = "cleaning" | "wash";
 
 export const CUSTOMER_HEADLINE_COMPLETED = "Daily cleaning completed";
 export const CUSTOMER_HEADLINE_CAR_NOT_AVAILABLE = "Car was not available for today's cleaning";
+export const PHOTO_TAG_CAR_NOT_AVAILABLE = "car_not_available";
 
 export function isPresentVisitStatus(status: string | null | undefined): boolean {
   return status === "completed" || status === "car_not_available";
@@ -37,7 +38,7 @@ export function attendanceFromVisitStatus(status: string | null | undefined): Dc
 }
 
 export function photosRequiredForOutcome(outcome: "completed" | "car_not_available"): boolean {
-  return outcome === "completed";
+  return outcome === "completed" || outcome === "car_not_available";
 }
 
 export function consumesCleaningEntitlement(

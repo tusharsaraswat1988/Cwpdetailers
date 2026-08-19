@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine, Navigation, MapPin, Car } from "lucide-react";
+import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine, Navigation, MapPin } from "lucide-react";
 import { extractClientExif, validateCameraFile, readFileAsDataUrl } from "../lib/cameraCapture";
 import { visitUploadErrorMessage } from "../lib/visitUploadError";
 import { staffVisitLabel } from "../lib/visitLabels";
@@ -70,6 +70,7 @@ export function StaffDailyRouteSimplified() {
   const recordCarNotAvailable = useRecordCarNotAvailable();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const cnaFileRef = useRef<HTMLInputElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [scanOpen, setScanOpen] = useState(false);
   const [plateScanMeta, setPlateScanMeta] = useState<PlateScanMeta | null>(null);
@@ -167,20 +168,29 @@ export function StaffDailyRouteSimplified() {
     }
   }, [current, completeVisit, toast, refetch, plateScanMeta, activeIdx, stops.length, visitType, walkInMode, navigate]);
 
-  const markCarNotAvailable = useCallback(async () => {
-    if (!current) return;
+  const captureCarNotAvailable = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !current) return;
+    e.target.value = "";
     try {
-      const gps = await getStaffLocation("action");
+      validateCameraFile(file);
+      const [gps, imageBase64, exif] = await Promise.all([
+        getStaffLocation("action"),
+        readFileAsDataUrl(file),
+        extractClientExif(file),
+      ]);
       await recordCarNotAvailable.mutateAsync({
         subscriptionId: current.subscriptionId,
         walkIn: walkInMode,
+        imageBase64,
+        exif,
+        capturedAt: new Date(file.lastModified).toISOString(),
         ...gps,
       });
       toast({
         title: "Visit record ho gaya",
         description: `${current.vehicleNumber} — car nahi mili, cleaning count nahi kata`,
       });
-      setConfirmUnavailable(false);
       if (walkInMode) {
         navigate("/staff/bookings?walkInSuccess=1");
         return;
@@ -308,20 +318,25 @@ export function StaffDailyRouteSimplified() {
                 Car available — photo lein & complete
               </Button>
               {visitType === "cleaning" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-12"
-                  onClick={() => setConfirmUnavailable(true)}
-                  disabled={actionPending}
-                >
-                  {recordCarNotAvailable.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Car className="h-4 w-4 mr-2" />
-                  )}
-                  Car nahi mili
-                </Button>
+                <div className="space-y-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-12"
+                    onClick={() => setConfirmUnavailable(true)}
+                    disabled={actionPending}
+                  >
+                    {recordCarNotAvailable.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Camera className="h-4 w-4 mr-2" />
+                    )}
+                    Car nahi mili — jagah ki photo
+                  </Button>
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    Wahan ki photo + GPS zaroori hai — proof ke liye ki aap gaye the. Cleaning credit nahi katega.
+                  </p>
+                </div>
               )}
             </div>
           ) : showSameDayRecovery ? (
@@ -447,6 +462,14 @@ export function StaffDailyRouteSimplified() {
         className="hidden"
         onChange={e => void captureVisit(e)}
       />
+      <input
+        ref={cnaFileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={e => void captureCarNotAvailable(e)}
+      />
 
       {!walkInMode && (
         <PlateScanFlow
@@ -461,10 +484,13 @@ export function StaffDailyRouteSimplified() {
         open={confirmUnavailable}
         onOpenChange={setConfirmUnavailable}
         title="Car nahi mili?"
-        description="Visit record hogi aur aap present count honge. Cleaning credit nahi katega. Vehicle photo ki zaroorat nahi."
-        confirmLabel="Haan, car nahi mili"
+        description="Is jagah ki photo zaroori hai — proof ke liye ki aap wahan gaye the. Visit present count hogi, cleaning credit nahi katega."
+        confirmLabel="Photo lein"
         cancelLabel="Wapas"
-        onConfirm={() => void markCarNotAvailable()}
+        onConfirm={() => {
+          setConfirmUnavailable(false);
+          cnaFileRef.current?.click();
+        }}
         isConfirming={recordCarNotAvailable.isPending}
       />
 

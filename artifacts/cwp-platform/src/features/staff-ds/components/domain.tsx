@@ -288,6 +288,7 @@ export function StaffAttendanceCard({
   dateLabel,
   checkInLabel,
   checkOutLabel,
+  selfieUrl,
   action,
   className,
 }: {
@@ -295,6 +296,7 @@ export function StaffAttendanceCard({
   dateLabel?: string;
   checkInLabel?: string;
   checkOutLabel?: string;
+  selfieUrl?: string | null;
   action?: ReactNode;
   className?: string;
 }) {
@@ -302,12 +304,12 @@ export function StaffAttendanceCard({
     <div className={cn("staff-card staff-elevated", className)} data-testid="profile-attendance-today">
       <div className={cn(STAFF_SPACE.cardPad)}>
         <div className="flex items-start justify-between gap-3" data-testid="staff-attendance-card">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Attendance
             </p>
             {dateLabel ? <p className="mt-0.5 text-sm text-foreground">{dateLabel}</p> : null}
-            <div className="mt-2">
+            <div className="mt-2 flex items-center gap-2">
               <StaffStatusBadge status={status} />
             </div>
             {(checkInLabel || checkOutLabel) && (
@@ -318,6 +320,13 @@ export function StaffAttendanceCard({
               </p>
             )}
           </div>
+          {selfieUrl ? (
+            <img
+              src={selfieUrl}
+              alt="Check-in selfie"
+              className="h-14 w-14 shrink-0 rounded-lg object-cover ring-1 ring-border"
+            />
+          ) : null}
           {action}
         </div>
       </div>

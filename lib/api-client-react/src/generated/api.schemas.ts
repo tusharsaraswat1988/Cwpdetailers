@@ -874,6 +874,7 @@ export interface Attendance {
   checkInTime?: string;
   checkOutTime?: string;
   notes?: string;
+  selfiePhotoUrl?: string | null;
 }
 
 export type MarkAttendanceBodyStatus =

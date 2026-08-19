@@ -70,16 +70,19 @@ export default function CustomerDcmsHistoryPage() {
                 : null;
               const afterUrl = visit.afterPhotoUrl
                 ? resolveMediaUrl(visit.afterPhotoUrl)
-                : null;
+                : visit.photoUrl
+                  ? resolveMediaUrl(visit.photoUrl)
+                  : null;
 
-              if (!isUnavailable && (beforeUrl || afterUrl)) {
+              if (beforeUrl || afterUrl) {
                 return (
                   <CustomerPhotoReport
                     key={row.visit.id}
                     title={headline}
                     status={row.visit.status}
                     beforeUrl={beforeUrl}
-                    afterUrl={afterUrl ?? (visit.photoUrl ? resolveMediaUrl(visit.photoUrl) : null)}
+                    afterUrl={afterUrl}
+                    afterLabel={isUnavailable ? "Car not available" : visit.afterPhotoUrl ? "After" : "Proof"}
                     completedAt={format(new Date(row.visit.visitTime), "dd MMM yyyy, hh:mm a")}
                     timeline={
                       <div className="space-y-1 text-sm text-muted-foreground">
@@ -103,8 +106,12 @@ export default function CustomerDcmsHistoryPage() {
               return (
                 <CustomerCard key={row.visit.id}>
                   <div className="flex gap-3">
-                    {!isUnavailable && row.visit.photoUrl && (
-                      <img src={resolveMediaUrl(row.visit.photoUrl)} alt="Proof" className="w-16 h-16 rounded object-cover" />
+                    {row.visit.photoUrl && (
+                      <img
+                        src={resolveMediaUrl(row.visit.photoUrl)}
+                        alt={isUnavailable ? "Car not available proof" : "Proof"}
+                        className="w-16 h-16 rounded object-cover"
+                      />
                     )}
                     <div>
                       <p className="font-medium">{headline}</p>

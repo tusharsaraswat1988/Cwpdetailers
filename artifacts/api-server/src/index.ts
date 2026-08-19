@@ -8,6 +8,7 @@ import { autoResumeExpiredPauses } from "./lib/dcms/pauseService";
 import { runDcmsMaintenanceJobs } from "./lib/dcms/maintenanceService";
 import { notifyDailyRoutesAvailable } from "./lib/dcms/routeNotifyService";
 import { processPendingNotificationEvents } from "./lib/push/eventProcessor";
+import { ensureWebPushConfigured } from "./lib/push/webPushService";
 import { todayStrInIST, getNext2359IST } from "./lib/dcms/dateUtils";
 import { bootstrapJobOrchestration } from "./lib/job-orchestration/bootstrap";
 
@@ -34,6 +35,9 @@ app.listen(port, "0.0.0.0", (err) => {
   }
 
   logger.info({ port, dbHost }, "Server listening");
+  if (!ensureWebPushConfigured()) {
+    logger.warn("Web push not configured — set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT");
+  }
   bootstrapMasterDataIfEmpty()
     .then(() => bootstrapDcmsPlansIfEmpty())
     .catch(err => {

@@ -25,6 +25,7 @@ import {
   applyEntitlementDelta,
   planCarNotAvailable,
   planCompleteCleaning,
+  PHOTO_TAG_CAR_NOT_AVAILABLE,
   type DcmsVisitStatus,
 } from "./visitOutcomes";
 
@@ -50,11 +51,15 @@ export type CompleteVisitInput = {
 export type RecordCarNotAvailableInput = {
   subscriptionId: number;
   staffId: number;
+  staffName: string;
   latitude: number;
   longitude: number;
   accuracy?: number;
   performedBy: number;
   walkIn?: boolean;
+  imageBase64: string;
+  exif?: ExifPayload | null;
+  capturedAt?: string;
 };
 
 async function todaysCleaningVisits(subscriptionId: number, dateStr: string): Promise<DcmsVisit[]> {
@@ -435,6 +440,7 @@ export async function recordCarNotAvailable(
     subscriptionId: input.subscriptionId,
     staffId: input.staffId,
     outcome: "car_not_available",
+    imageBytes: input.imageBase64?.length ?? 0,
     latitude: input.latitude,
     longitude: input.longitude,
     accuracy: input.accuracy,
@@ -442,6 +448,24 @@ export async function recordCarNotAvailable(
 
   if (input.latitude == null || input.longitude == null) {
     traceVisitFailure(log, "input_validated", new Error("Location required"));
+  }
+  if (!input.imageBase64) {
+    traceVisitFailure(log, "input_validated", new Error("Site photo required — car not available proof"));
+  }
+
+  let exifData: Record<string, unknown>;
+  try {
+    exifData = {
+      ...sanitizeExifForStorage(validateCameraPhoto(input.imageBase64, input.exif, {
+        capturedAt: input.capturedAt,
+      })),
+      photoTag: PHOTO_TAG_CAR_NOT_AVAILABLE,
+      outcome: PHOTO_TAG_CAR_NOT_AVAILABLE,
+    };
+    traceVisitStep(log, "image_validation_passed");
+  } catch (e) {
+    if (e instanceof ImageValidationError) traceVisitFailure(log, "image_validation_passed", e);
+    traceVisitFailure(log, "image_validation_passed", new ImageValidationError("Invalid camera photo"));
   }
   traceVisitStep(log, "input_validated");
 
@@ -477,12 +501,12 @@ export async function recordCarNotAvailable(
   if (plan.action === "reject") {
     traceVisitFailure(log, "assignment_verified", new Error(plan.error));
   }
-  if (plan.action === "return") {
-    const visit = existing.find(v => v.id === plan.visitId);
-    if (visit) {
-      traceVisitStep(log, "response_ready", { visitId: visit.id, idempotent: true });
-      return { visit, consumed: false, attendance: "present", idempotent: true };
-    }
+  const existingCna = plan.action === "return"
+    ? existing.find(v => v.id === plan.visitId)
+    : undefined;
+  if (existingCna?.photoUrl) {
+    traceVisitStep(log, "response_ready", { visitId: existingCna.id, idempotent: true });
+    return { visit: existingCna, consumed: false, attendance: "present", idempotent: true };
   }
 
   const [vehicle] = await db.select().from(vehiclesTable)
@@ -510,6 +534,7 @@ export async function recordCarNotAvailable(
       accuracy: input.accuracy ?? null,
       rejectionReason: "Outside Service Area",
       visitDate: today,
+      exifJson: exifData,
     }).returning();
 
     await logDcmsActivity({
@@ -539,22 +564,57 @@ export async function recordCarNotAvailable(
   }
   traceVisitStep(log, "geofence_passed", { withinRadius: true });
 
+  let photoUrl: string;
+  try {
+    traceVisitStep(log, "cloudinary_upload_started");
+    photoUrl = await uploadWatermarkedVisitPhoto({
+      imageBase64: input.imageBase64,
+      dateTime: now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+      vehicleNumber: vehicle?.registrationNumber ?? "UNKNOWN",
+      latitude: input.latitude,
+      longitude: input.longitude,
+      staffName: input.staffName,
+      outcomeLabel: "CAR NOT AVAILABLE",
+      tags: [PHOTO_TAG_CAR_NOT_AVAILABLE, "dcms-visit"],
+    });
+    traceVisitStep(log, "cloudinary_upload_passed", { photoUrl, photoTag: PHOTO_TAG_CAR_NOT_AVAILABLE });
+  } catch (e) {
+    traceVisitFailure(log, "cloudinary_upload_started", e);
+  }
+
   try {
     traceVisitStep(log, "db_transaction_started");
     const result = await db.transaction(async (tx) => {
+      if (existingCna) {
+        const [updated] = await tx.update(dcmsVisitsTable)
+          .set({
+            photoUrl,
+            latitude: input.latitude,
+            longitude: input.longitude,
+            accuracy: input.accuracy ?? null,
+            exifJson: exifData,
+          })
+          .where(and(
+            eq(dcmsVisitsTable.id, existingCna.id),
+            eq(dcmsVisitsTable.status, "car_not_available"),
+          ))
+          .returning();
+        return { visit: updated ?? existingCna, consumed: false as const, attendance: "present" as const };
+      }
+
       const [visit] = await tx.insert(dcmsVisitsTable).values({
         subscriptionId: input.subscriptionId,
         vehicleId: sub.vehicleId,
         staffId: input.staffId,
         visitType: "cleaning",
-        photoUrl: null,
+        photoUrl,
         visitTime: now,
         visitDate: today,
         status: "car_not_available",
         latitude: input.latitude,
         longitude: input.longitude,
         accuracy: input.accuracy ?? null,
-        exifJson: null,
+        exifJson: exifData,
       }).returning();
 
       await logDcmsActivity({
@@ -566,6 +626,7 @@ export async function recordCarNotAvailable(
         metadata: {
           remainingCleanings: sub.remainingCleanings,
           remainingWashes: sub.remainingWashes,
+          photoTag: PHOTO_TAG_CAR_NOT_AVAILABLE,
         },
       });
 
