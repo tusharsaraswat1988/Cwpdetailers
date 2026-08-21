@@ -18,6 +18,7 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { getTodayIST } from "../subscriptions/service";
 import { isDailyCleanCatalogServiceName } from "../lib/dcms/dailyCleanCatalogGuard";
+import { savedLocationService } from "../lib/saved-locations/SavedLocationService";
 import {
   serviceabilityBlockedLogPayload,
   serviceabilityHttpBody,
@@ -191,14 +192,51 @@ router.post("/bookings", async (req, res) => {
       customerId, vehicleId, solarSiteId, serviceId, branchId,
       scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng,
       placeId, savedLocationId, notes, cityId, citySlug, assetId, serviceLocationId,
-      contractRegistryId, addressId,
+      contractRegistryId, addressId, postalCode, addressComponents, cityName,
     } = req.body;
 
     if (!customerId || !scheduledDate || !serviceType) {
       return res.status(400).json({ error: "customerId, scheduledDate, and serviceType are required" });
     }
-    if (!address || locationLat == null || locationLng == null) {
-      return res.status(400).json({ error: "address, locationLat, and locationLng are required for doorstep service" });
+
+    let snapshotAddress = typeof address === "string" ? address : "";
+    let snapshotArea = typeof area === "string" ? area : undefined;
+    let snapshotLat = locationLat ?? null;
+    let snapshotLng = locationLng ?? null;
+    let snapshotPlaceId = placeId ?? null;
+    let snapshotCityId = cityId ?? null;
+    let snapshotPostal = typeof postalCode === "string" ? postalCode : undefined;
+    let resolvedSavedLocationId = savedLocationId ?? null;
+
+    if (savedLocationId) {
+      const saved = await savedLocationService.getOwned(Number(savedLocationId), customerId);
+      if (!saved) {
+        return res.status(400).json({ error: "Saved address not found for this customer" });
+      }
+      const row = saved as typeof saved & {
+        area?: string | null;
+        cityId?: number | null;
+        pincode?: string | null;
+        houseNumber?: string | null;
+      };
+      resolvedSavedLocationId = row.id;
+      snapshotAddress = snapshotAddress.trim() || row.address;
+      snapshotArea = snapshotArea || row.area || undefined;
+      snapshotLat = snapshotLat ?? row.latitude;
+      snapshotLng = snapshotLng ?? row.longitude;
+      snapshotPlaceId = snapshotPlaceId || row.placeId;
+      snapshotCityId = snapshotCityId ?? row.cityId;
+      snapshotPostal = snapshotPostal || row.pincode || undefined;
+    }
+
+    if (!snapshotAddress.trim()) {
+      return res.status(400).json({ error: "A service address is required" });
+    }
+    const hasCoords = snapshotLat != null && snapshotLng != null
+      && Number.isFinite(Number(snapshotLat)) && Number.isFinite(Number(snapshotLng))
+      && !(Number(snapshotLat) === 0 && Number(snapshotLng) === 0);
+    if (!hasCoords && !snapshotPostal && !snapshotCityId && !cityName && !citySlug) {
+      return res.status(400).json({ error: "Please choose a saved address or add enough detail for us to find you." });
     }
 
     const customer = await loadIfInScope(req,
@@ -257,17 +295,19 @@ router.post("/bookings", async (req, res) => {
         scheduledDate,
         scheduledTime,
         serviceType,
-        address,
-        area,
-        locationLat,
-        locationLng,
-        placeId,
-        savedLocationId,
+        address: snapshotAddress,
+        area: snapshotArea,
+        locationLat: snapshotLat,
+        locationLng: snapshotLng,
+        placeId: snapshotPlaceId,
+        savedLocationId: resolvedSavedLocationId,
         addressId,
         notes,
-        cityId: cityId ?? null,
-        citySlug,
-        cityName: typeof area === "string" ? area : undefined,
+        cityId: snapshotCityId,
+        citySlug: hasCoords ? undefined : citySlug,
+        cityName: typeof cityName === "string" ? cityName : snapshotArea,
+        postalCode: snapshotPostal,
+        addressComponents: Array.isArray(addressComponents) ? addressComponents : undefined,
         status: initialStatus,
       }, {
         traceId,

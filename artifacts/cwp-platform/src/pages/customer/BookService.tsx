@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccountScope } from "@/lib/account-scope";
 import {
   useCatalogServices, useSavedLocations, useCreateSavedLocation,
+  useUpdateSavedLocation, useDeleteSavedLocation, useSetDefaultSavedLocation,
   usePricingQuote, type LocationValue, type CatalogService,
 } from "@/features/master-data/api";
 import {
@@ -133,6 +134,9 @@ export default function BookService() {
   });
   const { data: savedLocations } = useSavedLocations(customerId ?? undefined);
   const createSavedLoc = useCreateSavedLocation();
+  const updateSavedLoc = useUpdateSavedLocation();
+  const deleteSavedLoc = useDeleteSavedLocation();
+  const setDefaultSavedLoc = useSetDefaultSavedLocation();
 
   const { data: subsData } = useListSubscriptions(
     { customerId: String(customerId ?? "") } as Parameters<typeof useListSubscriptions>[0],
@@ -162,6 +166,9 @@ export default function BookService() {
       locationLng: bookingLocation!.longitude,
       placeId: bookingLocation!.placeId,
       serviceId: serviceId ? parseInt(serviceId) : undefined,
+      postalCode: bookingLocation!.pincode,
+      cityName: bookingLocation!.cityName,
+      addressComponents: bookingLocation!.googleComponents,
     }),
     enabled: customerId != null && bookingLocation != null && step !== "asset" && step !== "plan",
     staleTime: 30_000,
@@ -294,9 +301,11 @@ export default function BookService() {
     const resolved = resolveBookingAddressForEntry({
       asset: enriched,
       selectedAddress: loadSelectedAddress(customerId),
+      savedLocations,
     });
     if (resolved) setBookingLocation(resolved);
-  }, [asset?.id, asset?.kind, vehicleRows, solarRows, customerId]);
+    else if (savedLocations && savedLocations.length === 0) setAddressSheetOpen(true);
+  }, [asset?.id, asset?.kind, vehicleRows, solarRows, customerId, savedLocations]);
 
   // Auto plan mode when asset known
   useEffect(() => {
@@ -453,7 +462,11 @@ export default function BookService() {
         locationLat: bookingLocation.latitude,
         locationLng: bookingLocation.longitude,
         placeId: bookingLocation.placeId,
-        citySlug: "varanasi",
+        savedLocationId: bookingLocation.savedLocationId,
+        postalCode: bookingLocation.pincode,
+        cityName: bookingLocation.cityName,
+        area: bookingLocation.area,
+        addressComponents: bookingLocation.googleComponents,
         entitlementId: selfBooking?.eligible ? selfBooking.entitlementId : undefined,
       } as Parameters<typeof createMutation.mutate>[0]["data"],
     });
@@ -697,20 +710,16 @@ export default function BookService() {
         onOpenChange={setAddressSheetOpen}
         value={bookingLocation}
         savedLocations={savedLocations}
+        customerId={customerId}
         onSelect={loc => {
           setBookingLocation(loc);
           if (customerId) saveSelectedAddress(customerId, loc);
           void refetchCoverage();
         }}
-        onSaveNew={(label, loc) => createSavedLoc.mutate({
-          customerId,
-          label,
-          address: loc.address,
-          latitude: loc.latitude,
-          longitude: loc.longitude,
-          placeId: loc.placeId,
-          isDefault: false,
-        })}
+        onSaveNew={data => createSavedLoc.mutateAsync(data)}
+        onUpdate={(id, data) => updateSavedLoc.mutateAsync({ id, ...data })}
+        onDelete={id => deleteSavedLoc.mutateAsync({ id, customerId })}
+        onSetDefault={id => setDefaultSavedLoc.mutateAsync({ id, customerId })}
       />
     </CustomerLayout>
   );

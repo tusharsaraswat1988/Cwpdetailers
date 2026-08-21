@@ -73,7 +73,20 @@ export class BookingService {
     const window = scheduleCheck.window;
 
     let coverage: CoverageResult | undefined;
-    if (!input.skipCoverageValidation && input.locationLat != null && input.locationLng != null) {
+    const hasCoords = input.locationLat != null && input.locationLng != null
+      && Number.isFinite(input.locationLat) && Number.isFinite(input.locationLng)
+      && !(input.locationLat === 0 && input.locationLng === 0);
+    const hasPlace = Boolean(
+      input.address?.trim()
+      || input.postalCode?.trim()
+      || input.cityId != null
+      || input.cityName?.trim()
+      || input.citySlug?.trim(),
+    );
+    if (!input.skipCoverageValidation) {
+      if (!hasCoords && !hasPlace) {
+        throw new BookingValidationError("A service address is required", "INVALID_ADDRESS");
+      }
       const validationResult = await bookingValidationPolicy.execute(
         {
           customerId: input.customerId,
@@ -83,7 +96,7 @@ export class BookingService {
           locationLng: input.locationLng,
           placeId: input.placeId,
           cityId: input.cityId,
-          citySlug: input.citySlug,
+          citySlug: hasCoords ? undefined : input.citySlug,
           cityName: input.cityName ?? input.area,
           addressComponents: input.addressComponents,
           postalCode: input.postalCode,

@@ -12,10 +12,15 @@ export type SavedLocationLike = {
   customerId?: number;
   label: string;
   address: string;
-  latitude: number;
-  longitude: number;
-  placeId?: string;
+  latitude: number | null;
+  longitude: number | null;
+  placeId?: string | null;
   isDefault?: boolean;
+  savedLocationId?: number;
+  houseNumber?: string | null;
+  area?: string | null;
+  cityName?: string | null;
+  pincode?: string | null;
 };
 
 export type ServiceLocationLike = {
@@ -190,11 +195,16 @@ export function collectAddressCandidates(input: ResolveAddressInput): AddressCan
   for (const loc of input.savedLocations ?? []) {
     pushCandidate(list, seen, {
       address: loc.address,
-      latitude: loc.latitude,
-      longitude: loc.longitude,
-      placeId: loc.placeId,
+      latitude: loc.latitude ?? 0,
+      longitude: loc.longitude ?? 0,
+      placeId: loc.placeId ?? undefined,
       assetLabel: loc.label || undefined,
       isDefault: loc.isDefault,
+      savedLocationId: loc.id,
+      houseNumber: loc.houseNumber ?? undefined,
+      area: loc.area ?? undefined,
+      cityName: loc.cityName ?? undefined,
+      pincode: loc.pincode ?? undefined,
     });
   }
 
@@ -282,14 +292,14 @@ export function toPickerLocations(
   input: ResolveAddressInput,
 ): SavedLocationLike[] {
   return collectAddressCandidates(input).map((c, index) => ({
-    id: index + 1,
+    id: c.savedLocationId ?? index + 1,
     customerId,
     label: c.assetLabel?.trim() || "Saved",
     address: c.address,
     latitude: c.latitude,
     longitude: c.longitude,
     placeId: c.placeId,
-    isDefault: Boolean(c.isDefault),
+    savedLocationId: c.savedLocationId,
   }));
 }
 

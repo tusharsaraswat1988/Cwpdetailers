@@ -9,23 +9,30 @@ function hasValidCoordinates(lat?: number | null, lng?: number | null): boolean 
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
+function hasManualPlace(request: {
+  address?: string | null;
+  postalCode?: string | null;
+  pincode?: string | null;
+  cityName?: string | null;
+  cityId?: number | null;
+}): boolean {
+  return Boolean(
+    request.address?.trim()
+    && (request.postalCode?.trim() || request.pincode?.trim() || request.cityName?.trim() || request.cityId != null),
+  );
+}
+
 export const addressValidator: CoverageValidator = {
   name: "AddressValidator",
 
   async validate(state) {
     const { request } = state;
+    const coords = hasValidCoordinates(request.locationLat, request.locationLng);
 
-    if (!request.address?.trim() && !hasValidCoordinates(request.locationLat, request.locationLng)) {
-      return halt("INVALID_ADDRESS", COVERAGE_MESSAGES.INVALID_ADDRESS);
-    }
+    if (coords) return cont(state);
 
-    if (!hasValidCoordinates(request.locationLat, request.locationLng)) {
-      return halt(
-        "INVALID_ADDRESS",
-        "Service location coordinates (latitude and longitude) are required.",
-      );
-    }
+    if (hasManualPlace(request)) return cont(state);
 
-    return cont(state);
+    return halt("INVALID_ADDRESS", COVERAGE_MESSAGES.INVALID_ADDRESS);
   },
 };

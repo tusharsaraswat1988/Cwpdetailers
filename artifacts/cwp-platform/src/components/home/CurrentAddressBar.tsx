@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronRight, MapPin } from "lucide-react";
 import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
-import type { LocationValue, SavedLocation } from "@/features/master-data/api";
+import type { LocationValue, SavedLocation, SavedLocationWrite } from "@/features/master-data/api";
 import type { SelectedAddress } from "@/lib/selected-address";
 import { cn } from "@/lib/utils";
 
@@ -13,8 +13,12 @@ interface CurrentAddressBarProps {
   };
   selected: SelectedAddress | null;
   savedLocations?: SavedLocation[];
+  customerId?: number;
   onSelectAddress: (loc: LocationValue, meta?: Pick<SelectedAddress, "assetId" | "assetType" | "assetLabel">) => void;
-  onSaveNew?: (label: string, loc: LocationValue) => void;
+  onSaveNew?: (data: SavedLocationWrite) => Promise<SavedLocation> | SavedLocation | void;
+  onUpdate?: (id: number, data: SavedLocationWrite) => Promise<SavedLocation> | SavedLocation | void;
+  onDelete?: (id: number) => Promise<void> | void;
+  onSetDefault?: (id: number) => Promise<SavedLocation> | SavedLocation | void;
   className?: string;
 }
 
@@ -22,8 +26,12 @@ export function CurrentAddressBar({
   address,
   selected,
   savedLocations,
+  customerId,
   onSelectAddress,
   onSaveNew,
+  onUpdate,
+  onDelete,
+  onSetDefault,
   className,
 }: CurrentAddressBarProps) {
   const [open, setOpen] = useState(false);
@@ -78,7 +86,11 @@ export function CurrentAddressBar({
         value={selected}
         onSelect={(loc, meta) => onSelectAddress(loc, meta)}
         savedLocations={savedLocations}
+        customerId={customerId}
         onSaveNew={onSaveNew}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        onSetDefault={onSetDefault}
       />
     </>
   );

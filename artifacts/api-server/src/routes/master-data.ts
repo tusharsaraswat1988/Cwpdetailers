@@ -12,6 +12,10 @@ import { eq, and, ilike, or, sql, asc } from "drizzle-orm";
 import { rowInScope } from "../middlewares/tenantScope";
 import { resolveVehiclePricing, getVehicleModelDetails } from "../lib/dynamicPricing";
 import { invalidateCoverageCacheForMasterUpdate } from "../lib/coverage";
+import {
+  isSavedLocationServiceError,
+  savedLocationService,
+} from "../lib/saved-locations/SavedLocationService";
 
 const router = Router();
 
@@ -416,18 +420,17 @@ router.get("/pricing/quote", async (req, res) => {
 
 // ─── Saved Locations ─────────────────────────────────────────────────────────
 
+function assertCustomerOwns(req: { user?: { role?: string | null }; scope?: { customerId?: number | null } | null }, customerId: number) {
+  return !(req.user?.role === "customer" && req.scope?.customerId != null && req.scope.customerId !== customerId);
+}
+
 router.get("/saved-locations", async (req, res) => {
   try {
     const { customerId } = req.query as Record<string, string>;
     if (!customerId) return res.status(400).json({ error: "customerId is required" });
     const cid = parseInt(customerId);
-    if (req.user?.role === "customer" && req.scope?.customerId && req.scope.customerId !== cid) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    const data = await db.select().from(savedLocationsTable)
-      .where(eq(savedLocationsTable.customerId, cid))
-      .orderBy(sql`${savedLocationsTable.isDefault} DESC`, asc(savedLocationsTable.label));
-    return res.json(data);
+    if (!assertCustomerOwns(req, cid)) return res.status(403).json({ error: "Forbidden" });
+    return res.json(await savedLocationService.list(cid));
   } catch (err) {
     req.log.error({ err }, "List saved locations error");
     return res.status(500).json({ error: "Internal server error" });
@@ -436,23 +439,29 @@ router.get("/saved-locations", async (req, res) => {
 
 router.post("/saved-locations", async (req, res) => {
   try {
-    const { customerId, label, address, latitude, longitude, placeId, isDefault } = req.body;
-    if (!customerId || !label || !address || latitude == null || longitude == null) {
-      return res.status(400).json({ error: "customerId, label, address, latitude, longitude are required" });
-    }
-    if (req.user?.role === "customer" && req.scope?.customerId && req.scope.customerId !== customerId) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    if (isDefault) {
-      await db.update(savedLocationsTable)
-        .set({ isDefault: false, updatedAt: new Date() })
-        .where(eq(savedLocationsTable.customerId, customerId));
-    }
-    const [loc] = await db.insert(savedLocationsTable).values({
-      customerId, label, address, latitude, longitude, placeId, isDefault: isDefault ?? false,
-    }).returning();
-    return res.status(201).json(loc);
+    const customerId = Number(req.body.customerId);
+    if (!assertCustomerOwns(req, customerId)) return res.status(403).json({ error: "Forbidden" });
+    const { location, reused } = await savedLocationService.create({
+      customerId,
+      label: req.body.label,
+      address: req.body.address,
+      houseNumber: req.body.houseNumber,
+      buildingName: req.body.buildingName,
+      area: req.body.area,
+      landmark: req.body.landmark,
+      cityId: req.body.cityId,
+      cityName: req.body.cityName ?? req.body.city,
+      pincode: req.body.pincode,
+      latitude: req.body.latitude,
+      longitude: req.body.longitude,
+      placeId: req.body.placeId,
+      formattedAddress: req.body.formattedAddress,
+      googleComponents: req.body.googleComponents,
+      isDefault: req.body.isDefault,
+    });
+    return res.status(reused ? 200 : 201).json(location);
   } catch (err) {
+    if (isSavedLocationServiceError(err)) return res.status(err.status).json({ error: err.error });
     req.log.error({ err }, "Create saved location error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -463,26 +472,42 @@ router.patch("/saved-locations/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const [existing] = await db.select().from(savedLocationsTable).where(eq(savedLocationsTable.id, id)).limit(1);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (req.user?.role === "customer" && req.scope?.customerId && req.scope.customerId !== existing.customerId) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    const { label, address, latitude, longitude, placeId, isDefault } = req.body;
-    if (isDefault) {
-      await db.update(savedLocationsTable)
-        .set({ isDefault: false, updatedAt: new Date() })
-        .where(eq(savedLocationsTable.customerId, existing.customerId));
-    }
-    const updateData: Record<string, unknown> = { updatedAt: new Date() };
-    if (label !== undefined) updateData.label = label;
-    if (address !== undefined) updateData.address = address;
-    if (latitude !== undefined) updateData.latitude = latitude;
-    if (longitude !== undefined) updateData.longitude = longitude;
-    if (placeId !== undefined) updateData.placeId = placeId;
-    if (isDefault !== undefined) updateData.isDefault = isDefault;
-    const [loc] = await db.update(savedLocationsTable).set(updateData).where(eq(savedLocationsTable.id, id)).returning();
+    if (!assertCustomerOwns(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    const loc = await savedLocationService.update(id, existing.customerId, {
+      label: req.body.label,
+      address: req.body.address,
+      houseNumber: req.body.houseNumber,
+      buildingName: req.body.buildingName,
+      area: req.body.area,
+      landmark: req.body.landmark,
+      cityId: req.body.cityId,
+      cityName: req.body.cityName ?? req.body.city,
+      pincode: req.body.pincode,
+      latitude: req.body.latitude,
+      longitude: req.body.longitude,
+      placeId: req.body.placeId,
+      formattedAddress: req.body.formattedAddress,
+      googleComponents: req.body.googleComponents,
+      isDefault: req.body.isDefault,
+    });
     return res.json(loc);
   } catch (err) {
+    if (isSavedLocationServiceError(err)) return res.status(err.status).json({ error: err.error });
     req.log.error({ err }, "Update saved location error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/saved-locations/:id/default", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(savedLocationsTable).where(eq(savedLocationsTable.id, id)).limit(1);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (!assertCustomerOwns(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    return res.json(await savedLocationService.setDefault(id, existing.customerId));
+  } catch (err) {
+    if (isSavedLocationServiceError(err)) return res.status(err.status).json({ error: err.error });
+    req.log.error({ err }, "Set default saved location error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -492,12 +517,11 @@ router.delete("/saved-locations/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const [existing] = await db.select().from(savedLocationsTable).where(eq(savedLocationsTable.id, id)).limit(1);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (req.user?.role === "customer" && req.scope?.customerId && req.scope.customerId !== existing.customerId) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    await db.delete(savedLocationsTable).where(eq(savedLocationsTable.id, id));
+    if (!assertCustomerOwns(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    await savedLocationService.remove(id, existing.customerId);
     return res.status(204).send();
   } catch (err) {
+    if (isSavedLocationServiceError(err)) return res.status(err.status).json({ error: err.error });
     req.log.error({ err }, "Delete saved location error");
     return res.status(500).json({ error: "Internal server error" });
   }

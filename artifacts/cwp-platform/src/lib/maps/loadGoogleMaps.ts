@@ -2,6 +2,33 @@
 
 const MAPS_SCRIPT_ID = "cwp-google-maps-js";
 
+export type GoogleAddressComponent = {
+  long_name: string;
+  short_name: string;
+  types: string[];
+};
+
+export type GoogleGeocoderResult = {
+  formatted_address?: string;
+  place_id?: string;
+  address_components?: GoogleAddressComponent[];
+  geometry?: { location?: { lat: () => number; lng: () => number } };
+};
+
+export type GooglePlaceResult = {
+  formatted_address?: string;
+  place_id?: string;
+  name?: string;
+  address_components?: GoogleAddressComponent[];
+  geometry?: { location?: { lat: () => number; lng: () => number } };
+};
+
+export type GoogleAutocompletePrediction = {
+  description: string;
+  place_id: string;
+  structured_formatting?: { main_text?: string; secondary_text?: string };
+};
+
 /** Minimal Maps surface used by our picker (avoids @types/google.maps dependency). */
 export type GoogleMapsNamespace = {
   Map: new (el: HTMLElement, opts?: Record<string, unknown>) => GoogleMap;
@@ -10,7 +37,7 @@ export type GoogleMapsNamespace = {
   Geocoder: new () => {
     geocode: (
       req: Record<string, unknown>,
-      cb: (results: Array<{ formatted_address?: string; place_id?: string }> | null, status: string) => void,
+      cb: (results: GoogleGeocoderResult[] | null, status: string) => void,
     ) => void;
   };
   event: {
@@ -18,16 +45,43 @@ export type GoogleMapsNamespace = {
     clearInstanceListeners?: (instance: unknown) => void;
   };
   places: {
-    Autocomplete: new (
+    Autocomplete?: new (
       input: HTMLInputElement,
       opts?: Record<string, unknown>,
     ) => {
-      getPlace: () => {
-        formatted_address?: string;
-        place_id?: string;
-        geometry?: { location?: { lat: () => number; lng: () => number } };
-      };
+      getPlace: () => GooglePlaceResult & { geometry?: { location?: { lat: () => number; lng: () => number } } };
       addListener: (event: string, handler: () => void) => void;
+    };
+    AutocompleteService?: new () => {
+      getPlacePredictions: (
+        req: Record<string, unknown>,
+        cb: (predictions: GoogleAutocompletePrediction[] | null, status: string) => void,
+      ) => void;
+    };
+    PlacesService?: new (attrContainer: HTMLDivElement | GoogleMap) => {
+      getDetails: (
+        req: Record<string, unknown>,
+        cb: (place: GooglePlaceResult | null, status: string) => void,
+      ) => void;
+    };
+    AutocompleteSuggestion?: {
+      fetchAutocompleteSuggestions: (req: Record<string, unknown>) => Promise<{
+        suggestions: Array<{
+          placePrediction?: {
+            text?: { text?: string };
+            placeId?: string;
+            mainText?: { text?: string };
+            secondaryText?: { text?: string };
+            toPlace?: () => {
+              fetchFields: (req: { fields: string[] }) => Promise<void>;
+              formattedAddress?: string;
+              id?: string;
+              location?: { lat: () => number; lng: () => number };
+              addressComponents?: Array<{ longText?: string; shortText?: string; types?: string[] }>;
+            };
+          };
+        }>;
+      }>;
     };
   };
 };
@@ -44,14 +98,17 @@ type GoogleMarker = {
   setMap: (map: GoogleMap | null) => void;
 };
 
-declare global {
-  interface Window {
-    google?: { maps?: GoogleMapsNamespace };
-    __cwpGoogleMapsInit?: () => void;
-  }
-}
-
 let loadPromise: Promise<GoogleMapsNamespace | null> | null = null;
+let lastFailure: string | null = null;
+
+type GoogleHost = {
+  google?: { maps?: GoogleMapsNamespace };
+  __cwpGoogleMapsInit?: () => void;
+};
+
+function googleHost(): GoogleHost {
+  return window as unknown as GoogleHost;
+}
 
 export function getGoogleMapsApiKey(): string | null {
   const key =
@@ -64,41 +121,54 @@ export function isGoogleMapsConfigured(): boolean {
   return Boolean(getGoogleMapsApiKey());
 }
 
+export function getGoogleMapsLoadError(): string | null {
+  return lastFailure;
+}
+
 export function loadGoogleMaps(): Promise<GoogleMapsNamespace | null> {
   const key = getGoogleMapsApiKey();
-  if (!key) return Promise.resolve(null);
+  if (!key) {
+    lastFailure = "not_configured";
+    return Promise.resolve(null);
+  }
 
-  if (window.google?.maps?.places) {
-    return Promise.resolve(window.google.maps);
+  if (googleHost().google?.maps?.places) {
+    lastFailure = null;
+    return Promise.resolve(googleHost().google!.maps!);
   }
 
   if (loadPromise) return loadPromise;
 
   loadPromise = new Promise<GoogleMapsNamespace | null>((resolve, reject) => {
     const finish = () => {
-      if (window.google?.maps?.places) {
-        resolve(window.google.maps);
+      if (googleHost().google?.maps?.places) {
+        lastFailure = null;
+        resolve(googleHost().google!.maps!);
       } else {
-        reject(new Error("Google Maps failed to initialize"));
+        lastFailure = "Google Maps failed to initialize";
+        reject(new Error(lastFailure));
       }
     };
 
     const existing = document.getElementById(MAPS_SCRIPT_ID) as HTMLScriptElement | null;
     if (existing) {
-      if (window.google?.maps?.places) {
+      if (googleHost().google?.maps?.places) {
         finish();
         return;
       }
       existing.addEventListener("load", finish, { once: true });
       existing.addEventListener(
         "error",
-        () => reject(new Error("Failed to load Google Maps")),
+        () => {
+          lastFailure = "Failed to load Google Maps";
+          reject(new Error(lastFailure));
+        },
         { once: true },
       );
       return;
     }
 
-    window.__cwpGoogleMapsInit = finish;
+    googleHost().__cwpGoogleMapsInit = finish;
 
     const script = document.createElement("script");
     script.id = MAPS_SCRIPT_ID;
@@ -109,7 +179,8 @@ export function loadGoogleMaps(): Promise<GoogleMapsNamespace | null> {
       `&libraries=places&callback=__cwpGoogleMapsInit&v=weekly`;
     script.onerror = () => {
       loadPromise = null;
-      reject(new Error("Failed to load Google Maps"));
+      lastFailure = "Failed to load Google Maps";
+      reject(new Error(lastFailure));
     };
     document.head.appendChild(script);
   }).catch(err => {
@@ -120,5 +191,5 @@ export function loadGoogleMaps(): Promise<GoogleMapsNamespace | null> {
   return loadPromise;
 }
 
-/** Varanasi — default map center for CWP Detailers. */
+/** Default map center — used only when the customer has not chosen a place yet. */
 export const DEFAULT_MAP_CENTER = { lat: 25.3176, lng: 82.9739 };

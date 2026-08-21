@@ -67,10 +67,15 @@ export function LocationPicker({ value, onChange, savedLocations, onSaveNew, req
     const loc = savedLocations?.find(l => String(l.id) === id);
     if (loc) {
       setAddress(loc.address);
-      setLat(loc.latitude.toString());
-      setLng(loc.longitude.toString());
+      setLat(String(loc.latitude ?? ""));
+      setLng(String(loc.longitude ?? ""));
       setPlaceId(loc.placeId ?? "");
-      onChange({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude, placeId: loc.placeId });
+      onChange({
+        address: loc.address,
+        latitude: loc.latitude ?? 0,
+        longitude: loc.longitude ?? 0,
+        placeId: loc.placeId ?? undefined,
+      });
     }
   };
 

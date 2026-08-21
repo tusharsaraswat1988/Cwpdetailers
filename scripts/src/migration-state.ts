@@ -57,6 +57,7 @@ export const PENDING_MIGRATIONS = [
   "059_dcms_one_present_cleaning_per_day.sql",
   "060_staff_extra_service_requests.sql",
   "061_attendance_selfie.sql",
+  "062_saved_locations_structured.sql",
 ] as const;
 
 export type Queryable = {

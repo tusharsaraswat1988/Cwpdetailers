@@ -149,12 +149,40 @@ describe("CoverageEngine", () => {
     expect(Array.isArray(api.availableServices)).toBe(true);
   });
 
-  it("returns INVALID_ADDRESS when coordinates missing", async () => {
+  it("returns INVALID_ADDRESS when coordinates and city/PIN are missing", async () => {
     const result = await coverageEngine.check({
       address: "test",
       locationLat: null,
       locationLng: null,
     });
     expect(result.status).toBe("INVALID_ADDRESS");
+  });
+
+  it("allows a manual address without coordinates when PIN is present", async () => {
+    mockLimit.mockResolvedValueOnce([activePinRow]);
+    mockIsAvailable.mockResolvedValue(true);
+
+    const result = await coverageEngine.check({
+      address: "12B Green Valley, Lanka",
+      locationLat: null,
+      locationLng: null,
+      postalCode: "221005",
+      cityName: "Varanasi",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.cityResolutionSource).toBe("pin");
+  });
+
+  it("does not treat citySlug as serviceable when GPS is present without PIN", async () => {
+    const result = await coverageEngine.check({
+      address: "Random street",
+      locationLat: 19.07,
+      locationLng: 72.87,
+      citySlug: "varanasi",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("PIN_NOT_FOUND");
   });
 });

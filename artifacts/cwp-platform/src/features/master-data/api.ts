@@ -43,8 +43,59 @@ export type ServiceCategory = {
   iconUrl?: string | null;
 };
 export type SavedLocation = {
-  id: number; customerId: number; label: string; address: string;
-  latitude: number; longitude: number; placeId?: string; isDefault: boolean;
+  id: number;
+  customerId: number;
+  label: string;
+  address: string;
+  houseNumber?: string | null;
+  buildingName?: string | null;
+  area?: string | null;
+  landmark?: string | null;
+  cityId?: number | null;
+  cityName?: string | null;
+  pincode?: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  placeId?: string | null;
+  formattedAddress?: string | null;
+  googleComponents?: Array<{ long_name: string; short_name: string; types: string[] }> | null;
+  isDefault: boolean;
+};
+
+export type LocationValue = {
+  address: string;
+  latitude: number;
+  longitude: number;
+  placeId?: string;
+  houseNumber?: string;
+  buildingName?: string;
+  area?: string;
+  landmark?: string;
+  cityName?: string;
+  cityId?: number;
+  pincode?: string;
+  formattedAddress?: string;
+  savedLocationId?: number;
+  googleComponents?: Array<{ long_name: string; short_name: string; types: string[] }>;
+};
+
+export type SavedLocationWrite = {
+  customerId: number;
+  label: string;
+  address: string;
+  houseNumber?: string;
+  buildingName?: string;
+  area?: string;
+  landmark?: string;
+  cityId?: number;
+  cityName?: string;
+  pincode?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  placeId?: string;
+  formattedAddress?: string;
+  googleComponents?: LocationValue["googleComponents"];
+  isDefault?: boolean;
 };
 export type CatalogService = {
   id: number; name: string; description?: string; category: string;
@@ -59,13 +110,6 @@ export type ServicePlan = {
 export type PricingQuote = {
   amount: number; source: string;
   vehicleCategory?: string; seatCategory?: string; durationMinutes?: number;
-};
-
-export type LocationValue = {
-  address: string;
-  latitude: number;
-  longitude: number;
-  placeId?: string;
 };
 
 // ─── Vehicle Masters ─────────────────────────────────────────────────────────
@@ -195,8 +239,35 @@ export function useSavedLocations(customerId?: number) {
 export function useCreateSavedLocation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Omit<SavedLocation, "id" | "createdAt" | "updatedAt">) =>
+    mutationFn: (data: SavedLocationWrite) =>
       masterFetch<SavedLocation>("/saved-locations", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["saved-locations", vars.customerId] }),
+  });
+}
+
+export function useUpdateSavedLocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, customerId, ...data }: SavedLocationWrite & { id: number }) =>
+      masterFetch<SavedLocation>(`/saved-locations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["saved-locations", vars.customerId] }),
+  });
+}
+
+export function useDeleteSavedLocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number; customerId: number }) =>
+      masterFetch<void>(`/saved-locations/${id}`, { method: "DELETE" }),
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["saved-locations", vars.customerId] }),
+  });
+}
+
+export function useSetDefaultSavedLocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, customerId }: { id: number; customerId: number }) =>
+      masterFetch<SavedLocation>(`/saved-locations/${id}/default`, { method: "POST", body: JSON.stringify({ customerId }) }),
     onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["saved-locations", vars.customerId] }),
   });
 }

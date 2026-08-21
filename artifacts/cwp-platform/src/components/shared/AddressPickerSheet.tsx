@@ -2,22 +2,18 @@ import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { FormattedAddressDisplay } from "@/components/shared/FormattedAddressDisplay";
+import type { LocationValue, SavedLocation, SavedLocationWrite } from "@/features/master-data/api";
+import { CreateServiceAddressForm } from "./address-picker/CreateServiceAddressForm";
+import { SavedAddressList } from "./address-picker/SavedAddressList";
 import {
-  CustomerServiceAddressSection,
+  addressFormToLocation,
+  emptyAddressValue,
+  formToWritePayload,
+  locationToAddressForm,
+  savedLocationToForm,
+  savedLocationToLocationValue,
   type CustomerServiceAddressValue,
-} from "@/features/customers/components/CustomerServiceAddressSection";
-import {
-  composeSavedAddress,
-  hasRequiredAddressParts,
-  parseComposedAddress,
-} from "@/features/customers/lib/serviceAddress";
-import { isGoogleMapsConfigured } from "@/lib/maps";
-import type { LocationValue, SavedLocation } from "@/features/master-data/api";
-import { addressesMatch } from "@/lib/selected-address";
-import { Check, MapPin } from "lucide-react";
-import { cn } from "@/lib/utils";
+} from "./address-picker/addressForm";
 
 type Props = {
   open: boolean;
@@ -25,55 +21,12 @@ type Props = {
   value: LocationValue | null;
   onSelect: (loc: LocationValue, meta?: { assetLabel?: string }) => void;
   savedLocations?: SavedLocation[];
-  onSaveNew?: (label: string, loc: LocationValue) => void;
+  onSaveNew?: (data: SavedLocationWrite) => Promise<SavedLocation> | SavedLocation | void;
+  onUpdate?: (id: number, data: SavedLocationWrite) => Promise<SavedLocation> | SavedLocation | void;
+  onDelete?: (id: number) => Promise<void> | void;
+  onSetDefault?: (id: number) => Promise<SavedLocation> | SavedLocation | void;
+  customerId?: number;
 };
-
-function emptyAddressValue(label = "Home"): CustomerServiceAddressValue {
-  return {
-    serviceLocationLabel: label,
-    houseNumber: "",
-    buildingName: "",
-    area: "",
-    landmark: "",
-    pincode: "",
-    city: "",
-    latitude: "",
-    longitude: "",
-    placeId: "",
-  };
-}
-
-function locationToAddressForm(loc: LocationValue | null, label: string): CustomerServiceAddressValue {
-  if (!loc) return emptyAddressValue(label);
-  const parts = parseComposedAddress(loc.address);
-  return {
-    serviceLocationLabel: label,
-    houseNumber: parts.houseNumber,
-    buildingName: parts.buildingName,
-    area: parts.area,
-    landmark: parts.landmark,
-    pincode: parts.pincode,
-    city: parts.city,
-    latitude: Number.isFinite(loc.latitude) ? String(loc.latitude) : "",
-    longitude: Number.isFinite(loc.longitude) ? String(loc.longitude) : "",
-    placeId: loc.placeId ?? "",
-  };
-}
-
-function addressFormToLocation(form: CustomerServiceAddressValue): LocationValue | null {
-  if (!hasRequiredAddressParts(form)) return null;
-  const lat = parseFloat(form.latitude);
-  const lng = parseFloat(form.longitude);
-  const mapsEnabled = isGoogleMapsConfigured();
-  if (mapsEnabled && (!Number.isFinite(lat) || !Number.isFinite(lng))) return null;
-
-  return {
-    address: composeSavedAddress(form),
-    latitude: Number.isFinite(lat) ? lat : 0,
-    longitude: Number.isFinite(lng) ? lng : 0,
-    placeId: form.placeId.trim() || undefined,
-  };
-}
 
 export function AddressPickerSheet({
   open,
@@ -82,119 +35,91 @@ export function AddressPickerSheet({
   onSelect,
   savedLocations,
   onSaveNew,
+  onUpdate,
+  onDelete,
+  onSetDefault,
+  customerId,
 }: Props) {
   const isMobile = useIsMobile();
-  const mapsEnabled = isGoogleMapsConfigured();
-  const [mode, setMode] = useState<"list" | "new">(
-    savedLocations && savedLocations.length > 0 ? "list" : "new",
-  );
+  const hasSaved = Boolean(savedLocations && savedLocations.length > 0);
+  const [mode, setMode] = useState<"list" | "new" | "edit">(hasSaved ? "list" : "new");
+  const [editing, setEditing] = useState<SavedLocation | null>(null);
   const [addressForm, setAddressForm] = useState<CustomerServiceAddressValue>(() =>
     locationToAddressForm(value, "Home"),
   );
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setEditing(null);
     setAddressForm(locationToAddressForm(value, "Home"));
-    setMode(savedLocations && savedLocations.length > 0 ? "list" : "new");
-  }, [open, value, savedLocations]);
+    setMode(hasSaved ? "list" : "new");
+  }, [open, value, hasSaved]);
 
-  const draft = addressFormToLocation(addressForm);
-  const dispatchReady = Boolean(draft) && (
-    !mapsEnabled
-    || (addressForm.latitude.trim() && addressForm.longitude.trim())
-  );
+  const closeWith = (loc: LocationValue, label: string) => {
+    onSelect(loc, { assetLabel: label });
+    onOpenChange(false);
+  };
 
-  const confirmDraft = () => {
-    if (!draft) return;
-    onSelect(draft, { assetLabel: addressForm.serviceLocationLabel.trim() || "Home" });
-    if (onSaveNew && mode === "new") {
-      onSaveNew(addressForm.serviceLocationLabel.trim() || "Home", draft);
+  const saveNew = async () => {
+    const draft = addressFormToLocation(addressForm);
+    if (!draft || customerId == null) return;
+    setSubmitting(true);
+    try {
+      const payload = formToWritePayload(addressForm, customerId, !hasSaved);
+      const created = await onSaveNew?.(payload);
+      const selected = created
+        ? savedLocationToLocationValue(created)
+        : { ...draft, savedLocationId: undefined };
+      closeWith(selected, addressForm.serviceLocationLabel.trim() || "Home");
+    } finally {
+      setSubmitting(false);
     }
-    onOpenChange(false);
   };
 
-  const selectSaved = (loc: SavedLocation) => {
-    const next: LocationValue = {
-      address: loc.address,
-      latitude: loc.latitude,
-      longitude: loc.longitude,
-      placeId: loc.placeId,
-    };
-    onSelect(next, { assetLabel: loc.label });
-    onOpenChange(false);
+  const saveEdit = async () => {
+    if (!editing || customerId == null) return;
+    const draft = addressFormToLocation(addressForm);
+    if (!draft) return;
+    setSubmitting(true);
+    try {
+      const payload = formToWritePayload(addressForm, customerId, editing.isDefault);
+      const updated = await onUpdate?.(editing.id, payload);
+      const selected = updated ? savedLocationToLocationValue(updated) : { ...draft, savedLocationId: editing.id };
+      closeWith(selected, addressForm.serviceLocationLabel.trim() || editing.label);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const body = (
-    <div className="space-y-4 pb-2">
-      {savedLocations && savedLocations.length > 0 && (
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={mode === "list" ? "default" : "outline"}
-            onClick={() => setMode("list")}
-          >
-            Saved
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={mode === "new" ? "default" : "outline"}
-            onClick={() => setMode("new")}
-          >
-            New address
-          </Button>
-        </div>
-      )}
-
-      {mode === "list" && savedLocations && savedLocations.length > 0 ? (
-        <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-          {savedLocations.map(loc => {
-            const selected = addressesMatch(value, loc);
-            return (
-              <button
-                key={loc.id}
-                type="button"
-                onClick={() => selectSaved(loc)}
-                className={cn(
-                  "w-full flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
-                  selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/30",
-                )}
-                data-testid={`saved-location-${loc.id}`}
-              >
-                <MapPin size={16} className="shrink-0 text-primary mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <FormattedAddressDisplay
-                    value={loc.address}
-                    siteLabel={loc.label}
-                    compact
-                  />
-                </div>
-                {selected && <Check size={16} className="shrink-0 text-primary" />}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <CustomerServiceAddressSection
-            idPrefix="address-picker"
-            value={addressForm}
-            onChange={patch => setAddressForm(prev => ({ ...prev, ...patch }))}
-          />
-
-          <Button
-            type="button"
-            className="w-full h-11"
-            disabled={!dispatchReady}
-            onClick={confirmDraft}
-            data-testid="btn-confirm-address"
-          >
-            Use this address
-          </Button>
-        </div>
-      )}
-    </div>
+  const body = mode === "list" && savedLocations && savedLocations.length > 0 ? (
+    <SavedAddressList
+      savedLocations={savedLocations}
+      value={value}
+      onSelect={loc => closeWith(loc, loc.savedLocationId
+        ? (savedLocations.find(s => s.id === loc.savedLocationId)?.label ?? "Saved")
+        : "Saved")}
+      onAddNew={() => {
+        setAddressForm(emptyAddressValue("Home"));
+        setMode("new");
+      }}
+      onEdit={loc => {
+        setEditing(loc);
+        setAddressForm(savedLocationToForm(loc));
+        setMode("edit");
+      }}
+      onDelete={onDelete ? async loc => { await onDelete(loc.id); } : undefined}
+      onSetDefault={onSetDefault ? async loc => { await onSetDefault(loc.id); } : undefined}
+    />
+  ) : (
+    <CreateServiceAddressForm
+      idPrefix={mode === "edit" ? "address-edit" : "address-picker"}
+      value={addressForm}
+      onChange={patch => setAddressForm(prev => ({ ...prev, ...patch }))}
+      ctaLabel="Save address"
+      submitting={submitting}
+      onSubmit={mode === "edit" ? saveEdit : saveNew}
+    />
   );
 
   if (isMobile) {
@@ -205,8 +130,8 @@ export function AddressPickerSheet({
           className="rounded-t-2xl px-5 pb-6 pt-4 max-h-[92dvh] overflow-y-auto"
           data-testid="address-picker-sheet"
         >
-          <SheetHeader className="text-left mb-3">
-            <SheetTitle className="font-display">Where should we arrive?</SheetTitle>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Where should we come?</SheetTitle>
           </SheetHeader>
           {body}
         </SheetContent>
@@ -217,8 +142,8 @@ export function AddressPickerSheet({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" data-testid="address-picker-dialog">
-        <DialogHeader>
-          <DialogTitle className="font-display">Where should we arrive?</DialogTitle>
+        <DialogHeader className="sr-only">
+          <DialogTitle>Where should we come?</DialogTitle>
         </DialogHeader>
         {body}
       </DialogContent>

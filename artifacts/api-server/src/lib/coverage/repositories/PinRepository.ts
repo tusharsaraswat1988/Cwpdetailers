@@ -23,6 +23,8 @@ export type PinRecord = {
   cityActive: boolean;
   stateName: string;
   stateCode: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export function toPinResolutionEntity(record: PinRecord): PinResolutionEntity {
@@ -49,6 +51,8 @@ export class PinRepository {
         cityActive: citiesTable.isActive,
         stateName: statesTable.name,
         stateCode: statesTable.code,
+        latitude: pincodesTable.latitude,
+        longitude: pincodesTable.longitude,
       })
       .from(pincodesTable)
       .innerJoin(serviceAreasTable, eq(pincodesTable.serviceAreaId, serviceAreasTable.id))

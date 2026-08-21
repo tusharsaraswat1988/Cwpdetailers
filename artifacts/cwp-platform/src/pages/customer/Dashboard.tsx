@@ -12,7 +12,7 @@ import {
   getListSolarSitesQueryKey,
 } from "@workspace/api-client-react";
 import { useAccountScope } from "@/lib/account-scope";
-import { useSavedLocations, useCreateSavedLocation } from "@/features/master-data/api";
+import { useSavedLocations, useCreateSavedLocation, useUpdateSavedLocation, useDeleteSavedLocation, useSetDefaultSavedLocation } from "@/features/master-data/api";
 import { useSelectedAddress } from "@/hooks/use-selected-address";
 import { useCustomerLocationSources } from "@/hooks/use-customer-location-sources";
 import CustomerLayout from "@/components/layout/CustomerLayout";
@@ -100,6 +100,9 @@ export default function CustomerDashboard() {
   const { serviceLocations, structuredAddresses, ready: locationCatalogReady } = useCustomerLocationSources(customerId);
   const { data: pendingFeedback } = usePendingFeedback();
   const createSavedLocation = useCreateSavedLocation();
+  const updateSavedLocation = useUpdateSavedLocation();
+  const deleteSavedLocation = useDeleteSavedLocation();
+  const setDefaultSavedLocation = useSetDefaultSavedLocation();
 
   const vehicleRows = useMemo(
     () => (vehiclesQuery.data ?? []) as VehicleRow[],
@@ -152,7 +155,7 @@ export default function CustomerDashboard() {
     planSolarSiteId,
   ]);
 
-  const { selected, initialized, selectLocation, savedLocations: saved } = useSelectedAddress(customerId, addressContext);
+  const { selected, initialized, selectLocation } = useSelectedAddress(customerId, addressContext);
 
   const dashboard = useMemo(() => {
     if (customerId == null) return null;
@@ -216,19 +219,13 @@ export default function CustomerDashboard() {
                 <CurrentAddressBar
                   address={dashboard.currentAddress}
                   selected={selected}
-                  savedLocations={saved}
+                  savedLocations={savedQuery.data}
+                  customerId={customerId}
                   onSelectAddress={selectLocation}
-                  onSaveNew={(label, loc) => {
-                    createSavedLocation.mutate({
-                      customerId,
-                      label,
-                      address: loc.address,
-                      latitude: loc.latitude,
-                      longitude: loc.longitude,
-                      placeId: loc.placeId,
-                      isDefault: saved.length === 0,
-                    });
-                  }}
+                  onSaveNew={data => createSavedLocation.mutateAsync(data)}
+                  onUpdate={(id, data) => updateSavedLocation.mutateAsync({ id, ...data })}
+                  onDelete={id => deleteSavedLocation.mutateAsync({ id, customerId })}
+                  onSetDefault={id => setDefaultSavedLocation.mutateAsync({ id, customerId })}
                 />
                 <OperationalHero hero={dashboard.hero} />
                 <AdaptivePrimaryCta cta={dashboard.cta} />

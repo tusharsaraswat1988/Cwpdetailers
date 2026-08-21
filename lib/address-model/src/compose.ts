@@ -16,3 +16,23 @@ export function hasRequiredAddressParts(
 ): boolean {
   return Boolean(parts.houseNumber.trim() && parts.area.trim() && parts.city.trim());
 }
+
+export function hasFiniteCoordinates(lat?: number | null, lng?: number | null): boolean {
+  return lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+}
+
+/** Customer save-gate: house/flat + enough place detail. City required only when GPS/place is missing. */
+export function canSaveCustomerLocation(
+  parts: Pick<CwpServiceAddressParts, "houseNumber" | "area" | "city"> & {
+    formattedAddress?: string | null;
+  },
+  opts?: { hasCoordinates?: boolean; mapsUnavailable?: boolean },
+): boolean {
+  if (!parts.houseNumber.trim()) return false;
+  const hasPlace = Boolean(parts.area.trim() || parts.formattedAddress?.trim());
+  if (!hasPlace) return false;
+  if (opts?.mapsUnavailable || !opts?.hasCoordinates) {
+    return Boolean(parts.city.trim());
+  }
+  return true;
+}

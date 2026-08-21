@@ -4,6 +4,8 @@ export {
   type CwpServiceAddressInput as ServiceAddressInput,
   composeSavedAddress,
   hasRequiredAddressParts,
+  canSaveCustomerLocation,
+  mapGoogleAddressComponents,
   prefillAddressFromGeocode,
   guessCityFromAddress,
   parseComposedAddress,

@@ -234,22 +234,54 @@ export function resolvePlanFromEntry(input: {
 export function resolveBookingAddressForEntry(input: {
   asset: ScheduleAsset | null;
   selectedAddress?: SelectedAddress | null;
+  savedLocations?: Array<{
+    id: number;
+    label: string;
+    address: string;
+    latitude: number | null;
+    longitude: number | null;
+    placeId?: string | null;
+    isDefault?: boolean;
+    houseNumber?: string | null;
+    area?: string | null;
+    cityName?: string | null;
+    pincode?: string | null;
+  }>;
 }): LocationValue | null {
+  const stored = input.selectedAddress;
+  if (stored?.address?.trim()) {
+    const unbound = stored.assetId == null || stored.assetType == null;
+    const matchesAsset = Boolean(
+      input.asset
+      && stored.assetId === input.asset.id
+      && stored.assetType === input.asset.kind,
+    );
+    if (unbound || matchesAsset || !input.asset) {
+      return stored;
+    }
+  }
+
+  const saved = input.savedLocations ?? [];
+  const preferred = saved.find(l => l.isDefault) ?? saved[0];
+  if (preferred) {
+    return {
+      address: preferred.address,
+      latitude: preferred.latitude ?? 0,
+      longitude: preferred.longitude ?? 0,
+      placeId: preferred.placeId ?? undefined,
+      savedLocationId: preferred.id,
+      houseNumber: preferred.houseNumber ?? undefined,
+      area: preferred.area ?? undefined,
+      cityName: preferred.cityName ?? undefined,
+      pincode: preferred.pincode ?? undefined,
+    };
+  }
+
   if (input.asset?.location) {
     return input.asset.location;
   }
 
-  const stored = input.selectedAddress;
-  if (!stored) return null;
-
-  if (input.asset && stored.assetId != null && stored.assetType != null) {
-    if (stored.assetId === input.asset.id && stored.assetType === input.asset.kind) {
-      return stored;
-    }
-    return null;
-  }
-
-  return stored;
+  return stored?.address?.trim() ? stored : null;
 }
 
 export function resolveScheduleEntryContext(input: {
@@ -279,7 +311,11 @@ export function resolveScheduleEntryContext(input: {
     singleAssetHint: hint,
   });
 
-  const address = resolveBookingAddressForEntry({ asset, selectedAddress: storedAddress });
+  const address = resolveBookingAddressForEntry({
+    asset,
+    selectedAddress: storedAddress,
+    savedLocations: undefined,
+  });
 
   const assetCount = countAssets(input.vehicles, input.solarSites);
   const initialStep = resolveActiveStep({

@@ -110,9 +110,14 @@ export function useSelectedAddress(
   const selectFromSaved = useCallback((loc: SavedLocationLike) => {
     selectLocation({
       address: loc.address,
-      latitude: loc.latitude,
-      longitude: loc.longitude,
-      placeId: loc.placeId,
+      latitude: loc.latitude ?? 0,
+      longitude: loc.longitude ?? 0,
+      placeId: loc.placeId ?? undefined,
+      savedLocationId: loc.id,
+      houseNumber: loc.houseNumber ?? undefined,
+      area: loc.area ?? undefined,
+      cityName: loc.cityName ?? undefined,
+      pincode: loc.pincode ?? undefined,
     }, { assetLabel: loc.label });
   }, [selectLocation]);
 

@@ -24,6 +24,9 @@ export async function checkCoverage(input: {
   placeId?: string;
   serviceId?: number;
   citySlug?: string;
+  cityName?: string;
+  postalCode?: string;
+  addressComponents?: Array<{ long_name: string; short_name: string; types: string[] }>;
 }): Promise<CoverageCheckResult> {
   const res = await fetch("/api/coverage/check", {
     method: "POST",
@@ -36,7 +39,10 @@ export async function checkCoverage(input: {
       locationLng: input.locationLng,
       placeId: input.placeId,
       serviceId: input.serviceId,
-      citySlug: input.citySlug ?? "varanasi",
+      cityName: input.cityName,
+      postalCode: input.postalCode,
+      addressComponents: input.addressComponents,
+      ...(input.citySlug ? { citySlug: input.citySlug } : {}),
     }),
   });
   const body = await res.json().catch(() => ({ message: "Coverage check failed" }));
