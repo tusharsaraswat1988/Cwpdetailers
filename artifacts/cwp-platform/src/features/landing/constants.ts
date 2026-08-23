@@ -8,9 +8,9 @@ export const LANDING_LAYOUT = {
   padX: "px-5 md:px-8",
   heroPadY: "pt-4 pb-8 md:pt-5 md:pb-12 lg:pt-6 lg:pb-14",
   /** Space between the in-hero switcher and the journey composition */
-  heroAfterSelector: "mt-3 md:mt-4",
+  heroAfterSelector: "mt-2.5 md:mt-3",
   heroGap: "gap-6 lg:gap-10",
-  heroGrid: "lg:grid-cols-[1.05fr_0.95fr] lg:items-start",
+  heroGrid: "lg:grid-cols-[1.05fr_0.95fr] lg:items-center",
   navHeight: "h-16",
   sectionRadius: "rounded-[28px]",
   mediaRadius: "rounded-[28px]",
