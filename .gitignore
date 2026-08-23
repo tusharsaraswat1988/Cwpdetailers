@@ -53,3 +53,14 @@ Thumbs.db
 
 # Vite PWA dev build output
 artifacts/cwp-platform/dev-dist/
+
+# Capacitor Android staff app build
+artifacts/cwp-staff-app/android/.gradle/
+artifacts/cwp-staff-app/android/app/build/
+artifacts/cwp-staff-app/android/build/
+artifacts/cwp-staff-app/android/local.properties
+artifacts/cwp-staff-app/android/captures/
+artifacts/cwp-staff-app/android/.idea/
+*.apk
+*.aab
+*.ap_

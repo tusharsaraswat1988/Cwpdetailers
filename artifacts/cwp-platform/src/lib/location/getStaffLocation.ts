@@ -6,6 +6,8 @@ import {
 } from "./constants";
 import { locationStoreSnapshot, modeUsesCache } from "./locationStore";
 import { runExclusiveGeolocationRead } from "./geolocationCoordinator";
+import { waitForAccurateGps } from "./accuracyWait";
+import { isStaffNativeApp } from "@/lib/native/staffNative";
 
 function mapGeoError(err: GeolocationPositionError): string {
   switch (err.code) {
@@ -21,6 +23,7 @@ function mapGeoError(err: GeolocationPositionError): string {
 }
 
 export function isGeolocationSupported(): boolean {
+  if (isStaffNativeApp()) return true;
   return typeof navigator !== "undefined" && "geolocation" in navigator;
 }
 
@@ -28,9 +31,9 @@ function optionsForMode(mode: GpsRequestMode): PositionOptions {
   return mode === "action" ? GPS_ACTION_OPTIONS : GPS_NAVIGATION_OPTIONS;
 }
 
-function readPosition(options: PositionOptions): Promise<StaffGpsCoords> {
+function readBrowserPosition(options: PositionOptions): Promise<StaffGpsCoords> {
   return new Promise((resolve, reject) => {
-    if (!isGeolocationSupported()) {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       reject(new Error("GPS is not available on this device"));
       return;
     }
@@ -47,9 +50,21 @@ function readPosition(options: PositionOptions): Promise<StaffGpsCoords> {
   });
 }
 
+async function readPosition(options: PositionOptions): Promise<StaffGpsCoords> {
+  if (isStaffNativeApp()) {
+    const { readNativePosition } = await import("./nativeGeolocation");
+    return readNativePosition({
+      enableHighAccuracy: options.enableHighAccuracy,
+      timeout: options.timeout,
+      maximumAge: options.maximumAge,
+    });
+  }
+  return readBrowserPosition(options);
+}
+
 /**
  * Unified staff GPS read.
- * - action: always fresh high-accuracy (attendance, jobs, photos, walk-in)
+ * - action: always fresh high-accuracy, waits until ±50m (or best ≤200m)
  * - navigation / background: may return cache ≤30s, else low-accuracy read
  */
 export async function getStaffLocation(mode: GpsRequestMode = "action"): Promise<StaffGpsCoords> {
@@ -60,7 +75,13 @@ export async function getStaffLocation(mode: GpsRequestMode = "action"): Promise
     if (cached) return cached;
   }
 
-  const coords = await runExclusiveGeolocationRead(() => readPosition(optionsForMode(mode)));
+  const coords = await runExclusiveGeolocationRead(async () => {
+    const options = optionsForMode(mode);
+    if (mode === "action") {
+      return waitForAccurateGps(() => readPosition(options));
+    }
+    return readPosition(options);
+  });
   store.setLocation(coords);
   return coords;
 }

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { useStaffLocation } from "./LocationProvider";
 
 export function LocationStatusIndicator({ className }: { className?: string }) {
-  const { permissionState, gpsReady, isRefreshing } = useStaffLocation();
+  const { permissionState, gpsReady, isRefreshing, accuracy } = useStaffLocation();
 
   if (permissionState === "unsupported" || permissionState === "denied") {
     return (
@@ -76,10 +76,10 @@ export function LocationStatusIndicator({ className }: { className?: string }) {
         className,
       )}
       data-testid="location-status"
-      title="GPS ready"
+      title={accuracy != null ? `GPS ±${Math.round(accuracy)}m` : "GPS ready"}
     >
       <MapPin size={11} />
-      GPS Ready
+      {accuracy != null ? `GPS ±${Math.round(accuracy)}m` : "GPS Ready"}
     </span>
   );
 }

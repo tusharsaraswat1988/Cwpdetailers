@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Search, Loader2, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
-import { recognizePlateFromImage, normalizeRegistration } from "../lib/plateOcr";
+import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
 import { useVehicleSearch, useRecognizePlate, dcmsFetch } from "../api";
 import { PlateVerifyCard } from "./PlateVerifyCard";
 import type { VehicleReferencePhotoSet } from "@/components/shared/VehicleReferencePhotos";
@@ -57,7 +57,6 @@ const EMPTY_PHOTOS: VehicleReferencePhotoSet = {
 
 export function PlateScanFlow({ open, onOpenChange, routeSubscriptionIds, onVehicleConfirmed }: Props) {
   const { toast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>("capture");
   const [ocrRaw, setOcrRaw] = useState("");
   const [ocrConfidence, setOcrConfidence] = useState(0);
@@ -120,14 +119,11 @@ export function PlateScanFlow({ open, onOpenChange, routeSubscriptionIds, onVehi
     setStep("verify");
   };
 
-  const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
-    setStep("processing");
+  const handleCapture = async () => {
     try {
-      const ocr = await recognizePlateFromImage(file);
+      const photo = await captureStaffPhoto("rear");
+      setStep("processing");
+      const ocr = await recognizePlateFromImage(photo.file);
       setOcrRaw(ocr.rawText);
       setOcrConfidence(ocr.confidence);
 
@@ -143,6 +139,7 @@ export function PlateScanFlow({ open, onOpenChange, routeSubscriptionIds, onVehi
 
       setStep("verify");
     } catch (err) {
+      if (isCameraCancel(err)) return;
       toast({ title: "OCR failed", description: (err as Error).message, variant: "destructive" });
       setStep("manual");
     }
@@ -220,7 +217,7 @@ export function PlateScanFlow({ open, onOpenChange, routeSubscriptionIds, onVehi
 
           {step === "capture" && (
             <div className="space-y-4">
-              <Button className="w-full" onClick={() => fileRef.current?.click()}>
+              <Button className="w-full" onClick={() => void handleCapture()}>
                 <Camera className="h-4 w-4 mr-2" /> Open Camera
               </Button>
               <Button variant="outline" className="w-full" onClick={() => setStep("manual")}>
@@ -342,15 +339,6 @@ export function PlateScanFlow({ open, onOpenChange, routeSubscriptionIds, onVehi
           )}
         </DialogContent>
       </Dialog>
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleCapture}
-      />
     </>
   );
 }

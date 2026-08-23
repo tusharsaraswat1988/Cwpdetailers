@@ -83,8 +83,14 @@ export type HeroSelectorOption = {
 export type HeroSelectorContent = {
   label: string;
   title: string;
-  orLabel: string;
+  /** @deprecated Public homepage presents both services; no longer rendered */
+  orLabel?: string;
   options: [HeroSelectorOption, HeroSelectorOption];
+};
+
+export type HeroCredibilityItem = {
+  id: string;
+  label: string;
 };
 
 export type HeroJourneyContent = {
@@ -96,6 +102,8 @@ export type HeroJourneyContent = {
   subheading: string;
   socialProof?: HeroSocialProof;
   trustPills: HeroTrustPill[];
+  /** Qualitative proof strip immediately below the hero composition */
+  credibility?: HeroCredibilityItem[];
   ctas: HeroCta[];
   media: HeroMediaSource;
   liveChip?: string;

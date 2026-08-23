@@ -23,7 +23,7 @@ export function HeroCTA({ ctas, enterReady, className }: HeroCTAProps) {
   return (
     <div
       style={enter.style}
-      className={cn(enter.className, "mt-8 flex flex-wrap gap-3", className)}
+      className={cn(enter.className, "mt-4 flex flex-wrap items-center gap-3", className)}
       data-testid="hero-cta-group"
     >
       {ctas.map((cta) => {
@@ -48,7 +48,8 @@ export function HeroCTA({ ctas, enterReady, className }: HeroCTAProps) {
             className={cn(
               cta.variant !== "secondary" &&
                 cta.variant !== "ghost" &&
-                "bg-foreground text-background hover:bg-foreground/90",
+                "h-11 bg-foreground px-6 text-background hover:bg-foreground/90",
+              (cta.variant === "secondary" || cta.variant === "ghost") && "h-11",
             )}
             onClick={onClick}
             data-testid={`hero-cta-${cta.id}`}
@@ -62,7 +63,13 @@ export function HeroCTA({ ctas, enterReady, className }: HeroCTAProps) {
 
         if (cta.external || cta.href.startsWith("http") || cta.href.startsWith("tel:")) {
           return (
-            <a key={cta.id} href={cta.href} target={cta.external ? "_blank" : undefined} rel={cta.external ? "noreferrer" : undefined}>
+            <a
+              key={cta.id}
+              href={cta.href}
+              className="cursor-pointer"
+              target={cta.external ? "_blank" : undefined}
+              rel={cta.external ? "noreferrer" : undefined}
+            >
               {inner}
             </a>
           );
@@ -70,14 +77,14 @@ export function HeroCTA({ ctas, enterReady, className }: HeroCTAProps) {
 
         if (isAppRoute(cta.href)) {
           return (
-            <Link key={cta.id} href={cta.href}>
+            <Link key={cta.id} href={cta.href} className="cursor-pointer">
               {inner}
             </Link>
           );
         }
 
         return (
-          <a key={cta.id} href={cta.href}>
+          <a key={cta.id} href={cta.href} className="cursor-pointer">
             {inner}
           </a>
         );

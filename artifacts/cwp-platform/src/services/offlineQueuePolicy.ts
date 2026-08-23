@@ -5,6 +5,10 @@ export const OFFLINE_QUEUE_ALLOWED_TYPES = [
   "note",
   "expense",
   "follow_up",
+  "staff_attendance",
+  "staff_job",
+  "staff_visit",
+  "staff_photo",
 ] as const;
 
 export type QueueOperationType = (typeof OFFLINE_QUEUE_ALLOWED_TYPES)[number];
@@ -42,6 +46,14 @@ export function canQueueOfflineOperation(
 ): type is QueueOperationType {
   if (!isOfflineQueueAllowedType(type)) return false;
   if (type === "expense") return true;
+  if (
+    type === "staff_attendance"
+    || type === "staff_job"
+    || type === "staff_visit"
+    || type === "staff_photo"
+  ) {
+    return true;
+  }
   return !isFinancialOrInventoryUrl(url);
 }
 

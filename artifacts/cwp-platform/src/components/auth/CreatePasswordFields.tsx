@@ -1,6 +1,6 @@
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
-import { authInputClass, authLabelClass } from "@/components/auth/authStyles";
+import { authControlClass, authLandingRingClass } from "@/components/auth/authStyles";
 import { cn } from "@/lib/utils";
 
 export const MIN_PASSWORD_LENGTH = 6;
@@ -37,13 +37,13 @@ export function CreatePasswordFields({
   onPasswordChange,
   onConfirmChange,
   disabled,
-  dark = true,
+  dark = false,
   idPrefix = "create-password",
   hint = "At least 6 characters. Use this to sign in next time without SMS.",
   className,
 }: CreatePasswordFieldsProps) {
-  const labelClass = dark ? authLabelClass : undefined;
-  const inputClass = dark ? authInputClass : undefined;
+  const labelClass = dark ? "text-white/70 text-sm" : "text-sm text-muted-foreground";
+  const inputClass = dark ? undefined : cn(authControlClass, authLandingRingClass);
 
   return (
     <div className={cn("space-y-3", className)}>

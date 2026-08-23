@@ -5,6 +5,7 @@ import type { GeoTaggedPhoto } from "@/lib/staff-jobs";
 import { REQUIRED_SERVICE_PHOTOS } from "@/lib/staff-jobs";
 import { mapsViewUrl } from "@/lib/maps";
 import { StaffSyncChip } from "@/features/staff-ds";
+import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
 
 type Props = {
   label: string;
@@ -14,6 +15,7 @@ type Props = {
   uploadingIndex?: number | null;
   disabled?: boolean;
   onCapture: (file: File) => void;
+  onCaptureError?: (err: unknown) => void;
 };
 
 export function GeoPhotoSlotGrid({
@@ -24,6 +26,7 @@ export function GeoPhotoSlotGrid({
   uploadingIndex,
   disabled,
   onCapture,
+  onCaptureError,
 }: Props) {
   const slots = Array.from({ length: requiredCount }, (_, i) => photos[i] ?? null);
   const isUploadingAny = uploadingIndex != null;
@@ -88,7 +91,7 @@ export function GeoPhotoSlotGrid({
           const canCapture = !disabled && photos.length === index && uploadingIndex == null;
 
           return (
-            <label
+            <div
               key={index}
               className={cn(
                 "staff-photo-slot staff-tap staff-transition relative",
@@ -111,21 +114,25 @@ export function GeoPhotoSlotGrid({
                   </span>
                 </>
               )}
-              {canCapture && (
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label={`Capture ${label} photo ${index + 1}`}
-                  onChange={e => {
-                    const f = e.target.files?.[0];
-                    if (f) onCapture(f);
-                    e.target.value = "";
-                  }}
-                />
-              )}
-            </label>
+                  {canCapture && (
+                    <button
+                      type="button"
+                      className="absolute inset-0 cursor-pointer"
+                      aria-label={`Capture ${label} photo ${index + 1}`}
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            const photo = await captureStaffPhoto("rear");
+                            onCapture(photo.file);
+                          } catch (err) {
+                            if (isCameraCancel(err)) return;
+                            onCaptureError?.(err);
+                          }
+                        })();
+                      }}
+                    />
+                  )}
+            </div>
           );
         })}
       </div>

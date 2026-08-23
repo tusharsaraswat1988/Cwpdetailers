@@ -24,6 +24,11 @@
   --hero-selector-transition: 220ms;
 }
 
+/* Experience switch — accent, tint and chrome ease together */
+.landing-root [data-testid="landing-hero"] {
+  transition: color 320ms ease;
+}
+
 /* Shared marketing prose (legal / long-form) — uses scoped accent, not global primary cyan */
 .landing-root .marketing-prose {
   --tw-prose-links: var(--landing-accent);
@@ -209,6 +214,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .landing-root [data-testid="landing-hero"] {
+    transition: none;
+  }
   .cwp-reveal,
   .cwp-lift,
   .cwp-kenburns,

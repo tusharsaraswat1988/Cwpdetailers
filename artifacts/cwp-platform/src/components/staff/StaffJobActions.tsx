@@ -2,6 +2,8 @@ import { Camera, CheckCircle, Route, ArrowRight, Loader2 } from "lucide-react";
 import type { StaffJob } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { StaffButton, StaffSuccessBanner, StaffSyncChip } from "@/features/staff-ds";
+import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
+import { useToast } from "@/hooks/use-toast";
 
 type Mutations = Pick<
   ReturnType<typeof useStaffJobsData>,
@@ -22,6 +24,7 @@ export function StaffJobActions({
   isActionPending,
   size = "default",
 }: Props) {
+  const { toast } = useToast();
   const btnClass = size === "hero" ? "w-full" : "w-full";
   const iconSize = size === "hero" ? 18 : 15;
   const isLocating = locatingJobId === job.id;
@@ -94,24 +97,28 @@ export function StaffJobActions({
       <div className="space-y-2">
         {isUploading ? <StaffSyncChip state="uploading" /> : null}
         <StaffButton
-          className={`${btnClass} relative`}
+          className={`${btnClass}`}
           variant="outline"
           disabled={isUploading}
           data-testid={`btn-before-photo-${job.id}`}
+          onClick={() => {
+            void (async () => {
+              try {
+                const photo = await captureStaffPhoto("rear");
+                uploadPhoto(job.id, "beforePhotoUrl", photo.file);
+              } catch (err) {
+                if (isCameraCancel(err)) return;
+                toast({
+                  title: "Camera failed",
+                  description: err instanceof Error ? err.message : "Could not capture photo",
+                  variant: "destructive",
+                });
+              }
+            })();
+          }}
         >
           <Camera size={iconSize} className="mr-2" />
           {isUploading ? "Uploading…" : "Take Before Photo"}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="absolute inset-0 cursor-pointer opacity-0"
-            onChange={e => {
-              const f = e.target.files?.[0];
-              if (f) uploadPhoto(job.id, "beforePhotoUrl", f);
-              e.target.value = "";
-            }}
-          />
         </StaffButton>
       </div>
     );
@@ -140,24 +147,28 @@ export function StaffJobActions({
       <div className="space-y-2">
         {isUploading ? <StaffSyncChip state="uploading" /> : null}
         <StaffButton
-          className={`${btnClass} relative`}
+          className={`${btnClass}`}
           variant="outline"
           disabled={isUploading}
           data-testid={`btn-after-photo-${job.id}`}
+          onClick={() => {
+            void (async () => {
+              try {
+                const photo = await captureStaffPhoto("rear");
+                uploadPhoto(job.id, "afterPhotoUrl", photo.file);
+              } catch (err) {
+                if (isCameraCancel(err)) return;
+                toast({
+                  title: "Camera failed",
+                  description: err instanceof Error ? err.message : "Could not capture photo",
+                  variant: "destructive",
+                });
+              }
+            })();
+          }}
         >
           <Camera size={iconSize} className="mr-2" />
           {isUploading ? "Uploading…" : "Take After Photo"}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="absolute inset-0 cursor-pointer opacity-0"
-            onChange={e => {
-              const f = e.target.files?.[0];
-              if (f) uploadPhoto(job.id, "afterPhotoUrl", f);
-              e.target.value = "";
-            }}
-          />
         </StaffButton>
       </div>
     );

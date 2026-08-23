@@ -4,6 +4,7 @@ declare let self: ServiceWorkerGlobalScope;
 import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
 import { registerRoute, NavigationRoute } from "workbox-routing";
 import { NetworkFirst } from "workbox-strategies";
+import { sanitizePrecacheManifest } from "./lib/pwa/precacheManifest";
 
 // Activate immediately so PushManager.subscribe() can run on the first tap.
 // Without this, navigator.serviceWorker.ready can hang forever on first install.
@@ -20,7 +21,7 @@ self.addEventListener("message", (event) => {
 });
 
 cleanupOutdatedCaches();
-precacheAndRoute(self.__WB_MANIFEST);
+precacheAndRoute(sanitizePrecacheManifest(self.__WB_MANIFEST));
 
 registerRoute(new NavigationRoute(
   new NetworkFirst({ cacheName: "pages" }),

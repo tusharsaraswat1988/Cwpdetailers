@@ -11,11 +11,19 @@ type AuthFooterProps = {
   links?: readonly { href: string; label: string }[];
   children?: React.ReactNode;
   className?: string;
+  tone?: "light" | "dark";
 };
 
-export function AuthFooter({ links = DEFAULT_LINKS, children, className }: AuthFooterProps) {
+export function AuthFooter({
+  links = DEFAULT_LINKS,
+  children,
+  className,
+  tone = "light",
+}: AuthFooterProps) {
+  const light = tone === "light";
+
   return (
-    <div className={cn("mt-4 pt-3 border-t border-white/[0.04]", className)}>
+    <div className={cn("mt-6 pt-4", light ? "border-t border-border/70" : "border-t border-white/[0.08]", className)}>
       {children}
       <nav
         className="flex flex-wrap justify-center gap-x-5 gap-y-1"
@@ -25,7 +33,12 @@ export function AuthFooter({ links = DEFAULT_LINKS, children, className }: AuthF
           <Link
             key={link.href}
             href={link.href}
-            className="text-white/20 hover:text-white/38 text-[11px] transition-colors duration-200"
+            className={cn(
+              "text-[11px] transition-colors duration-200",
+              light
+                ? "text-muted-foreground hover:text-foreground"
+                : "text-white/35 hover:text-white/60",
+            )}
           >
             {link.label}
           </Link>

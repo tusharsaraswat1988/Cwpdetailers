@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useSendAuthOtp } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { Input } from "@/components/ui/input";
+import { MarketingButton } from "@/features/landing/components/marketing/MarketingButton";
 import { useToast } from "@/hooks/use-toast";
 import { submitMobile } from "@/lib/contactForm";
 import { getAuthErrorMessage } from "@/lib/authErrorMessages";
@@ -13,11 +13,11 @@ import { trackAuthEvent } from "@/lib/authAnalytics";
 import { useBranding } from "@/lib/branding";
 import { useAuthFlow } from "@/hooks/useAuthFlow";
 import { useAuthFlowStore } from "@/lib/authFlowStore";
-import { AuthLayout } from "@/components/auth/AuthLayout";
+import { AuthLayout, AuthPanel } from "@/components/auth/AuthLayout";
 import { AuthHeader } from "@/components/auth/AuthHeader";
 import { AuthFooter } from "@/components/auth/AuthFooter";
-import { AuthDivider } from "@/components/auth/AuthDivider";
-import { GoogleButton } from "@/components/auth/GoogleButton";
+import { AuthBackButton } from "@/components/auth/AuthBackButton";
+import { AuthMethodChooser } from "@/components/auth/AuthMethodChooser";
 import { AuthOtpOverlay } from "@/components/auth/AuthOtpOverlay";
 import { AuthGoogleDialogs } from "@/components/auth/AuthGoogleDialogs";
 import {
@@ -25,14 +25,11 @@ import {
   validateCreatePassword,
 } from "@/components/auth/CreatePasswordFields";
 import {
+  authControlClass,
   authFadeUp,
   authFormStagger,
-  authGoogleButtonClass,
-  authInputClass,
-  authLabelClass,
+  authLandingRingClass,
   authLinkClass,
-  authPhoneInputClass,
-  authPrimaryButtonClass,
 } from "@/components/auth/authStyles";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -49,6 +46,7 @@ export default function Register() {
   const { toast } = useToast();
   const queryPhone = usePhoneFromQuery();
 
+  const [authStep, setAuthStep] = useState<"chooser" | "credentials">("chooser");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
@@ -72,7 +70,10 @@ export default function Register() {
   } = useAuthFlow("customer");
 
   useEffect(() => {
-    if (queryPhone) setPhone(queryPhone.replace(/\D/g, "").slice(0, 10));
+    if (queryPhone) {
+      setPhone(queryPhone.replace(/\D/g, "").slice(0, 10));
+      setAuthStep("credentials");
+    }
   }, [queryPhone]);
 
   const sendOtpMutation = useSendAuthOtp({
@@ -145,112 +146,119 @@ export default function Register() {
     <AuthLayout testId="register-page">
       <AuthHeader
         title="Create your account"
-        subtitle={`Join the ${branding.brandName} community`}
+        subtitle={
+          authStep === "chooser"
+            ? "Continue with Google, or sign up with your mobile number"
+            : `Join the ${branding.brandName} community`
+        }
       />
 
-      <form
-        onSubmit={handleContinue}
-        className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}
-      >
-        <div>
-          <Label htmlFor="register-name" className={authLabelClass}>
-            Full name
-          </Label>
-          <Input
-            id="register-name"
-            data-testid="input-name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Your full name"
-            autoComplete="name"
-            className={cn(authInputClass, "mt-1.5")}
-          />
-        </div>
-
-        <PhoneInput
-          id="register-phone"
-          data-testid="input-phone"
-          label="Mobile number"
-          dark
-          indianMobile
-          hideHint
-          deferValidationUntilComplete
-          value={phone}
-          onChange={setPhone}
-          error={phoneError}
-          onErrorChange={setPhoneError}
-          autoComplete="tel"
-          className={authPhoneInputClass}
-        />
-
-        <CreatePasswordFields
-          idPrefix="register"
-          password={password}
-          confirmPassword={confirmPassword}
-          onPasswordChange={setPassword}
-          onConfirmChange={setConfirmPassword}
-          disabled={pending}
-        />
-
-        <Button
-          type="submit"
-          disabled={pending || !formReady}
-          className={authPrimaryButtonClass}
-          data-testid="btn-continue-register"
-        >
-          {sendOtpMutation.isPending ? (
-            <>
-              <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
-              Sending OTP...
-            </>
-          ) : (
-            "Continue"
-          )}
-        </Button>
-
-        <p className="text-center text-white/25 text-[11px] leading-relaxed">
-          We&apos;ll send a one-time OTP to verify your number. After that, sign in with your password — no SMS needed.
-        </p>
-      </form>
-
-      <AuthDivider className="my-3.5" />
-
-      <div className={cn(authFadeUp, "delay-200")}>
-        <GoogleButton
-          onSuccess={idToken => {
+      <AuthPanel>
+      <div className={authStep === "chooser" ? undefined : "hidden"} aria-hidden={authStep !== "chooser"}>
+        <AuthMethodChooser
+          onGoogleSuccess={idToken => {
             trackAuthEvent("google_started", { method: "google", portal: "customer" });
             trackAuthEvent("registration_started", { method: "google", portal: "customer" });
             handleGoogleToken(idToken);
           }}
-          onError={msg => {
+          onGoogleError={msg => {
             trackAuthEvent("google_cancelled", { method: "google", portal: "customer" });
             toast({ title: "Google sign-in", description: getAuthErrorMessage(msg), variant: "destructive" });
           }}
-          disabled={googleDisabled || pending}
-          className={authGoogleButtonClass}
+          googleDisabled={googleDisabled}
+          googlePending={googlePending}
+          googlePendingLabel="Signing up with Google..."
+          secondaryLabel="Sign up with mobile"
+          secondaryTestId="btn-signup-email"
+          onChooseSecondary={() => setAuthStep("credentials")}
         />
-
-        {googlePending && (
-          <p className="text-center text-white/35 text-xs flex items-center justify-center gap-1.5 mt-1.5" aria-live="polite">
-            <Loader2 size={12} className="animate-spin" aria-hidden />
-            Signing up with Google...
-          </p>
-        )}
       </div>
 
-      <p className={cn("mt-3.5 text-center text-white/25 text-[11px] leading-relaxed px-2", authFadeUp, "delay-300")}>
+      {authStep === "credentials" ? (
+        <div data-testid="register-credential-form">
+          <AuthBackButton onClick={() => setAuthStep("chooser")} disabled={pending} />
+
+          <form
+            onSubmit={handleContinue}
+            className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}
+          >
+            <div>
+              <Label htmlFor="register-name" className="text-sm text-muted-foreground">
+                Full name
+              </Label>
+              <Input
+                id="register-name"
+                data-testid="input-name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Your full name"
+                autoComplete="name"
+                className={cn("mt-1.5", authControlClass, authLandingRingClass)}
+              />
+            </div>
+
+            <PhoneInput
+              id="register-phone"
+              data-testid="input-phone"
+              label="Mobile number"
+              indianMobile
+              hideHint
+              deferValidationUntilComplete
+              value={phone}
+              onChange={setPhone}
+              error={phoneError}
+              onErrorChange={setPhoneError}
+              autoComplete="tel"
+              className={cn(authControlClass, authLandingRingClass)}
+            />
+
+            <CreatePasswordFields
+              idPrefix="register"
+              password={password}
+              confirmPassword={confirmPassword}
+              onPasswordChange={setPassword}
+              onConfirmChange={setConfirmPassword}
+              disabled={pending}
+            />
+
+            <MarketingButton
+              type="submit"
+              size="lg"
+              disabled={pending || !formReady}
+              className="w-full"
+              data-testid="btn-continue-register"
+            >
+              {sendOtpMutation.isPending ? (
+                <>
+                  <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
+                  Sending OTP...
+                </>
+              ) : (
+                "Continue"
+              )}
+            </MarketingButton>
+
+            <p className="text-center text-muted-foreground text-[11px] leading-relaxed">
+              We&apos;ll send a one-time OTP to verify your number. After that, sign in with your password — no SMS needed.
+            </p>
+          </form>
+        </div>
+      ) : null}
+      </AuthPanel>
+
+      <p className={cn("mt-4 text-center text-muted-foreground text-[11px] leading-relaxed px-2", authFadeUp, "delay-300")}>
         By continuing, you agree to our{" "}
-        <Link href="/terms-and-conditions" className="text-white/40 hover:text-primary transition-colors duration-200">
+        <Link href="/terms-and-conditions" className={cn(authLinkClass, "text-[11px]")}>
           Terms
         </Link>
         {" "}and{" "}
-        <Link href="/privacy-policy" className="text-white/40 hover:text-primary transition-colors duration-200">
+        <Link href="/privacy-policy" className={cn(authLinkClass, "text-[11px]")}>
           Privacy Policy
         </Link>
         .
       </p>
 
-      <p className={cn("mt-3 text-center text-white/40 text-sm", authFadeUp, "delay-[400ms]")}>
+      <p className={cn("mt-3 text-center text-sm text-muted-foreground", authFadeUp, "delay-[400ms]")}>
         Already have an account?{" "}
         <Link href="/login" className={cn(authLinkClass, "inline-flex items-center gap-1")}>
           Sign in

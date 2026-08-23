@@ -35,6 +35,7 @@ export type {
   HeroStat,
   HeroTrustPill,
   HeroSocialProof,
+  HeroCredibilityItem,
 } from "./content/heroTypes";
 export { defaultHeroContent } from "./content/defaultHeroContent";
 export type {
@@ -109,6 +110,8 @@ export {
   HeroSelector,
   HeroTrustBar,
   HeroStats,
+  HeroCredibility,
+  HeroJourney,
 } from "./components/Hero";
 export type {
   HeroProps,
@@ -120,6 +123,8 @@ export type {
   HeroSelectorProps,
   HeroTrustBarProps,
   HeroStatsProps,
+  HeroCredibilityProps,
+  HeroJourneyProps,
 } from "./components/Hero";
 
 export { VehicleExperience } from "./experiences/VehicleExperience";

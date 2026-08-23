@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSendAuthOtp, useVerifyAuthOtp } from "@workspace/api-client-react";
 import type { AuthResponse } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
+import { MarketingButton } from "@/features/landing/components/marketing/MarketingButton";
 import {
   InputOTP,
   InputOTPGroup,
@@ -12,11 +12,7 @@ import { getAuthErrorMessage } from "@/lib/authErrorMessages";
 import { formatOtpMaskedPhone } from "@/lib/phoneDisplay";
 import { useOtpResendTimer } from "@/hooks/useOtpResendTimer";
 import type { AuthFlowPurpose } from "@/lib/authFlowStore";
-import {
-  authFadeUp,
-  authOtpSlotClass,
-  authPrimaryButtonClass,
-} from "@/components/auth/authStyles";
+import { authFadeUp, authLinkClass } from "@/components/auth/authStyles";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -146,13 +142,13 @@ export function OTPVerification({
   return (
     <div className="space-y-5" data-testid="otp-verification">
       <div className={cn("text-center space-y-2.5", authFadeUp)}>
-        <h2 className="font-display font-semibold text-xl text-white" id="otp-heading">
+        <h2 className="font-display font-semibold text-xl text-foreground" id="otp-heading">
           Verify your mobile number
         </h2>
-        <p className="text-white/55 text-sm tabular-nums tracking-wide" id="otp-description">
+        <p className="text-muted-foreground text-sm tabular-nums tracking-wide" id="otp-description">
           {displayPhone}
         </p>
-        <p className="text-white/30 text-xs leading-relaxed max-w-[16rem] mx-auto">
+        <p className="text-muted-foreground text-xs leading-relaxed max-w-[16rem] mx-auto">
           {purpose === "signup"
             ? "Enter the OTP to verify your number and finish creating your account."
             : "Enter the one-time code sent to your mobile number."}
@@ -181,7 +177,11 @@ export function OTPVerification({
           >
             <InputOTPGroup className="gap-2 sm:gap-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <InputOTPSlot key={i} index={i} className={authOtpSlotClass} />
+                <InputOTPSlot
+                  key={i}
+                  index={i}
+                  className="h-14 w-11 sm:w-12 rounded-xl border-border bg-background text-foreground text-lg sm:text-xl first:rounded-xl last:rounded-xl"
+                />
               ))}
             </InputOTPGroup>
           </InputOTP>
@@ -193,10 +193,11 @@ export function OTPVerification({
           </p>
         ) : null}
 
-        <Button
+        <MarketingButton
           type="submit"
+          size="lg"
           disabled={pending || otp.length !== 6}
-          className={authPrimaryButtonClass}
+          className="w-full"
           data-testid="btn-verify-otp"
         >
           {verifyMutation.isPending ? (
@@ -207,7 +208,7 @@ export function OTPVerification({
           ) : (
             "Continue"
           )}
-        </Button>
+        </MarketingButton>
       </form>
 
       <div className={cn("flex flex-col items-center gap-1.5 text-sm pb-safe", authFadeUp, "delay-200")}>
@@ -216,13 +217,13 @@ export function OTPVerification({
             type="button"
             onClick={handleResend}
             disabled={pending}
-            className="text-primary hover:underline font-medium disabled:opacity-50 min-h-[44px] px-4 transition-opacity duration-200"
+            className={cn(authLinkClass, "disabled:opacity-50 min-h-[44px] px-4")}
             data-testid="btn-resend-otp"
           >
             {resendMutation.isPending ? "Sending..." : "Resend OTP"}
           </button>
         ) : (
-          <p className="text-white/35 tabular-nums min-h-[44px] flex items-center text-xs" aria-live="polite">
+          <p className="text-muted-foreground tabular-nums min-h-[44px] flex items-center text-xs" aria-live="polite">
             Resend in {secondsLeft}s
           </p>
         )}
@@ -231,7 +232,7 @@ export function OTPVerification({
           type="button"
           onClick={onChangeNumber}
           disabled={pending}
-          className="text-white/35 hover:text-white/55 transition-colors duration-200 disabled:opacity-50 min-h-[44px] px-4 text-xs"
+          className="text-muted-foreground hover:text-foreground transition-colors duration-200 disabled:opacity-50 min-h-[44px] px-4 text-xs"
           data-testid="btn-change-number"
         >
           Change mobile number

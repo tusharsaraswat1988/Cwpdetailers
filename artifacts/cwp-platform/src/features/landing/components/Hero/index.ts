@@ -24,3 +24,9 @@ export type { HeroTrustBarProps } from "./HeroTrustBar";
 
 export { HeroStats } from "./HeroStats";
 export type { HeroStatsProps } from "./HeroStats";
+
+export { HeroCredibility } from "./HeroCredibility";
+export type { HeroCredibilityProps } from "./HeroCredibility";
+
+export { HeroJourney } from "./HeroJourney";
+export type { HeroJourneyProps } from "./HeroJourney";

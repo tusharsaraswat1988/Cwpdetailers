@@ -54,7 +54,7 @@ export function AccountRow({
 }) {
   const classes = cn(
     "flex w-full min-h-11 items-center gap-3 px-4 py-2.5 text-left customer-transition",
-    (onClick || href) && "hover:bg-foreground/[0.03] active:bg-foreground/[0.05]",
+    (onClick || href) && "cursor-pointer hover:bg-foreground/[0.03] active:bg-foreground/[0.05]",
     className,
   );
 

@@ -8,6 +8,7 @@ import { ConnectivityProvider } from "@/services/ConnectivityContext";
 import { ConnectivityBanner } from "@/components/connectivity/ConnectivityBanner";
 import { AppSplashGate } from "@/components/pwa/AppSplashGate";
 import { PwaRouteHeadSync } from "@/components/pwa/PwaRouteHeadSync";
+import { StaffNativeGuard } from "@/lib/native/StaffNativeGuard";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
@@ -298,6 +299,7 @@ function App() {
                 <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                   <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                     <PwaRouteHeadSync />
+                    <StaffNativeGuard />
                     <Router />
                   </WouterRouter>
                 </div>

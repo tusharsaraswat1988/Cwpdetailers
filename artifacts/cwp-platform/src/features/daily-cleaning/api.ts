@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { queuedFetch } from "@/services/queuedApi";
 
 async function dcmsFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -23,6 +24,39 @@ async function dcmsFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+async function dcmsStaffMutate<T>(
+  path: string,
+  data: Record<string, unknown>,
+  label: string,
+): Promise<T | { queued: true }> {
+  const result = await queuedFetch(
+    `/api${path}`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+    { operationType: "staff_visit", label },
+  );
+  if (result.queued) return { queued: true };
+  if (!result.ok) throw result.error;
+  if (!result.response.ok) {
+    const bodyText = await result.response.text();
+    let message = result.response.statusText || "Request failed";
+    try {
+      const parsed = JSON.parse(bodyText) as { error?: string; code?: string };
+      if (parsed.error?.trim()) message = parsed.error;
+      else if (parsed.code === "PAYLOAD_TOO_LARGE") message = "Photo upload too large — try lower camera resolution";
+    } catch {
+      if (bodyText.trim()) message = bodyText.slice(0, 200);
+    }
+    throw new Error(message);
+  }
+  if (result.response.status === 204) return undefined as T;
+  return result.response.json() as Promise<T>;
 }
 
 export type DcmsPlanAddon = {
@@ -304,7 +338,7 @@ export function useCompleteVisit() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Record<string, unknown>) =>
-      dcmsFetch("/daily-cleaning/visits/complete", { method: "POST", body: JSON.stringify(data) }),
+      dcmsStaffMutate("/daily-cleaning/visits/complete", data, "Daily clean visit"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dcms"] }),
   });
 }
@@ -313,7 +347,7 @@ export function useRecordCarNotAvailable() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Record<string, unknown>) =>
-      dcmsFetch("/daily-cleaning/visits/car-not-available", { method: "POST", body: JSON.stringify(data) }),
+      dcmsStaffMutate("/daily-cleaning/visits/car-not-available", data, "Car not available"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dcms"] }),
   });
 }

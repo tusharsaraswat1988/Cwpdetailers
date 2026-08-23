@@ -4,11 +4,13 @@ import {
   useForgotPassword,
   useResetPassword,
 } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { EmailInput } from "@/components/ui/email-input";
+import { MarketingButton } from "@/features/landing/components/marketing/MarketingButton";
+import { StaffButton } from "@/features/staff-ds";
+import { AdminButton } from "@/features/admin-ds";
 import {
   InputOTP,
   InputOTPGroup,
@@ -19,18 +21,16 @@ import { submitEmail, submitMobile } from "@/lib/contactForm";
 import { useBranding } from "@/lib/branding";
 import { getAuthErrorMessage } from "@/lib/authErrorMessages";
 import { trackAuthEvent } from "@/lib/authAnalytics";
-import { AuthLayout } from "@/components/auth/AuthLayout";
+import { AuthLayout, AuthPanel } from "@/components/auth/AuthLayout";
 import { AuthHeader } from "@/components/auth/AuthHeader";
 import { AuthFooter } from "@/components/auth/AuthFooter";
 import {
+  authControlClass,
   authFadeUp,
   authFormStagger,
-  authInputClass,
-  authLabelClass,
+  authDarkMutedLinkClass,
+  authLandingRingClass,
   authMutedLinkClass,
-  authOtpSlotClass,
-  authPhoneInputClass,
-  authPrimaryButtonClass,
 } from "@/components/auth/authStyles";
 import { ArrowLeft, Loader2, Mail, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -167,21 +167,30 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
     }
   };
 
-  return (
-    <AuthLayout testId="forgot-password-page" customerTheme={portal === "customer"}>
-      <AuthHeader title={title} subtitle={stepSubtitle} />
+  const SubmitButton = portal === "staff" ? StaffButton : portal === "admin" ? AdminButton : MarketingButton;
+  const chromeTone = portal === "customer" ? "light" : "dark";
+  const fieldClass = cn(authControlClass, chromeTone === "light" && authLandingRingClass);
+  const selectedTabClass =
+    chromeTone === "light"
+      ? "bg-foreground text-background font-medium"
+      : "bg-primary text-primary-foreground font-medium";
 
+  return (
+    <AuthLayout testId="forgot-password-page" portal={portal}>
+      <AuthHeader title={title} subtitle={stepSubtitle} tone={chromeTone} />
+
+      <AuthPanel portal={portal}>
       {step === "request" && (
         <form onSubmit={handleRequest} className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}>
-          <div className="flex rounded-lg border border-white/10 p-0.5 bg-white/[0.04]">
+          <div className="flex rounded-[var(--customer-radius-sm,0.75rem)] border border-border p-0.5 bg-muted/40">
             <button
               type="button"
               onClick={() => setMode("phone")}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] text-sm rounded-md transition-all duration-200",
                 mode === "phone"
-                  ? "bg-primary text-primary-foreground font-medium"
-                  : "text-white/45 hover:text-white/65",
+                  ? selectedTabClass
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Smartphone size={14} aria-hidden />
@@ -193,8 +202,8 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] text-sm rounded-md transition-all duration-200",
                 mode === "email"
-                  ? "bg-primary text-primary-foreground font-medium"
-                  : "text-white/45 hover:text-white/65",
+                  ? selectedTabClass
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Mail size={14} aria-hidden />
@@ -206,7 +215,6 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
             <PhoneInput
               id="forgot-phone"
               label="Registered mobile number"
-              dark
               indianMobile
               hideHint
               deferValidationUntilComplete
@@ -214,26 +222,21 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
               onChange={setPhone}
               error={phoneError}
               onErrorChange={setPhoneError}
-              className={authPhoneInputClass}
+              className={fieldClass}
             />
           ) : (
             <EmailInput
               id="forgot-email"
               label="Registered email address"
-              dark
               value={email}
               onChange={setEmail}
               error={emailError}
               onErrorChange={setEmailError}
-              className={authInputClass}
+              className={fieldClass}
             />
           )}
 
-          <Button
-            type="submit"
-            disabled={forgotMutation.isPending}
-            className={authPrimaryButtonClass}
-          >
+          <SubmitButton type="submit" disabled={forgotMutation.isPending} className="w-full" {...(portal === "customer" ? { size: "lg" as const } : {})}>
             {forgotMutation.isPending ? (
               <>
                 <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
@@ -242,25 +245,29 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
             ) : (
               "Send reset code"
             )}
-          </Button>
+          </SubmitButton>
         </form>
       )}
 
       {step === "verify" && (
         <form onSubmit={handleReset} className={cn("space-y-4", authFadeUp, "delay-150")}>
           {buildDeliveryMessage(deliveryInfo) && (
-            <p className="text-white/35 text-xs text-center px-2 leading-relaxed">
+            <p className="text-muted-foreground text-xs text-center px-2 leading-relaxed">
               {buildDeliveryMessage(deliveryInfo)}
             </p>
           )}
 
           <div className="space-y-2">
-            <Label className={authLabelClass}>6-digit verification code</Label>
+            <Label className="text-sm text-muted-foreground">6-digit verification code</Label>
             <div className="flex justify-center">
               <InputOTP maxLength={6} value={otp} onChange={setOtp} autoFocus inputMode="numeric">
                 <InputOTPGroup className="gap-2 sm:gap-3">
                   {[0, 1, 2, 3, 4, 5].map(i => (
-                    <InputOTPSlot key={i} index={i} className={authOtpSlotClass} />
+                    <InputOTPSlot
+                      key={i}
+                      index={i}
+                      className="h-14 w-11 sm:w-12 rounded-xl border-border bg-background text-foreground text-lg sm:text-xl first:rounded-xl last:rounded-xl"
+                    />
                   ))}
                 </InputOTPGroup>
               </InputOTP>
@@ -268,7 +275,7 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
           </div>
 
           <div>
-            <Label htmlFor="new-password" className={authLabelClass}>
+            <Label htmlFor="new-password" className="text-sm text-muted-foreground">
               New password
             </Label>
             <PasswordInput
@@ -277,15 +284,11 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
               onChange={e => setNewPassword(e.target.value)}
               placeholder="At least 6 characters"
               containerClassName="mt-1.5"
-              className={authInputClass}
+              className={fieldClass}
             />
           </div>
 
-          <Button
-            type="submit"
-            disabled={resetMutation.isPending}
-            className={authPrimaryButtonClass}
-          >
+          <SubmitButton type="submit" disabled={resetMutation.isPending} className="w-full" {...(portal === "customer" ? { size: "lg" as const } : {})}>
             {resetMutation.isPending ? (
               <>
                 <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
@@ -294,12 +297,12 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
             ) : (
               "Reset password"
             )}
-          </Button>
+          </SubmitButton>
 
           <button
             type="button"
             onClick={() => setStep("request")}
-            className="w-full text-white/35 text-sm hover:text-white/55 min-h-[44px] transition-colors duration-200"
+            className="w-full text-muted-foreground text-sm hover:text-foreground min-h-[44px] transition-colors duration-200"
           >
             Didn&apos;t receive code? Send again
           </button>
@@ -308,27 +311,46 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
 
       {step === "done" && (
         <div className={cn("text-center space-y-4", authFadeUp, "delay-150")}>
-          <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center mx-auto">
-            <span className="text-2xl text-primary" aria-hidden>✓</span>
+          <div
+            className={cn(
+              "w-14 h-14 rounded-full flex items-center justify-center mx-auto",
+              chromeTone === "light"
+                ? "bg-[color:var(--landing-icon-surface)]"
+                : "bg-primary/15",
+            )}
+          >
+            <span
+              className={cn(
+                "text-2xl",
+                chromeTone === "light" ? "text-[color:var(--landing-accent)]" : "text-primary",
+              )}
+              aria-hidden
+            >
+              ✓
+            </span>
           </div>
-          <p className="text-white/50 text-sm">Your password has been updated successfully.</p>
-          <Button onClick={() => setLocation(loginPath)} className={authPrimaryButtonClass}>
+          <p className="text-muted-foreground text-sm">Your password has been updated successfully.</p>
+          <SubmitButton onClick={() => setLocation(loginPath)} className="w-full" {...(portal === "customer" ? { size: "lg" as const } : {})}>
             Back to sign in
-          </Button>
+          </SubmitButton>
         </div>
       )}
+      </AuthPanel>
 
       <div className="mt-5">
         <Link
           href={loginPath}
-          className={cn(authMutedLinkClass, "inline-flex items-center gap-1.5 text-sm min-h-[44px]")}
+          className={cn(
+            chromeTone === "light" ? authMutedLinkClass : authDarkMutedLinkClass,
+            "inline-flex items-center gap-1.5 text-sm min-h-[44px]",
+          )}
         >
           <ArrowLeft size={14} aria-hidden />
           Back to sign in
         </Link>
       </div>
 
-      <AuthFooter />
+      <AuthFooter tone={chromeTone} />
     </AuthLayout>
   );
 }

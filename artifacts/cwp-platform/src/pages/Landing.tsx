@@ -46,7 +46,7 @@ function BrandedNav() {
 
 /**
  * Marketing homepage orchestrator — refined journey, no hybrid legacy sections.
- * App story is woven inside experiences; Stats strip removed to cut trust repetition.
+ * App story is woven inside experiences; first-viewport proof lives in the hero.
  */
 export default function Landing() {
   usePageSeo({

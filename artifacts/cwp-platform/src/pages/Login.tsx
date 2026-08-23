@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useSendAuthOtp } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { MarketingButton } from "@/features/landing/components/marketing/MarketingButton";
 import { useToast } from "@/hooks/use-toast";
 import { submitMobile } from "@/lib/contactForm";
 import { getAuthErrorMessage } from "@/lib/authErrorMessages";
@@ -11,22 +11,21 @@ import { trackAuthEvent } from "@/lib/authAnalytics";
 import { useBranding } from "@/lib/branding";
 import { useAuthFlow } from "@/hooks/useAuthFlow";
 import { useAuthFlowStore } from "@/lib/authFlowStore";
-import { AuthLayout } from "@/components/auth/AuthLayout";
+import { AuthLayout, AuthPanel } from "@/components/auth/AuthLayout";
 import { AuthHeader } from "@/components/auth/AuthHeader";
 import { AuthFooter } from "@/components/auth/AuthFooter";
-import { AuthDivider } from "@/components/auth/AuthDivider";
-import { GoogleButton } from "@/components/auth/GoogleButton";
+import { AuthBackButton } from "@/components/auth/AuthBackButton";
+import { AuthMethodChooser } from "@/components/auth/AuthMethodChooser";
 import { PasswordLogin } from "@/components/auth/PasswordLogin";
 import { AuthOtpOverlay } from "@/components/auth/AuthOtpOverlay";
 import { AuthGoogleDialogs } from "@/components/auth/AuthGoogleDialogs";
 import {
+  authControlClass,
   authFadeUp,
   authFormStagger,
-  authGoogleButtonClass,
+  authLandingRingClass,
   authLinkClass,
   authMutedLinkClass,
-  authPhoneInputClass,
-  authPrimaryButtonClass,
 } from "@/components/auth/authStyles";
 import { AlertCircle, ArrowRight, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -43,6 +42,7 @@ export default function Login() {
   const { toast } = useToast();
   const queryPhone = usePhoneFromQuery();
 
+  const [authStep, setAuthStep] = useState<"chooser" | "credentials">("chooser");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [showOtpLogin, setShowOtpLogin] = useState(false);
@@ -64,7 +64,10 @@ export default function Login() {
   const phoneReady = useMemo(() => isValidIndianMobileDigits(phone), [phone]);
 
   useEffect(() => {
-    if (queryPhone) setPhone(queryPhone.replace(/\D/g, "").slice(0, 10));
+    if (queryPhone) {
+      setPhone(queryPhone.replace(/\D/g, "").slice(0, 10));
+      setAuthStep("credentials");
+    }
   }, [queryPhone]);
 
   const sendOtpMutation = useSendAuthOtp({
@@ -126,12 +129,17 @@ export default function Login() {
     <AuthLayout testId="login-page">
       <AuthHeader
         title="Welcome back"
-        subtitle="Sign in with your password — OTP only if you need it"
+        subtitle={
+          authStep === "chooser"
+            ? "Continue with Google, or sign in with your mobile number"
+            : "Sign in with your password — OTP only if you need it"
+        }
       />
 
+      <AuthPanel>
       {authError && (
         <div
-          className={cn("rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2 mb-3", authFadeUp)}
+          className={cn("rounded-[var(--customer-radius-sm,0.75rem)] border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2 mb-3", authFadeUp)}
           role="alert"
           data-testid="login-auth-error"
         >
@@ -140,143 +148,140 @@ export default function Login() {
         </div>
       )}
 
-      <div className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}>
-        <PhoneInput
-          id="login-phone"
-          data-testid="input-phone"
-          label="Mobile number"
-          dark
-          indianMobile
-          hideHint
-          deferValidationUntilComplete
-          value={phone}
-          onChange={next => {
-            setPhone(next);
-            if (authError) clearAuthError();
-          }}
-          error={phoneError}
-          onErrorChange={setPhoneError}
-          autoComplete="tel"
-          className={authPhoneInputClass}
-        />
-
-        <PasswordLogin
-          phone={phone}
-          onSuccess={handlePasswordSuccess}
-          disabled={googlePending}
-        />
-      </div>
-
-      <AuthDivider className="my-3.5" />
-
-      <div className={cn(authFadeUp, "delay-200")}>
-        <GoogleButton
-          onSuccess={idToken => {
+      <div className={authStep === "chooser" ? undefined : "hidden"} aria-hidden={authStep !== "chooser"}>
+        <AuthMethodChooser
+          onGoogleSuccess={idToken => {
             trackAuthEvent("google_started", { method: "google", portal: "customer" });
             handleGoogleToken(idToken);
           }}
-          onError={msg => {
+          onGoogleError={msg => {
             trackAuthEvent("google_cancelled", { method: "google", portal: "customer" });
             toast({ title: "Google sign-in", description: getAuthErrorMessage(msg), variant: "destructive" });
           }}
-          disabled={googleDisabled || pending}
-          className={authGoogleButtonClass}
+          googleDisabled={googleDisabled}
+          googlePending={googlePending}
+          googlePendingLabel="Signing in with Google..."
+          secondaryLabel="Login with mobile"
+          secondaryTestId="btn-login-email"
+          onChooseSecondary={() => setAuthStep("credentials")}
         />
-
-        {googlePending && (
-          <p
-            className="text-center text-white/35 text-xs flex items-center justify-center gap-1.5 mt-1.5"
-            aria-live="polite"
-          >
-            <Loader2 size={12} className="animate-spin" aria-hidden />
-            Signing in with Google...
-          </p>
-        )}
       </div>
 
-      <AuthDivider className="my-3.5" />
+      {authStep === "credentials" ? (
+        <div data-testid="login-credential-form">
+          <AuthBackButton onClick={() => setAuthStep("chooser")} disabled={pending} />
 
-      <div className={cn(authFadeUp, "delay-300")}>
-        <button
-          type="button"
-          onClick={() => setShowOtpLogin(v => !v)}
-          className="w-full flex items-center justify-center gap-2 text-white/40 hover:text-white/65 text-sm font-normal py-1.5 min-h-[44px] transition-colors duration-200"
-          data-testid="btn-toggle-otp-login"
-          aria-expanded={showOtpLogin}
-          aria-controls="otp-login-panel"
-        >
-          {showOtpLogin ? "OTP login" : "Sign in with OTP instead"}
-          <ChevronDown
-            size={15}
-            className={cn("transition-transform duration-300 ease-out", showOtpLogin && "rotate-180")}
-            aria-hidden
-          />
-        </button>
+          <div className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}>
+            <PhoneInput
+              id="login-phone"
+              data-testid="input-phone"
+              label="Mobile number"
+              indianMobile
+              hideHint
+              deferValidationUntilComplete
+              value={phone}
+              onChange={next => {
+                setPhone(next);
+                if (authError) clearAuthError();
+              }}
+              error={phoneError}
+              onErrorChange={setPhoneError}
+              autoComplete="tel"
+              className={cn(authControlClass, authLandingRingClass)}
+            />
 
-        <div
-          id="otp-login-panel"
-          className={cn(
-            "grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
-            showOtpLogin ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-          )}
-          aria-hidden={!showOtpLogin}
-        >
-          <div className="overflow-hidden">
-            <form
-              onSubmit={handleOtpContinue}
-              className={cn(
-                "pt-3 space-y-3 transition-opacity duration-300",
-                showOtpLogin ? "opacity-100" : "opacity-0",
-              )}
+            <PasswordLogin
+              phone={phone}
+              onSuccess={handlePasswordSuccess}
+              disabled={googlePending}
+            />
+          </div>
+
+          <div className={cn("mt-1", authFadeUp, "delay-300")}>
+            <button
+              type="button"
+              onClick={() => setShowOtpLogin(v => !v)}
+              className="w-full flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground text-sm font-normal py-1.5 min-h-[44px] transition-colors duration-200"
+              data-testid="btn-toggle-otp-login"
+              aria-expanded={showOtpLogin}
+              aria-controls="otp-login-panel"
             >
-              <p className="text-white/30 text-xs text-center leading-relaxed">
-                Use OTP if you haven&apos;t set a password yet, or can&apos;t remember it.
-              </p>
-              {otpError && (
-                <div
-                  className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2"
-                  role="alert"
-                  data-testid="login-otp-error"
-                >
-                  <AlertCircle size={14} className="text-destructive shrink-0 mt-0.5" aria-hidden />
-                  <p className="text-destructive text-sm leading-snug">{otpError}</p>
-                </div>
+              {showOtpLogin ? "OTP login" : "Sign in with OTP instead"}
+              <ChevronDown
+                size={15}
+                className={cn("transition-transform duration-300 ease-out", showOtpLogin && "rotate-180")}
+                aria-hidden
+              />
+            </button>
+
+            <div
+              id="otp-login-panel"
+              className={cn(
+                "grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                showOtpLogin ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
               )}
-              <Button
-                type="submit"
-                disabled={pending || !phoneReady}
-                className={authPrimaryButtonClass}
-                data-testid="btn-continue-login-otp"
-              >
-                {sendOtpMutation.isPending ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
-                    Sending OTP...
-                  </>
-                ) : (
-                  "Send OTP"
-                )}
-              </Button>
-            </form>
+              aria-hidden={!showOtpLogin}
+            >
+              <div className="overflow-hidden">
+                <form
+                  onSubmit={handleOtpContinue}
+                  className={cn(
+                    "pt-3 space-y-3 transition-opacity duration-300",
+                    showOtpLogin ? "opacity-100" : "opacity-0",
+                  )}
+                >
+                  <p className="text-muted-foreground text-xs text-center leading-relaxed">
+                    Use OTP if you haven&apos;t set a password yet, or can&apos;t remember it.
+                  </p>
+                  {otpError && (
+                    <div
+                      className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2"
+                      role="alert"
+                      data-testid="login-otp-error"
+                    >
+                      <AlertCircle size={14} className="text-destructive shrink-0 mt-0.5" aria-hidden />
+                      <p className="text-destructive text-sm leading-snug">{otpError}</p>
+                    </div>
+                  )}
+                  <MarketingButton
+                    type="submit"
+                    size="lg"
+                    disabled={pending || !phoneReady}
+                    className="w-full"
+                    data-testid="btn-continue-login-otp"
+                  >
+                    {sendOtpMutation.isPending ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
+                        Sending OTP...
+                      </>
+                    ) : (
+                      "Send OTP"
+                    )}
+                  </MarketingButton>
+                </form>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
+      </AuthPanel>
 
-      <div className={cn("mt-4 text-center space-y-2", authFadeUp, "delay-[400ms]")}>
-        <p className="text-white/40 text-sm">
+      <div className={cn("mt-5 text-center space-y-2", authFadeUp, "delay-[400ms]")}>
+        <p className="text-sm text-muted-foreground">
           New to {branding.brandName}?{" "}
           <Link href="/register" className={cn(authLinkClass, "inline-flex items-center gap-1")}>
             Create your account
             <ArrowRight size={14} className="opacity-50" aria-hidden />
           </Link>
         </p>
-        <p className="text-white/25 text-xs">
+        <p className="text-xs text-muted-foreground">
           Field staff?{" "}
           <Link href="/staff/login" className={authMutedLinkClass}>
             Staff portal
           </Link>
         </p>
-        <p className="text-white/25 text-[11px] leading-relaxed pt-1" data-testid="login-trust-line">
+        <p className="text-[11px] leading-relaxed pt-1 text-muted-foreground" data-testid="login-trust-line">
           Secure sign-in · Your data stays private · OTP never shared
         </p>
       </div>

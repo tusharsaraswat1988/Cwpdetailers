@@ -111,6 +111,14 @@ function persistSession(portal: AuthPortal, u: AuthUser, token: string | null) {
   else localStorage.removeItem(tokenStorageKey(portal));
 }
 
+/** Local evidence that `/auth/me` is worth calling (cookie + optional bearer). */
+export function hasLocalSessionEvidence(
+  token: string | null | undefined,
+  user: AuthUser | null | undefined,
+): boolean {
+  return Boolean(token || user);
+}
+
 async function fetchAuthMe(portal: AuthPortal, bearerToken: string | null): Promise<Response> {
   const headers: Record<string, string> = { ...authPortalHeaders(portal) };
   if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
@@ -124,12 +132,19 @@ async function fetchAuthMe(portal: AuthPortal, bearerToken: string | null): Prom
 /**
  * Validate session — portal cookie first (httpOnly), then bearer token from portal localStorage.
  * Returns null only when the server definitively rejects all credentials (401).
+ *
+ * Logged-out visitors have no local evidence and are not probed — `/auth/me` stays
+ * requireAuth (401) and Chrome would otherwise log that expected 401 on every public page.
  */
 async function validateStoredSession(
   portal: AuthPortal,
   bearerToken: string | null,
   fallbackUser: AuthUser | null,
 ): Promise<{ user: AuthUser | null; token: string | null }> {
+  if (!hasLocalSessionEvidence(bearerToken, fallbackUser)) {
+    return { user: null, token: null };
+  }
+
   const attempts: Array<string | null> = [null];
   if (bearerToken) attempts.push(bearerToken);
 

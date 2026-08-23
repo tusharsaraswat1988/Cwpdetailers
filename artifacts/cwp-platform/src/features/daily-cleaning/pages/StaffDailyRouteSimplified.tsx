@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -10,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
 import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine, Navigation, MapPin } from "lucide-react";
-import { extractClientExif, validateCameraFile, readFileAsDataUrl } from "../lib/cameraCapture";
 import { visitUploadErrorMessage } from "../lib/visitUploadError";
 import { staffVisitLabel } from "../lib/visitLabels";
 import { getStaffLocation } from "@/lib/location";
+import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
+import { isOfflineQueued, queuedSavedMessage } from "@/services/queuedResult";
 import { buildNavigateUrl } from "@/lib/maps";
 import { PlateScanFlow, type PlateScanMeta } from "../components/PlateScanFlow";
 import { cn } from "@/lib/utils";
@@ -69,8 +70,6 @@ export function StaffDailyRouteSimplified() {
   const completeVisit = useCompleteVisit();
   const recordCarNotAvailable = useRecordCarNotAvailable();
   const { toast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const cnaFileRef = useRef<HTMLInputElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [scanOpen, setScanOpen] = useState(false);
   const [plateScanMeta, setPlateScanMeta] = useState<PlateScanMeta | null>(null);
@@ -132,30 +131,28 @@ export function StaffDailyRouteSimplified() {
     }
   }, [stops]);
 
-  const captureVisit = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !current) return;
-    e.target.value = "";
+  const captureVisit = useCallback(async () => {
+    if (!current) return;
     try {
-      validateCameraFile(file);
-      const [gps, imageBase64, exif] = await Promise.all([
-        getStaffLocation("action"),
-        readFileAsDataUrl(file),
-        extractClientExif(file),
-      ]);
-      await completeVisit.mutateAsync({
+      const photo = await captureStaffPhoto("rear");
+      const gps = await getStaffLocation("action");
+      const result = await completeVisit.mutateAsync({
         subscriptionId: current.subscriptionId,
         visitType,
-        imageBase64,
-        exif,
-        capturedAt: new Date(file.lastModified).toISOString(),
+        imageBase64: photo.dataUrl,
+        exif: photo.exif,
+        capturedAt: photo.capturedAt,
         walkIn: walkInMode,
         ...gps,
         ocrText: plateScanMeta?.ocrText ?? null,
         ocrConfidence: plateScanMeta?.ocrConfidence ?? null,
         confirmedRegistration: plateScanMeta?.confirmedRegistration ?? current.vehicleNumber,
       });
-      toast({ title: "Ho gaya!", description: `${current.vehicleNumber} — visit complete` });
+      if (isOfflineQueued(result)) {
+        toast({ title: "Visit saved on phone", description: queuedSavedMessage("visit") });
+      } else {
+        toast({ title: "Ho gaya!", description: `${current.vehicleNumber} — visit complete` });
+      }
       setPlateScanMeta(null);
       if (walkInMode) {
         navigate("/staff/bookings?walkInSuccess=1");
@@ -164,33 +161,32 @@ export function StaffDailyRouteSimplified() {
       refetch();
       if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
     } catch (err) {
+      if (isCameraCancel(err)) return;
       toast({ title: "Upload failed", description: visitUploadErrorMessage(err), variant: "destructive" });
     }
   }, [current, completeVisit, toast, refetch, plateScanMeta, activeIdx, stops.length, visitType, walkInMode, navigate]);
 
-  const captureCarNotAvailable = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !current) return;
-    e.target.value = "";
+  const captureCarNotAvailable = useCallback(async () => {
+    if (!current) return;
     try {
-      validateCameraFile(file);
-      const [gps, imageBase64, exif] = await Promise.all([
-        getStaffLocation("action"),
-        readFileAsDataUrl(file),
-        extractClientExif(file),
-      ]);
-      await recordCarNotAvailable.mutateAsync({
+      const photo = await captureStaffPhoto("rear");
+      const gps = await getStaffLocation("action");
+      const result = await recordCarNotAvailable.mutateAsync({
         subscriptionId: current.subscriptionId,
         walkIn: walkInMode,
-        imageBase64,
-        exif,
-        capturedAt: new Date(file.lastModified).toISOString(),
+        imageBase64: photo.dataUrl,
+        exif: photo.exif,
+        capturedAt: photo.capturedAt,
         ...gps,
       });
-      toast({
-        title: "Visit record ho gaya",
-        description: `${current.vehicleNumber} — car nahi mili, cleaning count nahi kata`,
-      });
+      if (isOfflineQueued(result)) {
+        toast({ title: "Record saved on phone", description: queuedSavedMessage("visit") });
+      } else {
+        toast({
+          title: "Visit record ho gaya",
+          description: `${current.vehicleNumber} — car nahi mili, cleaning count nahi kata`,
+        });
+      }
       if (walkInMode) {
         navigate("/staff/bookings?walkInSuccess=1");
         return;
@@ -198,6 +194,7 @@ export function StaffDailyRouteSimplified() {
       refetch();
       if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
     } catch (err) {
+      if (isCameraCancel(err)) return;
       toast({ title: "Record failed", description: visitUploadErrorMessage(err), variant: "destructive" });
     }
   }, [current, recordCarNotAvailable, toast, refetch, activeIdx, stops.length, walkInMode, navigate]);
@@ -307,7 +304,7 @@ export function StaffDailyRouteSimplified() {
             <div className="space-y-2">
               <Button
                 className="w-full h-14 text-base font-semibold"
-                onClick={() => fileRef.current?.click()}
+                onClick={() => void captureVisit()}
                 disabled={actionPending}
               >
                 {completeVisit.isPending ? (
@@ -347,7 +344,7 @@ export function StaffDailyRouteSimplified() {
               </div>
               <Button
                 className="w-full h-14 text-base font-semibold"
-                onClick={() => fileRef.current?.click()}
+                onClick={() => void captureVisit()}
                 disabled={actionPending}
                 data-testid="dcms-same-day-complete"
               >
@@ -454,23 +451,6 @@ export function StaffDailyRouteSimplified() {
         </div>
       )}
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={e => void captureVisit(e)}
-      />
-      <input
-        ref={cnaFileRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={e => void captureCarNotAvailable(e)}
-      />
-
       {!walkInMode && (
         <PlateScanFlow
           open={scanOpen}
@@ -489,7 +469,7 @@ export function StaffDailyRouteSimplified() {
         cancelLabel="Wapas"
         onConfirm={() => {
           setConfirmUnavailable(false);
-          cnaFileRef.current?.click();
+          void captureCarNotAvailable();
         }}
         isConfirming={recordCarNotAvailable.isPending}
       />

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useLogin } from "@workspace/api-client-react";
 import type { AuthResponse } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useToast } from "@/hooks/use-toast";
@@ -10,12 +9,8 @@ import { submitMobile } from "@/lib/contactForm";
 import { getAuthErrorMessage } from "@/lib/authErrorMessages";
 import { isValidIndianMobileDigits } from "@/lib/phoneDisplay";
 import type { AuthPortal } from "@/lib/authFlowStore";
-import {
-  authInputClass,
-  authLabelClass,
-  authLinkClass,
-  authPrimaryButtonClass,
-} from "@/components/auth/authStyles";
+import { MarketingButton } from "@/features/landing/components/marketing/MarketingButton";
+import { authControlClass, authLinkClass } from "@/components/auth/authStyles";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -95,7 +90,7 @@ export function PasswordLogin({
       )}
       <div>
         <div className="flex items-center justify-between gap-2">
-          <Label htmlFor="password-login-password" className={authLabelClass}>
+          <Label htmlFor="password-login-password" className="text-sm text-muted-foreground">
             Password
           </Label>
           <Link
@@ -118,7 +113,7 @@ export function PasswordLogin({
           placeholder="Enter your password"
           autoComplete="current-password"
           containerClassName="mt-1.5"
-          className={authInputClass}
+          className={authControlClass}
         />
         {capsLockOn ? (
           <p className="text-amber-400/70 text-xs mt-1.5" role="status">
@@ -127,10 +122,11 @@ export function PasswordLogin({
         ) : null}
       </div>
 
-      <Button
+      <MarketingButton
         type="submit"
+        size="lg"
         disabled={pending || !canSubmit}
-        className={authPrimaryButtonClass}
+        className="w-full"
         data-testid="btn-submit-login"
       >
         {loginMutation.isPending ? (
@@ -141,7 +137,7 @@ export function PasswordLogin({
         ) : (
           "Sign in"
         )}
-      </Button>
+      </MarketingButton>
     </form>
   );
 }

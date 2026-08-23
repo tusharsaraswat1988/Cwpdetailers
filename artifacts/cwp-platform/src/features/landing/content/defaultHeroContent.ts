@@ -5,24 +5,26 @@ import type { HeroContentBundle } from "./heroTypes";
 /**
  * Static default hero content (Varanasi EN).
  * Swap via CMS / A-B / locale by passing a different HeroContentBundle into <Hero />.
+ *
+ * Pricing on the vehicle micro-card matches the published Daily Clean Plan
+ * starting price in the vehicle Packages section (₹1,999 / month).
  */
 export const defaultHeroContent: HeroContentBundle = {
   selector: {
-    label: "Personalize your experience",
-    title: "What would you like us to take care of today?",
-    orLabel: "OR",
+    label: "",
+    title: "What would you like us to take care of?",
     options: [
       {
         id: "vehicle",
-        title: "My Vehicle",
-        description: "Keep your car looking new and performing at its best.",
+        title: "Car Care",
+        description: "Daily cleaning, detailing and doorstep plans.",
         accent: DIVISION_COLORS.vehicle.accent,
         icon: "car",
       },
       {
         id: "solar",
-        title: "My Solar Plant",
-        description: "Maximize energy, efficiency and long-term returns.",
+        title: "Solar Care",
+        description: "Panel cleaning, performance and savings.",
         accent: DIVISION_COLORS.solar.accent,
         icon: "sun",
       },
@@ -39,25 +41,33 @@ export const defaultHeroContent: HeroContentBundle = {
       after: ".",
     },
     subheading:
-      "Doorstep foam wash, interior detailing and ceramic protection — trained CWP specialists at your gate, every week.",
+      "Regular doorstep cleaning, professional detailing and recurring care plans — trained CWP specialists at your gate, every week.",
     socialProof: {
       ratingLabel: "4.9/5",
       ownersLabel: "Loved by 1,247 Varanasi owners this year",
       avatarInitials: ["A", "R", "P", "N", "S"],
     },
     trustPills: [
-      { id: "doorstep", label: "Doorstep weekly plans — managed in the app", icon: "camera" },
+      { id: "daily", label: "Daily car cleaning plans", icon: "camera" },
+      { id: "detail", label: "Interior & exterior detailing", icon: "droplets" },
+      { id: "recurring", label: "Recurring care, managed in the app", icon: "badgeCheck" },
+    ],
+    credibility: [
+      { id: "doorstep", label: "Doorstep specialists" },
+      { id: "trained", label: "Trained, uniformed team" },
+      { id: "redo", label: "24h re-do promise" },
+      { id: "city", label: "Varanasi & nearby" },
     ],
     ctas: [
       {
-        id: "vehicle-book",
-        label: "Book your first service",
-        href: "/register",
+        id: "vehicle-explore",
+        label: "Explore Car Care",
+        href: "#services",
         variant: "primary",
       },
       {
         id: "vehicle-plans",
-        label: "See plans & rates",
+        label: "View Plans",
         href: "#packages",
         variant: "secondary",
       },
@@ -65,15 +75,15 @@ export const defaultHeroContent: HeroContentBundle = {
     media: {
       kind: "image",
       src: landingImages.heroVehicle,
-      alt: "CWP technician detailing a car in Varanasi",
+      alt: "CWP technician detailing a car at a customer doorstep in Varanasi",
       width: 1600,
       height: 1200,
     },
     liveChip: "Varanasi · doorstep specialists",
     stats: {
-      label: "Owner rating",
-      value: "4.9",
-      hint: "Across active plans",
+      label: "Daily Car Cleaning",
+      value: "₹1,999",
+      hint: "Starting / month",
     },
     tintClass: DIVISION_COLORS.vehicle.tintClass,
   },
@@ -83,31 +93,39 @@ export const defaultHeroContent: HeroContentBundle = {
     locationLabel: "Serving Varanasi & 8 surrounding areas",
     headline: {
       eyebrow: "Professional Solar Care",
-      before: "Dust is settling on",
-      emphasis: "your profits",
-      after: ", not your panels.",
+      before: "Clean panels.",
+      emphasis: "Better performance.",
+      after: " Higher savings.",
     },
     subheading:
-      "Dust silently steals generation long before panels look dirty. We’ll show the science, prove the inverter gap, then estimate your rooftop.",
+      "Dust blocks light long before panels look dirty. Cleaner panels recover output — estimate what your rooftop may be losing, then book professional cleaning.",
     socialProof: {
       ratingLabel: "4.9/5",
       ownersLabel: "Trusted by rooftop & society clients in Varanasi",
       avatarInitials: ["A", "R", "P", "N", "S"],
     },
     trustPills: [
-      { id: "inverter", label: "Recovery measured on your inverter logs", icon: "zap" },
+      { id: "output", label: "Cleaner panels, stronger output", icon: "zap" },
+      { id: "savings", label: "Estimate your rooftop savings", icon: "badgeCheck" },
+      { id: "maintain", label: "Scheduled professional cleaning", icon: "camera" },
+    ],
+    credibility: [
+      { id: "science", label: "Scientific panel care" },
+      { id: "inverter", label: "Inverter-aware cleaning" },
+      { id: "trained", label: "Trained specialists" },
+      { id: "city", label: "Varanasi & nearby" },
     ],
     ctas: [
       {
         id: "solar-calc",
-        label: "Estimate my loss",
+        label: "Calculate Your Savings",
         href: "#calculator",
         variant: "primary",
       },
       {
-        id: "solar-science",
-        label: "Why dust matters",
-        href: "#science",
+        id: "solar-book",
+        label: "Book Solar Cleaning",
+        href: "#book",
         variant: "secondary",
       },
     ],

@@ -199,3 +199,16 @@ html.admin-theme .recharts-default-tooltip {
     transition: none;
   }
 }
+
+/* ---------- Auth (light trust panel over dark shell) ---------- */
+html.admin-theme .admin-auth-shell {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+}
+
+html.admin-theme .admin-auth-panel {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-radius: var(--admin-radius, var(--radius));
+  box-shadow: var(--shadow-lg, var(--shadow-md));
+}

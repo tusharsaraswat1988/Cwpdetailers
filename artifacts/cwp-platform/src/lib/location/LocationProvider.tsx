@@ -4,6 +4,7 @@ import { GPS_RECHECK_INTERVAL_MS, GPS_WATCH_OPTIONS } from "./constants";
 import { applyStaffLocationUpdate, getStaffLocation, isGeolocationSupported } from "./getStaffLocation";
 import { locationStoreSnapshot, useLocationStore } from "./locationStore";
 import { clearStaffGeolocationWatchRegistration, registerStaffGeolocationWatch } from "./geolocationCoordinator";
+import { isStaffNativeApp } from "@/lib/native/staffNative";
 
 type StaffLocationContextValue = {
   permissionState: LocationPermissionState;
@@ -20,6 +21,10 @@ const StaffLocationContext = createContext<StaffLocationContextValue | null>(nul
 
 async function queryPermission(): Promise<LocationPermissionState> {
   if (!isGeolocationSupported()) return "unsupported";
+  if (isStaffNativeApp()) {
+    const { checkNativeLocationPermission } = await import("./nativeGeolocation");
+    return checkNativeLocationPermission();
+  }
   try {
     const perm = await navigator.permissions.query({ name: "geolocation" });
     if (perm.state === "granted") return "granted";
@@ -40,21 +45,35 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const setPermissionState = useLocationStore(s => s.setPermissionState);
   const setRefreshing = useLocationStore(s => s.setRefreshing);
 
-  const watchIdRef = useRef<number | null>(null);
+  const watchIdRef = useRef<number | string | null>(null);
   const lastBackgroundRefreshRef = useRef(0);
   const permissionStateRef = useRef(permissionState);
   permissionStateRef.current = permissionState;
 
   const stopWatch = useCallback(() => {
-    if (watchIdRef.current != null && isGeolocationSupported()) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+    const id = watchIdRef.current;
+    if (id == null) return;
+    watchIdRef.current = null;
+    if (typeof id === "string") {
+      void import("./nativeGeolocation").then(({ clearNativeWatch }) => clearNativeWatch(id));
+      return;
+    }
+    if (isGeolocationSupported()) {
+      navigator.geolocation.clearWatch(id);
     }
   }, []);
 
   const startWatch = useCallback(() => {
     if (!isGeolocationSupported() || permissionStateRef.current !== "granted") return;
     if (watchIdRef.current != null) return;
+
+    if (isStaffNativeApp()) {
+      void import("./nativeGeolocation").then(async ({ watchNativePosition }) => {
+        if (watchIdRef.current != null || permissionStateRef.current !== "granted") return;
+        watchIdRef.current = await watchNativePosition(applyStaffLocationUpdate);
+      });
+      return;
+    }
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       pos =>

@@ -27,7 +27,6 @@ const DEFAULT_LINKS: MarketingNavLink[] = [
   { id: "packages", label: "Plans", href: "#packages" },
   { id: "results", label: "Results", href: "#work" },
   { id: "faq", label: "FAQs", href: "#faq" },
-  { id: "book", label: "Book", href: "#book" },
 ];
 
 function NavAnchor({
@@ -38,7 +37,7 @@ function NavAnchor({
   active: boolean;
 }) {
   const className = cn(
-    "transition hover:text-foreground",
+    "cursor-pointer transition hover:text-foreground",
     active && "font-semibold text-[color:var(--landing-accent)]",
   );
 
@@ -86,7 +85,7 @@ export function MarketingNav({
           LANDING_LAYOUT.navHeight,
         )}
       >
-        <Link href={homeHref} className="flex items-center gap-2.5">
+        <Link href={homeHref} className="flex cursor-pointer items-center gap-2.5">
           <BrandLogo variant="navbar" lazy={false} />
           <div className="leading-tight">
             <div className="text-[15px] font-semibold tracking-tight">
@@ -114,7 +113,7 @@ export function MarketingNav({
         <div className="flex items-center gap-2">
           <a
             href={`tel:${phone}`}
-            className="hidden items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium transition hover:border-foreground/30 sm:inline-flex"
+            className="hidden cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium transition hover:border-foreground/30 sm:inline-flex"
           >
             <Phone className="h-3.5 w-3.5" aria-hidden />
             {phoneDisplay}

@@ -35,7 +35,7 @@ export function AuthOtpOverlay({ open, session, onSuccess, onClose }: AuthOtpOve
         <SheetContent
           side="bottom"
           className={cn(
-            "bg-secondary border-white/10 text-white rounded-t-2xl px-5",
+            "bg-card border-border text-foreground rounded-t-2xl px-5",
             "pb-6 pt-5 max-h-[92dvh] overflow-y-auto",
             "[&>button.absolute]:hidden",
           )}
@@ -52,7 +52,7 @@ export function AuthOtpOverlay({ open, session, onSuccess, onClose }: AuthOtpOve
     <Dialog open={open} onOpenChange={next => { if (!next) onClose(); }}>
       <DialogContent
         className={cn(
-          "bg-secondary border-white/10 text-white sm:max-w-md p-6 rounded-2xl",
+          "bg-card border-border text-foreground sm:max-w-md p-6 rounded-2xl",
           "[&>button.absolute]:hidden",
         )}
         data-testid="otp-overlay-dialog"

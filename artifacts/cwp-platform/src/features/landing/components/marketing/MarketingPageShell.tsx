@@ -9,6 +9,7 @@ export type MarketingPageShellProps = {
   /** Defaults to cross-page site links (not landing hash anchors). */
   navLinks?: MarketingNavLink[];
   activeHref?: string;
+  homeHref?: string;
   showFooter?: boolean;
   className?: string;
 };
@@ -21,12 +22,13 @@ export function MarketingPageShell({
   children,
   navLinks = MARKETING_SITE_LINKS,
   activeHref,
+  homeHref,
   showFooter = true,
   className,
 }: MarketingPageShellProps) {
   return (
     <LandingShell className={className}>
-      <MarketingNav links={navLinks} activeHref={activeHref} />
+      <MarketingNav links={navLinks} activeHref={activeHref} homeHref={homeHref} />
       {children}
       {showFooter ? <MarketingFooter /> : null}
     </LandingShell>

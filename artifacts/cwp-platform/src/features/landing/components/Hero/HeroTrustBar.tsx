@@ -34,7 +34,7 @@ export function HeroTrustBar({ pills, enterReady, className }: HeroTrustBarProps
       style={enter.style}
       className={cn(
         enter.className,
-        "mt-6 flex list-none flex-wrap items-center gap-2.5 p-0 text-muted-foreground",
+        "mt-3 flex list-none flex-wrap items-center gap-2 p-0 text-muted-foreground md:mt-4",
         LANDING_TYPE.trust,
         className,
       )}

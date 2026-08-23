@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import {
   useGetStaffAttendance,
@@ -19,7 +19,8 @@ import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Lo
 import { todayIso } from "@/lib/staff-jobs";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 import { markAttendanceWithLocation } from "@/lib/location";
-import { extractClientExif, validateCameraFile, readFileAsDataUrl } from "@/features/daily-cleaning/lib/cameraCapture";
+import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
+import { isOfflineQueued, queuedSavedMessage } from "@/services/queuedResult";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { isDailyCleanOnlyStaff } from "@/lib/staff-ecosystem/roles";
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
@@ -52,7 +53,6 @@ export default function StaffProfile() {
   const [emergencyName, setEmergencyName] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
   const [editingEmergency, setEditingEmergency] = useState(false);
-  const selfieInputRef = useRef<HTMLInputElement>(null);
 
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-profile"],
@@ -102,9 +102,16 @@ export default function StaffProfile() {
       exif?: Record<string, unknown> | null;
       capturedAt?: string;
     }) => markAttendanceWithLocation(staffId!, payload),
-    onSuccess: () => {
+    onSuccess: (data) => {
       if (staffId != null) {
         qc.invalidateQueries({ queryKey: getGetStaffAttendanceQueryKey(staffId) });
+      }
+      if (isOfflineQueued(data)) {
+        toast({
+          title: "Check-in saved on phone",
+          description: queuedSavedMessage("punch"),
+        });
+        return;
       }
       toast({ title: "Attendance marked", description: "Selfie and GPS recorded for shift check-in" });
     },
@@ -145,25 +152,19 @@ export default function StaffProfile() {
   const showShiftAttendance = Boolean(profile) && !isSupervisor && !isDailyCleanOnly;
   const todaySelfieUrl = resolveMediaUrl(todayRecord?.selfiePhotoUrl) || null;
 
-  async function handleAttendanceSelfie(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
+  async function handleAttendanceCheckIn() {
     try {
-      validateCameraFile(file);
-      const [imageBase64, exif] = await Promise.all([
-        readFileAsDataUrl(file),
-        extractClientExif(file),
-      ]);
+      const photo = await captureStaffPhoto("front");
       await markMutation.mutateAsync({
         date: todayStr,
         status: "present",
         checkInTime: new Date().toTimeString().slice(0, 5),
-        imageBase64,
-        exif,
-        capturedAt: new Date(file.lastModified).toISOString(),
+        imageBase64: photo.dataUrl,
+        exif: photo.exif,
+        capturedAt: photo.capturedAt,
       });
     } catch (err) {
+      if (isCameraCancel(err)) return;
       toast({
         title: "Check-in failed",
         description: err instanceof Error ? err.message : "Selfie capture failed",
@@ -327,44 +328,33 @@ export default function StaffProfile() {
         )}
 
         {showShiftAttendance && (
-          <>
-            <input
-              ref={selfieInputRef}
-              type="file"
-              accept="image/*"
-              capture="user"
-              className="hidden"
-              data-testid="input-attendance-selfie"
-              onChange={e => void handleAttendanceSelfie(e)}
-            />
-            <StaffAttendanceCard
-              status={todayMarked ? todayRecord?.status ?? "present" : "pending"}
-              dateLabel="Today's attendance"
-              selfieUrl={todayMarked ? todaySelfieUrl : null}
-              checkInLabel={
-                todayMarked
-                  ? `Marked${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
-                  : "Selfie + GPS check-in required before field work"
-              }
-              action={
-                todayMarked ? undefined : (
-                  <StaffButton
-                    className="shrink-0 px-4"
-                    disabled={markMutation.isPending}
-                    data-testid="btn-mark-present"
-                    onClick={() => selfieInputRef.current?.click()}
-                  >
-                    {markMutation.isPending ? (
-                      <Loader2 size={16} className="mr-2 animate-spin" />
-                    ) : (
-                      <Camera size={16} className="mr-2" />
-                    )}
-                    {markMutation.isPending ? "Selfie + GPS…" : "Check in"}
-                  </StaffButton>
-                )
-              }
-            />
-          </>
+          <StaffAttendanceCard
+            status={todayMarked ? todayRecord?.status ?? "present" : "pending"}
+            dateLabel="Today's attendance"
+            selfieUrl={todayMarked ? todaySelfieUrl : null}
+            checkInLabel={
+              todayMarked
+                ? `Marked${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
+                : "Selfie + GPS check-in required before field work"
+            }
+            action={
+              todayMarked ? undefined : (
+                <StaffButton
+                  className="shrink-0 px-4"
+                  disabled={markMutation.isPending}
+                  data-testid="btn-mark-present"
+                  onClick={() => void handleAttendanceCheckIn()}
+                >
+                  {markMutation.isPending ? (
+                    <Loader2 size={16} className="mr-2 animate-spin" />
+                  ) : (
+                    <Camera size={16} className="mr-2" />
+                  )}
+                  {markMutation.isPending ? "Selfie + GPS…" : "Check in"}
+                </StaffButton>
+              )
+            }
+          />
         )}
 
         {!isSupervisor && (

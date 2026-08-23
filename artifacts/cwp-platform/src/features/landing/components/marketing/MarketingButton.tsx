@@ -56,7 +56,7 @@ export const MarketingButton = forwardRef<HTMLButtonElement, MarketingButtonProp
     ref,
   ) {
     const classes = cn(
-      "inline-flex items-center justify-center gap-1.5 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+      "inline-flex items-center justify-center gap-1.5 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 cursor-pointer disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
       LANDING_LAYOUT.pillRadius,
       VARIANT[variant],
       SIZE[size],

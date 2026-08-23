@@ -6,8 +6,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { MarketingButton } from "@/features/landing/components/marketing/MarketingButton";
 import { useGoogleAuthComplete } from "@workspace/api-client-react";
 import type { AuthResponse } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
@@ -90,10 +90,10 @@ export function GooglePhoneLinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="bg-secondary border-white/10 text-white sm:max-w-md max-h-[92dvh] overflow-y-auto">
+      <DialogContent className="bg-card border-border text-foreground sm:max-w-md max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display text-white">Finish your Google account</DialogTitle>
-          <DialogDescription className="text-white/50">
+          <DialogTitle className="font-display text-foreground">Finish your Google account</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
             {googleName ? `Hi ${googleName}! ` : ""}
             Add your mobile number and a password so you can also sign in without Google
             ({googleEmail}).
@@ -104,7 +104,6 @@ export function GooglePhoneLinkDialog({
           <PhoneInput
             id="google-link-phone"
             label="Mobile number"
-            dark
             indianMobile
             hideHint
             deferValidationUntilComplete
@@ -112,7 +111,7 @@ export function GooglePhoneLinkDialog({
             onChange={setPhone}
             error={phoneError}
             onErrorChange={setPhoneError}
-            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary"
+            className="h-12 min-h-12 rounded-[var(--customer-radius-sm,0.75rem)] text-base"
           />
 
           <CreatePasswordFields
@@ -125,10 +124,11 @@ export function GooglePhoneLinkDialog({
             hint="At least 6 characters. Sign in later with phone + password — no SMS."
           />
 
-          <Button
+          <MarketingButton
             type="submit"
+            size="lg"
             disabled={completeMutation.isPending || !canSubmit}
-            className="w-full bg-primary text-secondary hover:bg-primary/90 font-semibold h-12"
+            className="w-full"
             data-testid="btn-google-complete"
           >
             {completeMutation.isPending ? (
@@ -136,7 +136,7 @@ export function GooglePhoneLinkDialog({
             ) : (
               "Create account"
             )}
-          </Button>
+          </MarketingButton>
         </form>
       </DialogContent>
     </Dialog>

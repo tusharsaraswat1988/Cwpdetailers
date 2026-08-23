@@ -32,7 +32,7 @@ export function HeroContent({
           style={eyebrowEnter.style}
           className={cn(
             eyebrowEnter.className,
-            "inline-flex w-fit items-center gap-2 rounded-full border border-border bg-white/70 px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur",
+            "hidden w-fit items-center gap-2 rounded-full border border-border bg-white/70 px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur 2xl:inline-flex",
           )}
         >
           <MapPin className="h-3 w-3" aria-hidden />
@@ -45,7 +45,8 @@ export function HeroContent({
           style={eyebrowEnter.style}
           className={cn(
             eyebrowEnter.className,
-            "mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--landing-accent)]",
+            "text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--landing-accent)] transition-colors duration-300",
+            locationLabel && "2xl:mt-3",
           )}
         >
           {headline.eyebrow}
@@ -56,7 +57,7 @@ export function HeroContent({
         style={headlineEnter.style}
         className={cn(
           headlineEnter.className,
-          "mt-6 font-display font-semibold tracking-tight",
+          "mt-2 font-display font-semibold tracking-tight md:mt-2.5",
           LANDING_TYPE.heroMobile,
           LANDING_TYPE.heroDesktop,
           LANDING_TYPE.heroLeading,
@@ -64,7 +65,9 @@ export function HeroContent({
       >
         {headline.before}
         <br />
-        <span className="text-[color:var(--landing-accent)]">{headline.emphasis}</span>
+        <span className="text-[color:var(--landing-accent)] transition-colors duration-300">
+          {headline.emphasis}
+        </span>
         {headline.after ?? ""}
       </h1>
 
@@ -72,7 +75,7 @@ export function HeroContent({
         style={subEnter.style}
         className={cn(
           subEnter.className,
-          "mt-6 max-w-xl leading-relaxed text-muted-foreground",
+          "mt-2.5 max-w-xl leading-relaxed text-muted-foreground md:mt-3.5",
           LANDING_TYPE.sub,
         )}
       >

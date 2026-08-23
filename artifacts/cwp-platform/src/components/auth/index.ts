@@ -1,7 +1,9 @@
-export { AuthLayout } from "./AuthLayout";
+export { AuthLayout, AuthPanel } from "./AuthLayout";
 export { AuthHeader } from "./AuthHeader";
 export { AuthFooter } from "./AuthFooter";
 export { AuthDivider } from "./AuthDivider";
+export { AuthBackButton } from "./AuthBackButton";
+export { AuthMethodChooser } from "./AuthMethodChooser";
 export { GoogleButton } from "./GoogleButton";
 export { OTPVerification } from "./OTPVerification";
 export { AuthOtpOverlay } from "./AuthOtpOverlay";

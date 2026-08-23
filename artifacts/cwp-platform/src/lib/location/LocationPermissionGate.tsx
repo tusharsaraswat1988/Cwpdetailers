@@ -41,20 +41,20 @@ export function LocationPermissionGate({ children }: { children: ReactNode }) {
               {permissionState === "unsupported" &&
                 "Is device par GPS nahi hai. Android phone se staff app use karein."}
               {permissionState === "denied" &&
-                "Attendance aur visit proof ke liye location zaroori hai."}
+                "Attendance aur visit proof ke liye Precise location zaroori hai."}
               {(permissionState === "prompt" || permissionState === "checking") &&
-                "Allow karein — field work ke liye live GPS chahiye."}
+                "Allow karein — punch aur job start ke liye accurate GPS chahiye."}
             </p>
 
             {permissionState !== "unsupported" && (
               <ul className="mb-4 space-y-1.5 rounded-xl border bg-muted/40 p-3 text-left text-[11px] text-muted-foreground">
                 <li className="flex gap-2">
                   <Navigation size={12} className="mt-0.5 shrink-0 text-primary" />
-                  App ko home screen par add karein
+                  Permission: Precise location / Allow while using
                 </li>
                 <li className="flex gap-2">
                   <Navigation size={12} className="mt-0.5 shrink-0 text-primary" />
-                  Settings → Location → Allow while using
+                  Open sky ke paas khade ho — indoor GPS weak hota hai
                 </li>
               </ul>
             )}

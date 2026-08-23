@@ -5,6 +5,17 @@ export const GPS_ACTION_OPTIONS: PositionOptions = {
   maximumAge: 0,
 };
 
+/** Stop waiting once accuracy is at or below this (field punch / geofence). */
+export const GPS_TARGET_ACCURACY_METERS = 50;
+
+/** Matches server MAX_GPS_ACCURACY_METERS — worse fixes are rejected. */
+export const GPS_MAX_ACCURACY_METERS = 200;
+
+/** Max time to wait for a better GPS fix on punch / job start / photos. */
+export const GPS_ACCURACY_WAIT_MS = 15_000;
+
+export const GPS_ACCURACY_POLL_MS = 2_000;
+
 /** Cached / background reads — navigation and watchPosition updates. */
 export const GPS_NAVIGATION_OPTIONS: PositionOptions = {
   enableHighAccuracy: false,

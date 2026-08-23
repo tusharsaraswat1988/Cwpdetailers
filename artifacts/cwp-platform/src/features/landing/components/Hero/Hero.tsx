@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { LANDING_LAYOUT } from "../../constants";
 import { defaultHeroContent } from "../../content/defaultHeroContent";
 import type { HeroContentBundle } from "../../content/heroTypes";
 import { useExperience } from "../../ExperienceProvider";
@@ -14,22 +15,14 @@ export type HeroProps = {
 };
 
 /**
- * Hero orchestrator — no knowledge of sections below.
+ * Hero orchestrator — the Car / Solar toggle switches the entire first-viewport experience.
  * Division state comes exclusively from ExperienceProvider.
  */
 export function Hero({ content = defaultHeroContent, className }: HeroProps) {
   const { division, setDivision, themeStyle } = useExperience();
-  const enterReady = useHeroEnterReady(division);
+  const selectorEnterReady = useHeroEnterReady();
+  const journeyEnterReady = useHeroEnterReady(division);
   const journey = division === "vehicle" ? content.vehicle : content.solar;
-
-  const selectorSlot = (
-    <HeroSelector
-      content={content.selector}
-      value={division}
-      onChange={(next, meta) => setDivision(next, { method: meta?.method ?? "click" })}
-      enterReady={enterReady}
-    />
-  );
 
   return (
     <section
@@ -41,28 +34,42 @@ export function Hero({ content = defaultHeroContent, className }: HeroProps) {
     >
       <div
         className={cn(
-          "pointer-events-none absolute inset-0 bg-gradient-to-b transition-colors duration-700",
+          "pointer-events-none absolute inset-0 bg-gradient-to-b transition-colors duration-500",
           journey.tintClass,
         )}
         aria-hidden
       />
 
-      <div className="relative">
-        {division === "vehicle" ? (
-          <HeroVehicle
-            key={content.vehicle.contentKey}
-            content={content.vehicle}
-            selectorSlot={selectorSlot}
-            enterReady={enterReady}
-          />
-        ) : (
-          <HeroSolar
-            key={content.solar.contentKey}
-            content={content.solar}
-            selectorSlot={selectorSlot}
-            enterReady={enterReady}
-          />
+      <div
+        className={cn(
+          "relative mx-auto",
+          LANDING_LAYOUT.maxWidth,
+          LANDING_LAYOUT.padX,
+          LANDING_LAYOUT.heroPadY,
         )}
+      >
+        <HeroSelector
+          content={content.selector}
+          value={division}
+          onChange={(next, meta) => setDivision(next, { method: meta?.method ?? "click" })}
+          enterReady={selectorEnterReady}
+        />
+
+        <div className={LANDING_LAYOUT.heroAfterSelector}>
+          {division === "vehicle" ? (
+            <HeroVehicle
+              key={content.vehicle.contentKey}
+              content={content.vehicle}
+              enterReady={journeyEnterReady}
+            />
+          ) : (
+            <HeroSolar
+              key={content.solar.contentKey}
+              content={content.solar}
+              enterReady={journeyEnterReady}
+            />
+          )}
+        </div>
       </div>
     </section>
   );

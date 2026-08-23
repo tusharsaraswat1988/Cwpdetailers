@@ -200,8 +200,15 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
   padding: 0.25rem 0.125rem;
 }
 
-/* ---------- Auth (light trust panel over dark shell optional) ---------- */
+/* ---------- Auth (light trust panel over dark shell) ---------- */
 html.customer-theme .customer-auth-shell {
   background: hsl(var(--secondary));
   color: hsl(var(--secondary-foreground));
+}
+
+html.customer-theme .customer-auth-panel {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-radius: var(--customer-radius-xl, 1.5rem);
+  box-shadow: var(--customer-card-shadow, var(--shadow-lg, var(--shadow-md)));
 }

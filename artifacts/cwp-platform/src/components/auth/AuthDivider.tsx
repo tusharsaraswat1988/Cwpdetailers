@@ -5,14 +5,14 @@ type AuthDividerProps = {
   className?: string;
 };
 
-export function AuthDivider({ label = "or", className }: AuthDividerProps) {
+export function AuthDivider({ label = "OR", className }: AuthDividerProps) {
   return (
-    <div className={cn("relative my-3.5", className)} role="separator" aria-label={label}>
+    <div className={cn("relative my-4", className)} role="separator" aria-label={label}>
       <div className="absolute inset-0 flex items-center">
-        <div className="w-full border-t border-white/[0.08]" />
+        <div className="w-full border-t border-border" />
       </div>
       <div className="relative flex justify-center text-xs">
-        <span className="bg-secondary px-3 text-white/25 lowercase tracking-normal">{label}</span>
+        <span className="bg-card px-3 text-muted-foreground uppercase tracking-wider">{label}</span>
       </div>
     </div>
   );

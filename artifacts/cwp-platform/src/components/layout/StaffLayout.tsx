@@ -3,6 +3,7 @@ import { LocationProvider } from "@/lib/location/LocationProvider";
 import { LocationPermissionGate } from "@/lib/location/LocationPermissionGate";
 import StaffAppShell from "@/components/layout/StaffAppShell";
 import { StaffJobAlertLayer } from "@/components/staff/StaffJobAlertLayer";
+import { StaffPendingSyncBanner } from "@/components/staff/StaffPendingSyncBanner";
 import { StaffThemeRoot } from "@/features/staff-ds";
 
 /**
@@ -16,6 +17,7 @@ export function StaffLayout({ children }: { children: ReactNode }) {
       <LocationProvider>
         <StaffAppShell>
           <LocationPermissionGate>
+            <StaffPendingSyncBanner />
             <StaffJobAlertLayer>{children}</StaffJobAlertLayer>
           </LocationPermissionGate>
         </StaffAppShell>

@@ -1,5 +1,7 @@
 import type { LocationPayload, StaffLocationLogRow } from "./types";
 import { getStaffLocation, parseApiLocationError, toLocationPayload } from "./getStaffLocation";
+import { queuedFetch } from "@/services/queuedApi";
+import { isOfflineQueued } from "@/services/queuedResult";
 
 export async function transitionBookingWithLocation(
   bookingId: number,
@@ -13,16 +15,23 @@ export async function transitionBookingWithLocation(
     payload = { ...payload, ...toLocationPayload(coords) };
   }
 
-  const res = await fetch(`/api/bookings/${bookingId}/transition`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    throw new Error(await parseApiLocationError(res));
+  const result = await queuedFetch(
+    `/api/bookings/${bookingId}/transition`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    { operationType: "staff_job", label: `Job ${body.toStatus}` },
+  );
+
+  if (result.queued) return { queued: true };
+  if (!result.ok) throw result.error;
+  if (!result.response.ok) {
+    throw new Error(await parseApiLocationError(result.response));
   }
-  return res.json();
+  return result.response.json();
 }
 
 export type MarkAttendancePayload = {
@@ -43,16 +52,23 @@ export async function markAttendanceWithLocation(
   const coords = await getStaffLocation("action");
   const payload = { ...body, ...toLocationPayload(coords) };
 
-  const res = await fetch(`/api/staff/${staffId}/attendance`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    throw new Error(await parseApiLocationError(res));
+  const result = await queuedFetch(
+    `/api/staff/${staffId}/attendance`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    { operationType: "staff_attendance", label: "Shift check-in" },
+  );
+
+  if (result.queued) return { queued: true };
+  if (!result.ok) throw result.error;
+  if (!result.response.ok) {
+    throw new Error(await parseApiLocationError(result.response));
   }
-  return res.json();
+  return result.response.json();
 }
 
 export async function fetchStaffLocationLogs(
@@ -72,3 +88,4 @@ export async function fetchStaffLocationLogs(
 }
 
 export type { LocationPayload, StaffLocationLogRow };
+export { isOfflineQueued };

@@ -107,15 +107,20 @@ class OfflineQueueService {
       await this.persist(item);
 
       try {
-        const res = await fetchWithRetry(item.url, {
-          method: item.method,
-          headers: item.headers,
-          body: item.body,
-          credentials: "include",
-        });
+        if (item.type === "staff_photo") {
+          const { processStaffPhotoQueueItem } = await import("./staffPhotoQueue");
+          await processStaffPhotoQueueItem(item);
+        } else {
+          const res = await fetchWithRetry(item.url, {
+            method: item.method,
+            headers: item.headers,
+            body: item.body,
+            credentials: "include",
+          });
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
         }
 
         await this.removeItem(item.id);

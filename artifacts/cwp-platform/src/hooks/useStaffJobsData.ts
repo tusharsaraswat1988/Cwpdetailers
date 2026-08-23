@@ -12,6 +12,10 @@ import { useAccountScope } from "@/lib/account-scope";
 import { uploadFileToCloudinary } from "@/lib/media-url";
 import { useToast } from "@/hooks/use-toast";
 import { getStaffLocation, transitionBookingWithLocation } from "@/lib/location";
+import { locationStoreSnapshot } from "@/lib/location/locationStore";
+import { isOfflineQueued, queuedSavedMessage } from "@/services/queuedResult";
+import { enqueueStaffPhotoUpload, isNetworkUploadFailure } from "@/services/staffPhotoQueue";
+import { readFileAsDataUrl } from "@/features/daily-cleaning/lib/cameraCapture";
 import {
   type StaffJob,
   type GeoTaggedPhoto,
@@ -154,8 +158,12 @@ export function useStaffJobsData() {
   const transitionMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: { toStatus: string; reason?: string } }) =>
       transitionBookingWithLocation(id, data),
-    onSuccess: () => {
+    onSuccess: (data) => {
       invalidateJobs();
+      if (isOfflineQueued(data)) {
+        toast({ title: "Saved on phone", description: queuedSavedMessage("job") });
+        return;
+      }
       toast({ title: "Status updated" });
     },
     onError: (err: Error) =>
@@ -188,8 +196,12 @@ export function useStaffJobsData() {
       }
       throw new Error("Unsupported action for this job");
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       invalidateJobs();
+      if (isOfflineQueued(data)) {
+        toast({ title: "Saved on phone", description: queuedSavedMessage("job") });
+        return;
+      }
       toast({ title: "Status updated" });
     },
     onError: (err: Error) =>
@@ -269,7 +281,26 @@ export function useStaffJobsData() {
       });
       const secureUrl = await uploadFileToCloudinary(file, presign as Parameters<typeof uploadFileToCloudinary>[1]);
       await updateMutation.mutateAsync({ id: jobId, data: { [field]: secureUrl } });
-    } catch {
+    } catch (err) {
+      if (isNetworkUploadFailure(err)) {
+        const dataUrl = await readFileAsDataUrl(file);
+        const gps = await getStaffLocation("action").catch(() => locationStoreSnapshot().lastKnownLocation);
+        await enqueueStaffPhotoUpload(
+          {
+            jobId,
+            source: "booking",
+            kind: field === "beforePhotoUrl" ? "before" : "after",
+            field,
+            dataUrl,
+            fileName: file.name,
+            contentType: file.type || "image/jpeg",
+            ...(gps ?? { latitude: 0, longitude: 0, accuracy: 999 }),
+          },
+          field === "beforePhotoUrl" ? "Before photo" : "After photo",
+        );
+        toast({ title: "Photo saved on phone", description: queuedSavedMessage("photo") });
+        return;
+      }
       toast({ title: "Photo upload failed", variant: "destructive" });
     } finally {
       setUploadingJobId(null);
@@ -279,8 +310,9 @@ export function useStaffJobsData() {
   async function uploadGeoPhoto(job: StaffJob, kind: "before" | "after", file: File, photoIndex: number) {
     setUploadingJobId(job.id);
     setUploadingPhotoIndex(photoIndex);
+    let gps: { latitude: number; longitude: number; accuracy: number } | null = null;
     try {
-      const gps = await getStaffLocation("action");
+      gps = await getStaffLocation("action");
       const presign = await requestUrlMutation.mutateAsync({
         data: { name: file.name, size: file.size, contentType: file.type },
       });
@@ -316,6 +348,29 @@ export function useStaffJobsData() {
         },
       });
     } catch (err) {
+      if (isNetworkUploadFailure(err) && gps) {
+        const dataUrl = await readFileAsDataUrl(file);
+        const { beforePhotos: existingBefore, afterPhotos: existingAfter } = getJobPhotoArrays(job);
+        await enqueueStaffPhotoUpload(
+          {
+            jobId: job.id,
+            source: job.source === "execution" ? "execution" : "booking",
+            executionId: job.executionId ?? job.id,
+            kind,
+            dataUrl,
+            fileName: file.name,
+            contentType: file.type || "image/jpeg",
+            existingBeforeUrls: existingBefore.map(p => p.url),
+            existingAfterUrls: existingAfter.map(p => p.url),
+            beforePhotoUrl: job.beforePhotoUrl,
+            afterPhotoUrl: job.afterPhotoUrl,
+            ...gps,
+          },
+          `${kind} photo`,
+        );
+        toast({ title: "Photo saved on phone", description: queuedSavedMessage("photo") });
+        return;
+      }
       toast({
         title: "Photo upload failed",
         description: err instanceof Error ? err.message : undefined,

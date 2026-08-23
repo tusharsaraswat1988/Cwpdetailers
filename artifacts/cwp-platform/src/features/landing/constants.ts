@@ -6,12 +6,14 @@
 export const LANDING_LAYOUT = {
   maxWidth: "max-w-7xl",
   padX: "px-5 md:px-8",
-  heroPadY: "pt-14 pb-24 md:pt-20 md:pb-28",
-  heroGap: "gap-12 lg:gap-16",
-  heroGrid: "lg:grid-cols-[1.05fr_1fr]",
+  heroPadY: "pt-4 pb-8 md:pt-5 md:pb-12 lg:pt-6 lg:pb-14",
+  /** Space between the in-hero switcher and the journey composition */
+  heroAfterSelector: "mt-3 md:mt-4",
+  heroGap: "gap-6 lg:gap-10",
+  heroGrid: "lg:grid-cols-[1.05fr_0.95fr] lg:items-start",
   navHeight: "h-16",
   sectionRadius: "rounded-[28px]",
-  mediaRadius: "rounded-[32px]",
+  mediaRadius: "rounded-[28px]",
   cardRadius: "rounded-2xl",
   pillRadius: "rounded-full",
 } as const;
@@ -26,13 +28,13 @@ export const LANDING_SPACE = {
 } as const;
 
 export const LANDING_TYPE = {
-  heroMobile: "text-[44px]",
-  heroDesktop: "md:text-[64px]",
-  heroLeading: "leading-[1.05]",
-  sub: "text-[17px]",
+  heroMobile: "text-[34px] sm:text-[40px]",
+  heroDesktop: "md:text-[48px] lg:text-[56px] xl:text-[64px]",
+  heroLeading: "leading-[1.08]",
+  sub: "text-[16px] md:text-[17px]",
   eyebrow: "text-xs",
-  selectorTitle: "text-xl sm:text-2xl lg:text-[28px] lg:leading-snug",
-  selectorLabel: "text-[11px]",
+  selectorTitle: "text-[14px] sm:text-[15px] md:text-base",
+  selectorLabel: "text-[10px] sm:text-[11px]",
   trust: "text-xs",
   statValue: "text-3xl",
   chip: "text-xs",
@@ -44,13 +46,14 @@ export const LANDING_MOTION = {
   enterEase: "cubic-bezier(0.22, 1, 0.36, 1)",
   enterDistancePx: 14,
   staggerMs: {
-    eyebrow: 0,
-    headline: 60,
-    subheading: 120,
-    trust: 180,
-    cta: 220,
-    selector: 260,
-    media: 100,
+    selector: 0,
+    eyebrow: 80,
+    headline: 140,
+    subheading: 200,
+    trust: 260,
+    cta: 300,
+    media: 180,
+    credibility: 340,
   },
   selectorTransitionMs: 220,
   mediaFadeMs: 500,
@@ -73,7 +76,7 @@ export const LANDING_Z = {
 } as const;
 
 export const LANDING_MEDIA = {
-  heroAspect: "aspect-[4/5]",
+  heroAspect: "aspect-[5/4] lg:aspect-[5/4] xl:aspect-[4/5]",
   heroWidth: 1600,
   heroHeight: 1200,
 } as const;
@@ -103,6 +106,6 @@ export const SOCIAL_AVATAR_COLORS = [
 
 export const HERO_SHADOW = {
   media: "shadow-[0_40px_120px_-40px_rgba(15,23,42,0.35)]",
-  selector: "shadow-[0_20px_60px_-30px_rgba(15,23,42,0.15)]",
-  optionActive: "shadow-[0_10px_30px_-15px_rgba(15,23,42,0.25)]",
+  selector: "shadow-[0_12px_40px_-28px_rgba(15,23,42,0.12)]",
+  optionActive: "shadow-none",
 } as const;

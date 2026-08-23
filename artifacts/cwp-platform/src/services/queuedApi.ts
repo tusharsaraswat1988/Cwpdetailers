@@ -54,7 +54,8 @@ function serverConfirmationError(): QueuedFetchResult {
 }
 
 /**
- * Write helper for queue-eligible operations only (bookings, customers, notes, expenses, follow-ups).
+ * Write helper for queue-eligible operations (bookings, customers, notes,
+ * expenses, follow-ups, and staff field punch/job/visit/photo).
  * Payments, invoices, wallet, accounting, and inventory must use `fetchWithRetry` directly.
  */
 export async function queuedFetch(

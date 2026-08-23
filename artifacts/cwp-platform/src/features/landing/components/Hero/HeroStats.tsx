@@ -13,7 +13,7 @@ export function HeroStats({ stats, className }: HeroStatsProps) {
   return (
     <div
       className={cn(
-        "min-w-[190px] rounded-2xl bg-white/95 p-4 shadow-lg backdrop-blur",
+        "min-w-[168px] rounded-2xl border border-border/60 bg-white/95 p-3.5 shadow-md backdrop-blur sm:min-w-[190px] sm:p-4",
         className,
       )}
       data-testid="hero-stats"

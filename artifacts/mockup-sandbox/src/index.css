@@ -141,6 +141,50 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  /*
+   * Pointer cursor for genuine controls only.
+   * Tailwind utilities (cursor-not-allowed, cursor-default, resize cursors)
+   * still win because they live in @layer utilities.
+   */
+  button:not(:disabled):not([aria-disabled="true"]),
+  a[href]:not([aria-disabled="true"]),
+  [role="button"]:not(:disabled):not([aria-disabled="true"]),
+  [role="link"]:not([aria-disabled="true"]),
+  [role="tab"]:not(:disabled):not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]):not([data-disabled]),
+  [role="menuitemcheckbox"]:not([aria-disabled="true"]):not([data-disabled]),
+  [role="menuitemradio"]:not([aria-disabled="true"]):not([data-disabled]),
+  [role="option"]:not([aria-disabled="true"]):not([data-disabled]),
+  [role="switch"]:not(:disabled):not([aria-disabled="true"]),
+  [role="checkbox"]:not(:disabled):not([aria-disabled="true"]),
+  [role="radio"]:not(:disabled):not([aria-disabled="true"]),
+  [role="combobox"]:not(:disabled):not([aria-disabled="true"]),
+  [role="slider"]:not(:disabled):not([aria-disabled="true"]),
+  summary,
+  label:not(:has(:disabled)):not(:has([aria-disabled="true"])),
+  select:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="image"]:not(:disabled),
+  input[type="range"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  [role="button"][disabled],
+  [role="button"][aria-disabled="true"],
+  label:has(:disabled),
+  label:has([aria-disabled="true"]) {
+    cursor: not-allowed;
+  }
 }
 
 @layer utilities {

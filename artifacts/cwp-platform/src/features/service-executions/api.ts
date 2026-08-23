@@ -1,3 +1,6 @@
+import { queuedFetch } from "@/services/queuedApi";
+import { parseApiLocationError } from "@/lib/location/getStaffLocation";
+
 export const SERVICE_EXECUTIONS_QUERY_KEY = ["service-executions"];
 
 export type ServiceExecutionStatus =
@@ -50,6 +53,29 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
     throw new Error((err as { error?: string }).error ?? "Request failed");
   }
   return res.json() as Promise<T>;
+}
+
+async function staffExecutionMutate<T>(
+  path: string,
+  body: unknown,
+  label: string,
+): Promise<T | { queued: true }> {
+  const result = await queuedFetch(
+    `/api${path}`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    },
+    { operationType: "staff_job", label },
+  );
+  if (result.queued) return { queued: true };
+  if (!result.ok) throw result.error;
+  if (!result.response.ok) {
+    throw new Error(await parseApiLocationError(result.response));
+  }
+  return result.response.json() as Promise<T>;
 }
 
 export async function fetchTodayExecutions(): Promise<ServiceExecution[]> {
@@ -108,11 +134,8 @@ export async function addExecutionPhotos(
 export async function startExecution(
   id: number,
   gps?: { latitude: number; longitude: number; accuracy?: number },
-): Promise<ServiceExecution> {
-  return apiFetch(`/service-executions/${id}/start`, {
-    method: "POST",
-    body: JSON.stringify(gps ?? {}),
-  });
+): Promise<ServiceExecution | { queued: true }> {
+  return staffExecutionMutate(`/service-executions/${id}/start`, gps ?? {}, "Start job");
 }
 
 export async function pauseExecution(id: number, reason?: string): Promise<ServiceExecution> {
@@ -153,11 +176,11 @@ export async function completeExecution(
     notes?: string;
     customerSignatureUrl?: string;
   },
-): Promise<ServiceExecution> {
+): Promise<ServiceExecution | { queued: true }> {
   const gps = opts?.gps;
-  return apiFetch(`/service-executions/${id}/complete`, {
-    method: "POST",
-    body: JSON.stringify({
+  return staffExecutionMutate(
+    `/service-executions/${id}/complete`,
+    {
       ...(gps ? { latitude: gps.latitude, longitude: gps.longitude, accuracy: gps.accuracy } : {}),
       ...(opts?.notes?.trim()
         ? { notes: [{ kind: "technician", body: opts.notes.trim() }] }
@@ -165,6 +188,7 @@ export async function completeExecution(
       ...(opts?.customerSignatureUrl
         ? { customerSignatureUrl: opts.customerSignatureUrl }
         : {}),
-    }),
-  });
+    },
+    "Complete job",
+  );
 }

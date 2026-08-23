@@ -425,8 +425,8 @@ export function ServiceSelect({ asset, value, onChange }: Props) {
             const cardClass = cn(
               "text-left border rounded-lg px-4 py-3 min-h-14 transition-colors",
               disabled && "opacity-60 cursor-not-allowed bg-muted/30 border-border",
-              !disabled && selected && "border-primary bg-primary/5",
-              !disabled && !selected && "border-border hover:border-primary/40",
+              !disabled && selected && "border-primary bg-primary/5 cursor-pointer",
+              !disabled && !selected && "border-border hover:border-primary/40 cursor-pointer",
             );
             const inner = (
               <>

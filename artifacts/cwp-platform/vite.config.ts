@@ -77,13 +77,14 @@ export default defineConfig({
         icons: [],
       },
       injectManifest: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,json}"],
+        // HTML is served NetworkFirst in sw.ts — do not pin unrevisioned /index.html.
+        globPatterns: ["**/*.{js,css,ico,png,svg,woff2,json}"],
+        globIgnores: ["**/index.html"],
         // Main bundle exceeds Workbox default 2 MiB precache limit.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,json}"],
-        navigateFallback: "/index.html",
+        globPatterns: ["**/*.{js,css,ico,png,svg,woff2,json}"],
         navigateFallbackDenylist: [/^\/api/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
@@ -110,7 +111,7 @@ export default defineConfig({
         // sw.ts is ESM — classic scripts fail to install in `pnpm dev`,
         // which leaves navigator.serviceWorker.ready pending forever (Enabling… spinner).
         type: "module",
-        navigateFallback: "/index.html",
+        // Custom SW uses NetworkFirst for navigations; do not inject unrevisioned /index.html.
       },
     }),
     runtimeErrorOverlay(),

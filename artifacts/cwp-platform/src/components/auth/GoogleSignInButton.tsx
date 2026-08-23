@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import { MarketingButton } from "@/features/landing/components/marketing/MarketingButton";
 import { Loader2 } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,8 @@ type GoogleSignInButtonProps = {
   onError?: (message: string) => void;
   disabled?: boolean;
   className?: string;
+  /** Filled white button — use on the Google-first chooser. */
+  prominent?: boolean;
 };
 
 let scriptLoadPromise: Promise<void> | null = null;
@@ -76,6 +78,7 @@ export function GoogleSignInButton({
   onError,
   disabled,
   className,
+  prominent = false,
 }: GoogleSignInButtonProps) {
   const hiddenHostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
@@ -185,15 +188,10 @@ export function GoogleSignInButton({
 
   if (status === "loading") {
     return (
-      <Button
-        type="button"
-        variant="outline"
-        disabled
-        className={`w-full border-white/15 bg-white/5 text-white/50 ${className ?? ""}`}
-      >
+      <MarketingButton type="button" variant={prominent ? "primary" : "outline"} disabled className={cn("w-full", className)} size="lg">
         <Loader2 size={16} className="animate-spin mr-2" />
         Loading Google…
-      </Button>
+      </MarketingButton>
     );
   }
 
@@ -208,18 +206,14 @@ export function GoogleSignInButton({
         aria-hidden
       />
 
-      <Button
+      <MarketingButton
         type="button"
-        variant="outline"
+        variant={prominent ? "primary" : "outline"}
         onClick={triggerGoogleSignIn}
         disabled={disabled || pending}
         data-testid="btn-google-signin"
-        className={cn(
-          "w-full h-12 min-h-12 text-base font-medium rounded-lg transition-all duration-200 ease-out",
-          "border border-white/15 bg-transparent text-white/85",
-          "hover:bg-white/[0.07] hover:text-white active:scale-[0.985]",
-          className,
-        )}
+        className={cn("w-full", className)}
+        size="lg"
       >
         {pending ? (
           <Loader2 size={18} className="animate-spin mr-2" />
@@ -227,7 +221,7 @@ export function GoogleSignInButton({
           <FcGoogle size={18} className="mr-2" />
         )}
         Continue with Google
-      </Button>
+      </MarketingButton>
     </>
   );
 }
@@ -242,19 +236,13 @@ export function GoogleSignInFallback({
   pending?: boolean;
 }) {
   return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={onClick}
-      disabled={disabled || pending}
-      className="w-full border-white/15 bg-white text-secondary hover:bg-white/90 font-medium"
-    >
+    <MarketingButton type="button" variant="outline" onClick={onClick} disabled={disabled || pending} className="w-full" size="lg">
       {pending ? (
         <Loader2 size={16} className="animate-spin mr-2" />
       ) : (
         <FcGoogle size={18} className="mr-2" />
       )}
       Continue with Google
-    </Button>
+    </MarketingButton>
   );
 }
