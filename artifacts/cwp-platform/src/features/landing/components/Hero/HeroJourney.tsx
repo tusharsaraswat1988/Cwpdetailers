@@ -38,7 +38,7 @@ export function HeroJourney({
           LANDING_LAYOUT.heroGrid,
         )}
       >
-        <div className="flex flex-col justify-center">
+        <div className="flex flex-col">
           <HeroContent
             locationLabel={content.locationLabel}
             headline={content.headline}
