@@ -23,7 +23,7 @@ export function HeroCTA({ ctas, enterReady, className }: HeroCTAProps) {
   return (
     <div
       style={enter.style}
-      className={cn(enter.className, "mt-4 flex flex-wrap items-center gap-3", className)}
+      className={cn(enter.className, "mt-5 flex flex-wrap items-center gap-3 md:mt-6", className)}
       data-testid="hero-cta-group"
     >
       {ctas.map((cta) => {

@@ -46,7 +46,7 @@ export function HeroContent({
           className={cn(
             eyebrowEnter.className,
             "text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--landing-accent)] transition-colors duration-300",
-            locationLabel && "2xl:mt-3",
+            locationLabel && "2xl:mt-2",
           )}
         >
           {headline.eyebrow}
@@ -57,7 +57,7 @@ export function HeroContent({
         style={headlineEnter.style}
         className={cn(
           headlineEnter.className,
-          "mt-2 font-display font-semibold tracking-tight md:mt-2.5",
+          "mt-1.5 font-display font-semibold tracking-tight md:mt-2",
           LANDING_TYPE.heroMobile,
           LANDING_TYPE.heroDesktop,
           LANDING_TYPE.heroLeading,
@@ -75,7 +75,7 @@ export function HeroContent({
         style={subEnter.style}
         className={cn(
           subEnter.className,
-          "mt-2.5 max-w-xl leading-relaxed text-muted-foreground md:mt-3.5",
+          "mt-2.5 max-w-xl leading-relaxed text-muted-foreground md:mt-3",
           LANDING_TYPE.sub,
         )}
       >
