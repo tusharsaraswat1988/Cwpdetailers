@@ -34,6 +34,23 @@ import { CustomerPersonaBadges } from "@/features/customers/components/CustomerP
 import { ArchiveCustomerButton } from "@/features/customers/components/ArchiveCustomerButton";
 import { fetchCustomerServicesHub } from "@/features/customers/api";
 import {
+  CustomerServiceAddressSection,
+  composeSavedAddress,
+} from "@/features/customers/components/CustomerServiceAddressSection";
+import {
+  emptyAddressValue,
+  savedLocationToForm,
+  addressFormToLocation,
+  formToWritePayload,
+  type CustomerServiceAddressValue,
+} from "@/components/shared/address-picker/addressForm";
+import { parseComposedAddress } from "@workspace/address-model";
+import {
+  useSavedLocations,
+  useCreateSavedLocation,
+  useUpdateSavedLocation,
+} from "@/features/master-data/api";
+import {
   apiToFounderStatus,
   founderToApiStatus,
   FOUNDER_STATUS_LABELS,
@@ -74,11 +91,16 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
   });
   const [activeTab, setActiveTab] = useState("overview");
   const [editErrors, setEditErrors] = useState<{ phone?: string | null; email?: string | null }>({});
+  const [addressForm, setAddressForm] = useState<CustomerServiceAddressValue>(emptyAddressValue());
 
   const { data: customer, isLoading } = useGetCustomer(id, {
     query: { queryKey: getGetCustomerQueryKey(id), enabled: id > 0 },
   });
   const { data: branches } = useListBranches({ query: { queryKey: getListBranchesQueryKey() } });
+  const { data: savedLocations } = useSavedLocations(id > 0 ? id : undefined);
+  const createSavedLocation = useCreateSavedLocation();
+  const updateSavedLocation = useUpdateSavedLocation();
+  const defaultLocation = savedLocations?.find(l => l.isDefault) ?? savedLocations?.[0];
 
   // Filter out inactive branches, but keep the customer's current branch even if inactive
   const activeBranches = (branches ?? []).filter(b => 
@@ -121,6 +143,25 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
     });
   }, [customer]);
 
+  useEffect(() => {
+    if (!customer) return;
+    const loc = savedLocations?.find(l => l.isDefault) ?? savedLocations?.[0];
+    if (loc) {
+      setAddressForm(savedLocationToForm(loc));
+      return;
+    }
+    const parsed = parseComposedAddress(customer.address ?? "");
+    setAddressForm({
+      ...emptyAddressValue(),
+      houseNumber: parsed.houseNumber,
+      buildingName: parsed.buildingName,
+      area: parsed.area,
+      landmark: parsed.landmark,
+      pincode: parsed.pincode,
+      city: parsed.city || (customer.city ?? ""),
+    });
+  }, [customer, savedLocations]);
+
   const { data: servicesHub } = useQuery({
     queryKey: ["customer", id, "services-hub"],
     queryFn: () => fetchCustomerServicesHub(id),
@@ -162,14 +203,31 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
       toast({ title: "Please fix phone or email format", variant: "destructive" });
       return;
     }
+    const composedAddress = composeSavedAddress(addressForm) || addressForm.formattedAddress?.trim() || "";
+    const locationValue = addressFormToLocation(addressForm);
+    if (locationValue) {
+      const payload = formToWritePayload(addressForm, id, defaultLocation ? defaultLocation.isDefault : true);
+      const onError = (err: unknown) => {
+        toast({
+          title: "Service address not saved",
+          description: err instanceof Error ? err.message : "Failed to save the service address",
+          variant: "destructive",
+        });
+      };
+      if (defaultLocation) {
+        updateSavedLocation.mutate({ id: defaultLocation.id, ...payload }, { onError });
+      } else {
+        createSavedLocation.mutate(payload, { onError });
+      }
+    }
     updateCustomerMutation.mutate({
       id,
       data: {
         name: editForm.name,
         phone: phoneResult.value,
         email: emailResult.value,
-        city: editForm.city || undefined,
-        address: editForm.address || undefined,
+        city: (addressForm.city.trim() || editForm.city) || undefined,
+        address: (composedAddress || editForm.address) || undefined,
         status: founderToApiStatus(editForm.status),
         branchId: editForm.branchId ? parseInt(editForm.branchId, 10) : undefined,
         gstin: editForm.gstin.trim() || null,
@@ -314,9 +372,12 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                         </Select>
                       </div>
                     </div>
-                    <div>
-                      <Label htmlFor="edit-address">Address</Label>
-                      <Input id="edit-address" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} className="mt-1" />
+                    <div className="rounded-lg border border-border p-4">
+                      <CustomerServiceAddressSection
+                        idPrefix="edit-customer-address"
+                        value={addressForm}
+                        onChange={patch => setAddressForm(f => ({ ...f, ...patch }))}
+                      />
                     </div>
                     <div>
                       <Label>Branch</Label>
