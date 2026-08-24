@@ -2,7 +2,7 @@ import { useState, type ReactNode, type ComponentType } from "react";
 import { useListCustomers, getListCustomersQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Upload } from "lucide-react";
 import { Link } from "wouter";
@@ -128,7 +128,10 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
         <Can resource="customers" action="create">
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>New Customer</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>New Customer</DialogTitle>
+                <DialogDescription>Create a new customer profile with contact details and service address</DialogDescription>
+              </DialogHeader>
               <QuickCreateCustomerForm
                 customerBasePath={basePath}
                 onCreated={() => {
