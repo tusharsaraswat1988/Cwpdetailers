@@ -80,6 +80,11 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
   });
   const { data: branches } = useListBranches({ query: { queryKey: getListBranchesQueryKey() } });
 
+  // Filter out inactive branches, but keep the customer's current branch even if inactive
+  const activeBranches = (branches ?? []).filter(b => 
+    b.isActive !== false || String(b.id) === editForm.branchId
+  );
+
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
     const legacyToOverview = new Set(["services", "wallet", "assets", "locations", "support", "active-services"]);
@@ -321,7 +326,7 @@ export default function CustomerDetailPage({ Layout, basePath, routePattern }: C
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">No branch</SelectItem>
-                          {(branches ?? []).map(b => (
+                          {activeBranches.map(b => (
                             <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
                           ))}
                         </SelectContent>
