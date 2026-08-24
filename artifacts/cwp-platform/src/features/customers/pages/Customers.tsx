@@ -127,7 +127,7 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
         )}
         <Can resource="customers" action="create">
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>New Customer</DialogTitle></DialogHeader>
               <QuickCreateCustomerForm
                 customerBasePath={basePath}
