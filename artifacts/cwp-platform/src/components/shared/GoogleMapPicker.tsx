@@ -226,6 +226,8 @@ export function GoogleMapPicker({
   };
 
   const pickSuggestion = async (suggestion: PlaceSuggestion) => {
+    // Clear suggestions immediately to close dropdown
+    setSuggestions([]);
     const resolved = await resolvePlaceById(suggestion.id);
     if (resolved) applyResolved(resolved);
   };
@@ -291,6 +293,10 @@ export function GoogleMapPicker({
           aria-label="Search your address, building or landmark"
           aria-autocomplete="list"
           aria-expanded={suggestions.length > 0}
+          onBlur={() => {
+            // Small delay to allow click events to process before closing
+            setTimeout(() => setSuggestions([]), 200);
+          }}
           onKeyDown={e => {
             if (e.key === "ArrowDown") {
               e.preventDefault();
