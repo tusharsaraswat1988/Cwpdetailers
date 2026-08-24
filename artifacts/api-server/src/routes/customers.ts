@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { customersTable, vehiclesTable, solarSitesTable, subscriptionsTable, bookingsTable, paymentsTable, branchesTable } from "@workspace/db";
+import { customersTable, vehiclesTable, solarSitesTable, subscriptionsTable, bookingsTable, paymentsTable, branchesTable, usersTable } from "@workspace/db";
 import { eq, ilike, or, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { getLedgerBalance } from "../lib/wallet/service";
@@ -22,15 +22,27 @@ import { composeSavedAddress, toCreateAddressBody, hasRequiredAddressParts } fro
 
 const router = Router();
 
-function customerSelfContactExcludes(
+/**
+ * Excludes for a contact-uniqueness check on an existing customer: the customer
+ * row itself plus every login user linked to it, so the customer's own portal
+ * account is never reported as a conflict.
+ */
+async function customerContactExcludes(
   customerId: number,
   existingUserId?: number | null,
   sessionUserId?: number,
-): ContactExclude[] {
+): Promise<ContactExclude[]> {
   const excludes: ContactExclude[] = [{ entity: "customer", id: customerId }];
   const linkedUserIds = new Set<number>();
   if (existingUserId) linkedUserIds.add(existingUserId);
   if (sessionUserId) linkedUserIds.add(sessionUserId);
+
+  const linkedUsers = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.customerId, customerId));
+  for (const user of linkedUsers) linkedUserIds.add(user.id);
+
   for (const userId of linkedUserIds) {
     excludes.push({ entity: "user", id: userId });
   }
@@ -356,7 +368,7 @@ router.patch("/customers/me", async (req, res) => {
       const identityCheck = await assertContactIdentityAvailable(
         updateData.phone,
         existing.email,
-        customerSelfContactExcludes(customerId, existing.userId, req.user?.id),
+        await customerContactExcludes(customerId, existing.userId, req.user?.id),
       );
       if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
       updateData.phone = identityCheck.identity.phone;
@@ -461,9 +473,7 @@ router.patch("/customers/:id", async (req, res) => {
       const identityCheck = await assertContactIdentityAvailable(
         typeof updateData.phone === "string" ? updateData.phone : existing.phone,
         updateData.email !== undefined ? updateData.email : existing.email,
-        isCustomerSelf
-          ? customerSelfContactExcludes(id, existing.userId, req.user?.id)
-          : { entity: "customer", id },
+        await customerContactExcludes(id, existing.userId, isCustomerSelf ? req.user?.id : undefined),
       );
       if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
       if (typeof updateData.phone === "string") updateData.phone = identityCheck.identity.phone;
@@ -508,13 +518,11 @@ router.patch("/customers/:id", async (req, res) => {
 
     const [customer] = await db.update(customersTable).set(updateData).where(eq(customersTable.id, id)).returning();
 
-    if (isCustomerSelf) {
-      await syncCustomerLoginProfile(id, {
-        name: typeof updateData.name === "string" ? updateData.name : undefined,
-        phone: typeof updateData.phone === "string" ? updateData.phone : undefined,
-        email: updateData.email !== undefined ? (updateData.email as string | null) : undefined,
-      });
-    }
+    await syncCustomerLoginProfile(id, {
+      name: typeof updateData.name === "string" ? updateData.name : undefined,
+      phone: typeof updateData.phone === "string" ? updateData.phone : undefined,
+      email: updateData.email !== undefined ? (updateData.email as string | null) : undefined,
+    });
 
     let reactivated = false;
     if (status === "active" && isLegacyDormantCustomer(existing)) {
