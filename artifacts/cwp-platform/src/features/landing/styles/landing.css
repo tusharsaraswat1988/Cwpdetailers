@@ -237,3 +237,10 @@
     opacity: 1;
   }
 }
+
+
+/* Smooth scrolling for landing sections */
+.landing-root,
+.landing-root * {
+  scroll-behavior: smooth;
+}

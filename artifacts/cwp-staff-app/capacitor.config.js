@@ -27,7 +27,10 @@ function staffServerUrl(raw) {
   }
 }
 
-const remoteUrl = staffServerUrl(readEnvValue("STAFF_APP_SERVER_URL"));
+// In standard bundled mode, no server.url is used so assets load from local device storage.
+// Live-reload over Wi-Fi is enabled only when CAP_LIVE_RELOAD=true.
+const isLiveReload = process.env.CAP_LIVE_RELOAD === "true";
+const remoteUrl = isLiveReload ? staffServerUrl(readEnvValue("STAFF_APP_SERVER_URL")) : undefined;
 
 /** @type {import('@capacitor/cli').CapacitorConfig} */
 const config = {
@@ -35,7 +38,6 @@ const config = {
   appName: "CWP Staff",
   webDir: "../cwp-platform/dist/public",
   android: {
-    allowMixedContent: true,
     backgroundColor: "#21252e",
     captureInput: true,
   },

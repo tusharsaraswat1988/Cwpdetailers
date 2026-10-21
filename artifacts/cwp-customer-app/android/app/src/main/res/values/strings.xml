@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CWP Detailers</string>
+    <string name="title_activity_main">CWP Detailers</string>
+    <string name="package_name">in.cwpdetailers.customer</string>
+    <string name="custom_url_scheme">in.cwpdetailers.customer</string>
+</resources>

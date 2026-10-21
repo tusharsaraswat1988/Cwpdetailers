@@ -48,7 +48,7 @@ export function HeroJourney({
           <HeroTrustBar
             pills={content.trustPills}
             enterReady={enterReady}
-            className="hidden min-[1400px]:flex"
+            className="hidden lg:flex"
           />
           <HeroCTA ctas={content.ctas} enterReady={enterReady} />
         </div>

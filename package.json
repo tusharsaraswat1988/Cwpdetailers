@@ -8,7 +8,11 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "migrate:pending": "pnpm --filter @workspace/scripts run migrate:pending"
+    "migrate:pending": "pnpm --filter @workspace/scripts run migrate:pending",
+    "android:staff:sync": "pnpm --filter @workspace/cwp-platform run build && pnpm --filter @workspace/cwp-staff-app run sync",
+    "android:staff:open": "pnpm --filter @workspace/cwp-staff-app run open:android",
+    "android:customer:sync": "pnpm --filter @workspace/cwp-platform run build && pnpm --filter @workspace/cwp-customer-app run sync",
+    "android:customer:open": "pnpm --filter @workspace/cwp-customer-app run open:android"
   },
   "private": true,
   "pnpm": {

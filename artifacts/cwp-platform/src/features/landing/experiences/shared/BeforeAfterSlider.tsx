@@ -1,20 +1,43 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LANDING_MOTION } from "../../constants";
 
 export type BeforeAfterSliderProps = {
-  src: string;
+  /** Single composite fallback image */
+  src?: string;
+  /** Full-frame 'before' condition image */
+  beforeSrc?: string;
+  /** Full-frame 'after' condition image */
+  afterSrc?: string;
   alt: string;
+  beforeLabel?: string;
+  afterLabel?: string;
   className?: string;
 };
 
-/** Interactive before/after compare — visual proof primitive. */
-export function BeforeAfterSlider({ src, alt, className }: BeforeAfterSliderProps) {
+/**
+ * Enhanced interactive before/after visual proof slider.
+ * Supports genuine dual-layer clipping (via clip-path) or high-contrast split comparison.
+ */
+export function BeforeAfterSlider({
+  src,
+  beforeSrc,
+  afterSrc,
+  alt,
+  beforeLabel = "Before",
+  afterLabel = "After",
+  className,
+}: BeforeAfterSliderProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState(50);
   const [dragging, setDragging] = useState(false);
   const [touched, setTouched] = useState(false);
+
+  // Fallback to src if dual images aren't individually provided
+  const primaryAfter = afterSrc || src || "";
+  const primaryBefore = beforeSrc || src || "";
+  const isDualLayer = Boolean(beforeSrc && afterSrc);
 
   useEffect(() => {
     if (touched) return;
@@ -29,7 +52,7 @@ export function BeforeAfterSlider({ src, alt, className }: BeforeAfterSliderProp
       if (visible) {
         const p = ((t - start) / 4200) % 2;
         const tri = p < 1 ? p : 2 - p;
-        setPos(30 + tri * 40);
+        setPos(32 + tri * 36);
       }
       raf = requestAnimationFrame(loop);
     };
@@ -56,7 +79,7 @@ export function BeforeAfterSlider({ src, alt, className }: BeforeAfterSliderProp
     <div
       ref={wrapRef}
       className={cn(
-        "group relative select-none overflow-hidden rounded-3xl border border-border bg-muted",
+        "group relative select-none overflow-hidden rounded-3xl border border-border bg-slate-950 shadow-2xl",
         className,
       )}
       onPointerDown={onPointerDown}
@@ -66,7 +89,7 @@ export function BeforeAfterSlider({ src, alt, className }: BeforeAfterSliderProp
       onPointerUp={() => setDragging(false)}
       onPointerCancel={() => setDragging(false)}
       role="slider"
-      aria-label="Drag to compare before and after"
+      aria-label="Drag to compare before and after detailing results"
       aria-valuenow={Math.round(pos)}
       aria-valuemin={0}
       aria-valuemax={100}
@@ -84,35 +107,70 @@ export function BeforeAfterSlider({ src, alt, className }: BeforeAfterSliderProp
       style={{ cursor: dragging ? "grabbing" : "grab" }}
       data-testid="before-after-slider"
     >
-      <img
-        src={src}
-        alt={alt}
-        loading="lazy"
-        width={1400}
-        height={900}
-        draggable={false}
-        className="pointer-events-none aspect-[7/4] w-full object-cover"
-      />
-      <div className="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white backdrop-blur">
-        Before
-      </div>
-      <div className="absolute right-4 top-4 rounded-full bg-emerald-500/95 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white">
-        After
-      </div>
-      <div
-        className="pointer-events-none absolute inset-y-0 w-[2px] bg-white/80 shadow-[0_0_20px_rgba(255,255,255,0.55)]"
-        style={{
-          left: `${pos}%`,
-          transition: dragging ? "none" : "left 220ms cubic-bezier(0.22,1,0.36,1)",
-        }}
-      >
-        <div className="absolute left-1/2 top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-foreground shadow-lg">
-          <ArrowRight className="h-3.5 w-3.5 -mr-3" aria-hidden />
-          <ArrowRight className="h-3.5 w-3.5 -ml-3 rotate-180" aria-hidden />
+      <div className="relative aspect-[16/10] sm:aspect-[7/4] w-full overflow-hidden">
+        {/* Layer 1: "After" Image (Clean, glossy, detailed result) */}
+        <img
+          src={primaryAfter}
+          alt={`After: ${alt}`}
+          loading="lazy"
+          width={1400}
+          height={900}
+          draggable={false}
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+        />
+
+        {/* Layer 2: "Before" Image (Clipped dynamically based on pos%) */}
+        <div
+          className="pointer-events-none absolute inset-0 h-full w-full overflow-hidden"
+          style={{
+            clipPath: `inset(0 ${100 - pos}% 0 0)`,
+            transition: dragging ? "none" : "clip-path 220ms cubic-bezier(0.22,1,0.36,1)",
+          }}
+        >
+          <img
+            src={primaryBefore}
+            alt={`Before: ${alt}`}
+            loading="lazy"
+            width={1400}
+            height={900}
+            draggable={false}
+            className={cn(
+              "pointer-events-none absolute inset-0 h-full w-full object-cover",
+              !isDualLayer && "brightness-90 contrast-95 saturate-[0.85] sepia-[0.12]",
+            )}
+          />
         </div>
-      </div>
-      <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-xl bg-black/50 px-4 py-2 text-[11px] text-white/85 backdrop-blur">
-        {touched ? "Same angle · same day · unfiltered" : "Drag the handle to compare"}
+
+        {/* Badges */}
+        <div className="absolute left-4 top-4 rounded-full bg-black/75 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white backdrop-blur shadow-sm">
+          {beforeLabel}
+        </div>
+        <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-emerald-600/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white shadow-sm backdrop-blur">
+          <Sparkles className="h-3 w-3" />
+          <span>{afterLabel}</span>
+        </div>
+
+        {/* Divider line & handle */}
+        <div
+          className="pointer-events-none absolute inset-y-0 w-[2px] bg-white shadow-[0_0_15px_rgba(255,255,255,0.85)]"
+          style={{
+            left: `${pos}%`,
+            transition: dragging ? "none" : "left 220ms cubic-bezier(0.22,1,0.36,1)",
+          }}
+        >
+          <div className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-foreground shadow-2xl ring-2 ring-black/15 transition-transform group-hover:scale-105">
+            <ArrowRight className="h-3.5 w-3.5 -mr-2.5 text-foreground" aria-hidden />
+            <ArrowRight className="h-3.5 w-3.5 -ml-2.5 rotate-180 text-foreground" aria-hidden />
+          </div>
+        </div>
+
+        {/* Subtitle / Bottom Indicator Strip */}
+        <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center justify-between rounded-xl bg-black/60 px-4 py-2 text-[11px] text-white/90 backdrop-blur">
+          <span>
+            {touched ? "Real customer vehicles · Same day · Varanasi" : "Drag slider left & right to inspect results"}
+          </span>
+          <span className="font-mono text-[10px] text-white/70">{Math.round(pos)}%</span>
+        </div>
       </div>
     </div>
   );

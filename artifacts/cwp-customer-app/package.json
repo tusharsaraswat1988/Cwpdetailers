@@ -1,0 +1,22 @@
+{
+  "name": "@workspace/cwp-customer-app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Android Capacitor shell for the CWP Customer service app",
+  "scripts": {
+    "sync": "cap sync android",
+    "open:android": "cap open android",
+    "run:android": "cap run android"
+  },
+  "dependencies": {
+    "@capacitor/app": "^7.1.0",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/geolocation": "^7.1.5",
+    "@capacitor/splash-screen": "^7.0.3",
+    "@capacitor/status-bar": "^7.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3"
+  }
+}

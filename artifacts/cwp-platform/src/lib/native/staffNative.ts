@@ -1,31 +1,24 @@
-import { Capacitor } from "@capacitor/core";
+export {
+  isStaffNativeApp,
+  isCustomerNativeApp,
+  isAnyNativeApp,
+  getSyncNativePortal,
+  getNativePortal,
+  isPortalAllowedPath,
+  portalHomePath,
+  isRootScreenForPortal,
+} from "./portalNative";
 
-/** True only inside the CWP Staff Android/iOS shell — not the browser PWA. */
-export function isStaffNativeApp(): boolean {
-  try {
-    return Capacitor.isNativePlatform();
-  } catch {
-    return false;
-  }
-}
+import { isPortalAllowedPath, portalHomePath } from "./portalNative";
 
 const STAFF_NATIVE_PATHS = ["/staff"];
-const STAFF_NATIVE_ALLOWED_PREFIXES = [
-  "/staff",
-  "/privacy-policy",
-  "/terms-and-conditions",
-  "/refund-policy",
-  "/data-deletion",
-];
 
 export function isStaffNativeAllowedPath(pathname: string): boolean {
-  return STAFF_NATIVE_ALLOWED_PREFIXES.some(
-    prefix => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  return isPortalAllowedPath("staff", pathname);
 }
 
 export function staffNativeHomePath(): string {
-  return "/staff/login";
+  return portalHomePath("staff");
 }
 
 export { STAFF_NATIVE_PATHS };

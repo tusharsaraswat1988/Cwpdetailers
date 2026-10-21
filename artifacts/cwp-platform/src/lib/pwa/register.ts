@@ -1,6 +1,6 @@
 import { registerSW } from "virtual:pwa-register";
 import { setPushServiceWorkerRegistration } from "@/lib/pushNotifications";
-import { isStaffNativeApp } from "@/lib/native/staffNative";
+import { Capacitor } from "@capacitor/core";
 
 let settleRegistration: (registration: ServiceWorkerRegistration | null) => void;
 const registrationPromise = new Promise<ServiceWorkerRegistration | null>((resolve) => {
@@ -21,7 +21,7 @@ function settle(registration: ServiceWorkerRegistration | null) {
 export function initPwa(): void {
   setPushServiceWorkerRegistration(registrationPromise);
 
-  if (isStaffNativeApp()) {
+  if (Capacitor.isNativePlatform()) {
     settle(null);
     return;
   }

@@ -34,7 +34,7 @@ export function ExperienceCTA() {
   return (
     <section
       id="book"
-      className="relative overflow-hidden bg-foreground text-white"
+      className="scroll-mt-20 relative overflow-hidden bg-foreground text-white"
       data-testid="experience-cta"
     >
       <div

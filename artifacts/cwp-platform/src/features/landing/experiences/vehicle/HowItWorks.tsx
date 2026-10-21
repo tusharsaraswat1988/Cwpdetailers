@@ -40,7 +40,7 @@ const STEPS = [
  */
 export function HowItWorks() {
   return (
-    <section id="services" className="bg-white" data-testid="vehicle-how-it-works">
+    <section id="services" className="scroll-mt-20 bg-white" data-testid="vehicle-how-it-works">
       <div
         className={`${LANDING_LAYOUT.maxWidth} ${LANDING_LAYOUT.padX} mx-auto py-20 md:py-28`}
       >

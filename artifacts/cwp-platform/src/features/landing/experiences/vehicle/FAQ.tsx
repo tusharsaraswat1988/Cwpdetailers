@@ -28,7 +28,7 @@ const ITEMS = [
 /** Unique question: “What could go wrong?” — objections only, no feature replay. */
 export function FAQ() {
   return (
-    <section id="faq" className="bg-white" data-testid="vehicle-faq">
+    <section id="faq" className="scroll-mt-20 bg-white" data-testid="vehicle-faq">
       <div
         className={`${LANDING_LAYOUT.maxWidth} ${LANDING_LAYOUT.padX} mx-auto py-20 md:py-24`}
       >

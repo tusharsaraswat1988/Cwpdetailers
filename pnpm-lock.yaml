@@ -270,6 +270,31 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@25.3.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.31.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.4)
 
+  artifacts/cwp-customer-app:
+    dependencies:
+      '@capacitor/app':
+        specifier: ^7.1.0
+        version: 7.1.2(@capacitor/core@7.6.8)
+      '@capacitor/core':
+        specifier: ^7.4.3
+        version: 7.6.8
+      '@capacitor/geolocation':
+        specifier: ^7.1.5
+        version: 7.1.8(@capacitor/core@7.6.8)
+      '@capacitor/splash-screen':
+        specifier: ^7.0.3
+        version: 7.0.5(@capacitor/core@7.6.8)
+      '@capacitor/status-bar':
+        specifier: ^7.0.3
+        version: 7.0.6(@capacitor/core@7.6.8)
+    devDependencies:
+      '@capacitor/android':
+        specifier: ^7.4.3
+        version: 7.6.8(@capacitor/core@7.6.8)
+      '@capacitor/cli':
+        specifier: ^7.4.3
+        version: 7.6.8
+
   artifacts/cwp-platform:
     dependencies:
       '@capacitor/app':
@@ -1543,7 +1568,6 @@ packages:
   '@esbuild/win32-x64@0.27.3':
     resolution: {integrity: sha512-4uJGhsxuptu3OcpVAzli+/gWusVGwZZHTlS63hh++ehExkVT8SgiEf7/uC/PclrPPkLhZqGgCTjd0VWLo6xMqA==}
     engines: {node: '>=18'}
-    cpu: [x64]
     os: [win32]
 
   '@fast-csv/format@4.3.5':
@@ -2713,7 +2737,6 @@ packages:
 
   '@rollup/rollup-win32-x64-msvc@4.61.1':
     resolution: {integrity: sha512-X+zaP2x+j4RXGfbp/seSoRHWnPxzApilDszisZxbYH5C/jTxFhCtDNdPGZb9lJyYPs24wGxruPF7Y+sIXt9Gzw==}
-    cpu: [x64]
     os: [win32]
 
   '@scalar/helpers@0.2.18':
@@ -2793,7 +2816,6 @@ packages:
   '@tailwindcss/oxide-win32-x64-msvc@4.3.0':
     resolution: {integrity: sha512-Mvrf2kXW/yeW/OTezZlCGOirXRcUuLIBx/5Y12BaPM7wJoryG6dfS/NJL8aBPqtTEx/Vm4T4vKzFUcKDT+TKUA==}
     engines: {node: '>= 20'}
-    cpu: [x64]
     os: [win32]
 
   '@tailwindcss/oxide@4.2.1':
@@ -4476,7 +4498,6 @@ packages:
   lightningcss-win32-x64-msvc@1.31.1:
     resolution: {integrity: sha512-I9aiFrbd7oYHwlnQDqr1Roz+fTz61oDDJX7n9tYF9FJymH1cIN1DtKw3iYt6b8WZgEjoNwVSncwF4wx/ZedMhw==}
     engines: {node: '>= 12.0.0'}
-    cpu: [x64]
     os: [win32]
 
   lightningcss@1.31.1:

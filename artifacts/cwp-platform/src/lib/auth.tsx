@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
+import { setBaseUrl as setApiClientBaseUrl } from "@workspace/api-client-react";
+import { getApiBaseUrl, isTrustedApiUrl, resolveApiUrl } from "./apiConfig";
 import {
   authPortalHeaders,
   migrateLegacySession,
@@ -203,7 +205,8 @@ function installFetchInterceptor() {
         ? input.toString()
         : (input as Request).url;
 
-    if (!isSameOriginApi(url)) return orig(input, init);
+    if (!isTrustedApiUrl(input)) return orig(input, init);
+    const resolvedInput = resolveApiUrl(input);
 
     const portal = resolveAuthPortal();
     const token = localStorage.getItem(tokenStorageKey(portal));
@@ -215,7 +218,7 @@ function installFetchInterceptor() {
       headers.set("Authorization", `Bearer ${token}`);
     }
 
-    return orig(input, {
+    return orig(resolvedInput, {
       ...init,
       headers,
       credentials: init.credentials ?? "include",
@@ -236,6 +239,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     installFetchInterceptor();
+    const apiBase = getApiBaseUrl();
+    if (apiBase) setApiClientBaseUrl(apiBase);
     const portal = resolveAuthPortal();
     portalRef.current = portal;
     cachedRef.current = loadCachedSession(portal);
