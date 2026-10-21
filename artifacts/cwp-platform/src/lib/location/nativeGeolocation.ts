@@ -81,7 +81,7 @@ export async function checkNativeLocationPermission(): Promise<{
       const permRes = await NativeLocationBridge.checkLocationPermission();
       return {
         permission: permRes.permission,
-        permanentlyDenied: Boolean(permRes.permanentlyDenied),
+        permanentlyDenied: permRes.permission === "prompt" ? false : Boolean(permRes.permanentlyDenied),
       };
     } catch {
       // Fallback
@@ -200,12 +200,13 @@ export async function readNativePosition(options: {
   if (permCheck.permission !== "granted") {
     const requested = await requestNativeLocationPermission();
     if (requested.permission !== "granted") {
+      const isBlocked = requested.permission === "denied" && Boolean(requested.permanentlyDenied);
       const err = new Error(
-        requested.permanentlyDenied
+        isBlocked
           ? "Location permission blocked. Open settings to allow location."
           : "Location permission denied. Enable location for this app in your phone settings."
       );
-      (err as any).permanentlyDenied = requested.permanentlyDenied;
+      (err as any).permanentlyDenied = isBlocked;
       throw err;
     }
   }

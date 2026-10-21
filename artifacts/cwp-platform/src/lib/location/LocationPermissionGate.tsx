@@ -1,7 +1,8 @@
 import { ReactNode } from "react";
-import { Loader2, MapPin, MapPinOff, Navigation, RefreshCw, Settings, ShieldAlert } from "lucide-react";
+import { Loader2, MapPin, MapPinOff, Navigation, RefreshCw, Settings, ShieldAlert, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStaffLocation } from "./LocationProvider";
+import { useAuth } from "@/lib/auth";
 
 /**
  * Blocks staff UI only when location permission is missing, denied, or GPS is off.
@@ -19,6 +20,7 @@ export function LocationPermissionGate({ children }: { children: ReactNode }) {
     openLocationSettings,
     openAppSettings,
   } = useStaffLocation();
+  const { logout } = useAuth();
 
   const canEnterApp = permissionState === "granted";
 
@@ -195,6 +197,16 @@ export function LocationPermissionGate({ children }: { children: ReactNode }) {
                 {isRefreshing ? "Requesting…" : "Enable location"}
               </Button>
             )}
+
+            <Button
+              variant="ghost"
+              className="h-9 w-full text-xs text-muted-foreground hover:text-destructive mt-3"
+              onClick={() => logout("staff")}
+              data-testid="gate-logout-btn"
+            >
+              <LogOut size={13} className="mr-1.5" />
+              Log out
+            </Button>
           </div>
         </div>
       )}

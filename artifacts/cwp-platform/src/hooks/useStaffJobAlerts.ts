@@ -11,11 +11,38 @@ export type StaffJobAlert = {
   receivedAt: number;
 };
 
+const ALERTED_STORAGE_KEY = "cwp_staff_alerted_jobs";
+
+function getPersistedAlertedKeys(): Set<string> {
+  try {
+    const raw = localStorage.getItem(ALERTED_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistAlertedKeys(keys: Set<string>) {
+  try {
+    // Keep max 200 keys to avoid unlimited growth
+    const arr = Array.from(keys).slice(-200);
+    localStorage.setItem(ALERTED_STORAGE_KEY, JSON.stringify(arr));
+  } catch {
+    // ignore
+  }
+}
+
 /** Walk-in / self-start: do not vibrate or show "New job assigned" for this booking. */
 const suppressedAlertKeys = new Set<string>();
 
 export function suppressStaffJobAlert(job: Pick<StaffJob, "id" | "source">) {
-  suppressedAlertKeys.add(staffJobKey(job));
+  const key = staffJobKey(job);
+  suppressedAlertKeys.add(key);
+  const persisted = getPersistedAlertedKeys();
+  persisted.add(key);
+  persistAlertedKeys(persisted);
 }
 
 function jobLabel(job: StaffJob) {
@@ -32,12 +59,12 @@ function jobsSnapshotKey(jobs: StaffJob[]) {
 
 /**
  * Watches today's job list for newly assigned work.
- * Vibrates + toast + returns alert state for in-app popup banner.
+ * Vibrates + returns alert state for in-app popup banner.
+ * Uses persistent storage so reopening the app never re-alerts for existing/completed jobs.
  */
 export function useStaffJobAlerts(todayJobs: StaffJob[], enabled: boolean) {
   const { toast } = useToast();
-  const knownKeysRef = useRef<Set<string> | null>(null);
-  const alertedKeysRef = useRef<Set<string>>(new Set());
+  const initializedRef = useRef(false);
   const [latestAlert, setLatestAlert] = useState<StaffJobAlert | null>(null);
 
   const dismissAlert = useCallback(() => setLatestAlert(null), []);
@@ -47,44 +74,45 @@ export function useStaffJobAlerts(todayJobs: StaffJob[], enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
 
-    const currentKeys = new Set(todayJobs.map(staffJobKey));
+    const persisted = getPersistedAlertedKeys();
 
-    if (knownKeysRef.current === null) {
-      knownKeysRef.current = currentKeys;
+    // First time non-empty jobs load: seed all existing jobs as already known so reopening the app doesn't trigger false alerts
+    if (!initializedRef.current) {
+      if (todayJobs.length > 0) {
+        for (const job of todayJobs) {
+          persisted.add(staffJobKey(job));
+        }
+        persistAlertedKeys(persisted);
+        initializedRef.current = true;
+      }
       return;
     }
 
     const newJobs = todayJobs.filter(j => {
       const key = staffJobKey(j);
-      if (knownKeysRef.current!.has(key)) return false;
-      if (j.status === "completed" || j.status === "cancelled") return false;
-      if (suppressedAlertKeys.has(key)) {
-        suppressedAlertKeys.delete(key);
+      if (j.status === "completed" || j.status === "cancelled") {
+        persisted.add(key);
         return false;
       }
-      if (alertedKeysRef.current.has(key)) return false;
+      if (suppressedAlertKeys.has(key)) {
+        suppressedAlertKeys.delete(key);
+        persisted.add(key);
+        return false;
+      }
+      if (persisted.has(key)) return false;
       return true;
     });
-
-    knownKeysRef.current = currentKeys;
 
     if (newJobs.length === 0) return;
 
     for (const job of newJobs) {
-      alertedKeysRef.current.add(staffJobKey(job));
+      persisted.add(staffJobKey(job));
     }
+    persistAlertedKeys(persisted);
 
     vibrateStaffJobAlert();
 
-    for (const job of newJobs) {
-      const label = jobLabel(job);
-      toast({
-        title: "New job assigned",
-        description: `${job.customerName ?? "Customer"} — ${label}`,
-        duration: 8000,
-      });
-    }
-
+    // Single unified alert banner to prevent conflicting double-color UI
     const first = newJobs[0]!;
     setLatestAlert({
       id: first.id,
@@ -120,7 +148,7 @@ export function useStaffPushMessageAlerts(enabled: boolean) {
       const dedupeKey = data.tag ?? `${data.title ?? ""}:${data.body ?? ""}`;
       if (recentPushTagsRef.current.has(dedupeKey)) return;
       recentPushTagsRef.current.add(dedupeKey);
-      setTimeout(() => recentPushTagsRef.current.delete(dedupeKey), 15_000);
+      setTimeout(() => recentPushTagsRef.current.delete(dedupeKey), 30_000);
 
       if (data.vibrate !== false) vibrateStaffJobAlert();
 

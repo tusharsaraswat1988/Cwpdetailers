@@ -9,9 +9,12 @@ export type StaffJob = {
   id: number;
   source?: "booking" | "execution";
   executionId?: number;
+  customerId?: number;
+  customerPhone?: string;
+  vehicleId?: number;
+  assetId?: number;
   taskType?: string | null;
   customerName?: string;
-  customerPhone?: string;
   serviceType?: string | null;
   serviceName?: string | null;
   scheduledDate?: string;
@@ -128,7 +131,9 @@ const EXECUTION_STATUS_MAP: Record<string, string> = {
 
 export function executionToStaffJob(e: {
   id: number;
+  customerId?: number;
   customerName: string;
+  assetId?: number | null;
   serviceLabel?: string | null;
   assetLabel?: string | null;
   serviceLocationLabel?: string | null;
@@ -153,6 +158,9 @@ export function executionToStaffJob(e: {
     source: "execution",
     id: e.id,
     executionId: e.id,
+    customerId: e.customerId,
+    assetId: e.assetId ?? undefined,
+    vehicleId: e.assetId ?? undefined,
     taskType: e.taskType ?? null,
     customerName: e.customerName,
     serviceName,

@@ -8,12 +8,12 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { useToast } from "@/hooks/use-toast";
-import { getAuthErrorMessage } from "@/lib/authErrorMessages";
+import { getActionableAuthDetails, getAuthErrorMessage } from "@/lib/authErrorMessages";
 import { formatOtpMaskedPhone } from "@/lib/phoneDisplay";
 import { useOtpResendTimer } from "@/hooks/useOtpResendTimer";
 import type { AuthFlowPurpose } from "@/lib/authFlowStore";
 import { authFadeUp, authLinkClass } from "@/components/auth/authStyles";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type OTPVerificationProps = {
@@ -25,6 +25,7 @@ type OTPVerificationProps = {
   password?: string;
   onSuccess: (data: AuthResponse) => void;
   onChangeNumber: () => void;
+  onSwitchToPassword?: () => void;
   autoStartTimer?: boolean;
 };
 
@@ -35,11 +36,13 @@ export function OTPVerification({
   password,
   onSuccess,
   onChangeNumber,
+  onSwitchToPassword,
   autoStartTimer = true,
 }: OTPVerificationProps) {
   const { toast } = useToast();
   const [otp, setOtp] = useState("");
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [recoveryStep, setRecoveryStep] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const { secondsLeft, canResend, startTimer } = useOtpResendTimer(30);
 
@@ -52,13 +55,14 @@ export function OTPVerification({
       onSuccess: (data) => {
         submittingRef.current = false;
         setInlineError(null);
+        setRecoveryStep(null);
         onSuccess(data);
       },
       onError: (err: unknown) => {
         submittingRef.current = false;
-        const message = getAuthErrorMessage(err, "OTP expired or incorrect. Try again or tap Resend OTP.");
-        setInlineError(message);
-        toast({ title: "Couldn't verify OTP", description: message, variant: "destructive" });
+        const details = getActionableAuthDetails(err, "The code is invalid or expired. Request a new code if permitted.");
+        setInlineError(details.message);
+        setRecoveryStep(details.actionableStep ?? null);
         setOtp("");
       },
     },
@@ -70,17 +74,16 @@ export function OTPVerification({
         startTimer();
         setOtp("");
         setInlineError(null);
+        setRecoveryStep(null);
         toast({
-          title: "OTP sent",
+          title: "Code sent",
           description: data.maskedPhone ? `Sent to ${formatOtpMaskedPhone(phone)}` : "Check your phone for the new code.",
         });
       },
       onError: (err: unknown) => {
-        toast({
-          title: "Couldn't resend OTP",
-          description: getAuthErrorMessage(err, "Please try again in a moment."),
-          variant: "destructive",
-        });
+        const details = getActionableAuthDetails(err, "Unable to send verification code. Please try again in a few moments.");
+        setInlineError(details.message);
+        setRecoveryStep(details.actionableStep ?? null);
       },
     },
   });
@@ -92,15 +95,11 @@ export function OTPVerification({
     if (code.length !== 6 || pending || submittingRef.current) return;
     if (purpose === "signup" && (!password || password.length < 6)) {
       setInlineError("Password is missing. Go back and create a password, then request a new OTP.");
-      toast({
-        title: "Password required",
-        description: "Go back, create a password, and continue signup again.",
-        variant: "destructive",
-      });
       return;
     }
     submittingRef.current = true;
     setInlineError(null);
+    setRecoveryStep(null);
     verifyMutation.mutate({
       data: {
         phone,
@@ -124,12 +123,17 @@ export function OTPVerification({
   const handleOtpChange = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 6);
     setOtp(digits);
-    if (inlineError) setInlineError(null);
+    if (inlineError) {
+      setInlineError(null);
+      setRecoveryStep(null);
+    }
     if (digits.length === 6) submitOtp(digits);
   };
 
   const handleResend = () => {
     if (!canResend || pending) return;
+    setInlineError(null);
+    setRecoveryStep(null);
     resendMutation.mutate({
       data: {
         phone,
@@ -145,15 +149,13 @@ export function OTPVerification({
         <h2 className="font-display font-semibold text-xl text-foreground" id="otp-heading">
           Verify your mobile number
         </h2>
-        <p className="text-muted-foreground text-sm tabular-nums tracking-wide" id="otp-description">
+        <p className="text-muted-foreground text-sm tabular-nums tracking-wide font-medium" id="otp-description">
           {displayPhone}
         </p>
         <p className="text-muted-foreground text-xs leading-relaxed max-w-[16rem] mx-auto">
           {purpose === "signup"
-            ? "Enter the OTP to verify your number and finish creating your account."
-            : "Enter the one-time code sent to your mobile number."}
-          <br />
-          No spam. No promotional messages.
+            ? "Enter the 6-digit code to complete account verification."
+            : "Enter the 6-digit code sent to your phone."}
         </p>
       </div>
 
@@ -180,7 +182,7 @@ export function OTPVerification({
                 <InputOTPSlot
                   key={i}
                   index={i}
-                  className="h-14 w-11 sm:w-12 rounded-xl border-border bg-background text-foreground text-lg sm:text-xl first:rounded-xl last:rounded-xl"
+                  className="h-14 w-11 sm:w-12 rounded-xl border-border bg-background text-foreground text-lg sm:text-xl first:rounded-xl last:rounded-xl focus-visible:ring-2 focus-visible:ring-ring"
                 />
               ))}
             </InputOTPGroup>
@@ -188,9 +190,31 @@ export function OTPVerification({
         </div>
 
         {inlineError ? (
-          <p id="otp-error" className="text-center text-destructive text-sm" role="alert">
-            {inlineError}
-          </p>
+          <div
+            id="otp-error"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-center text-destructive text-sm flex flex-col items-center gap-1.5"
+            role="alert"
+            aria-live="assertive"
+          >
+            <div className="flex items-center gap-1.5 font-medium">
+              <AlertCircle size={15} className="shrink-0" aria-hidden />
+              <span>{inlineError}</span>
+            </div>
+            {recoveryStep ? (
+              <p className="text-xs text-destructive/90 leading-tight">
+                {recoveryStep}
+              </p>
+            ) : null}
+            {onSwitchToPassword ? (
+              <button
+                type="button"
+                onClick={onSwitchToPassword}
+                className="mt-1 text-xs text-foreground underline hover:text-foreground/80 font-medium"
+              >
+                Sign in with password instead
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <MarketingButton
@@ -217,14 +241,21 @@ export function OTPVerification({
             type="button"
             onClick={handleResend}
             disabled={pending}
-            className={cn(authLinkClass, "disabled:opacity-50 min-h-[44px] px-4")}
+            className={cn(authLinkClass, "disabled:opacity-50 min-h-[44px] px-4 font-medium")}
             data-testid="btn-resend-otp"
           >
-            {resendMutation.isPending ? "Sending..." : "Resend OTP"}
+            {resendMutation.isPending ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 size={14} className="animate-spin" />
+                Sending new code...
+              </span>
+            ) : (
+              "Resend OTP"
+            )}
           </button>
         ) : (
           <p className="text-muted-foreground tabular-nums min-h-[44px] flex items-center text-xs" aria-live="polite">
-            Resend in {secondsLeft}s
+            Resend code in {secondsLeft}s
           </p>
         )}
 
@@ -232,10 +263,10 @@ export function OTPVerification({
           type="button"
           onClick={onChangeNumber}
           disabled={pending}
-          className="text-muted-foreground hover:text-foreground transition-colors duration-200 disabled:opacity-50 min-h-[44px] px-4 text-xs"
+          className="text-muted-foreground hover:text-foreground transition-colors duration-200 disabled:opacity-50 min-h-[44px] px-4 text-xs font-normal"
           data-testid="btn-change-number"
         >
-          Change mobile number
+          Edit mobile number
         </button>
       </div>
     </div>

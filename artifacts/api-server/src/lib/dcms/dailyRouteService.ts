@@ -7,6 +7,7 @@ import {
   customersTable,
   vehiclesTable,
   dcmsSubscriptionLocationsTable,
+  serviceLocationsTable,
 } from "@workspace/db";
 import { eq, and, sql, asc, gte, lte } from "drizzle-orm";
 import {
@@ -15,8 +16,15 @@ import {
 } from "../vehicles/referencePhotos";
 import { isDateInPauseRange, todayStrInIST, dayBoundsIST } from "./dateUtils";
 import { classifyRouteStop, type RouteStopStatus } from "./visitOutcomes";
+import {
+  resolveRouteStopDestination,
+  isValidCoordinate,
+  type RouteDestinationInput,
+  type ResolvedDestination,
+} from "./routeDestination";
 
-export type { RouteStopStatus };
+export type { RouteStopStatus, RouteDestinationInput, ResolvedDestination };
+export { resolveRouteStopDestination, isValidCoordinate };
 
 export type DailyRouteStop = {
   subscriptionId: number;
@@ -36,6 +44,9 @@ export type DailyRouteStop = {
   referencePhotos: VehicleReferencePhotos;
   referencePhotosComplete: boolean;
   location: { latitude: number; longitude: number; radiusMeters: number } | null;
+  address: string | null;
+  locationLabel: string | null;
+  destinationType: "coordinates" | "address" | "missing";
   todayStatus: RouteStopStatus;
   todayVisitId?: number;
   rejectionReason?: string | null;
@@ -61,16 +72,23 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
       planName: dcmsPlansTable.name,
       customerName: customersTable.name,
       customerId: customersTable.id,
+      customerAddress: customersTable.address,
+      customerCity: customersTable.city,
       vehicleNumber: vehiclesTable.registrationNumber,
       vehicleMake: vehiclesTable.make,
       vehicleModel: vehiclesTable.model,
       vehicleId: vehiclesTable.id,
       vehicleColor: vehiclesTable.color,
+      vehicleServiceAddress: vehiclesTable.serviceAddress,
+      vehicleServiceLat: vehiclesTable.serviceLat,
+      vehicleServiceLng: vehiclesTable.serviceLng,
+      vehicleLocationLabel: vehiclesTable.locationLabel,
       refPhotoFrontUrl: vehiclesTable.refPhotoFrontUrl,
       refPhotoRearUrl: vehiclesTable.refPhotoRearUrl,
       refPhotoLeftUrl: vehiclesTable.refPhotoLeftUrl,
       refPhotoRightUrl: vehiclesTable.refPhotoRightUrl,
-      location: dcmsSubscriptionLocationsTable,
+      subLocation: dcmsSubscriptionLocationsTable,
+      serviceLocation: serviceLocationsTable,
     })
     .from(dcmsStaffAssignmentsTable)
     .innerJoin(dcmsSubscriptionsTable, eq(dcmsStaffAssignmentsTable.subscriptionId, dcmsSubscriptionsTable.id))
@@ -78,6 +96,7 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
     .innerJoin(customersTable, eq(dcmsSubscriptionsTable.customerId, customersTable.id))
     .innerJoin(vehiclesTable, eq(dcmsSubscriptionsTable.vehicleId, vehiclesTable.id))
     .leftJoin(dcmsSubscriptionLocationsTable, eq(dcmsSubscriptionLocationsTable.subscriptionId, dcmsSubscriptionsTable.id))
+    .leftJoin(serviceLocationsTable, eq(dcmsSubscriptionsTable.serviceLocationId, serviceLocationsTable.id))
     .where(and(
       eq(dcmsStaffAssignmentsTable.staffId, staffId),
       eq(dcmsStaffAssignmentsTable.isActive, true),
@@ -105,6 +124,21 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
     const visit = visitsToday[0];
     const todayStatus = classifyRouteStop(visit?.status, isPastDay);
 
+    const dest = resolveRouteStopDestination({
+      subLocation: row.subLocation,
+      serviceLocation: row.serviceLocation,
+      vehicle: {
+        serviceLat: row.vehicleServiceLat,
+        serviceLng: row.vehicleServiceLng,
+        serviceAddress: row.vehicleServiceAddress,
+        locationLabel: row.vehicleLocationLabel,
+      },
+      customer: {
+        address: row.customerAddress,
+        city: row.customerCity,
+      },
+    });
+
     stops.push({
       subscriptionId: row.subscription.id,
       assignmentId: row.assignment.id,
@@ -122,11 +156,10 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
       customerId: row.customerId,
       referencePhotos: mapVehicleReferencePhotos(row),
       referencePhotosComplete: Boolean(row.refPhotoFrontUrl && row.refPhotoRearUrl),
-      location: row.location ? {
-        latitude: row.location.latitude,
-        longitude: row.location.longitude,
-        radiusMeters: row.location.radiusMeters,
-      } : null,
+      location: dest.location,
+      address: dest.address,
+      locationLabel: dest.locationLabel,
+      destinationType: dest.destinationType,
       todayStatus,
       todayVisitId: visit?.id,
       rejectionReason: visit?.rejectionReason,

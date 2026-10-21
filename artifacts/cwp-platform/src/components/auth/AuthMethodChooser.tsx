@@ -14,6 +14,8 @@ type AuthMethodChooserProps = {
   secondaryLabel: string;
   secondaryTestId: string;
   onChooseSecondary: () => void;
+  tertiaryLabel?: string;
+  onChooseTertiary?: () => void;
 };
 
 export function AuthMethodChooser({
@@ -25,6 +27,8 @@ export function AuthMethodChooser({
   secondaryLabel,
   secondaryTestId,
   onChooseSecondary,
+  tertiaryLabel,
+  onChooseTertiary,
 }: AuthMethodChooserProps) {
   return (
     <div className={cn(authFadeUp)} data-testid="auth-method-chooser">
@@ -58,6 +62,20 @@ export function AuthMethodChooser({
       >
         {secondaryLabel}
       </MarketingButton>
+
+      {tertiaryLabel && onChooseTertiary ? (
+        <div className="text-center mt-3">
+          <button
+            type="button"
+            onClick={onChooseTertiary}
+            disabled={googlePending}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 underline-offset-4 hover:underline"
+            data-testid="btn-choose-password-direct"
+          >
+            {tertiaryLabel}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

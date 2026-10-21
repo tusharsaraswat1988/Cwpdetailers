@@ -18,6 +18,16 @@ import {
   StaffCard,
   StaffSuccessBanner,
 } from "@/features/staff-ds";
+import {
+  ExtraServiceStatusCard,
+  StaffAddServiceButton,
+  StaffAddServiceSheet,
+} from "@/features/extra-service/components/StaffAddServiceSheet";
+import {
+  useStaffExtraServiceRequests,
+  useVerifyExtraServiceOtp,
+  type ExtraServiceRequestView,
+} from "@/features/extra-service/api";
 
 type Props = {
   selectedJobKey?: string | null;
@@ -25,6 +35,69 @@ type Props = {
 };
 
 const WALK_IN_SUCCESS_MSG = "Customer ready — agla customer khojo";
+
+function StaffJobExtraServiceSection({ job }: { job: StaffJob }) {
+  const [addServiceOpen, setAddServiceOpen] = useState(false);
+  const [extraOtp, setExtraOtp] = useState("");
+  const [extraOtpError, setExtraOtpError] = useState<string | null>(null);
+  const [, navigate] = useLocation();
+
+  const extraRequests = useStaffExtraServiceRequests(job.customerId, {
+    enabled: job.customerId != null,
+    refetchInterval: 3000,
+  });
+  const verifyExtra = useVerifyExtraServiceOtp();
+
+  const extraRequest = extraRequests.data?.requests.find((r: ExtraServiceRequestView) =>
+    r.vehicleId === job.vehicleId
+    || (job.vehicleId == null && r.customerId === job.customerId),
+  ) ?? extraRequests.data?.requests[0];
+
+  if (!job.customerId) return null;
+
+  return (
+    <div className="pt-3 border-t border-border/60 space-y-3" data-testid="staff-job-extra-service-section">
+      {extraRequest && extraRequest.status !== "rejected" && extraRequest.status !== "cancelled" && (
+        <ExtraServiceStatusCard
+          request={extraRequest}
+          otp={extraOtp}
+          onOtpChange={(v) => { setExtraOtp(v); setExtraOtpError(null); }}
+          verifying={verifyExtra.isPending}
+          error={extraOtpError}
+          onVerify={() => {
+            verifyExtra.mutate(
+              { id: extraRequest.id, code: extraOtp },
+              {
+                onSuccess: (res: { request: ExtraServiceRequestView }) => {
+                  setExtraOtp("");
+                  const executionId = res.request.executionId;
+                  if (executionId) {
+                    navigate(`/staff/bookings?job=execution-${executionId}`);
+                  }
+                },
+                onError: (err: Error) => setExtraOtpError(err instanceof Error ? err.message : "Could not verify"),
+              },
+            );
+          }}
+        />
+      )}
+
+      {(!extraRequest
+        || extraRequest.status === "otp_verified"
+        || extraRequest.status === "rejected"
+        || extraRequest.status === "cancelled") && (
+        <StaffAddServiceButton onClick={() => setAddServiceOpen(true)} />
+      )}
+
+      <StaffAddServiceSheet
+        open={addServiceOpen}
+        onOpenChange={setAddServiceOpen}
+        customerId={job.customerId}
+        vehicleId={job.vehicleId}
+      />
+    </div>
+  );
+}
 
 export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) {
   const jobs = useStaffJobsData();
@@ -151,7 +224,10 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
             {loadingDetail ? (
               <StaffSkeleton className="h-48 w-full" />
             ) : (
-              <StaffServiceJobFlow job={selectedJob} {...mutations} />
+              <>
+                <StaffServiceJobFlow job={selectedJob} {...mutations} />
+                <StaffJobExtraServiceSection job={selectedJob} />
+              </>
             )}
           </div>
         </StaffCard>
@@ -246,14 +322,14 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
           {completedJobs.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Completed Today ({completedJobs.length})
+                Completed Jobs ({completedJobs.length})
               </p>
               <div className="space-y-2.5">
                 {completedJobs.map(job => (
                   <button
                     key={staffJobKey(job)}
                     type="button"
-                    className="w-full text-left opacity-85 hover:opacity-100 transition-opacity"
+                    className="w-full text-left"
                     onClick={() => {
                       onSelectJob(staffJobKey(job));
                       setLoadingDetail(true);
@@ -271,10 +347,6 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
           )}
         </div>
       )}
-
-      <Link href="/staff/jobs" className="block text-center text-xs font-semibold text-primary">
-        All jobs (upcoming & done) →
-      </Link>
     </div>
   );
 }

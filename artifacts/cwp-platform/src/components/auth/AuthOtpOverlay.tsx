@@ -11,9 +11,10 @@ type AuthOtpOverlayProps = {
   session: OtpSession;
   onSuccess: (data: AuthResponse) => void;
   onClose: () => void;
+  onSwitchToPassword?: () => void;
 };
 
-export function AuthOtpOverlay({ open, session, onSuccess, onClose }: AuthOtpOverlayProps) {
+export function AuthOtpOverlay({ open, session, onSuccess, onClose, onSwitchToPassword }: AuthOtpOverlayProps) {
   const isMobile = useIsMobile();
 
   const content = (
@@ -26,6 +27,7 @@ export function AuthOtpOverlay({ open, session, onSuccess, onClose }: AuthOtpOve
       password={session.password}
       onSuccess={onSuccess}
       onChangeNumber={onClose}
+      onSwitchToPassword={onSwitchToPassword}
     />
   );
 

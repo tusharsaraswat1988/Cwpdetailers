@@ -1,54 +1,82 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
-import { useStaffDailyRoute, useCompleteVisit, useRecordCarNotAvailable } from "../api";
+import { useStaffDailyRoute } from "../api";
 import { fetchWalkInDcmsStop } from "@/features/staff-walk-in/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { useToast } from "@/hooks/use-toast";
-import { ChevronLeft, ChevronRight, Camera, CheckCircle, Loader2, ScanLine, Navigation, MapPin } from "lucide-react";
-import { visitUploadErrorMessage } from "../lib/visitUploadError";
+import {
+  Camera,
+  CheckCircle,
+  Navigation,
+  MapPinOff,
+  RotateCcw,
+  AlertTriangle,
+  Clock,
+  Sparkles,
+} from "lucide-react";
 import { staffVisitLabel } from "../lib/visitLabels";
-import { getStaffLocation } from "@/lib/location";
-import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
-import { isOfflineQueued, queuedSavedMessage } from "@/services/queuedResult";
-import { buildNavigateUrl } from "@/lib/maps";
-import { PlateScanFlow, type PlateScanMeta } from "../components/PlateScanFlow";
+import { buildNavigateUrl, openExternalNavigation } from "@/lib/maps";
+import { Capacitor } from "@capacitor/core";
 import { cn } from "@/lib/utils";
 import {
-  ExtraServiceStatusCard,
-  StaffAddServiceButton,
-  StaffAddServiceSheet,
-} from "@/features/extra-service/components/StaffAddServiceSheet";
-import {
-  useStaffExtraServiceRequests,
-  useVerifyExtraServiceOtp,
-  type ExtraServiceRequestView,
-} from "@/features/extra-service/api";
+  StaffVehicleCleanDialog,
+  type CleanDialogStop,
+} from "../components/StaffVehicleCleanDialog";
+import { StaffCarNotAvailableDialog } from "../components/StaffCarNotAvailableDialog";
 
-type RouteStop = {
+export type RouteStop = {
   subscriptionId: number;
   customerId?: number;
   vehicleId?: number;
+  routeOrder?: number;
   customerName: string;
   vehicleNumber: string;
   vehicleMake: string;
   vehicleModel: string;
+  vehicleColor?: string | null;
   todayStatus: "pending" | "completed" | "missed" | "rejected" | "car_not_available";
   remainingCleanings: number;
   remainingWashes?: number;
-  location?: { latitude: number; longitude: number; radiusMeters: number } | null;
+  location?: { latitude: number; longitude: number; radiusMeters?: number } | null;
+  address?: string | null;
+  locationLabel?: string | null;
+  destinationType?: "coordinates" | "address" | "missing";
 };
 
-const statusLabel: Record<string, string> = {
-  pending: staffVisitLabel("pending"),
-  completed: staffVisitLabel("completed"),
-  missed: staffVisitLabel("missed"),
-  rejected: staffVisitLabel("rejected"),
-  car_not_available: staffVisitLabel("car_not_available"),
+export function computeRouteStats(stops: Array<{ todayStatus: string }>) {
+  const total = stops.length;
+  const completed = stops.filter(s => s.todayStatus === "completed").length;
+  const pending = stops.filter(
+    s => s.todayStatus === "pending" || s.todayStatus === "rejected",
+  ).length;
+  const notAvailable = stops.filter(s => s.todayStatus === "car_not_available").length;
+  return { total, completed, pending, notAvailable };
+}
+
+const statusBadgeConfig: Record<string, { label: string; className: string }> = {
+  pending: {
+    label: staffVisitLabel("pending"),
+    className: "bg-amber-500/15 text-amber-800 border-amber-500/30",
+  },
+  completed: {
+    label: staffVisitLabel("completed"),
+    className: "bg-green-600 text-white border-green-700",
+  },
+  car_not_available: {
+    label: staffVisitLabel("car_not_available"),
+    className: "bg-orange-500/15 text-orange-900 border-orange-500/30",
+  },
+  rejected: {
+    label: staffVisitLabel("rejected"),
+    className: "bg-destructive/15 text-destructive border-destructive/30",
+  },
+  missed: {
+    label: staffVisitLabel("missed"),
+    className: "bg-muted text-muted-foreground border-border",
+  },
 };
 
 export function StaffDailyRouteSimplified() {
@@ -60,144 +88,41 @@ export function StaffDailyRouteSimplified() {
   const walkInSubscriptionId = params.get("subscriptionId");
   const walkInVisitType = params.get("visitType") === "wash" ? "wash" : "cleaning";
 
-  const { data, isLoading, isError, error, refetch } = useStaffDailyRoute(undefined, { enabled: !walkInMode });
+  const { data, isLoading, isError, error, refetch } = useStaffDailyRoute(undefined, {
+    enabled: !walkInMode,
+  });
+
   const walkInStopQuery = useQuery({
     queryKey: ["walk-in-dcms-stop", walkInSubscriptionId, walkInVisitType],
     queryFn: () => fetchWalkInDcmsStop(Number(walkInSubscriptionId), walkInVisitType),
     enabled: walkInMode && walkInSubscriptionId != null && Number.isFinite(Number(walkInSubscriptionId)),
   });
 
-  const completeVisit = useCompleteVisit();
-  const recordCarNotAvailable = useRecordCarNotAvailable();
-  const { toast } = useToast();
-  const [activeIdx, setActiveIdx] = useState(0);
-  const [scanOpen, setScanOpen] = useState(false);
-  const [plateScanMeta, setPlateScanMeta] = useState<PlateScanMeta | null>(null);
-  const [confirmUnavailable, setConfirmUnavailable] = useState(false);
-  const [addServiceOpen, setAddServiceOpen] = useState(false);
-  const [extraOtp, setExtraOtp] = useState("");
-  const [extraOtpError, setExtraOtpError] = useState<string | null>(null);
+  const [selectedCleanStop, setSelectedCleanStop] = useState<CleanDialogStop | null>(null);
+  const [selectedUnavailableStop, setSelectedUnavailableStop] = useState<CleanDialogStop | null>(null);
 
   const routeStops = (data?.stops ?? []) as RouteStop[];
   const walkInStop = walkInStopQuery.data;
 
   const stops: RouteStop[] = walkInMode && walkInStop
-    ? [{
-        subscriptionId: walkInStop.subscriptionId,
-        customerId: walkInStop.customerId,
-        vehicleId: walkInStop.vehicleId,
-        customerName: walkInStop.customerName,
-        vehicleNumber: walkInStop.vehicleNumber,
-        vehicleMake: walkInStop.vehicleMake,
-        vehicleModel: walkInStop.vehicleModel,
-        todayStatus: walkInStop.todayStatus,
-        remainingCleanings: walkInStop.remainingCleanings,
-        remainingWashes: walkInStop.remainingWashes,
-      }]
+    ? [
+        {
+          subscriptionId: walkInStop.subscriptionId,
+          customerId: walkInStop.customerId,
+          vehicleId: walkInStop.vehicleId,
+          customerName: walkInStop.customerName,
+          vehicleNumber: walkInStop.vehicleNumber,
+          vehicleMake: walkInStop.vehicleMake,
+          vehicleModel: walkInStop.vehicleModel,
+          todayStatus: walkInStop.todayStatus,
+          remainingCleanings: walkInStop.remainingCleanings,
+          remainingWashes: walkInStop.remainingWashes,
+        },
+      ]
     : routeStops;
 
-  useEffect(() => {
-    if (walkInMode && walkInSubscriptionId && stops.length > 0) {
-      const idx = stops.findIndex(s => s.subscriptionId === Number(walkInSubscriptionId));
-      if (idx >= 0) setActiveIdx(idx);
-    }
-  }, [walkInMode, walkInSubscriptionId, stops]);
-
-  const current = stops[activeIdx];
-  const doneCount = stops.filter(s => s.todayStatus === "completed").length;
-  const unavailableCount = stops.filter(s => s.todayStatus === "car_not_available").length;
+  const stats = computeRouteStats(stops);
   const visitType = walkInMode ? walkInVisitType : "cleaning";
-  const showPendingActions = current?.todayStatus === "pending" || current?.todayStatus === "rejected";
-  const showSameDayRecovery = current?.todayStatus === "car_not_available" && visitType === "cleaning";
-  const actionPending = completeVisit.isPending || recordCarNotAvailable.isPending;
-  const extraRequests = useStaffExtraServiceRequests(current?.customerId, {
-    enabled: current?.customerId != null,
-    refetchInterval: 3000,
-  });
-  const verifyExtra = useVerifyExtraServiceOtp();
-  const extraRequest = extraRequests.data?.requests.find((r: ExtraServiceRequestView) =>
-    r.vehicleId === current?.vehicleId
-    || (current?.vehicleId == null && r.customerId === current?.customerId),
-  ) ?? extraRequests.data?.requests[0];
-
-  const handlePlateConfirmed = useCallback(({ subscriptionId, scanMeta }: {
-    subscriptionId: number;
-    scanMeta: PlateScanMeta;
-  }) => {
-    const idx = stops.findIndex(s => s.subscriptionId === subscriptionId);
-    if (idx >= 0) {
-      setActiveIdx(idx);
-      setPlateScanMeta(scanMeta);
-    }
-  }, [stops]);
-
-  const captureVisit = useCallback(async () => {
-    if (!current) return;
-    try {
-      const photo = await captureStaffPhoto("rear");
-      const gps = await getStaffLocation("action");
-      const result = await completeVisit.mutateAsync({
-        subscriptionId: current.subscriptionId,
-        visitType,
-        imageBase64: photo.dataUrl,
-        exif: photo.exif,
-        capturedAt: photo.capturedAt,
-        walkIn: walkInMode,
-        ...gps,
-        ocrText: plateScanMeta?.ocrText ?? null,
-        ocrConfidence: plateScanMeta?.ocrConfidence ?? null,
-        confirmedRegistration: plateScanMeta?.confirmedRegistration ?? current.vehicleNumber,
-      });
-      if (isOfflineQueued(result)) {
-        toast({ title: "Visit saved on phone", description: queuedSavedMessage("visit") });
-      } else {
-        toast({ title: "Ho gaya!", description: `${current.vehicleNumber} — visit complete` });
-      }
-      setPlateScanMeta(null);
-      if (walkInMode) {
-        navigate("/staff/bookings?walkInSuccess=1");
-        return;
-      }
-      refetch();
-      if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
-    } catch (err) {
-      if (isCameraCancel(err)) return;
-      toast({ title: "Upload failed", description: visitUploadErrorMessage(err), variant: "destructive" });
-    }
-  }, [current, completeVisit, toast, refetch, plateScanMeta, activeIdx, stops.length, visitType, walkInMode, navigate]);
-
-  const captureCarNotAvailable = useCallback(async () => {
-    if (!current) return;
-    try {
-      const photo = await captureStaffPhoto("rear");
-      const gps = await getStaffLocation("action");
-      const result = await recordCarNotAvailable.mutateAsync({
-        subscriptionId: current.subscriptionId,
-        walkIn: walkInMode,
-        imageBase64: photo.dataUrl,
-        exif: photo.exif,
-        capturedAt: photo.capturedAt,
-        ...gps,
-      });
-      if (isOfflineQueued(result)) {
-        toast({ title: "Record saved on phone", description: queuedSavedMessage("visit") });
-      } else {
-        toast({
-          title: "Visit record ho gaya",
-          description: `${current.vehicleNumber} — car nahi mili, cleaning count nahi kata`,
-        });
-      }
-      if (walkInMode) {
-        navigate("/staff/bookings?walkInSuccess=1");
-        return;
-      }
-      refetch();
-      if (activeIdx < stops.length - 1) setActiveIdx(i => i + 1);
-    } catch (err) {
-      if (isCameraCancel(err)) return;
-      toast({ title: "Record failed", description: visitUploadErrorMessage(err), variant: "destructive" });
-    }
-  }, [current, recordCarNotAvailable, toast, refetch, activeIdx, stops.length, walkInMode, navigate]);
 
   if (!user?.staffId) {
     return (
@@ -241,246 +166,216 @@ export function StaffDailyRouteSimplified() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
       {walkInMode && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
           Walk-in visit — wahi daily clean workflow use karo jo assigned jobs mein hai.
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          {walkInMode ? "Walk-in" : data?.date} · <span className="font-medium text-foreground">{doneCount}/{stops.length}</span> cleaned
-          {unavailableCount > 0 && (
-            <> · <span className="font-medium text-foreground">{unavailableCount}</span> car nahi mili</>
-          )}
-        </p>
-        {!walkInMode && (
-          <Button variant="outline" size="sm" onClick={() => setScanOpen(true)}>
-            <ScanLine className="h-4 w-4 mr-1" /> Scan plate
-          </Button>
-        )}
+      {/* TOP PROGRESS SUMMARY BANNER */}
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm space-y-3">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">{walkInMode ? "Walk-in Job" : (data?.date ?? "Today")}</span>
+          <span>{stats.completed}/{stats.total} Cleaned</span>
+        </div>
+
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <div className="rounded-xl bg-muted/50 p-2.5">
+            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-tight">Total</p>
+            <p className="text-lg font-bold font-display text-foreground mt-0.5">{stats.total}</p>
+          </div>
+          <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-2.5">
+            <p className="text-[11px] text-green-800 font-medium uppercase tracking-tight">Cleaned</p>
+            <p className="text-lg font-bold font-display text-green-700 mt-0.5">{stats.completed}</p>
+          </div>
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5">
+            <p className="text-[11px] text-amber-800 font-medium uppercase tracking-tight">Pending</p>
+            <p className="text-lg font-bold font-display text-amber-700 mt-0.5">{stats.pending}</p>
+          </div>
+          <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-2.5">
+            <p className="text-[11px] text-orange-800 font-medium uppercase tracking-tight">Nahi mili</p>
+            <p className="text-lg font-bold font-display text-orange-700 mt-0.5">{stats.notAvailable}</p>
+          </div>
+        </div>
       </div>
 
-      {current && (
-        <div className="rounded-2xl border-2 border-primary/25 bg-card p-5 space-y-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="font-display font-bold text-2xl tracking-wide truncate">{current.vehicleNumber}</p>
-              <p className="text-sm font-medium mt-1 truncate">{current.customerName}</p>
-              <p className="text-xs text-muted-foreground truncate">{current.vehicleMake} {current.vehicleModel}</p>
-            </div>
-            <Badge
-              variant={current.todayStatus === "completed" ? "default" : "secondary"}
+      {/* VERTICALLY SCROLLABLE ROUTE LIST */}
+      <div className="space-y-3" data-testid="dcms-daily-route-list">
+        {stops.map((stop, idx) => {
+          const navUrl = buildNavigateUrl({
+            latitude: stop.location?.latitude,
+            longitude: stop.location?.longitude,
+            address: stop.address,
+          });
+
+          const isCompleted = stop.todayStatus === "completed";
+          const isNotAvailable = stop.todayStatus === "car_not_available";
+          const isPending = stop.todayStatus === "pending" || stop.todayStatus === "rejected";
+          const badge = statusBadgeConfig[stop.todayStatus] ?? {
+            label: stop.todayStatus,
+            className: "bg-muted text-muted-foreground",
+          };
+
+          return (
+            <div
+              key={stop.subscriptionId}
               className={cn(
-                "shrink-0",
-                current.todayStatus === "completed" && "bg-green-600",
-                current.todayStatus === "pending" && "bg-amber-500/15 text-amber-800 border-amber-500/30",
-                current.todayStatus === "car_not_available" && "bg-amber-500/15 text-amber-900 border-amber-500/30",
-                current.todayStatus === "rejected" && "bg-destructive/15 text-destructive",
+                "rounded-2xl border bg-card p-4 space-y-3 shadow-sm transition-all",
+                isCompleted && "border-green-500/30 bg-green-500/[0.02]",
+                isNotAvailable && "border-orange-500/30 bg-orange-500/[0.02]",
+                isPending && "border-border hover:border-primary/40",
               )}
+              data-testid={`dcms-vehicle-card-${stop.subscriptionId}`}
             >
-              {statusLabel[current.todayStatus]}
-            </Badge>
-          </div>
-
-          {current.location && (
-            <a
-              href={buildNavigateUrl({
-                latitude: current.location.latitude,
-                longitude: current.location.longitude,
-              })}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2 h-11 rounded-xl border border-primary/30 bg-primary/5 text-sm font-medium text-primary"
-              data-testid={`dcms-navigate-${current.subscriptionId}`}
-            >
-              <Navigation size={15} />
-              Navigate to stop
-              <MapPin size={12} className="opacity-60" />
-            </a>
-          )}
-
-          {showPendingActions ? (
-            <div className="space-y-2">
-              <Button
-                className="w-full min-h-[3.5rem] h-auto py-3 px-4 text-base font-semibold whitespace-normal break-words leading-snug text-center"
-                onClick={() => void captureVisit()}
-                disabled={actionPending}
-              >
-                {completeVisit.isPending ? (
-                  <Loader2 className="h-5 w-5 mr-2 shrink-0 animate-spin" />
-                ) : (
-                  <Camera className="h-5 w-5 mr-2 shrink-0" />
-                )}
-                <span>Car available — photo lein & complete</span>
-              </Button>
-              {visitType === "cleaning" && (
-                <div className="space-y-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full min-h-[3rem] h-auto py-2.5 px-4 text-sm font-medium whitespace-normal break-words leading-snug text-center"
-                    onClick={() => setConfirmUnavailable(true)}
-                    disabled={actionPending}
-                  >
-                    {recordCarNotAvailable.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin" />
-                    ) : (
-                      <Camera className="h-4 w-4 mr-2 shrink-0" />
-                    )}
-                    <span>Car nahi mili — jagah ki photo</span>
-                  </Button>
-                  <p className="text-[11px] text-center text-muted-foreground">
-                    Wahan ki photo + GPS zaroori hai — proof ke liye ki aap gaye the. Cleaning credit nahi katega.
+              {/* TOP HEADER: STOP #, VEHICLE NUMBER, STATUS BADGE */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      #{idx + 1}
+                    </span>
+                    <h3 className="font-display font-bold text-xl tracking-tight text-foreground truncate">
+                      {stop.vehicleNumber}
+                    </h3>
+                  </div>
+                  <p className="text-sm font-medium text-foreground truncate mt-0.5">
+                    {stop.customerName}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {stop.vehicleMake} {stop.vehicleModel}
+                    {stop.vehicleColor ? ` · ${stop.vehicleColor}` : ""}
                   </p>
                 </div>
-              )}
-            </div>
-          ) : showSameDayRecovery ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-center gap-2 text-sm font-medium rounded-xl w-full py-3 text-amber-800 bg-amber-500/10">
-                <CheckCircle size={18} />
-                Car nahi mili — visit record ho gaya, cleaning nahi
-              </div>
-              <Button
-                className="w-full min-h-[3.5rem] h-auto py-3 px-4 text-base font-semibold whitespace-normal break-words leading-snug text-center"
-                onClick={() => void captureVisit()}
-                disabled={actionPending}
-                data-testid="dcms-same-day-complete"
-              >
-                {completeVisit.isPending ? (
-                  <Loader2 className="h-5 w-5 mr-2 shrink-0 animate-spin" />
-                ) : (
-                  <Camera className="h-5 w-5 mr-2 shrink-0" />
-                )}
-                <span>Car mil gayi — complete cleaning</span>
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3 py-3">
-              <div className="flex items-center justify-center gap-2 text-sm font-medium rounded-xl w-full py-3 text-green-600 bg-green-500/10">
-                <CheckCircle size={18} />
-                Is car ka kaam ho chuka hai
-              </div>
-              {walkInMode && (
-                <Button
-                  className="w-full"
-                  onClick={() => navigate("/staff/bookings?walkInSuccess=1")}
-                >
-                  Agla customer khojo
-                </Button>
-              )}
-            </div>
-          )}
 
-          {extraRequest && extraRequest.status !== "rejected" && extraRequest.status !== "cancelled" && (
-            <ExtraServiceStatusCard
-              request={extraRequest}
-              otp={extraOtp}
-              onOtpChange={(v) => { setExtraOtp(v); setExtraOtpError(null); }}
-              verifying={verifyExtra.isPending}
-              error={extraOtpError}
-              onVerify={() => {
-                verifyExtra.mutate(
-                  { id: extraRequest.id, code: extraOtp },
-                  {
-                    onSuccess: (res: { request: ExtraServiceRequestView }) => {
-                      setExtraOtp("");
-                      const executionId = res.request.executionId;
-                      if (executionId) {
-                        navigate(`/staff/bookings?job=execution-${executionId}`);
+                <Badge variant="outline" className={cn("shrink-0 font-medium text-xs", badge.className)}>
+                  {badge.label}
+                </Badge>
+              </div>
+
+              {/* LOCATION / DIRECTIONS ACTION */}
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">
+                {navUrl ? (
+                  <a
+                    href={navUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => {
+                      if (Capacitor.isNativePlatform()) {
+                        e.preventDefault();
+                        openExternalNavigation(navUrl);
                       }
-                    },
-                    onError: (err: Error) => setExtraOtpError(err instanceof Error ? err.message : "Could not verify"),
-                  },
-                );
-              }}
-            />
-          )}
+                    }}
+                    className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline h-8 px-2.5 rounded-lg bg-primary/5 border border-primary/20"
+                    data-testid={`dcms-navigate-${stop.subscriptionId}`}
+                  >
+                    <Navigation className="h-3.5 w-3.5 text-primary" />
+                    <span>Directions</span>
+                    {stop.address && (
+                      <span className="text-[11px] text-muted-foreground font-normal max-w-[150px] truncate hidden sm:inline">
+                        · {stop.address}
+                      </span>
+                    )}
+                  </a>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-muted-foreground/80 italic text-[11px]">
+                    <MapPinOff className="h-3.5 w-3.5 text-muted-foreground/60" />
+                    Location nahi mili
+                  </span>
+                )}
 
-          {(!extraRequest
-            || extraRequest.status === "otp_verified"
-            || extraRequest.status === "rejected"
-            || extraRequest.status === "cancelled") && (
-            <StaffAddServiceButton onClick={() => setAddServiceOpen(true)} disabled={actionPending} />
-          )}
+                {stop.remainingCleanings > 0 && (
+                  <span className="text-muted-foreground text-[11px]">
+                    {stop.remainingCleanings} cleans left
+                  </span>
+                )}
+              </div>
 
-          {!walkInMode && (
-            <div className="flex items-center justify-between pt-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={activeIdx === 0}
-                onClick={() => setActiveIdx(i => i - 1)}
-              >
-                <ChevronLeft className="h-4 w-4 mr-0.5" /> Pehla
-              </Button>
-              <span className="text-xs text-muted-foreground">{activeIdx + 1} / {stops.length}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={activeIdx >= stops.length - 1}
-                onClick={() => setActiveIdx(i => i + 1)}
-              >
-                Agla <ChevronRight className="h-4 w-4 ml-0.5" />
-              </Button>
+              {/* ACTION BUTTONS */}
+              {isPending ? (
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    className="flex-1 min-h-[2.75rem] h-auto py-2.5 px-3 text-sm font-semibold"
+                    onClick={() => setSelectedCleanStop(stop)}
+                    data-testid={`dcms-clean-btn-${stop.subscriptionId}`}
+                  >
+                    <Camera className="mr-1.5 h-4 w-4 shrink-0" />
+                    Clean karein
+                  </Button>
+                  {visitType === "cleaning" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-[2.75rem] h-auto py-2.5 px-3 text-xs font-medium border-orange-500/30 text-orange-900 bg-orange-500/5 hover:bg-orange-500/15"
+                      onClick={() => setSelectedUnavailableStop(stop)}
+                      data-testid={`dcms-unavailable-btn-${stop.subscriptionId}`}
+                    >
+                      Gaadi nahi mili
+                    </Button>
+                  )}
+                </div>
+              ) : isNotAvailable ? (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-medium rounded-xl py-2 px-3 text-orange-900 bg-orange-500/10 border border-orange-500/20">
+                    <AlertTriangle size={14} className="text-orange-700" />
+                    Car nahi mili — visit recorded (cleaning credit nahi kata)
+                  </div>
+                  {visitType === "cleaning" && (
+                    <Button
+                      variant="outline"
+                      className="w-full h-10 text-xs font-semibold border-green-600/30 text-green-800 bg-green-500/5 hover:bg-green-500/15"
+                      onClick={() => setSelectedCleanStop(stop)}
+                      data-testid={`dcms-recovery-btn-${stop.subscriptionId}`}
+                    >
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-green-700" />
+                      Car mil gayi — clean karein
+                    </Button>
+                  )}
+                </div>
+              ) : isCompleted ? (
+                <div className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-800 text-xs font-medium">
+                  <CheckCircle size={15} className="text-green-600" />
+                  Is car ka kaam ho chuka hai
+                </div>
+              ) : null}
             </div>
-          )}
-        </div>
-      )}
+          );
+        })}
+      </div>
 
-      {!walkInMode && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {stops.map((s, i) => (
-            <button
-              key={s.subscriptionId}
-              type="button"
-              onClick={() => setActiveIdx(i)}
-              className={cn(
-                "shrink-0 px-3 py-2 rounded-lg text-xs font-medium border transition-colors",
-                i === activeIdx && "ring-2 ring-primary border-primary",
-                s.todayStatus === "completed" && "bg-green-500/10 border-green-500/30 text-green-800",
-                s.todayStatus === "pending" && "bg-card border-border",
-                s.todayStatus === "rejected" && "bg-destructive/10 border-destructive/30",
-                s.todayStatus === "car_not_available" && "bg-amber-500/10 border-amber-500/30 text-amber-900",
-              )}
-            >
-              {s.vehicleNumber.slice(-4)}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {!walkInMode && (
-        <PlateScanFlow
-          open={scanOpen}
-          onOpenChange={setScanOpen}
-          routeSubscriptionIds={stops.map(s => s.subscriptionId)}
-          onVehicleConfirmed={handlePlateConfirmed}
-        />
-      )}
-
-      <ConfirmDialog
-        open={confirmUnavailable}
-        onOpenChange={setConfirmUnavailable}
-        title="Car nahi mili?"
-        description="Is jagah ki photo zaroori hai — proof ke liye ki aap wahan gaye the. Visit present count hogi, cleaning credit nahi katega."
-        confirmLabel="Photo lein"
-        cancelLabel="Wapas"
-        onConfirm={() => {
-          setConfirmUnavailable(false);
-          void captureCarNotAvailable();
+      {/* GUIDED CLEANING WORKFLOW MODAL */}
+      <StaffVehicleCleanDialog
+        open={Boolean(selectedCleanStop)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedCleanStop(null);
         }}
-        isConfirming={recordCarNotAvailable.isPending}
+        stop={selectedCleanStop}
+        visitType={visitType}
+        walkInMode={walkInMode}
+        onSuccess={() => {
+          if (walkInMode) {
+            navigate("/staff/bookings?walkInSuccess=1");
+          } else {
+            void refetch();
+          }
+        }}
       />
 
-      <StaffAddServiceSheet
-        open={addServiceOpen}
-        onOpenChange={setAddServiceOpen}
-        customerId={current?.customerId}
-        subscriptionId={current?.subscriptionId}
-        vehicleId={current?.vehicleId}
+      {/* CAR NOT AVAILABLE EXCEPTION MODAL */}
+      <StaffCarNotAvailableDialog
+        open={Boolean(selectedUnavailableStop)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedUnavailableStop(null);
+        }}
+        stop={selectedUnavailableStop}
+        walkInMode={walkInMode}
+        onSuccess={() => {
+          if (walkInMode) {
+            navigate("/staff/bookings?walkInSuccess=1");
+          } else {
+            void refetch();
+          }
+        }}
       />
     </div>
   );

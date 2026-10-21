@@ -121,11 +121,12 @@ public class NativeLocationBridgePlugin extends Plugin {
             ret.put("permanentlyDenied", false);
         } else {
             boolean shouldShow = ActivityCompat.shouldShowRequestPermissionRationale(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION);
+            boolean hasRequested = ctx.getSharedPreferences("cwp_location_bridge_prefs", Context.MODE_PRIVATE)
+                .getBoolean("has_requested_location_permission", false);
             ret.put("permission", "prompt");
             ret.put("shouldShowRationale", shouldShow);
-            // If rationale is false and permission is not granted, on Android that typically indicates
-            // the user chose "Don't ask again" or it has not been requested yet.
-            ret.put("permanentlyDenied", !shouldShow);
+            // Only permanently denied if it has been requested at least once and Android rationale returns false
+            ret.put("permanentlyDenied", hasRequested && !shouldShow);
         }
         call.resolve(ret);
     }
@@ -171,6 +172,10 @@ public class NativeLocationBridgePlugin extends Plugin {
             ret.put("permission", "granted");
             ret.put("permanentlyDenied", false);
         } else {
+            ctx.getSharedPreferences("cwp_location_bridge_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("has_requested_location_permission", true)
+                .apply();
             boolean shouldShow = ActivityCompat.shouldShowRequestPermissionRationale(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION);
             ret.put("permission", "denied");
             ret.put("permanentlyDenied", !shouldShow);

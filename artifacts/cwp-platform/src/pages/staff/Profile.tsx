@@ -13,6 +13,17 @@ import { useAccountScope } from "@/lib/account-scope";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffVerificationBanner, StaffVerificationBadge } from "@/features/staff/components/StaffVerificationBanner";
 import { StaffOperationalRoles } from "@/features/staff/components/StaffOperationalRoles";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Loader2, Camera, Pencil, Save } from "lucide-react";
@@ -474,15 +485,42 @@ export default function StaffProfile() {
 
         <PushNotificationSettings variant="staff" />
 
-        <StaffButton
-          variant="outline"
-          className="w-full border-destructive/30 text-destructive hover:bg-destructive/10"
-          onClick={logout}
-          data-testid="btn-sign-out"
-        >
-          <LogOut size={16} className="mr-2" />
-          Sign out
-        </StaffButton>
+        <div className="pt-2 pb-14">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <StaffButton
+                variant="outline"
+                className="w-full border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive/15 min-h-[3.25rem] font-semibold"
+                data-testid="btn-sign-out"
+              >
+                <LogOut size={18} className="mr-2" />
+                Log out
+              </StaffButton>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="max-w-[340px] rounded-2xl p-5">
+              <AlertDialogHeader className="text-left space-y-2">
+                <AlertDialogTitle className="text-base font-bold">
+                  Log out karein?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
+                  Aap sure hain ki aap staff app se log out karna chahte hain? Wapas login karne ke liye apna registered mobile number enter karna hoga.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex-row gap-2 justify-end pt-3">
+                <AlertDialogCancel className="h-9 px-4 text-xs font-medium m-0">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="h-9 px-4 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground m-0"
+                  onClick={() => logout("staff")}
+                  data-testid="confirm-logout-btn"
+                >
+                  Yes, Log out
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
     </StaffPage>
   );
 }

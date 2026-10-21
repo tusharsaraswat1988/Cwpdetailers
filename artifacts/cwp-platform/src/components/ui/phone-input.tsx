@@ -102,7 +102,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(function
       aria-invalid={!!error}
       className={cn(
         !indianMobile && label && "mt-1.5",
-        indianMobile && "rounded-l-none border-l-0 pl-3 flex-1 min-w-0 rounded-r-lg",
+        indianMobile && "rounded-l-none border-l-0 pl-3 flex-1 min-w-0 rounded-r-xl focus-visible:ring-0 focus-visible:outline-none focus:ring-0 focus:outline-none",
         error && "border-destructive focus-visible:ring-destructive/50",
         className,
       )}
@@ -119,10 +119,17 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(function
         </Label>
       )}
       {indianMobile ? (
-        <div className={cn("flex", label && "mt-1.5")}>
+        <div
+          className={cn(
+            "flex rounded-xl transition-all duration-200",
+            "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1",
+            error && "focus-within:ring-destructive",
+            label && "mt-1.5",
+          )}
+        >
           <span
             className={cn(
-              "inline-flex items-center h-12 min-h-12 px-3 rounded-l-lg border border-r-0 text-sm font-medium tabular-nums shrink-0 transition-colors duration-200",
+              "inline-flex items-center h-12 min-h-12 px-3.5 rounded-l-xl border border-r-0 text-sm font-medium tabular-nums shrink-0 transition-colors duration-200",
               dark
                 ? "bg-white/[0.04] border-white/10 text-white/60"
                 : "bg-muted border-input text-muted-foreground",

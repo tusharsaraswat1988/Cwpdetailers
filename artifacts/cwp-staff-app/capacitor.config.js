@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 const repoRoot = path.resolve(__dirname, "../..");
 const envPath = path.join(repoRoot, ".env");
@@ -14,23 +15,60 @@ function readEnvValue(key) {
   return line.slice(key.length + 1).trim().replace(/^["']|["']$/g, "") || undefined;
 }
 
+function getLanIpAddress() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === "IPv4" && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return undefined;
+}
+
 function staffServerUrl(raw) {
   if (!raw) return undefined;
+  let formatted = raw.trim();
+  if (!/^https?:\/\//i.test(formatted)) {
+    formatted = `http://${formatted}`;
+  }
   try {
-    const url = new URL(raw);
+    const url = new URL(formatted);
     if (url.pathname === "/" || url.pathname === "") {
       url.pathname = "/staff/login";
     }
     return url.toString();
   } catch {
-    return raw;
+    return formatted;
   }
 }
 
 // In standard bundled mode, no server.url is used so assets load from local device storage.
-// Live-reload over Wi-Fi is enabled only when CAP_LIVE_RELOAD=true.
+// Live-reload over Wi-Fi / ADB is enabled only when CAP_LIVE_RELOAD=true.
 const isLiveReload = process.env.CAP_LIVE_RELOAD === "true";
-const remoteUrl = isLiveReload ? staffServerUrl(readEnvValue("STAFF_APP_SERVER_URL")) : undefined;
+let remoteUrl = undefined;
+
+if (isLiveReload) {
+  const configuredUrl = readEnvValue("STAFF_APP_SERVER_URL");
+  if (configuredUrl) {
+    remoteUrl = staffServerUrl(configuredUrl);
+  } else {
+    const autoIp = getLanIpAddress();
+    if (autoIp) {
+      remoteUrl = staffServerUrl(`http://${autoIp}:21456`);
+      console.log(`[Capacitor Live Reload] Auto-detected reachable LAN IP: ${autoIp}`);
+    }
+  }
+
+  if (remoteUrl) {
+    console.log(`[Capacitor Live Reload] ACTIVE -> Staff WebView target: ${remoteUrl}`);
+  } else {
+    console.warn(
+      `[Capacitor Live Reload] WARNING: CAP_LIVE_RELOAD=true was passed, but no server URL or LAN IP could be detected. Falling back to bundled assets.`,
+    );
+  }
+}
 
 /** @type {import('@capacitor/cli').CapacitorConfig} */
 const config = {

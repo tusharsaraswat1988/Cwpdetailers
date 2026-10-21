@@ -12,7 +12,9 @@
     "android:staff:sync": "pnpm --filter @workspace/cwp-platform run build && pnpm --filter @workspace/cwp-staff-app run sync",
     "android:staff:open": "pnpm --filter @workspace/cwp-staff-app run open:android",
     "android:customer:sync": "pnpm --filter @workspace/cwp-platform run build && pnpm --filter @workspace/cwp-customer-app run sync",
-    "android:customer:open": "pnpm --filter @workspace/cwp-customer-app run open:android"
+    "android:customer:open": "pnpm --filter @workspace/cwp-customer-app run open:android",
+    "android:staff:live": "node scripts/android-live.mjs staff",
+    "android:staff:bundled": "node scripts/android-live.mjs staff --bundled"
   },
   "private": true,
   "pnpm": {

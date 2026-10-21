@@ -6,7 +6,9 @@
   "scripts": {
     "sync": "cap sync android",
     "open:android": "cap open android",
-    "run:android": "cap run android"
+    "run:android": "cap run android",
+    "live": "node ../../scripts/android-live.mjs staff",
+    "bundled": "node ../../scripts/android-live.mjs staff --bundled"
   },
   "dependencies": {
     "@capacitor/app": "^7.1.0",

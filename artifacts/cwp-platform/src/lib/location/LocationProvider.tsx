@@ -271,12 +271,13 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         }
 
         if (currentPermission !== "granted") {
-          setIsPermanentlyDenied(Boolean(isPermBlocked));
-          setPermissionState("denied");
+          const isBlocked = currentPermission === "denied" && Boolean(isPermBlocked);
+          setIsPermanentlyDenied(isBlocked);
+          setPermissionState(currentPermission === "prompt" ? "prompt" : "denied");
           setErrorMessage(
-            isPermBlocked
+            isBlocked
               ? "Location permission blocked. Open settings to allow location."
-              : "Location permission denied. Please allow location to continue."
+              : "Location permission required. Tap Enable location to allow."
           );
           return;
         }

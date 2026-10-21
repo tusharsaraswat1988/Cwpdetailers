@@ -5,7 +5,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { MarketingButton } from "@/features/landing/components/marketing/MarketingButton";
 import { useToast } from "@/hooks/use-toast";
 import { submitMobile } from "@/lib/contactForm";
-import { getAuthErrorMessage } from "@/lib/authErrorMessages";
+import { getActionableAuthDetails } from "@/lib/authErrorMessages";
 import { isValidIndianMobileDigits } from "@/lib/phoneDisplay";
 import { trackAuthEvent } from "@/lib/authAnalytics";
 import { useBranding } from "@/lib/branding";
@@ -28,7 +28,7 @@ import {
   authMutedLinkClass,
 } from "@/components/auth/authStyles";
 import { isCustomerNativeApp } from "@/lib/native/portalNative";
-import { AlertCircle, ArrowRight, ChevronDown, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function usePhoneFromQuery() {
@@ -44,14 +44,16 @@ export default function Login() {
   const queryPhone = usePhoneFromQuery();
 
   const [authStep, setAuthStep] = useState<"chooser" | "credentials">("chooser");
+  const [authMode, setAuthMode] = useState<"otp" | "password">("otp");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [showOtpLogin, setShowOtpLogin] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpRecoveryStep, setOtpRecoveryStep] = useState<string | null>(null);
 
   const { otpSession, showOtp, setOtpSession, clearOtpSession } = useAuthFlowStore();
 
   const {
+    stateMachine,
     googlePending,
     phoneLink,
     clearPhoneLink,
@@ -59,6 +61,7 @@ export default function Login() {
     handleAuthSuccess,
     googleDisabled,
     authError,
+    actionableDetails,
     clearAuthError,
   } = useAuthFlow("customer");
 
@@ -75,6 +78,8 @@ export default function Login() {
     mutation: {
       onSuccess: (data, variables) => {
         setOtpError(null);
+        setOtpRecoveryStep(null);
+        stateMachine.setAwaitingOtp();
         trackAuthEvent("otp_sent", { method: "otp", portal: "customer" });
         setOtpSession({
           purpose: "login",
@@ -83,25 +88,29 @@ export default function Login() {
         });
       },
       onError: (err: unknown) => {
-        const message = getAuthErrorMessage(err);
-        setOtpError(message);
-        toast({ title: "Verification required", description: message, variant: "destructive" });
+        const details = getActionableAuthDetails(err);
+        setOtpError(details.message);
+        setOtpRecoveryStep(details.actionableStep ?? null);
+        stateMachine.failWithError(err);
       },
     },
   });
 
   const handleOtpContinue = (e: React.FormEvent) => {
     e.preventDefault();
+    if (sendOtpMutation.isPending || !stateMachine.canSubmit) return; // Prevent double clicks
+
     setOtpError(null);
+    setOtpRecoveryStep(null);
     if (authError) clearAuthError();
 
     const phoneResult = submitMobile(phone);
     setPhoneError(phoneResult.ok ? null : phoneResult.error);
     if (!phoneResult.ok) {
-      toast({ title: phoneResult.error, variant: "destructive" });
       return;
     }
 
+    stateMachine.startSubmitting();
     sendOtpMutation.mutate({ data: { phone: phoneResult.value, purpose: "login" } });
   };
 
@@ -124,7 +133,7 @@ export default function Login() {
     [clearOtpSession, handleAuthSuccess],
   );
 
-  const pending = sendOtpMutation.isPending || googlePending;
+  const pending = sendOtpMutation.isPending || googlePending || stateMachine.isBusy;
 
   return (
     <AuthLayout testId="login-page">
@@ -133,19 +142,40 @@ export default function Login() {
         subtitle={
           authStep === "chooser"
             ? "Continue with Google, or sign in with your mobile number"
-            : "Sign in with your password — OTP only if you need it"
+            : authMode === "otp"
+              ? "Enter your mobile number to receive a one-time passcode"
+              : "Sign in with your mobile number and password"
         }
       />
 
       <AuthPanel>
       {authError && (
         <div
-          className={cn("rounded-[var(--customer-radius-sm,0.75rem)] border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2 mb-3", authFadeUp)}
+          className={cn("rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 flex flex-col gap-2 mb-4", authFadeUp)}
           role="alert"
+          aria-live="assertive"
           data-testid="login-auth-error"
         >
-          <AlertCircle size={14} className="text-destructive shrink-0 mt-0.5" aria-hidden />
-          <p className="text-destructive text-sm leading-snug">{authError}</p>
+          <div className="flex items-start gap-2">
+            <AlertCircle size={16} className="text-destructive shrink-0 mt-0.5" aria-hidden />
+            <div className="space-y-1 text-sm leading-snug">
+              <p className="text-destructive font-medium">{authError}</p>
+              {actionableDetails?.actionableStep && (
+                <p className="text-destructive/85 text-xs">{actionableDetails.actionableStep}</p>
+              )}
+            </div>
+          </div>
+          {actionableDetails?.actionUrl && actionableDetails?.actionLabel ? (
+            <div className="pl-6 pt-0.5">
+              <Link
+                href={actionableDetails.actionUrl}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-primary underline underline-offset-4 hover:opacity-80"
+              >
+                {actionableDetails.actionLabel}
+                <ArrowRight size={12} />
+              </Link>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -157,20 +187,81 @@ export default function Login() {
           }}
           onGoogleError={msg => {
             trackAuthEvent("google_cancelled", { method: "google", portal: "customer" });
-            toast({ title: "Google sign-in", description: getAuthErrorMessage(msg), variant: "destructive" });
+            const details = getActionableAuthDetails(new Error(msg));
+            stateMachine.failWithError(new Error(details.message));
           }}
           googleDisabled={googleDisabled}
           googlePending={googlePending}
           googlePendingLabel="Signing in with Google..."
-          secondaryLabel="Login with mobile"
+          secondaryLabel="Continue with mobile number"
           secondaryTestId="btn-login-email"
-          onChooseSecondary={() => setAuthStep("credentials")}
+          onChooseSecondary={() => {
+            setAuthMode("otp");
+            setAuthStep("credentials");
+          }}
+          tertiaryLabel="Sign in with password instead"
+          onChooseTertiary={() => {
+            setAuthMode("password");
+            setAuthStep("credentials");
+          }}
         />
       </div>
 
       {authStep === "credentials" ? (
         <div data-testid="login-credential-form">
           <AuthBackButton onClick={() => setAuthStep("chooser")} disabled={pending} />
+
+          {/* Segmented Switcher for Login Method */}
+          <div
+            className={cn(
+              "grid grid-cols-2 p-1 bg-muted/70 rounded-xl mb-4 text-sm font-medium",
+              authFadeUp,
+              "delay-75",
+            )}
+            role="tablist"
+            aria-label="Login method"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={authMode === "otp"}
+              onClick={() => {
+                setAuthMode("otp");
+                if (authError) clearAuthError();
+                setOtpError(null);
+                setOtpRecoveryStep(null);
+              }}
+              className={cn(
+                "py-2 px-3 rounded-lg transition-all duration-200 text-center font-medium min-h-[38px] flex items-center justify-center gap-1.5",
+                authMode === "otp"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              data-testid="tab-login-otp"
+            >
+              Sign in with OTP
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={authMode === "password"}
+              onClick={() => {
+                setAuthMode("password");
+                if (authError) clearAuthError();
+                setOtpError(null);
+                setOtpRecoveryStep(null);
+              }}
+              className={cn(
+                "py-2 px-3 rounded-lg transition-all duration-200 text-center font-medium min-h-[38px] flex items-center justify-center gap-1.5",
+                authMode === "password"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              data-testid="tab-login-password"
+            >
+              Password
+            </button>
+          </div>
 
           <div className={cn("space-y-3", authFormStagger, authFadeUp, "delay-150")}>
             <PhoneInput
@@ -184,6 +275,7 @@ export default function Login() {
               onChange={next => {
                 setPhone(next);
                 if (authError) clearAuthError();
+                if (otpError) setOtpError(null);
               }}
               error={phoneError}
               onErrorChange={setPhoneError}
@@ -191,78 +283,84 @@ export default function Login() {
               className={cn(authControlClass, authLandingRingClass)}
             />
 
-            <PasswordLogin
-              phone={phone}
-              onSuccess={handlePasswordSuccess}
-              disabled={googlePending}
-            />
-          </div>
-
-          <div className={cn("mt-1", authFadeUp, "delay-300")}>
-            <button
-              type="button"
-              onClick={() => setShowOtpLogin(v => !v)}
-              className="w-full flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground text-sm font-normal py-1.5 min-h-[44px] transition-colors duration-200"
-              data-testid="btn-toggle-otp-login"
-              aria-expanded={showOtpLogin}
-              aria-controls="otp-login-panel"
-            >
-              {showOtpLogin ? "OTP login" : "Sign in with OTP instead"}
-              <ChevronDown
-                size={15}
-                className={cn("transition-transform duration-300 ease-out", showOtpLogin && "rotate-180")}
-                aria-hidden
-              />
-            </button>
-
-            <div
-              id="otp-login-panel"
-              className={cn(
-                "grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
-                showOtpLogin ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-              )}
-              aria-hidden={!showOtpLogin}
-            >
-              <div className="overflow-hidden">
-                <form
-                  onSubmit={handleOtpContinue}
-                  className={cn(
-                    "pt-3 space-y-3 transition-opacity duration-300",
-                    showOtpLogin ? "opacity-100" : "opacity-0",
-                  )}
-                >
-                  <p className="text-muted-foreground text-xs text-center leading-relaxed">
-                    Use OTP if you haven&apos;t set a password yet, or can&apos;t remember it.
-                  </p>
-                  {otpError && (
-                    <div
-                      className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 flex items-start gap-2"
-                      role="alert"
-                      data-testid="login-otp-error"
-                    >
-                      <AlertCircle size={14} className="text-destructive shrink-0 mt-0.5" aria-hidden />
-                      <p className="text-destructive text-sm leading-snug">{otpError}</p>
-                    </div>
-                  )}
-                  <MarketingButton
-                    type="submit"
-                    size="lg"
-                    disabled={pending || !phoneReady}
-                    className="w-full"
-                    data-testid="btn-continue-login-otp"
+            {authMode === "otp" ? (
+              <form onSubmit={handleOtpContinue} className="space-y-3 pt-1">
+                {otpError && (
+                  <div
+                    className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 flex flex-col gap-1"
+                    role="alert"
+                    aria-live="assertive"
+                    data-testid="login-otp-error"
                   >
-                    {sendOtpMutation.isPending ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
-                        Sending OTP...
-                      </>
-                    ) : (
-                      "Send OTP"
-                    )}
-                  </MarketingButton>
-                </form>
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle size={15} className="text-destructive shrink-0" aria-hidden />
+                      <p className="text-destructive text-sm font-medium leading-snug">{otpError}</p>
+                    </div>
+                    {otpRecoveryStep ? (
+                      <p className="text-destructive/85 text-xs pl-5 leading-normal">{otpRecoveryStep}</p>
+                    ) : null}
+                  </div>
+                )}
+                <MarketingButton
+                  type="submit"
+                  size="lg"
+                  disabled={pending || !phoneReady}
+                  className="w-full"
+                  data-testid="btn-continue-login-otp"
+                >
+                  {sendOtpMutation.isPending ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin mr-2" aria-hidden />
+                      Sending OTP...
+                    </>
+                  ) : (
+                    "Send OTP"
+                  )}
+                </MarketingButton>
+
+                <p className="text-muted-foreground text-xs text-center pt-1.5">
+                  Prefer using your password?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode("password");
+                      if (authError) clearAuthError();
+                      setOtpError(null);
+                      setOtpRecoveryStep(null);
+                    }}
+                    className={cn(authLinkClass, "font-normal hover:underline")}
+                    data-testid="btn-switch-to-password"
+                  >
+                    Sign in with password
+                  </button>
+                </p>
+              </form>
+            ) : (
+              <div className="space-y-3">
+                <PasswordLogin
+                  phone={phone}
+                  onSuccess={handlePasswordSuccess}
+                  disabled={googlePending}
+                />
+
+                <p className="text-muted-foreground text-xs text-center pt-2">
+                  Don&apos;t remember your password?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode("otp");
+                      if (authError) clearAuthError();
+                      setOtpError(null);
+                      setOtpRecoveryStep(null);
+                    }}
+                    className={cn(authLinkClass, "font-normal hover:underline")}
+                    data-testid="btn-toggle-otp-login"
+                  >
+                    Sign in with OTP
+                  </button>
+                </p>
               </div>
-            </div>
+            )}
           </div>
         </div>
       ) : null}
@@ -292,7 +390,16 @@ export default function Login() {
       <AuthFooter />
 
       {otpSession && (
-        <AuthOtpOverlay open={showOtp} session={otpSession} onSuccess={handleOtpSuccess} onClose={clearOtpSession} />
+        <AuthOtpOverlay
+          open={showOtp}
+          session={otpSession}
+          onSuccess={handleOtpSuccess}
+          onClose={clearOtpSession}
+          onSwitchToPassword={() => {
+            clearOtpSession();
+            setAuthMode("password");
+          }}
+        />
       )}
 
       <AuthGoogleDialogs

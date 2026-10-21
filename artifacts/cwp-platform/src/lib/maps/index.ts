@@ -3,7 +3,11 @@ export {
   buildMapsUrl,
   buildNavigateUrl,
   canNavigateTo,
+  isValidMapCoordinate,
 } from "./urls";
+export {
+  openExternalNavigation,
+} from "./navigation";
 export {
   loadGoogleMaps,
   getGoogleMapsApiKey,
