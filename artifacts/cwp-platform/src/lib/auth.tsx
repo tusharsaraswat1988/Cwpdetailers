@@ -198,7 +198,7 @@ function isSameOriginApi(url: string): boolean {
   }
 }
 
-function installFetchInterceptor() {
+export function installFetchInterceptor() {
   if (fetchPatched) return;
   fetchPatched = true;
 
@@ -281,6 +281,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     })();
 
+    // Multi-tab session synchronization: react to login/logout events across browser tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      const activePortal = resolveAuthPortal();
+      const userKey = userStorageKey(activePortal);
+      const tokenKey = tokenStorageKey(activePortal);
+
+      if (e.key === userKey || e.key === tokenKey) {
+        const reloaded = loadCachedSession(activePortal);
+        if (!reloaded.user) {
+          // Another tab logged out
+          setUser(null);
+          setToken(null);
+          setPermissions([]);
+          setScope(null);
+          setSessionReady(false);
+        } else {
+          // Another tab logged in or refreshed user profile
+          setUser(reloaded.user);
+          setToken(reloaded.token);
+          setSessionReady(true);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
     let removeResumeListener: (() => void) | undefined;
     if (isNativeApp()) {
       void import("@capacitor/app").then(({ App: CapApp }) => {
@@ -311,6 +337,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       removeResumeListener?.();
+      window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
 

@@ -139,9 +139,9 @@ export default function StaffLogin() {
   };
 
   return (
-    <StaffThemeRoot>
+    <StaffThemeRoot className="min-h-full min-h-screen bg-[hsl(var(--secondary))]">
       <div
-        className="staff-auth-shell flex min-h-[100dvh] items-center justify-center p-4 sm:p-6"
+        className="staff-auth-shell flex min-h-full min-h-screen min-h-[100dvh] w-full flex-col items-center justify-center p-4 sm:p-6"
         data-testid="staff-login-page"
       >
         <div className="w-full max-w-md">

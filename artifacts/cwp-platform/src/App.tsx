@@ -9,6 +9,7 @@ import { ConnectivityBanner } from "@/components/connectivity/ConnectivityBanner
 import { AppSplashGate } from "@/components/pwa/AppSplashGate";
 import { PwaRouteHeadSync } from "@/components/pwa/PwaRouteHeadSync";
 import { AppNativeGuard } from "@/lib/native/AppNativeGuard";
+import { getSyncNativePortal, portalHomePath } from "@/lib/native/portalNative";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
@@ -146,6 +147,9 @@ function RedirectPreserveSearch({ to }: { to: string }) {
 }
 
 function LandingDivisionRedirect() {
+  const portal = getSyncNativePortal();
+  if (portal === "staff") return <Redirect to={portalHomePath("staff")} />;
+  if (portal === "customer") return <Redirect to={portalHomePath("customer")} />;
   const legacyDivision = new URLSearchParams(window.location.search).get("division");
   if (legacyDivision === "solar") return <Redirect to="/solar" />;
   if (legacyDivision === "vehicle") return <Redirect to="/vehicle" />;
@@ -294,9 +298,9 @@ function App() {
           <BrandingProvider>
             <AppSplashGate />
             <TooltipProvider>
-              <div className="flex h-[100dvh] flex-col overflow-hidden">
+              <div className="flex h-full min-h-screen min-h-[100dvh] max-h-screen max-h-[100dvh] h-screen h-[100dvh] flex-col overflow-hidden">
                 <ConnectivityBanner className="shrink-0 z-40" />
-                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                <div className="min-h-0 flex-1 flex flex-col overflow-y-auto overflow-x-hidden">
                   <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                     <PwaRouteHeadSync />
                     <AppNativeGuard />

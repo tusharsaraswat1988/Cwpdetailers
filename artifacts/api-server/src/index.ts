@@ -11,22 +11,11 @@ import { processPendingNotificationEvents } from "./lib/push/eventProcessor";
 import { ensureWebPushConfigured } from "./lib/push/webPushService";
 import { todayStrInIST, getNext2359IST } from "./lib/dcms/dateUtils";
 import { bootstrapJobOrchestration } from "./lib/job-orchestration/bootstrap";
+import { validateStartupEnvironment } from "./lib/startupEnv";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const dbHost = process.env.DATABASE_URL?.split("@")[1]?.split("/")[0] ?? "not-set";
+const envSummary = validateStartupEnvironment();
+const port = envSummary.port;
+const dbHost = envSummary.databaseHost;
 
 app.listen(port, "0.0.0.0", (err) => {
   if (err) {

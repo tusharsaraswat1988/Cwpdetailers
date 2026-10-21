@@ -19,6 +19,8 @@ declare global {
   }
 }
 
+export const DEFAULT_PRODUCTION_API_URL = "https://cwpdetailers-production.up.railway.app";
+
 export function isNativeApp(): boolean {
   try {
     return Capacitor.isNativePlatform();
@@ -40,11 +42,9 @@ export function getApiBaseUrl(): string {
     return configured.replace(/\/+$/, "");
   }
 
-  // When running on native without a configured URL, warn in console
-  if (isNativeApp() && typeof console !== "undefined") {
-    console.warn(
-      "[CWP Mobile] VITE_API_URL is not set. Native requests to /api may fail against localhost.",
-    );
+  // When running on native without a configured URL, fall back to production backend
+  if (isNativeApp()) {
+    return DEFAULT_PRODUCTION_API_URL;
   }
 
   return "";

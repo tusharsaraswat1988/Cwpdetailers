@@ -48,7 +48,8 @@ import {
 } from "../lib/userPassword";
 import { sendAuthOtp, verifyAuthOtp, isOtpSmsConfigured } from "../lib/authOtp";
 import { authRateLimit } from "../lib/authRateLimit";
-import { logAuthEvent, neutralizeOtpSendError } from "../lib/authObservability";
+import { logAuthEvent, neutralizeOtpSendError, startAuthSpan } from "../lib/authObservability";
+import { authMetrics } from "../lib/authMetrics";
 import { normalizeStaffPasswordLogin } from "../lib/staffLoginSync";
 import {
   findCustomerByEmail,
@@ -141,12 +142,15 @@ router.get("/auth/google/config", (_req, res) => {
 router.post("/auth/google", async (req, res) => {
   const requestId = getRequestId(req);
   res.setHeader("X-Correlation-Id", requestId);
+  const span = startAuthSpan();
   try {
     const { idToken, portal: rawPortal = "customer" } = req.body as { idToken?: string; portal?: string };
     if (!idToken) {
+      logAuthEvent(req, "auth.google.failed", { portal: rawPortal, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: "Google token required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
     if (rawPortal === "staff") {
+      logAuthEvent(req, "auth.google.failed", { portal: rawPortal, authErrorCode: "PORTAL_MISMATCH", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({
         error: "Google sign-in is not available for the staff portal. Use your phone number and admin-provided password.",
         code: "PORTAL_MISMATCH",
@@ -176,6 +180,7 @@ router.post("/auth/google", async (req, res) => {
 
       const nonCustomer = emailUsers.find(u => !isRoleAllowedForPortal(u.role, portal));
       if (nonCustomer) {
+        logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: "PORTAL_MISMATCH", durationMs: span.getDurationMs(), requestId });
         if (nonCustomer.role === "staff") {
           return res.status(403).json({
             error:
@@ -206,6 +211,7 @@ router.post("/auth/google", async (req, res) => {
       const customer = await findCustomerByEmail(normalizedEmail);
       if (customer) {
         if (customer.status !== "active") {
+          logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
           return res.status(401).json({
             error: "Account suspended",
             code: "ACCOUNT_NOT_ELIGIBLE",
@@ -224,6 +230,7 @@ router.post("/auth/google", async (req, res) => {
 
     if (user) {
       if (!isRoleAllowedForPortal(user.role, portal)) {
+        logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: "PORTAL_MISMATCH", durationMs: span.getDurationMs(), requestId });
         if (user.role === "staff") {
           return res.status(403).json({
             error:
@@ -247,6 +254,7 @@ router.post("/auth/google", async (req, res) => {
         });
       }
       if (!user.isActive) {
+        logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
         return res.status(401).json({
           error: "Account suspended",
           code: "ACCOUNT_NOT_ELIGIBLE",
@@ -271,12 +279,14 @@ router.post("/auth/google", async (req, res) => {
 
       const token = await issueSession(user.id, req);
       setSessionCookie(res, token, portal);
+      logAuthEvent(req, "auth.google", { portal, userId: user.id, durationMs: span.getDurationMs(), requestId });
       return res.json({ token, user: toSafeUser(user), requestId });
     }
 
     // No customer user yet — still block if this Google email is a staff or admin identity.
     const emailGuard = await assertGoogleEmailOkForCustomerSignup(normalizedEmail);
     if (!emailGuard.ok) {
+      logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: emailGuard.body.code, durationMs: span.getDurationMs(), requestId });
       return res.status(emailGuard.status).json({ ...emailGuard.body, requestId });
     }
 
@@ -305,6 +315,7 @@ router.post("/auth/google", async (req, res) => {
   } catch (err) {
     req.log.error({ err, requestId }, "Google auth error");
     const message = err instanceof Error ? err.message : "Google sign-in failed";
+    logAuthEvent(req, "auth.google.failed", { portal: "customer", error: message, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
     return res.status(400).json({ error: message, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
   }
 });
@@ -312,6 +323,7 @@ router.post("/auth/google", async (req, res) => {
 router.post("/auth/google/complete", async (req, res) => {
   const requestId = getRequestId(req);
   res.setHeader("X-Correlation-Id", requestId);
+  const span = startAuthSpan();
   try {
     const { linkToken, phone, password: rawPassword } = req.body as {
       linkToken?: string;
@@ -319,16 +331,19 @@ router.post("/auth/google/complete", async (req, res) => {
       password?: string;
     };
     if (!linkToken) {
+      logAuthEvent(req, "auth.google.failed", { portal: "customer", authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: "Link token required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
 
     const phoneResult = parseRequiredMobile(phone);
     if (!phoneResult.ok) {
+      logAuthEvent(req, "auth.google.failed", { portal: "customer", authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: phoneResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
 
     const pwCheck = validateNewPassword(rawPassword);
     if (!pwCheck.ok) {
+      logAuthEvent(req, "auth.google.failed", { portal: "customer", authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: pwCheck.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
     const chosenPassword = pwCheck.value;
@@ -350,6 +365,7 @@ router.post("/auth/google/complete", async (req, res) => {
     )[0];
 
     if (!pending) {
+      logAuthEvent(req, "auth.google.failed", { portal: "customer", authErrorCode: "OTP_INVALID_OR_EXPIRED", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({
         error: "Google sign-in session expired. Please try again.",
         code: "OTP_INVALID_OR_EXPIRED",
@@ -365,6 +381,7 @@ router.post("/auth/google/complete", async (req, res) => {
       normalizedEmail,
     );
     if (!phoneGuard.ok) {
+      logAuthEvent(req, "auth.google.failed", { portal: "customer", authErrorCode: phoneGuard.body.code, durationMs: span.getDurationMs(), requestId });
       return res.status(phoneGuard.status).json({ ...phoneGuard.body, requestId });
     }
 
@@ -378,11 +395,13 @@ router.post("/auth/google/complete", async (req, res) => {
       });
       const token = await issueSession(linkedUser.id, req);
       setSessionCookie(res, token, "customer");
+      logAuthEvent(req, "auth.google", { portal: "customer", userId: linkedUser.id, phone: phoneResult.value, durationMs: span.getDurationMs(), requestId });
       return res.json({ token, user: toSafeUser(linkedUser), requestId });
     }
 
     const identityCheck = await assertContactIdentityAvailable(phoneResult.value, normalizedEmail);
     if (!identityCheck.ok) {
+      logAuthEvent(req, "auth.google.failed", { portal: "customer", authErrorCode: identityCheck.body.code, durationMs: span.getDurationMs(), requestId });
       return res.status(identityCheck.status).json({ ...identityCheck.body, requestId });
     }
 
@@ -435,10 +454,12 @@ router.post("/auth/google/complete", async (req, res) => {
 
     const token = await issueSession(result.id, req);
     setSessionCookie(res, token, "customer");
+    logAuthEvent(req, "auth.google", { portal: "customer", userId: result.id, phone: phoneResult.value, durationMs: span.getDurationMs(), requestId });
     return res.status(201).json({ token, user: toSafeUser(result), requestId });
   } catch (err) {
     req.log.error({ err, requestId }, "Google complete error");
     const message = err instanceof Error ? err.message : "Could not complete sign-up";
+    logAuthEvent(req, "auth.google.failed", { portal: "customer", error: message, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
     return res.status(400).json({ error: message, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
   }
 });
@@ -610,25 +631,30 @@ router.post("/auth/set-password", optionalAuth, requireAuth, async (req, res) =>
 router.post("/auth/login", async (req, res) => {
   const requestId = getRequestId(req);
   res.setHeader("X-Correlation-Id", requestId);
+  const span = startAuthSpan();
   try {
     const { phone, email, password, portal: rawPortal } = req.body;
+    const portal: AuthPortal = isAuthPortal(rawPortal) ? rawPortal : "customer";
+
     if (!password) {
+      logAuthEvent(req, "auth.login.password.failed", { portal, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: "Password required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
 
-    const portal: AuthPortal = isAuthPortal(rawPortal) ? rawPortal : "customer";
-
     const idResult = normalizeLoginIdentifier(phone, email);
     if (!idResult.ok) {
+      logAuthEvent(req, "auth.login.password.failed", { portal, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: idResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
 
     const user = await findUserByIdentifier(idResult.value.phone, idResult.value.email);
 
     if (!user) {
+      logAuthEvent(req, "auth.login.password.failed", { portal, phone: idResult.value.phone, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(401).json({ error: "Invalid credentials", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
     if (!userHasPassword(user)) {
+      logAuthEvent(req, "auth.login.password.failed", { portal, phone: user.phone, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(401).json({
         error: user.role === "staff"
           ? "Invalid credentials"
@@ -640,13 +666,16 @@ router.post("/auth/login", async (req, res) => {
 
     const { valid, upgradedHash } = await verifyPasswordWithUpgrade(password, user.passwordHash!);
     if (!valid) {
+      logAuthEvent(req, "auth.login.password.failed", { portal, phone: user.phone, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(401).json({ error: "Invalid credentials", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
     if (!user.isActive) {
+      logAuthEvent(req, "auth.login.password.failed", { portal, phone: user.phone, authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(401).json({ error: "Account suspended", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
 
     if (!isRoleAllowedForPortal(user.role, portal)) {
+      logAuthEvent(req, "auth.login.password.failed", { portal, phone: user.phone, authErrorCode: "PORTAL_MISMATCH", durationMs: span.getDurationMs(), requestId });
       return res.status(403).json({
         error: portalMismatchMessage(portal),
         code: "PORTAL_MISMATCH",
@@ -670,9 +699,11 @@ router.post("/auth/login", async (req, res) => {
 
     const token = await issueSession(user.id, req);
     setSessionCookie(res, token, portal);
+    logAuthEvent(req, "auth.login.password", { portal, phone: user.phone, userId: user.id, durationMs: span.getDurationMs(), requestId });
     return res.json({ token, user: toSafeUser(user), requestId });
   } catch (err) {
     req.log.error({ err, requestId }, "Login error");
+    logAuthEvent(req, "auth.login.password.failed", { authErrorCode: "AUTH_INTERNAL_ERROR", durationMs: span.getDurationMs(), requestId });
     return res.status(500).json({ error: "Internal server error", code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
@@ -691,6 +722,7 @@ router.get("/auth/otp/config", (_req, res) => {
 router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), async (req, res) => {
   const requestId = getRequestId(req);
   res.setHeader("X-Correlation-Id", requestId);
+  const span = startAuthSpan();
   try {
     const { phone, purpose: rawPurpose, name } = req.body as {
       phone?: string;
@@ -700,11 +732,13 @@ router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), asyn
 
     const purpose = parseOtpPurpose(rawPurpose);
     if (!purpose) {
+      logAuthEvent(req, "auth.otp.send.failed", { authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: "Invalid OTP purpose", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
 
     const phoneResult = parseRequiredMobile(phone);
     if (!phoneResult.ok) {
+      logAuthEvent(req, "auth.otp.send.failed", { authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: phoneResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
 
@@ -715,7 +749,7 @@ router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), asyn
       name,
     });
 
-    logAuthEvent(req, "auth.otp.send", { purpose, phone: phoneResult.value, portal: "customer", requestId });
+    logAuthEvent(req, "auth.otp.send", { purpose, phone: phoneResult.value, portal: "customer", durationMs: span.getDurationMs(), requestId });
 
     return res.json({
       ok: true,
@@ -729,7 +763,7 @@ router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), asyn
     const raw = err instanceof Error ? err.message : "Could not send OTP";
     const authCode: StructuredAuthErrorCode = err instanceof AuthError ? err.code : "AUTH_INTERNAL_ERROR";
     const statusCode = err instanceof AuthError ? err.statusCode : 400;
-    logAuthEvent(req, "auth.otp.send.failed", { error: raw, authErrorCode: authCode, requestId });
+    logAuthEvent(req, "auth.otp.send.failed", { error: raw, authErrorCode: authCode, durationMs: span.getDurationMs(), requestId });
     return res.status(statusCode).json({
       error: neutralizeOtpSendError(raw, authCode),
       code: authCode,
@@ -741,6 +775,7 @@ router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), asyn
 router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000), async (req, res) => {
   const requestId = getRequestId(req);
   res.setHeader("X-Correlation-Id", requestId);
+  const span = startAuthSpan();
   try {
     const {
       phone,
@@ -764,14 +799,17 @@ router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000),
 
     const purpose = parseOtpPurpose(rawPurpose);
     if (!purpose) {
+      logAuthEvent(req, "auth.otp.verify.failed", { authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: "Invalid OTP purpose", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
     if (!code || code.trim().length !== 6) {
+      logAuthEvent(req, "auth.otp.verify.failed", { authErrorCode: "OTP_INVALID_OR_EXPIRED", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: "Enter the 6-digit OTP", code: "OTP_INVALID_OR_EXPIRED", requestId });
     }
 
     const phoneResult = parseRequiredMobile(phone);
     if (!phoneResult.ok) {
+      logAuthEvent(req, "auth.otp.verify.failed", { authErrorCode: "ACCOUNT_NOT_ELIGIBLE", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: phoneResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
 
@@ -783,11 +821,11 @@ router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000),
     });
 
     if (!verified.ok) {
-      logAuthEvent(req, "auth.otp.verify.failed", { purpose, phone: phoneResult.value, authErrorCode: "OTP_INVALID_OR_EXPIRED", requestId });
+      logAuthEvent(req, "auth.otp.verify.failed", { purpose, phone: phoneResult.value, authErrorCode: "OTP_INVALID_OR_EXPIRED", durationMs: span.getDurationMs(), requestId });
       return res.status(400).json({ error: "Invalid or expired OTP", code: "OTP_INVALID_OR_EXPIRED", requestId });
     }
 
-    logAuthEvent(req, "auth.otp.verify", { purpose, phone: phoneResult.value, requestId });
+    logAuthEvent(req, "auth.otp.verify", { purpose, phone: phoneResult.value, durationMs: span.getDurationMs(), requestId });
 
     if (purpose === "login") {
       const user = await resolveOrRepairVerifiedCustomer(phoneResult.value, { authProvider: "otp" });
@@ -988,6 +1026,7 @@ router.get("/auth/permissions", optionalAuth, async (req, res) => {
 router.post("/auth/logout", optionalAuth, async (req, res) => {
   const requestId = getRequestId(req);
   res.setHeader("X-Correlation-Id", requestId);
+  const span = startAuthSpan();
   try {
     for (const token of listSessionTokens(req)) {
       await db
@@ -998,11 +1037,39 @@ router.post("/auth/logout", optionalAuth, async (req, res) => {
     const portal = parseAuthPortalHeader(req);
     if (portal) clearSessionCookie(res, portal);
     else clearAllSessionCookies(res);
+    logAuthEvent(req, "auth.logout", { portal: portal ?? "unknown", durationMs: span.getDurationMs(), requestId });
     return res.json({ ok: true, requestId });
   } catch (err) {
     req.log.error({ err, requestId }, "Logout error");
     return res.status(500).json({ error: "Internal server error", code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
+
+function timingSafeCompareKey(provided?: string | null, secret?: string | null): boolean {
+  if (!provided || !secret || secret.length < 16) return false;
+  const hashProvided = crypto.createHash("sha256").update(provided).digest();
+  const hashSecret = crypto.createHash("sha256").update(secret).digest();
+  return crypto.timingSafeEqual(hashProvided, hashSecret);
+}
+
+export function handleGetAuthMetrics(req: Request, res: Response) {
+  const isSuper = Boolean(req.user && ["admin", "superadmin", "manager"].includes(req.user.role));
+  const internalDiagKey = process.env.DIAGNOSTICS_KEY?.trim();
+  const providedHeader = typeof req.headers["x-diagnostics-key"] === "string"
+    ? req.headers["x-diagnostics-key"].trim()
+    : null;
+  const hasValidDiagHeader = timingSafeCompareKey(providedHeader, internalDiagKey);
+
+  if (!isSuper && !hasValidDiagHeader) {
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    return res.status(403).json({ error: "Access denied. Administrator privileges required." });
+  }
+
+  return res.json(authMetrics.getSnapshot());
+}
+
+router.get("/auth/metrics", authRateLimit("auth-metrics", 60, 60000), optionalAuth, handleGetAuthMetrics);
 
 export default router;
