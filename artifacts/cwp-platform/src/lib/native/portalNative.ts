@@ -10,13 +10,27 @@ declare global {
 
 let cachedPortal: NativePortalType | null = null;
 
+const NATIVE_PORTAL_STORAGE_KEY = "cwp_native_portal";
+
 export function setCachedNativePortal(portal: NativePortalType | null): void {
   cachedPortal = portal;
+  try {
+    if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.setItem === "function") {
+      if (portal && portal !== "none") {
+        localStorage.setItem(NATIVE_PORTAL_STORAGE_KEY, portal);
+      } else {
+        localStorage.removeItem(NATIVE_PORTAL_STORAGE_KEY);
+      }
+    }
+  } catch {
+    // ignore storage exceptions
+  }
 }
 
 /**
  * Synchronous portal detection for initial render.
- * Reads explicit environment variable, window override, or falls back safely.
+ * Reads window override, cached state, persisted native portal, explicit env,
+ * or falls back safely.
  */
 export function getSyncNativePortal(): NativePortalType {
   if (cachedPortal) return cachedPortal;
@@ -34,6 +48,19 @@ export function getSyncNativePortal(): NativePortalType {
     return cachedPortal;
   }
 
+  // Check persisted storage from previous verified native detection
+  try {
+    if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.getItem === "function") {
+      const saved = localStorage.getItem(NATIVE_PORTAL_STORAGE_KEY);
+      if (saved === "staff" || saved === "customer") {
+        cachedPortal = saved;
+        return cachedPortal;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   const envPortal = (import.meta.env.VITE_APP_PORTAL as string | undefined)?.toLowerCase();
   if (envPortal === "staff" || envPortal === "customer") {
     cachedPortal = envPortal;
@@ -45,14 +72,15 @@ export function getSyncNativePortal(): NativePortalType {
     return "staff";
   }
 
-  return "customer";
+  return "none";
 }
 
 /**
  * Asynchronous detection verifying the actual native bundle ID via @capacitor/app.
+ * Persists the result for immediate synchronous access on subsequent boots.
  */
 export async function getNativePortal(): Promise<NativePortalType> {
-  if (cachedPortal && cachedPortal !== "customer") return cachedPortal;
+  if (cachedPortal && cachedPortal !== "none") return cachedPortal;
 
   try {
     if (!Capacitor.isNativePlatform()) {
@@ -65,11 +93,11 @@ export async function getNativePortal(): Promise<NativePortalType> {
     const id = info.id.toLowerCase();
 
     if (id.includes("staff")) {
-      cachedPortal = "staff";
+      setCachedNativePortal("staff");
       return "staff";
     }
     if (id.includes("customer")) {
-      cachedPortal = "customer";
+      setCachedNativePortal("customer");
       return "customer";
     }
   } catch {
@@ -160,7 +188,19 @@ export function isPortalAllowedPath(portal: NativePortalType, pathname: string):
 }
 
 export function portalHomePath(portal: NativePortalType): string {
-  if (portal === "staff") return "/staff/login";
+  if (portal === "staff") {
+    try {
+      if (typeof localStorage !== "undefined") {
+        const hasStaffSession = Boolean(
+          localStorage.getItem("cwp_token_staff") || localStorage.getItem("cwp_user_staff")
+        );
+        if (hasStaffSession) return "/staff/dashboard";
+      }
+    } catch {
+      // fallback to login if storage is inaccessible
+    }
+    return "/staff/login";
+  }
   if (portal === "customer") return "/customer/dashboard";
   return "/";
 }

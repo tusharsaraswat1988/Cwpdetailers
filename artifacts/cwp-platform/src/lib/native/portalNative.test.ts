@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   isPortalAllowedPath,
   portalHomePath,
@@ -8,14 +8,31 @@ import {
 } from "./portalNative";
 
 describe("portalNative isolation logic", () => {
+  let mockStore: Record<string, string> = {};
+
   beforeEach(() => {
+    mockStore = {};
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => mockStore[key] ?? null,
+      setItem: (key: string, val: string) => {
+        mockStore[key] = val;
+      },
+      removeItem: (key: string) => {
+        delete mockStore[key];
+      },
+      clear: () => {
+        mockStore = {};
+      },
+    });
     setCachedNativePortal(null);
     delete window.__CWP_APP_PORTAL__;
   });
 
   afterEach(() => {
+    mockStore = {};
     setCachedNativePortal(null);
     delete window.__CWP_APP_PORTAL__;
+    vi.unstubAllGlobals();
   });
 
   describe("Staff Portal Isolation", () => {
@@ -43,8 +60,14 @@ describe("portalNative isolation logic", () => {
       expect(isRootScreenForPortal("staff", "/staff/daily-clean")).toBe(false);
     });
 
-    it("returns /staff/login as default home", () => {
+    it("returns /staff/login as default home when unauthenticated", () => {
+      localStorage.clear();
       expect(portalHomePath("staff")).toBe("/staff/login");
+    });
+
+    it("returns /staff/dashboard as default home when staff session is cached", () => {
+      localStorage.setItem("cwp_token_staff", "valid-test-token");
+      expect(portalHomePath("staff")).toBe("/staff/dashboard");
     });
   });
 

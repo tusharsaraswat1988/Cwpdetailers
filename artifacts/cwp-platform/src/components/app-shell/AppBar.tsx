@@ -25,7 +25,7 @@ export function AppBar({
     <header
       className={cn(
         "sticky top-0 z-30 flex items-center gap-3 px-4 bg-card/95 backdrop-blur border-b border-border shrink-0 safe-area-top",
-        "h-[var(--app-bar-height)] min-h-[var(--app-bar-height)]",
+        "min-h-[calc(var(--app-bar-height)+env(safe-area-inset-top,0px))] h-auto py-2",
         className,
       )}
       data-testid="app-bar"

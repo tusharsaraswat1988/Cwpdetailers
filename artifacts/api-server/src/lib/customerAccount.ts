@@ -6,6 +6,7 @@ import { hashPassword } from "./passwords";
 import { assertContactIdentityAvailable } from "./contactIdentity";
 import { findUserByPhone } from "./userLookup";
 import { authProviderAfterPasswordSet } from "./userPassword";
+import { normalizeIndianMobile } from "./contactFields";
 
 const PHONE_MATCH = (phone: string) =>
   sql`RIGHT(REGEXP_REPLACE(${customersTable.phone}, '[^0-9]', '', 'g'), 10) = ${phone}`;
@@ -94,6 +95,7 @@ export async function ensureCustomerLoginUser(
 
   const normalizedEmail =
     options.email?.toLowerCase().trim() ?? customer.email?.toLowerCase().trim() ?? null;
+  const normCustomerPhone = normalizeIndianMobile(customer.phone) ?? customer.phone;
 
   if (customer.userId) {
     const [linked] = await db
@@ -103,61 +105,71 @@ export async function ensureCustomerLoginUser(
       .limit(1);
 
     if (linked) {
-      if (linked.role !== "customer") {
-        throw new Error(
-          linked.role === "staff"
-            ? "This mobile number belongs to a staff account. Use the Staff portal to sign in."
-            : "This mobile number is registered to a different account type.",
-        );
-      }
-      if (!linked.isActive) throw new Error("Account suspended");
-      if (options.googleId && linked.googleId && linked.googleId !== options.googleId) {
-        throw new Error("This account is already linked to a different Google account.");
-      }
+      const normLinkedPhone = normalizeIndianMobile(linked.phone);
+      // If linked user's phone does not match customer phone, treat as broken link rather than hijacking
+      if (normLinkedPhone && normCustomerPhone && normLinkedPhone !== normCustomerPhone) {
+        // Fall through to findUserByPhone below to bind to the phone owner
+      } else {
+        if (linked.role !== "customer") {
+          throw new Error(
+            linked.role === "staff"
+              ? "This mobile number belongs to a staff account. Use the Staff portal to sign in."
+              : ["admin", "superadmin", "manager"].includes(linked.role)
+                ? "This mobile number belongs to an administrator. Use the Admin portal to sign in."
+                : "This mobile number is registered to a different account type.",
+          );
+        }
+        if (!linked.isActive) throw new Error("Account suspended");
+        if (options.googleId && linked.googleId && linked.googleId !== options.googleId) {
+          throw new Error("This account is already linked to a different Google account.");
+        }
 
-      const updates: Partial<typeof usersTable.$inferInsert> = {
-        customerId: linked.customerId ?? customer.id,
-        updatedAt: new Date(),
-      };
-      if (options.googleId) updates.googleId = options.googleId;
-      if (options.avatarUrl) updates.avatarUrl = options.avatarUrl;
-      if (normalizedEmail && !linked.email) updates.email = normalizedEmail;
-      if (options.passwordHash) {
-        updates.passwordHash = options.passwordHash;
-        updates.authProvider = authProviderAfterPasswordSet({
-          ...linked,
-          googleId: options.googleId ?? linked.googleId,
-        });
-      } else if (options.googleId) {
-        updates.authProvider = authProviderAfterPasswordSet({
-          ...linked,
-          googleId: options.googleId,
-        });
-      } else if (options.authProvider) {
-        updates.authProvider = options.authProvider;
-      }
+        const updates: Partial<typeof usersTable.$inferInsert> = {
+          customerId: linked.customerId ?? customer.id,
+          updatedAt: new Date(),
+        };
+        if (options.googleId) updates.googleId = options.googleId;
+        if (options.avatarUrl) updates.avatarUrl = options.avatarUrl;
+        if (normalizedEmail && !linked.email) updates.email = normalizedEmail;
+        if (options.passwordHash) {
+          updates.passwordHash = options.passwordHash;
+          updates.authProvider = authProviderAfterPasswordSet({
+            ...linked,
+            googleId: options.googleId ?? linked.googleId,
+          });
+        } else if (options.googleId) {
+          updates.authProvider = authProviderAfterPasswordSet({
+            ...linked,
+            googleId: options.googleId,
+          });
+        } else if (options.authProvider) {
+          updates.authProvider = options.authProvider;
+        }
 
-      if (Object.keys(updates).length > 1) {
-        const [updated] = await db
-          .update(usersTable)
-          .set(updates)
-          .where(eq(usersTable.id, linked.id))
-          .returning();
-        return updated ?? linked;
-      }
+        if (Object.keys(updates).length > 1) {
+          const [updated] = await db
+            .update(usersTable)
+            .set(updates)
+            .where(eq(usersTable.id, linked.id))
+            .returning();
+          return updated ?? linked;
+        }
 
-      return linked;
+        return linked;
+      }
     }
   }
 
-  const phoneUser = await findUserByPhone(customer.phone);
+  const phoneUser = await findUserByPhone(normCustomerPhone);
 
   if (phoneUser) {
     if (phoneUser.role !== "customer" || !phoneUser.isActive) {
       throw new Error(
         phoneUser.role === "staff"
           ? "This mobile number belongs to a staff account. Use the Staff portal to sign in."
-          : "This mobile number is registered to a different account type.",
+          : ["admin", "superadmin", "manager"].includes(phoneUser.role)
+            ? "This mobile number belongs to an administrator. Use the Admin portal to sign in."
+            : "This mobile number is registered to a different account type.",
       );
     }
 
@@ -177,7 +189,7 @@ export async function ensureCustomerLoginUser(
     .insert(usersTable)
     .values({
       name: customer.name,
-      phone: customer.phone,
+      phone: normCustomerPhone,
       email: normalizedEmail ?? undefined,
       passwordHash: options.passwordHash ?? null,
       role: "customer",
@@ -217,8 +229,10 @@ export async function createCustomerLoginAccount(
     throw new Error("Login account already exists for this customer");
   }
 
+  const normPhone = normalizeIndianMobile(customer.phone) ?? customer.phone;
+
   const identityCheck = await assertContactIdentityAvailable(
-    customer.phone,
+    normPhone,
     customer.email,
     { entity: "customer", id: customer.id },
   );
@@ -226,11 +240,7 @@ export async function createCustomerLoginAccount(
     throw new Error(identityCheck.body.error as string);
   }
 
-  const [existingUser] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.phone, customer.phone))
-    .limit(1);
+  const existingUser = await findUserByPhone(normPhone);
   if (existingUser) {
     throw new Error("A login account with this phone number already exists");
   }
@@ -240,7 +250,7 @@ export async function createCustomerLoginAccount(
     .insert(usersTable)
     .values({
       name: customer.name,
-      phone: customer.phone,
+      phone: normPhone,
       email: customer.email ?? undefined,
       passwordHash,
       role: "customer",
@@ -275,7 +285,9 @@ export async function syncCustomerLoginProfile(
 
   const userUpdate: Record<string, unknown> = { updatedAt: new Date() };
   if (fields.name !== undefined) userUpdate.name = fields.name;
-  if (fields.phone !== undefined) userUpdate.phone = fields.phone;
+  if (fields.phone !== undefined) {
+    userUpdate.phone = normalizeIndianMobile(fields.phone) ?? fields.phone;
+  }
   if (fields.email !== undefined) userUpdate.email = fields.email ?? null;
 
   await db.update(usersTable).set(userUpdate).where(eq(usersTable.id, customer.userId));

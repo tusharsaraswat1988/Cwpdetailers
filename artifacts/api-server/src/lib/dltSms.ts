@@ -18,7 +18,7 @@ function sanitizeTemplateVar(value: string): string {
 function getDltConfig() {
   return {
     apiKey: process.env.FAST2SMS_API_KEY ?? "",
-    senderId: process.env.FAST2SMS_SENDER_ID ?? "CWPDTL",
+    senderId: process.env.FAST2SMS_SENDER_ID?.trim() || "CWPDTL",
     messageId:
       process.env.FAST2SMS_DLT_MESSAGE_ID
       ?? process.env.FAST2SMS_TEMPLATE_ID
@@ -102,4 +102,21 @@ export async function sendOtpSms(opts: SendOtpSmsOptions): Promise<SmsSendResult
 export function isOtpSmsConfigured(): boolean {
   const { apiKey, messageId, otpId } = getDltConfig();
   return Boolean(apiKey && (messageId || otpId));
+}
+
+export function getSmsDiagnostics(): {
+  configured: boolean;
+  hasApiKey: boolean;
+  senderId: string;
+  hasDltMessageId: boolean;
+  hasOtpId: boolean;
+} {
+  const { apiKey, senderId, messageId, otpId } = getDltConfig();
+  return {
+    configured: isOtpSmsConfigured(),
+    hasApiKey: Boolean(apiKey),
+    senderId,
+    hasDltMessageId: Boolean(messageId),
+    hasOtpId: Boolean(otpId),
+  };
 }

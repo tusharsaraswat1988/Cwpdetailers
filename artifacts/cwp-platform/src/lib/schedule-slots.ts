@@ -23,8 +23,8 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00`);
 }
 
-export function todayIso(): string {
-  return new Date().toISOString().split("T")[0];
+export function todayIso(now = new Date()): string {
+  return now.toISOString().split("T")[0];
 }
 
 export function formatDateLabel(dateStr: string): string {
@@ -61,7 +61,7 @@ export function firstAvailableDate(dates: ScheduleDateOption[]): string | null {
 
 /** Local fallback when slots API is unavailable. */
 export function slotsForDate(dateStr: string, now = new Date()): string[] {
-  const isToday = dateStr === todayIso();
+  const isToday = dateStr === todayIso(now);
   if (!isToday) return [...SCHEDULE_TIME_SLOTS];
   const currentHour = now.getHours();
   return SCHEDULE_TIME_SLOTS.filter((slot) => {

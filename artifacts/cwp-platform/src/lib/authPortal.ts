@@ -1,4 +1,5 @@
 import type { UserRole } from "./auth";
+import { getSyncNativePortal } from "./native/portalNative";
 
 export type AuthPortal = "admin" | "staff" | "customer" | "franchisee";
 
@@ -13,6 +14,11 @@ const CUSTOMER_ROLES = new Set<UserRole>(["customer"]);
 const FRANCHISEE_ROLES = new Set<UserRole>(["franchisee"]);
 
 export function resolveAuthPortal(pathname?: string): AuthPortal {
+  // If running inside a dedicated native APK, the portal is strictly bound to that APK's identity.
+  const nativePortal = getSyncNativePortal();
+  if (nativePortal === "staff") return "staff";
+  if (nativePortal === "customer") return "customer";
+
   const path = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
   if (path.startsWith("/admin")) return "admin";
   if (path.startsWith("/staff")) return "staff";

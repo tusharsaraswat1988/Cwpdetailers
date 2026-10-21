@@ -36,6 +36,9 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
   const [fromWalkIn, setFromWalkIn] = useState(false);
   const [walkInSuccess, setWalkInSuccess] = useState<string | null>(null);
 
+  const pendingJobs = jobs.today.filter(j => j.status !== "completed" && j.status !== "cancelled");
+  const completedJobs = jobs.today.filter(j => j.status === "completed");
+
   useEffect(() => {
     const params = new URLSearchParams(search);
     if (params.get("walkInSuccess") === "1") {
@@ -212,24 +215,60 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
           description="Assigned jobs will show up here"
         />
       ) : (
-        <div className="space-y-3">
-          {jobs.today.map(job => (
-            <button
-              key={staffJobKey(job)}
-              type="button"
-              className="w-full text-left"
-              onClick={() => {
-                onSelectJob(staffJobKey(job));
-                setLoadingDetail(true);
-                void jobs.loadJobWithPhotos(job).then(enriched => {
-                  setSelectedJob(enriched);
-                  setLoadingDetail(false);
-                });
-              }}
-            >
-              <StaffJobListItem job={job} />
-            </button>
-          ))}
+        <div className="space-y-4">
+          {pendingJobs.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Pending Jobs ({pendingJobs.length})
+              </p>
+              <div className="space-y-2.5">
+                {pendingJobs.map(job => (
+                  <button
+                    key={staffJobKey(job)}
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => {
+                      onSelectJob(staffJobKey(job));
+                      setLoadingDetail(true);
+                      void jobs.loadJobWithPhotos(job).then(enriched => {
+                        setSelectedJob(enriched);
+                        setLoadingDetail(false);
+                      });
+                    }}
+                  >
+                    <StaffJobListItem job={job} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {completedJobs.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Completed Today ({completedJobs.length})
+              </p>
+              <div className="space-y-2.5">
+                {completedJobs.map(job => (
+                  <button
+                    key={staffJobKey(job)}
+                    type="button"
+                    className="w-full text-left opacity-85 hover:opacity-100 transition-opacity"
+                    onClick={() => {
+                      onSelectJob(staffJobKey(job));
+                      setLoadingDetail(true);
+                      void jobs.loadJobWithPhotos(job).then(enriched => {
+                        setSelectedJob(enriched);
+                        setLoadingDetail(false);
+                      });
+                    }}
+                  >
+                    <StaffJobListItem job={job} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

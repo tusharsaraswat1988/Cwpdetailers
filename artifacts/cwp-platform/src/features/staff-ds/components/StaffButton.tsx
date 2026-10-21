@@ -17,7 +17,7 @@ export const StaffButton = forwardRef<HTMLButtonElement, StaffButtonProps>(
     const sizeClass =
       size === "sm" || size === "icon"
         ? undefined
-        : "h-[3.25rem] min-h-[3.25rem] rounded-[var(--staff-radius-sm,0.75rem)] text-base font-semibold";
+        : "min-h-[3.25rem] h-auto py-2.5 px-4 rounded-[var(--staff-radius-sm,0.75rem)] text-base font-semibold whitespace-normal break-words text-center leading-snug";
 
     if (href) {
       return (

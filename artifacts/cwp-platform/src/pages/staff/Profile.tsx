@@ -329,28 +329,44 @@ export default function StaffProfile() {
 
         {showShiftAttendance && (
           <StaffAttendanceCard
-            status={todayMarked ? todayRecord?.status ?? "present" : "pending"}
+            status={
+              markMutation.isPending
+                ? "checking_in"
+                : markMutation.isError
+                  ? "failed"
+                  : todayMarked
+                    ? (todayRecord?.status ?? "present")
+                    : "not_checked_in"
+            }
             dateLabel="Today's attendance"
             selfieUrl={todayMarked ? todaySelfieUrl : null}
             checkInLabel={
               todayMarked
                 ? `Marked${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
-                : "Selfie + GPS check-in required before field work"
+                : markMutation.isError
+                  ? "Check-in failed. Please try again with selfie + GPS."
+                  : markMutation.isPending
+                    ? "Capturing selfie and verifying location…"
+                    : "Selfie + GPS check-in required before field work"
             }
             action={
               todayMarked ? undefined : (
                 <StaffButton
-                  className="shrink-0 px-4"
+                  className="w-full sm:w-auto px-4"
                   disabled={markMutation.isPending}
                   data-testid="btn-mark-present"
                   onClick={() => void handleAttendanceCheckIn()}
                 >
                   {markMutation.isPending ? (
-                    <Loader2 size={16} className="mr-2 animate-spin" />
+                    <Loader2 size={16} className="mr-2 animate-spin shrink-0" />
                   ) : (
-                    <Camera size={16} className="mr-2" />
+                    <Camera size={16} className="mr-2 shrink-0" />
                   )}
-                  {markMutation.isPending ? "Selfie + GPS…" : "Check in"}
+                  {markMutation.isPending
+                    ? "Selfie + GPS…"
+                    : markMutation.isError
+                      ? "Retry Check-in"
+                      : "Check in"}
                 </StaffButton>
               )
             }
@@ -375,7 +391,10 @@ export default function StaffProfile() {
               value={
                 loadingPerf
                   ? "…"
-                  : `${(perf?.averageRating ?? profile?.performance?.averageRating)?.toFixed(1) ?? "0"}/5`
+                  : (perf?.averageRating ?? profile?.performance?.averageRating) != null &&
+                    (perf?.averageRating ?? profile?.performance?.averageRating)! > 0
+                    ? `${(perf?.averageRating ?? profile?.performance?.averageRating)!.toFixed(1)}/5`
+                    : "New"
               }
               icon={<Star size={13} className="text-primary" aria-hidden />}
               tone="primary"

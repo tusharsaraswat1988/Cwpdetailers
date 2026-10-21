@@ -1,4 +1,5 @@
 import { useAuth } from "@/lib/auth";
+import { useGetStaffAttendance } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, Link } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
@@ -12,6 +13,7 @@ import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { ActiveJobHero } from "@/components/staff/ActiveJobHero";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
 import { Calendar, CheckCircle, Clock, Sparkles, Wrench, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   StaffPage,
   StaffDashboard,
@@ -104,6 +106,21 @@ export default function StaffDashboardPage() {
     enabled: Boolean(user?.staffId),
   });
 
+  const todayIsoDate = new Date().toISOString().split("T")[0];
+  const { data: attendanceData } = useGetStaffAttendance(
+    user?.staffId ?? 0,
+    { month: todayIsoDate.slice(0, 7) },
+    { query: { enabled: Boolean(user?.staffId) } }
+  );
+  const todayAttendance = (attendanceData ?? []).find((a: { date?: string }) => a.date === todayIsoDate);
+  const isCheckedIn = Boolean(
+    todayAttendance &&
+      (todayAttendance.status === "present" ||
+        todayAttendance.status === "half_day" ||
+        todayAttendance.status === "late" ||
+        todayAttendance.status === "checked_in")
+  );
+
   const canDailyClean = myRoles?.slugs.includes(OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER) ?? false;
 
   if (myContext?.staffCategory === "supervisor") {
@@ -162,7 +179,46 @@ export default function StaffDashboardPage() {
         <StaffVerificationBanner status={myProfile.verificationStatus} notes={myProfile.verificationNotes} />
       )}
 
-      <StaffDashboard greeting={greeting} dateLabel={dateLabel} />
+      <StaffDashboard greeting={greeting} dateLabel={dateLabel}>
+        <div className="mt-3 rounded-xl border border-border bg-card p-3 shadow-none staff-elevated">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                  isCheckedIn
+                    ? "bg-[hsl(var(--tone-success)/0.15)] text-[hsl(var(--tone-success-fg))]"
+                    : "bg-amber-500/15 text-amber-800"
+                )}
+              >
+                {isCheckedIn ? <CheckCircle size={18} /> : <Clock size={18} />}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Today's Shift Attendance
+                </p>
+                <p className="text-sm font-semibold truncate text-foreground">
+                  {isCheckedIn
+                    ? `Checked In${todayAttendance?.checkInTime ? ` at ${todayAttendance.checkInTime}` : ""}`
+                    : "Not Checked In"}
+                </p>
+              </div>
+            </div>
+            {!isCheckedIn ? (
+              <Link
+                href="/staff/profile"
+                className="staff-tap shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                Check in
+              </Link>
+            ) : (
+              <span className="shrink-0 text-xs font-medium text-[hsl(var(--tone-success-fg))]">
+                Verified
+              </span>
+            )}
+          </div>
+        </div>
+      </StaffDashboard>
 
       <div className="flex gap-2" data-testid="staff-stats-row">
         <StaffMetric

@@ -55,7 +55,7 @@ export function AppShell({
       <main
         className={cn(
           "flex-1 min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden",
-          hasBottomNav ? "pb-[var(--bottom-nav-height)]" : "pb-safe",
+          hasBottomNav ? "pb-[calc(var(--bottom-nav-height)+1.5rem)]" : "pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]",
           appBar ? "px-4 py-4" : "px-4 py-4 sm:py-6",
         )}
       >

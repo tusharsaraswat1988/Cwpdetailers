@@ -30,7 +30,7 @@ async function findStaffByEmail(email: string) {
   return row ?? null;
 }
 
-/** Reject Google customer signup when this email already belongs to staff. */
+/** Reject Google customer signup when this email already belongs to staff or admin. */
 export async function assertGoogleEmailOkForCustomerSignup(
   googleEmail: string,
 ): Promise<{ ok: true } | { ok: false; status: number; body: Record<string, unknown> }> {
@@ -45,6 +45,7 @@ export async function assertGoogleEmailOkForCustomerSignup(
       body: {
         error:
           "This Google account belongs to a staff member. Use the Staff portal with your phone number and password.",
+        code: "PORTAL_MISMATCH",
         conflict: {
           field: "email",
           entity: "staff",
@@ -57,7 +58,8 @@ export async function assertGoogleEmailOkForCustomerSignup(
     };
   }
 
-  const [emailUser] = await db
+  // Check all users matching email deterministically without arbitrary limit(1)
+  const emailUsers = await db
     .select({ id: usersTable.id, role: usersTable.role, name: usersTable.name })
     .from(usersTable)
     .where(
@@ -66,24 +68,27 @@ export async function assertGoogleEmailOkForCustomerSignup(
         sql`TRIM(${usersTable.email}) <> ''`,
         sql`LOWER(TRIM(${usersTable.email})) = ${normalized}`,
       ),
-    )
-    .limit(1);
+    );
 
-  if (emailUser && emailUser.role !== "customer") {
+  const nonCustomer = emailUsers.find(u => u.role !== "customer");
+  if (nonCustomer) {
     return {
       ok: false,
       status: 403,
       body: {
         error:
-          emailUser.role === "staff"
+          nonCustomer.role === "staff"
             ? "This Google account belongs to a staff member. Use the Staff portal with your phone number and password."
-            : "This Google account belongs to a different account type. Use the correct portal.",
+            : ["admin", "superadmin", "manager"].includes(nonCustomer.role)
+              ? "This Google account belongs to an administrator. Use the Admin portal to sign in."
+              : "This Google account belongs to a different account type. Use the correct portal.",
+        code: "PORTAL_MISMATCH",
         conflict: {
           field: "email",
           entity: "user",
-          entityId: emailUser.id,
-          entityName: emailUser.name,
-          role: emailUser.role,
+          entityId: nonCustomer.id,
+          entityName: nonCustomer.name,
+          role: nonCustomer.role,
         },
       },
     };
@@ -139,6 +144,9 @@ function staffPortalMessage(role: string): string {
   if (role === "staff") {
     return "This mobile number belongs to a staff account. Use the Staff portal to sign in (phone + password).";
   }
+  if (["admin", "superadmin", "manager"].includes(role)) {
+    return "This mobile number belongs to an administrator. Use the Admin portal to sign in.";
+  }
   return "This mobile number is registered to a different account type. Use the correct portal.";
 }
 
@@ -157,6 +165,7 @@ export async function assertGooglePhoneOkForCustomerSignup(
       status: 409,
       body: {
         error: staffPortalMessage(phoneUser.role),
+        code: "PORTAL_MISMATCH",
         conflict: { field: "phone", entity: "user", entityId: phoneUser.id, role: phoneUser.role },
       },
     };
@@ -174,6 +183,7 @@ export async function assertGooglePhoneOkForCustomerSignup(
       status: 409,
       body: {
         error: staffPortalMessage("staff"),
+        code: "PORTAL_MISMATCH",
         conflict: {
           field: "phone",
           entity: "staff",
@@ -188,7 +198,7 @@ export async function assertGooglePhoneOkForCustomerSignup(
 
   const normalizedEmail = googleEmail.toLowerCase().trim();
   if (normalizedEmail) {
-    const [emailUser] = await db
+    const emailUsers = await db
       .select({ id: usersTable.id, role: usersTable.role, name: usersTable.name })
       .from(usersTable)
       .where(
@@ -197,24 +207,27 @@ export async function assertGooglePhoneOkForCustomerSignup(
           sql`TRIM(${usersTable.email}) <> ''`,
           sql`LOWER(TRIM(${usersTable.email})) = ${normalizedEmail}`,
         ),
-      )
-      .limit(1);
+      );
 
-    if (emailUser && emailUser.role !== "customer") {
+    const nonCustomer = emailUsers.find(u => u.role !== "customer");
+    if (nonCustomer) {
       return {
         ok: false,
         status: 409,
         body: {
           error:
-            emailUser.role === "staff"
+            nonCustomer.role === "staff"
               ? "This Google account is linked to a staff login. Use the Staff portal (phone + password)."
-              : "This Google account belongs to a different account type. Use the correct portal.",
+              : ["admin", "superadmin", "manager"].includes(nonCustomer.role)
+                ? "This Google account belongs to an administrator. Use the Admin portal to sign in."
+                : "This Google account belongs to a different account type. Use the correct portal.",
+          code: "PORTAL_MISMATCH",
           conflict: {
             field: "email",
             entity: "user",
-            entityId: emailUser.id,
-            entityName: emailUser.name,
-            role: emailUser.role,
+            entityId: nonCustomer.id,
+            entityName: nonCustomer.name,
+            role: nonCustomer.role,
           },
         },
       };
@@ -223,13 +236,13 @@ export async function assertGooglePhoneOkForCustomerSignup(
 
   const parsed = parseContactIdentity(phone, googleEmail);
   if (!parsed.ok) {
-    return { ok: false, status: 400, body: { error: parsed.error } };
+    return { ok: false, status: 400, body: { error: parsed.error, code: "ACCOUNT_NOT_ELIGIBLE" } };
   }
 
   const conflicts = await findContactConflicts(parsed.value);
   const staffConflict = conflicts.find(c => c.entity === "staff");
   if (staffConflict) {
-    return { ok: false, status: 409, body: conflictToHttpBody(staffConflict) };
+    return { ok: false, status: 409, body: { ...conflictToHttpBody(staffConflict), code: "ACCOUNT_LINK_CONFLICT" } };
   }
 
   return { ok: true };

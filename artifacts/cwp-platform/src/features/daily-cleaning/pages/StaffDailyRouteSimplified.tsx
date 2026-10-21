@@ -264,15 +264,16 @@ export function StaffDailyRouteSimplified() {
 
       {current && (
         <div className="rounded-2xl border-2 border-primary/25 bg-card p-5 space-y-4 shadow-sm">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="font-display font-bold text-2xl tracking-wide">{current.vehicleNumber}</p>
-              <p className="text-sm font-medium mt-1">{current.customerName}</p>
-              <p className="text-xs text-muted-foreground">{current.vehicleMake} {current.vehicleModel}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-display font-bold text-2xl tracking-wide truncate">{current.vehicleNumber}</p>
+              <p className="text-sm font-medium mt-1 truncate">{current.customerName}</p>
+              <p className="text-xs text-muted-foreground truncate">{current.vehicleMake} {current.vehicleModel}</p>
             </div>
             <Badge
               variant={current.todayStatus === "completed" ? "default" : "secondary"}
               className={cn(
+                "shrink-0",
                 current.todayStatus === "completed" && "bg-green-600",
                 current.todayStatus === "pending" && "bg-amber-500/15 text-amber-800 border-amber-500/30",
                 current.todayStatus === "car_not_available" && "bg-amber-500/15 text-amber-900 border-amber-500/30",
@@ -303,32 +304,32 @@ export function StaffDailyRouteSimplified() {
           {showPendingActions ? (
             <div className="space-y-2">
               <Button
-                className="w-full h-14 text-base font-semibold"
+                className="w-full min-h-[3.5rem] h-auto py-3 px-4 text-base font-semibold whitespace-normal break-words leading-snug text-center"
                 onClick={() => void captureVisit()}
                 disabled={actionPending}
               >
                 {completeVisit.isPending ? (
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  <Loader2 className="h-5 w-5 mr-2 shrink-0 animate-spin" />
                 ) : (
-                  <Camera className="h-5 w-5 mr-2" />
+                  <Camera className="h-5 w-5 mr-2 shrink-0" />
                 )}
-                Car available — photo lein & complete
+                <span>Car available — photo lein & complete</span>
               </Button>
               {visitType === "cleaning" && (
                 <div className="space-y-1.5">
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full h-12"
+                    className="w-full min-h-[3rem] h-auto py-2.5 px-4 text-sm font-medium whitespace-normal break-words leading-snug text-center"
                     onClick={() => setConfirmUnavailable(true)}
                     disabled={actionPending}
                   >
                     {recordCarNotAvailable.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin" />
                     ) : (
-                      <Camera className="h-4 w-4 mr-2" />
+                      <Camera className="h-4 w-4 mr-2 shrink-0" />
                     )}
-                    Car nahi mili — jagah ki photo
+                    <span>Car nahi mili — jagah ki photo</span>
                   </Button>
                   <p className="text-[11px] text-center text-muted-foreground">
                     Wahan ki photo + GPS zaroori hai — proof ke liye ki aap gaye the. Cleaning credit nahi katega.
@@ -343,17 +344,17 @@ export function StaffDailyRouteSimplified() {
                 Car nahi mili — visit record ho gaya, cleaning nahi
               </div>
               <Button
-                className="w-full h-14 text-base font-semibold"
+                className="w-full min-h-[3.5rem] h-auto py-3 px-4 text-base font-semibold whitespace-normal break-words leading-snug text-center"
                 onClick={() => void captureVisit()}
                 disabled={actionPending}
                 data-testid="dcms-same-day-complete"
               >
                 {completeVisit.isPending ? (
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  <Loader2 className="h-5 w-5 mr-2 shrink-0 animate-spin" />
                 ) : (
-                  <Camera className="h-5 w-5 mr-2" />
+                  <Camera className="h-5 w-5 mr-2 shrink-0" />
                 )}
-                Car mil gayi — complete cleaning
+                <span>Car mil gayi — complete cleaning</span>
               </Button>
             </div>
           ) : (

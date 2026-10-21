@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import {
   db,
   usersTable,
@@ -56,14 +57,24 @@ import {
   assertGooglePhoneOkForCustomerSignup,
   assertGoogleEmailOkForCustomerSignup,
 } from "../lib/googleCustomerLink";
-import { ensureCustomerLoginUser, findCustomerByPhone } from "../lib/customerAccount";
+import { ensureCustomerLoginUser } from "../lib/customerAccount";
 import { findUserByLoginIdentifier } from "../lib/userLookup";
+import {
+  AuthError,
+  resolveOrRepairVerifiedCustomer,
+  type StructuredAuthErrorCode,
+} from "../lib/authIdentity";
 import type { AuthOtpPurpose } from "@workspace/db";
 
 const router = Router();
 
 const SESSION_TTL_DAYS = 30;
 const GOOGLE_LINK_TTL_MINUTES = 15;
+
+function getRequestId(req: { id?: unknown; headers: Record<string, unknown> }): string {
+  const raw = req.id ?? req.headers["x-request-id"] ?? req.headers["x-correlation-id"];
+  return typeof raw === "string" && raw.trim() ? raw.trim() : crypto.randomUUID();
+}
 
 function parsePasswordPortal(raw: unknown): AuthPortal {
   if (raw === "staff") return "staff";
@@ -128,12 +139,18 @@ router.get("/auth/google/config", (_req, res) => {
 });
 
 router.post("/auth/google", async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const { idToken, portal: rawPortal = "customer" } = req.body as { idToken?: string; portal?: string };
-    if (!idToken) return res.status(400).json({ error: "Google token required" });
+    if (!idToken) {
+      return res.status(400).json({ error: "Google token required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
     if (rawPortal === "staff") {
       return res.status(400).json({
         error: "Google sign-in is not available for the staff portal. Use your phone number and admin-provided password.",
+        code: "PORTAL_MISMATCH",
+        requestId,
       });
     }
     const portal = "customer" as const;
@@ -146,24 +163,55 @@ router.post("/auth/google", async (req, res) => {
     )[0];
 
     if (!user && normalizedEmail) {
-      user = (
-        await db
-          .select()
-          .from(usersTable)
-          .where(
-            and(
-              sql`${usersTable.email} IS NOT NULL`,
-              sql`TRIM(${usersTable.email}) <> ''`,
-              sql`LOWER(TRIM(${usersTable.email})) = ${normalizedEmail}`,
-            ),
-          )
-          .limit(1)
-      )[0];
+      const emailUsers = await db
+        .select()
+        .from(usersTable)
+        .where(
+          and(
+            sql`${usersTable.email} IS NOT NULL`,
+            sql`TRIM(${usersTable.email}) <> ''`,
+            sql`LOWER(TRIM(${usersTable.email})) = ${normalizedEmail}`,
+          ),
+        );
+
+      const nonCustomer = emailUsers.find(u => !isRoleAllowedForPortal(u.role, portal));
+      if (nonCustomer) {
+        if (nonCustomer.role === "staff") {
+          return res.status(403).json({
+            error:
+              "This Google account belongs to a staff member. Use the Staff portal with your phone number and password.",
+            code: "PORTAL_MISMATCH",
+            requestId,
+          });
+        }
+        if (["admin", "superadmin", "manager"].includes(nonCustomer.role)) {
+          return res.status(403).json({
+            error:
+              "This Google account belongs to an administrator. Use the Admin portal to sign in.",
+            code: "PORTAL_MISMATCH",
+            requestId,
+          });
+        }
+        return res.status(403).json({
+          error: portalMismatchMessage(portal),
+          code: "PORTAL_MISMATCH",
+          requestId,
+        });
+      }
+
+      user = emailUsers.find(u => isRoleAllowedForPortal(u.role, portal));
     }
 
     if (!user && normalizedEmail && portal === "customer") {
       const customer = await findCustomerByEmail(normalizedEmail);
-      if (customer?.status === "active") {
+      if (customer) {
+        if (customer.status !== "active") {
+          return res.status(401).json({
+            error: "Account suspended",
+            code: "ACCOUNT_NOT_ELIGIBLE",
+            requestId,
+          });
+        }
         user = await ensureCustomerLoginUser(customer, {
           googleId: googleProfile.sub,
           email: normalizedEmail,
@@ -180,11 +228,31 @@ router.post("/auth/google", async (req, res) => {
           return res.status(403).json({
             error:
               "This Google account belongs to a staff member. Use the Staff portal with your phone number and password.",
+            code: "PORTAL_MISMATCH",
+            requestId,
           });
         }
-        return res.status(403).json({ error: portalMismatchMessage(portal) });
+        if (["admin", "superadmin", "manager"].includes(user.role)) {
+          return res.status(403).json({
+            error:
+              "This Google account belongs to an administrator. Use the Admin portal to sign in.",
+            code: "PORTAL_MISMATCH",
+            requestId,
+          });
+        }
+        return res.status(403).json({
+          error: portalMismatchMessage(portal),
+          code: "PORTAL_MISMATCH",
+          requestId,
+        });
       }
-      if (!user.isActive) return res.status(401).json({ error: "Account suspended" });
+      if (!user.isActive) {
+        return res.status(401).json({
+          error: "Account suspended",
+          code: "ACCOUNT_NOT_ELIGIBLE",
+          requestId,
+        });
+      }
 
       const updates: Partial<typeof usersTable.$inferInsert> = {
         updatedAt: new Date(),
@@ -203,13 +271,13 @@ router.post("/auth/google", async (req, res) => {
 
       const token = await issueSession(user.id, req);
       setSessionCookie(res, token, portal);
-      return res.json({ token, user: toSafeUser(user) });
+      return res.json({ token, user: toSafeUser(user), requestId });
     }
 
-    // No customer user yet — still block if this Google email is a staff identity.
+    // No customer user yet — still block if this Google email is a staff or admin identity.
     const emailGuard = await assertGoogleEmailOkForCustomerSignup(normalizedEmail);
     if (!emailGuard.ok) {
-      return res.status(emailGuard.status).json(emailGuard.body);
+      return res.status(emailGuard.status).json({ ...emailGuard.body, requestId });
     }
 
     const linkToken = generateOpaqueToken();
@@ -231,28 +299,38 @@ router.post("/auth/google", async (req, res) => {
       linkToken,
       email: normalizedEmail,
       name: googleProfile.name ?? null,
+      code: "GOOGLE_PHONE_LINK_REQUIRED",
+      requestId,
     });
   } catch (err) {
-    req.log.error({ err }, "Google auth error");
+    req.log.error({ err, requestId }, "Google auth error");
     const message = err instanceof Error ? err.message : "Google sign-in failed";
-    return res.status(400).json({ error: message });
+    return res.status(400).json({ error: message, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
   }
 });
 
 router.post("/auth/google/complete", async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const { linkToken, phone, password: rawPassword } = req.body as {
       linkToken?: string;
       phone?: string;
       password?: string;
     };
-    if (!linkToken) return res.status(400).json({ error: "Link token required" });
+    if (!linkToken) {
+      return res.status(400).json({ error: "Link token required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const phoneResult = parseRequiredMobile(phone);
-    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+    if (!phoneResult.ok) {
+      return res.status(400).json({ error: phoneResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const pwCheck = validateNewPassword(rawPassword);
-    if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
+    if (!pwCheck.ok) {
+      return res.status(400).json({ error: pwCheck.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
     const chosenPassword = pwCheck.value;
 
     const tokenHash = hashOpaqueToken(linkToken);
@@ -271,7 +349,13 @@ router.post("/auth/google/complete", async (req, res) => {
         .limit(1)
     )[0];
 
-    if (!pending) return res.status(400).json({ error: "Google sign-in session expired. Please try again." });
+    if (!pending) {
+      return res.status(400).json({
+        error: "Google sign-in session expired. Please try again.",
+        code: "OTP_INVALID_OR_EXPIRED",
+        requestId,
+      });
+    }
 
     const normalizedEmail = pending.email.toLowerCase().trim();
     await cleanupIncompleteGoogleCustomers(pending.googleId, phoneResult.value, normalizedEmail);
@@ -281,7 +365,7 @@ router.post("/auth/google/complete", async (req, res) => {
       normalizedEmail,
     );
     if (!phoneGuard.ok) {
-      return res.status(phoneGuard.status).json(phoneGuard.body);
+      return res.status(phoneGuard.status).json({ ...phoneGuard.body, requestId });
     }
 
     const existingCustomer = await findCustomerForGooglePhoneLink(
@@ -294,11 +378,13 @@ router.post("/auth/google/complete", async (req, res) => {
       });
       const token = await issueSession(linkedUser.id, req);
       setSessionCookie(res, token, "customer");
-      return res.json({ token, user: toSafeUser(linkedUser) });
+      return res.json({ token, user: toSafeUser(linkedUser), requestId });
     }
 
     const identityCheck = await assertContactIdentityAvailable(phoneResult.value, normalizedEmail);
-    if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+    if (!identityCheck.ok) {
+      return res.status(identityCheck.status).json({ ...identityCheck.body, requestId });
+    }
 
     const passwordHash = await hashPassword(chosenPassword);
     const authProvider = "hybrid";
@@ -349,15 +435,17 @@ router.post("/auth/google/complete", async (req, res) => {
 
     const token = await issueSession(result.id, req);
     setSessionCookie(res, token, "customer");
-    return res.status(201).json({ token, user: toSafeUser(result) });
+    return res.status(201).json({ token, user: toSafeUser(result), requestId });
   } catch (err) {
-    req.log.error({ err }, "Google complete error");
+    req.log.error({ err, requestId }, "Google complete error");
     const message = err instanceof Error ? err.message : "Could not complete sign-up";
-    return res.status(400).json({ error: message });
+    return res.status(400).json({ error: message, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
   }
 });
 
 router.post("/auth/forgot-password", async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const { phone, email, portal: rawPortal = "customer" } = req.body as {
       phone?: string;
@@ -368,23 +456,32 @@ router.post("/auth/forgot-password", async (req, res) => {
     const portal = parsePasswordPortal(rawPortal);
 
     const idResult = normalizeLoginIdentifier(phone, email);
-    if (!idResult.ok) return res.status(400).json({ error: idResult.error });
+    if (!idResult.ok) {
+      return res.status(400).json({ error: idResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const user = await findUserByIdentifier(idResult.value.phone, idResult.value.email);
     if (!user || !isRoleAllowedForPortal(user.role, portal)) {
       return res.json({
         ok: true,
         message: "If an account exists, a reset code has been sent.",
+        requestId,
       });
     }
 
     if (!user.isActive) {
-      return res.status(401).json({ error: "Account suspended. Contact support." });
+      return res.status(401).json({
+        error: "Account suspended. Contact support.",
+        code: "ACCOUNT_NOT_ELIGIBLE",
+        requestId,
+      });
     }
 
     if (user.authProvider === "google" && user.role !== "staff") {
       return res.status(400).json({
         error: "This account uses Google Sign-In only. Sign in with Google or set a password from your account.",
+        code: "ACCOUNT_NOT_ELIGIBLE",
+        requestId,
       });
     }
 
@@ -397,15 +494,18 @@ router.post("/auth/forgot-password", async (req, res) => {
       sentEmail: delivery.sentEmail,
       maskedPhone: delivery.maskedPhone,
       maskedEmail: delivery.maskedEmail,
+      requestId,
     });
   } catch (err) {
-    req.log.error({ err }, "Forgot password error");
+    req.log.error({ err, requestId }, "Forgot password error");
     const message = err instanceof Error ? err.message : "Could not send reset code";
-    return res.status(400).json({ error: message });
+    return res.status(400).json({ error: message, code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
 
 router.post("/auth/reset-password", async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const { phone, email, code, newPassword, portal: rawPortal = "customer" } = req.body as {
       phone?: string;
@@ -416,23 +516,27 @@ router.post("/auth/reset-password", async (req, res) => {
     };
 
     if (!code || !newPassword) {
-      return res.status(400).json({ error: "Code and new password are required" });
+      return res.status(400).json({ error: "Code and new password are required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
     if (newPassword.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
+      return res.status(400).json({ error: "Password must be at least 6 characters", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
     const portal = parsePasswordPortal(rawPortal);
 
     const idResult = normalizeLoginIdentifier(phone, email);
-    if (!idResult.ok) return res.status(400).json({ error: idResult.error });
+    if (!idResult.ok) {
+      return res.status(400).json({ error: idResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const user = await findUserByIdentifier(idResult.value.phone, idResult.value.email);
     if (!user || !isRoleAllowedForPortal(user.role, portal)) {
-      return res.status(400).json({ error: "Invalid or expired reset code" });
+      return res.status(400).json({ error: "Invalid or expired reset code", code: "OTP_INVALID_OR_EXPIRED", requestId });
     }
 
     const valid = await verifyPasswordResetOtp(user.id, code, portal);
-    if (!valid) return res.status(400).json({ error: "Invalid or expired reset code" });
+    if (!valid) {
+      return res.status(400).json({ error: "Invalid or expired reset code", code: "OTP_INVALID_OR_EXPIRED", requestId });
+    }
 
     const passwordHash = await hashPassword(newPassword);
     const authProvider = authProviderAfterPasswordSet(user);
@@ -443,14 +547,16 @@ router.post("/auth/reset-password", async (req, res) => {
 
     await revokeAllUserSessions(user.id);
 
-    return res.json({ ok: true, message: "Password updated successfully. Please sign in." });
+    return res.json({ ok: true, message: "Password updated successfully. Please sign in.", requestId });
   } catch (err) {
-    req.log.error({ err }, "Reset password error");
-    return res.status(500).json({ error: "Internal server error" });
+    req.log.error({ err, requestId }, "Reset password error");
+    return res.status(500).json({ error: "Internal server error", code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
 
 router.post("/auth/set-password", optionalAuth, requireAuth, async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const { newPassword, currentPassword } = req.body as {
       newPassword?: string;
@@ -458,21 +564,27 @@ router.post("/auth/set-password", optionalAuth, requireAuth, async (req, res) =>
     };
 
     const pwCheck = validateNewPassword(newPassword);
-    if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
+    if (!pwCheck.ok) {
+      return res.status(400).json({ error: pwCheck.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const rows = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id)).limit(1);
     const user = rows[0];
-    if (!user || !user.isActive) return res.status(401).json({ error: "Authentication required" });
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: "Authentication required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     if (userHasPassword(user)) {
       if (!currentPassword) {
-        return res.status(400).json({ error: "Current password is required" });
+        return res.status(400).json({ error: "Current password is required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
       }
       if (!user.passwordHash) {
-        return res.status(400).json({ error: "Could not verify current password" });
+        return res.status(400).json({ error: "Could not verify current password", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
       }
       const { valid } = await verifyPasswordWithUpgrade(currentPassword, user.passwordHash);
-      if (!valid) return res.status(400).json({ error: "Current password is incorrect" });
+      if (!valid) {
+        return res.status(400).json({ error: "Current password is incorrect", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+      }
     }
 
     const passwordHash = await hashPassword(pwCheck.value);
@@ -484,42 +596,62 @@ router.post("/auth/set-password", optionalAuth, requireAuth, async (req, res) =>
       .where(eq(usersTable.id, user.id))
       .returning();
 
-    if (!updated) return res.status(500).json({ error: "Could not update password" });
+    if (!updated) {
+      return res.status(500).json({ error: "Could not update password", code: "AUTH_INTERNAL_ERROR", requestId });
+    }
 
-    return res.json({ ok: true, message: "Password saved", user: toSafeUser(updated) });
+    return res.json({ ok: true, message: "Password saved", user: toSafeUser(updated), requestId });
   } catch (err) {
-    req.log.error({ err }, "Set password error");
-    return res.status(500).json({ error: "Internal server error" });
+    req.log.error({ err, requestId }, "Set password error");
+    return res.status(500).json({ error: "Internal server error", code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
 
 router.post("/auth/login", async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const { phone, email, password, portal: rawPortal } = req.body;
-    if (!password) return res.status(400).json({ error: "Password required" });
+    if (!password) {
+      return res.status(400).json({ error: "Password required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const portal: AuthPortal = isAuthPortal(rawPortal) ? rawPortal : "customer";
 
     const idResult = normalizeLoginIdentifier(phone, email);
-    if (!idResult.ok) return res.status(400).json({ error: idResult.error });
+    if (!idResult.ok) {
+      return res.status(400).json({ error: idResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const user = await findUserByIdentifier(idResult.value.phone, idResult.value.email);
 
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
     if (!userHasPassword(user)) {
       return res.status(401).json({
         error: user.role === "staff"
           ? "Invalid credentials"
           : "This account uses Google Sign-In. Use Continue with Google or set a password from your account.",
+        code: "ACCOUNT_NOT_ELIGIBLE",
+        requestId,
       });
     }
 
     const { valid, upgradedHash } = await verifyPasswordWithUpgrade(password, user.passwordHash!);
-    if (!valid) return res.status(401).json({ error: "Invalid credentials" });
-    if (!user.isActive) return res.status(401).json({ error: "Account suspended" });
+    if (!valid) {
+      return res.status(401).json({ error: "Invalid credentials", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
+    if (!user.isActive) {
+      return res.status(401).json({ error: "Account suspended", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     if (!isRoleAllowedForPortal(user.role, portal)) {
-      return res.status(403).json({ error: portalMismatchMessage(portal) });
+      return res.status(403).json({
+        error: portalMismatchMessage(portal),
+        code: "PORTAL_MISMATCH",
+        requestId,
+      });
     }
 
     if (upgradedHash) {
@@ -538,10 +670,10 @@ router.post("/auth/login", async (req, res) => {
 
     const token = await issueSession(user.id, req);
     setSessionCookie(res, token, portal);
-    return res.json({ token, user: toSafeUser(user) });
+    return res.json({ token, user: toSafeUser(user), requestId });
   } catch (err) {
-    req.log.error({ err }, "Login error");
-    return res.status(500).json({ error: "Internal server error" });
+    req.log.error({ err, requestId }, "Login error");
+    return res.status(500).json({ error: "Internal server error", code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
 
@@ -552,11 +684,13 @@ function parseOtpPurpose(raw: unknown): AuthOtpPurpose | null {
 router.get("/auth/otp/config", (_req, res) => {
   return res.json({
     enabled: isOtpSmsConfigured(),
-    senderId: process.env.FAST2SMS_SENDER_ID ?? "CWPDTL",
+    senderId: process.env.FAST2SMS_SENDER_ID?.trim() || "CWPDTL",
   });
 });
 
 router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const { phone, purpose: rawPurpose, name } = req.body as {
       phone?: string;
@@ -565,10 +699,14 @@ router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), asyn
     };
 
     const purpose = parseOtpPurpose(rawPurpose);
-    if (!purpose) return res.status(400).json({ error: "Invalid OTP purpose" });
+    if (!purpose) {
+      return res.status(400).json({ error: "Invalid OTP purpose", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const phoneResult = parseRequiredMobile(phone);
-    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+    if (!phoneResult.ok) {
+      return res.status(400).json({ error: phoneResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const delivery = await sendAuthOtp({
       phone: phoneResult.value,
@@ -577,23 +715,32 @@ router.post("/auth/otp/send", authRateLimit("otp-send", 8, 15 * 60 * 1000), asyn
       name,
     });
 
-    logAuthEvent(req, "auth.otp.send", { purpose, phone: phoneResult.value, portal: "customer" });
+    logAuthEvent(req, "auth.otp.send", { purpose, phone: phoneResult.value, portal: "customer", requestId });
 
     return res.json({
       ok: true,
       message: "OTP sent",
       sentSms: delivery.sentSms,
       maskedPhone: delivery.maskedPhone,
+      requestId,
     });
   } catch (err) {
-    req.log.error({ err }, "Send OTP error");
+    req.log.error({ err, requestId }, "Send OTP error");
     const raw = err instanceof Error ? err.message : "Could not send OTP";
-    logAuthEvent(req, "auth.otp.send.failed", { error: raw });
-    return res.status(400).json({ error: neutralizeOtpSendError(raw) });
+    const authCode: StructuredAuthErrorCode = err instanceof AuthError ? err.code : "AUTH_INTERNAL_ERROR";
+    const statusCode = err instanceof AuthError ? err.statusCode : 400;
+    logAuthEvent(req, "auth.otp.send.failed", { error: raw, authErrorCode: authCode, requestId });
+    return res.status(statusCode).json({
+      error: neutralizeOtpSendError(raw, authCode),
+      code: authCode,
+      requestId,
+    });
   }
 });
 
 router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000), async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const {
       phone,
@@ -616,56 +763,64 @@ router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000),
     };
 
     const purpose = parseOtpPurpose(rawPurpose);
-    if (!purpose) return res.status(400).json({ error: "Invalid OTP purpose" });
-    if (!code || code.length !== 6) return res.status(400).json({ error: "Enter the 6-digit OTP" });
+    if (!purpose) {
+      return res.status(400).json({ error: "Invalid OTP purpose", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
+    if (!code || code.trim().length !== 6) {
+      return res.status(400).json({ error: "Enter the 6-digit OTP", code: "OTP_INVALID_OR_EXPIRED", requestId });
+    }
 
     const phoneResult = parseRequiredMobile(phone);
-    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+    if (!phoneResult.ok) {
+      return res.status(400).json({ error: phoneResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const verified = await verifyAuthOtp({
       phone: phoneResult.value,
-      code,
+      code: code.trim(),
       purpose,
       portal: "customer",
     });
+
     if (!verified.ok) {
-      logAuthEvent(req, "auth.otp.verify.failed", { purpose, phone: phoneResult.value });
-      return res.status(400).json({ error: "Invalid or expired OTP" });
+      logAuthEvent(req, "auth.otp.verify.failed", { purpose, phone: phoneResult.value, authErrorCode: "OTP_INVALID_OR_EXPIRED", requestId });
+      return res.status(400).json({ error: "Invalid or expired OTP", code: "OTP_INVALID_OR_EXPIRED", requestId });
     }
 
-    logAuthEvent(req, "auth.otp.verify", { purpose, phone: phoneResult.value });
+    logAuthEvent(req, "auth.otp.verify", { purpose, phone: phoneResult.value, requestId });
 
     if (purpose === "login") {
-      let user = (
-        await db.select().from(usersTable).where(eq(usersTable.phone, phoneResult.value)).limit(1)
-      )[0];
-
-      if (!user) {
-        const customer = await findCustomerByPhone(phoneResult.value);
-        if (!customer) return res.status(401).json({ error: "Invalid credentials" });
-        user = await ensureCustomerLoginUser(customer, { authProvider: "otp" });
-      }
+      const user = await resolveOrRepairVerifiedCustomer(phoneResult.value, { authProvider: "otp" });
 
       if (!user.isActive || user.role !== "customer") {
-        return res.status(401).json({ error: "Invalid credentials" });
+        return res.status(401).json({ error: "Invalid credentials", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
       }
 
       const token = await issueSession(user.id, req);
       setSessionCookie(res, token, "customer");
-      return res.json({ token, user: toSafeUser(user) });
+      return res.json({ token, user: toSafeUser(user), requestId });
     }
 
+    // purpose === "signup"
     const signupName = (name ?? verified.pendingName ?? "").trim();
-    if (!signupName) return res.status(400).json({ error: "Name is required" });
+    if (!signupName) {
+      return res.status(400).json({ error: "Name is required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const emailResult = parseOptionalEmail(email);
-    if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
+    if (!emailResult.ok) {
+      return res.status(400).json({ error: emailResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const identityCheck = await assertContactIdentityAvailable(phoneResult.value, emailResult.value);
-    if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+    if (!identityCheck.ok) {
+      return res.status(identityCheck.status).json({ ...identityCheck.body, requestId });
+    }
 
     const pwCheck = validateNewPassword(password);
-    if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
+    if (!pwCheck.ok) {
+      return res.status(400).json({ error: pwCheck.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
     const passwordHash = await hashPassword(pwCheck.value);
     const authProvider = "local";
 
@@ -680,7 +835,9 @@ router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000),
       authProvider,
     }).returning();
 
-    if (!user) return res.status(500).json({ error: "Failed to create user" });
+    if (!user) {
+      return res.status(500).json({ error: "Failed to create user", code: "AUTH_INTERNAL_ERROR", requestId });
+    }
 
     const [customer] = await db.insert(customersTable).values({
       userId: user.id,
@@ -704,35 +861,49 @@ router.post("/auth/otp/verify", authRateLimit("otp-verify", 12, 15 * 60 * 1000),
 
     const token = await issueSession(linkedUser.id, req);
     setSessionCookie(res, token, "customer");
-    return res.status(201).json({ token, user: toSafeUser(linkedUser) });
+    return res.status(201).json({ token, user: toSafeUser(linkedUser), requestId });
   } catch (err) {
-    req.log.error({ err }, "Verify OTP error");
-    const message = err instanceof Error ? err.message : "Could not verify OTP";
-    return res.status(400).json({ error: message });
+    req.log.error({ err, requestId }, "Verify OTP error");
+    const raw = err instanceof Error ? err.message : "Could not verify OTP";
+    const authCode: StructuredAuthErrorCode = err instanceof AuthError ? err.code : "AUTH_INTERNAL_ERROR";
+    const statusCode = err instanceof AuthError ? err.statusCode : 400;
+    return res.status(statusCode).json({ error: raw, code: authCode, requestId });
   }
 });
 
 router.post("/auth/register", async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const { name, phone, email, password, address, city, branchId } = req.body;
-    if (!name || !password) return res.status(400).json({ error: "Name and password are required" });
+    if (!name || !password) {
+      return res.status(400).json({ error: "Name and password are required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const phoneResult = parseRequiredMobile(phone);
-    if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });
+    if (!phoneResult.ok) {
+      return res.status(400).json({ error: phoneResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const emailResult = parseRequiredEmail(email);
-    if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
+    if (!emailResult.ok) {
+      return res.status(400).json({ error: emailResult.error, code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
 
     const normalizedPhone = phoneResult.value;
     const normalizedEmail = emailResult.value;
 
     const identityCheck = await assertContactIdentityAvailable(normalizedPhone, normalizedEmail);
-    if (!identityCheck.ok) return res.status(identityCheck.status).json(identityCheck.body);
+    if (!identityCheck.ok) {
+      return res.status(identityCheck.status).json({ ...identityCheck.body, requestId });
+    }
 
     const passwordHash = await hashPassword(password);
 
     const [user] = await db.insert(usersTable).values({
-      name, phone: identityCheck.identity.phone, email: identityCheck.identity.email,
+      name,
+      phone: identityCheck.identity.phone,
+      email: identityCheck.identity.email,
       passwordHash,
       role: "customer",
       branchId: branchId || null,
@@ -740,11 +911,15 @@ router.post("/auth/register", async (req, res) => {
       authProvider: "local",
     }).returning();
 
-    if (!user) return res.status(500).json({ error: "Failed to create user" });
+    if (!user) {
+      return res.status(500).json({ error: "Failed to create user", code: "AUTH_INTERNAL_ERROR", requestId });
+    }
 
     const [customer] = await db.insert(customersTable).values({
       userId: user.id,
-      name, phone: identityCheck.identity.phone, email: identityCheck.identity.email,
+      name,
+      phone: identityCheck.identity.phone,
+      email: identityCheck.identity.email,
       address: address || null,
       city: city || "Varanasi",
       branchId: branchId || null,
@@ -759,28 +934,41 @@ router.post("/auth/register", async (req, res) => {
 
     const token = await issueSession(linkedUser.id, req);
     setSessionCookie(res, token, "customer");
-    return res.status(201).json({ token, user: toSafeUser(linkedUser) });
+    return res.status(201).json({ token, user: toSafeUser(linkedUser), requestId });
   } catch (err) {
-    req.log.error({ err }, "Register error");
-    return res.status(500).json({ error: "Internal server error" });
+    req.log.error({ err, requestId }, "Register error");
+    return res.status(500).json({ error: "Internal server error", code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
 
 router.get("/auth/me", optionalAuth, requireAuth, async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     const rows = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id)).limit(1);
     const u = rows[0];
-    if (!u || !u.isActive) return res.status(401).json({ error: "Authentication required" });
+    if (!u || !u.isActive) {
+      return res.status(401).json({ error: "Authentication required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
+    }
+
+    // Portal role guard
+    const portal = parseAuthPortalHeader(req);
+    if (portal && !isRoleAllowedForPortal(u.role, portal)) {
+      return res.status(403).json({
+        error: portalMismatchMessage(portal),
+        code: "PORTAL_MISMATCH",
+        requestId,
+      });
+    }
 
     // Extend httpOnly cookie on activity (rolling session).
-    const portal = parseAuthPortalHeader(req);
     const activeToken = listSessionTokens(req).find(t => t.length > 0);
     if (activeToken && portal) setSessionCookie(res, activeToken, portal);
 
     return res.json(toSafeUser(u));
   } catch (err) {
-    req.log.error({ err }, "Get me error");
-    return res.status(500).json({ error: "Internal server error" });
+    req.log.error({ err, requestId }, "Get me error");
+    return res.status(500).json({ error: "Internal server error", code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
 
@@ -798,6 +986,8 @@ router.get("/auth/permissions", optionalAuth, async (req, res) => {
 });
 
 router.post("/auth/logout", optionalAuth, async (req, res) => {
+  const requestId = getRequestId(req);
+  res.setHeader("X-Correlation-Id", requestId);
   try {
     for (const token of listSessionTokens(req)) {
       await db
@@ -808,10 +998,10 @@ router.post("/auth/logout", optionalAuth, async (req, res) => {
     const portal = parseAuthPortalHeader(req);
     if (portal) clearSessionCookie(res, portal);
     else clearAllSessionCookies(res);
-    return res.json({ ok: true });
+    return res.json({ ok: true, requestId });
   } catch (err) {
-    req.log.error({ err }, "Logout error");
-    return res.status(500).json({ error: "Internal server error" });
+    req.log.error({ err, requestId }, "Logout error");
+    return res.status(500).json({ error: "Internal server error", code: "AUTH_INTERNAL_ERROR", requestId });
   }
 });
 

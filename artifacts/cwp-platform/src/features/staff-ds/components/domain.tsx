@@ -303,31 +303,37 @@ export function StaffAttendanceCard({
   return (
     <div className={cn("staff-card staff-elevated", className)} data-testid="profile-attendance-today">
       <div className={cn(STAFF_SPACE.cardPad)}>
-        <div className="flex items-start justify-between gap-3" data-testid="staff-attendance-card">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Attendance
-            </p>
-            {dateLabel ? <p className="mt-0.5 text-sm text-foreground">{dateLabel}</p> : null}
-            <div className="mt-2 flex items-center gap-2">
-              <StaffStatusBadge status={status} />
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3" data-testid="staff-attendance-card">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            {selfieUrl ? (
+              <img
+                src={selfieUrl}
+                alt="Check-in selfie"
+                className="h-14 w-14 shrink-0 rounded-lg object-cover ring-1 ring-border"
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Attendance
+                </p>
+                <StaffStatusBadge status={status} />
+              </div>
+              {dateLabel ? <p className="mt-0.5 text-sm font-medium text-foreground">{dateLabel}</p> : null}
+              {(checkInLabel || checkOutLabel) && (
+                <p className="mt-1 text-xs text-muted-foreground break-words">
+                  {checkInLabel}
+                  {checkInLabel && checkOutLabel ? " · " : ""}
+                  {checkOutLabel}
+                </p>
+              )}
             </div>
-            {(checkInLabel || checkOutLabel) && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {checkInLabel}
-                {checkInLabel && checkOutLabel ? " · " : ""}
-                {checkOutLabel}
-              </p>
-            )}
           </div>
-          {selfieUrl ? (
-            <img
-              src={selfieUrl}
-              alt="Check-in selfie"
-              className="h-14 w-14 shrink-0 rounded-lg object-cover ring-1 ring-border"
-            />
+          {action ? (
+            <div className="w-full sm:w-auto shrink-0 pt-1 sm:pt-0">
+              {action}
+            </div>
           ) : null}
-          {action}
         </div>
       </div>
     </div>
@@ -360,7 +366,7 @@ export function StaffProfileCard({
           <img
             src={avatarUrl}
             alt=""
-            className="h-14 w-14 rounded-full object-cover border border-border"
+            className="h-14 w-14 rounded-full object-cover border border-border shrink-0"
           />
         ) : (
           <div className="staff-icon-well flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-sm font-bold">
@@ -369,7 +375,7 @@ export function StaffProfileCard({
         )}
         <div className="min-w-0 flex-1">
           <p className="font-display text-lg font-bold truncate text-foreground">{name}</p>
-          {role ? <p className="text-sm text-muted-foreground">{role}</p> : null}
+          {role ? <p className="text-sm text-muted-foreground truncate">{role}</p> : null}
           {status ? <div className="mt-1"><StaffStatusBadge status={status} /></div> : null}
         </div>
       </div>

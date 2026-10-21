@@ -1,8 +1,12 @@
-import { db, usersTable, authOtpCodesTable } from "@workspace/db";
-import { eq, and, gt, isNull, desc } from "drizzle-orm";
+import { db, authOtpCodesTable } from "@workspace/db";
+import { eq, and, gt, isNull } from "drizzle-orm";
 import { sendOtpSms, isOtpSmsConfigured } from "./dltSms";
 import { generateOtpCode, hashOtpCode, maskPhone } from "./googleAuth";
-import { findCustomerByPhone } from "./customerAccount";
+import {
+  AuthError,
+  resolveCustomerIdentityByPhone,
+  normalizeIndianMobile,
+} from "./authIdentity";
 import type { AuthOtpPurpose } from "@workspace/db";
 
 const OTP_TTL_MINUTES = 15;
@@ -49,82 +53,104 @@ export async function sendAuthOtp(params: {
   name?: string;
 }): Promise<{ sentSms: boolean; maskedPhone: string }> {
   if (!isOtpSmsConfigured()) {
-    throw new Error("SMS OTP is not configured. Contact support.");
+    throw new AuthError(
+      "OTP_PROVIDER_UNAVAILABLE",
+      503,
+      "Verification is temporarily unavailable. Please try again later.",
+      "SMS OTP is not configured. Missing FAST2SMS_DLT_MESSAGE_ID or FAST2SMS_OTP_ID",
+    );
   }
 
   const portal = params.portal ?? "customer";
   if (portal !== "customer") {
-    throw new Error("OTP sign-in is only available for customers");
+    throw new AuthError("PORTAL_MISMATCH", 403, "OTP sign-in is only available for customers");
   }
 
-  const phone = params.phone;
-  const existingUser = (
-    await db.select().from(usersTable).where(eq(usersTable.phone, phone)).limit(1)
-  )[0];
-  const existingCustomer =
-    !existingUser && params.purpose === "login" ? await findCustomerByPhone(phone) : null;
+  const normalized = normalizeIndianMobile(params.phone);
+  if (!normalized) {
+    throw new AuthError("ACCOUNT_NOT_ELIGIBLE", 400, "Please enter a valid 10-digit mobile number.");
+  }
+
+  // Shared canonical resolution
+  const resolved = await resolveCustomerIdentityByPhone(normalized);
 
   if (params.purpose === "login") {
-    if (!existingUser && !existingCustomer) {
-      throw new Error("No account found for this phone number. Please sign up first.");
+    if (resolved.status === "NOT_FOUND") {
+      throw new AuthError("ACCOUNT_NOT_ELIGIBLE", 404, "No account found for this phone number. Please sign up first.");
     }
-    if (existingUser && !existingUser.isActive) {
-      throw new Error("Account suspended. Contact support.");
+    if (resolved.status === "INELIGIBLE_ROLE") {
+      throw new AuthError("PORTAL_MISMATCH", 403, resolved.reason);
     }
-    if (existingUser && existingUser.role !== "customer") {
-      throw new Error("This phone number is not registered as a customer account.");
-    }
-    if (existingCustomer && existingCustomer.status !== "active") {
-      throw new Error("Account suspended. Contact support.");
+    if (resolved.status === "INELIGIBLE_SUSPENDED") {
+      throw new AuthError("ACCOUNT_NOT_ELIGIBLE", 401, resolved.reason);
     }
   }
 
   if (params.purpose === "signup") {
-    if (existingUser) {
-      throw new Error("This phone number is already registered. Sign in instead.");
+    if (resolved.status === "ELIGIBLE_USER" || resolved.status === "ELIGIBLE_CUSTOMER_WITHOUT_USER") {
+      throw new AuthError("ACCOUNT_NOT_ELIGIBLE", 409, "This phone number is already registered. Sign in instead.");
+    }
+    if (resolved.status === "INELIGIBLE_ROLE") {
+      throw new AuthError("PORTAL_MISMATCH", 403, resolved.reason);
     }
     const trimmedName = params.name?.trim();
     if (!trimmedName) {
-      throw new Error("Name is required for sign up");
+      throw new AuthError("ACCOUNT_NOT_ELIGIBLE", 400, "Name is required for sign up");
     }
   }
 
-  if (await countRecentOtps(phone, params.purpose) >= MAX_OTP_PER_HOUR) {
-    throw new Error("Too many OTP requests. Please try again after an hour.");
+  if (await countRecentOtps(normalized, params.purpose) >= MAX_OTP_PER_HOUR) {
+    throw new AuthError("OTP_RATE_LIMITED", 429, "Too many attempts. Please wait and try again.");
   }
 
-  await invalidatePendingCodes(phone, params.purpose);
+  await invalidatePendingCodes(normalized, params.purpose);
 
   const code = generateOtpCode();
   const codeHash = hashOtpCode(code);
   const recipientName =
     params.purpose === "login"
-      ? (existingUser?.name ?? existingCustomer?.name ?? "Customer")
+      ? (resolved.status === "ELIGIBLE_USER"
+          ? resolved.user.name
+          : resolved.status === "ELIGIBLE_CUSTOMER_WITHOUT_USER"
+            ? resolved.customer.name
+            : "Customer")
       : (params.name?.trim() ?? "Customer");
 
-  await db.insert(authOtpCodesTable).values({
-    phone,
-    codeHash,
-    purpose: params.purpose,
-    portal,
-    pendingName: params.purpose === "signup" ? recipientName : null,
-    expiresAt: otpExpiry(),
-  });
+  const [otpRow] = await db
+    .insert(authOtpCodesTable)
+    .values({
+      phone: normalized,
+      codeHash,
+      purpose: params.purpose,
+      portal,
+      pendingName: params.purpose === "signup" ? recipientName : null,
+      expiresAt: otpExpiry(),
+    })
+    .returning();
 
   const smsResult = await sendOtpSms({
-    phone,
+    phone: normalized,
     recipientName,
     otpCode: code,
     otpExpiryMinutes: OTP_TTL_MINUTES,
   });
 
   if (!smsResult.success) {
-    throw new Error(smsResult.error ?? "Could not send OTP SMS");
+    // Clean up failed pending code safely so an orphaned OTP record is not left pending
+    if (otpRow) {
+      await db.delete(authOtpCodesTable).where(eq(authOtpCodesTable.id, otpRow.id));
+    }
+    throw new AuthError(
+      "OTP_DELIVERY_FAILED",
+      502,
+      "Unable to send verification code. Please try again in a few moments.",
+      smsResult.error ?? "Could not send OTP SMS",
+    );
   }
 
   return {
     sentSms: true,
-    maskedPhone: maskPhone(phone),
+    maskedPhone: maskPhone(normalized),
   };
 }
 
@@ -133,17 +159,19 @@ export async function verifyAuthOtp(params: {
   code: string;
   purpose: AuthOtpPurpose;
   portal?: AuthPortal;
-}): Promise<{ ok: true; pendingName?: string | null } | { ok: false }> {
+}): Promise<{ ok: true; pendingName?: string | null } | { ok: false; reason?: string }> {
   const portal = params.portal ?? "customer";
-  const codeHash = hashOtpCode(params.code);
+  const normalized = normalizeIndianMobile(params.phone) ?? params.phone;
+  const codeHash = hashOtpCode(params.code.trim());
   const now = new Date();
 
-  const rows = await db
-    .select()
-    .from(authOtpCodesTable)
+  // Atomic consumption ensures OTP cannot be verified twice under concurrent requests
+  const [consumed] = await db
+    .update(authOtpCodesTable)
+    .set({ usedAt: now })
     .where(
       and(
-        eq(authOtpCodesTable.phone, params.phone),
+        eq(authOtpCodesTable.phone, normalized),
         eq(authOtpCodesTable.purpose, params.purpose),
         eq(authOtpCodesTable.portal, portal),
         eq(authOtpCodesTable.codeHash, codeHash),
@@ -151,18 +179,11 @@ export async function verifyAuthOtp(params: {
         gt(authOtpCodesTable.expiresAt, now),
       ),
     )
-    .orderBy(desc(authOtpCodesTable.createdAt))
-    .limit(1);
+    .returning();
 
-  const row = rows[0];
-  if (!row) return { ok: false };
+  if (!consumed) return { ok: false, reason: "OTP_INVALID_OR_EXPIRED" };
 
-  await db
-    .update(authOtpCodesTable)
-    .set({ usedAt: now })
-    .where(eq(authOtpCodesTable.id, row.id));
-
-  return { ok: true, pendingName: row.pendingName };
+  return { ok: true, pendingName: consumed.pendingName };
 }
 
 export { isOtpSmsConfigured, OTP_TTL_MINUTES };

@@ -49,10 +49,10 @@ export function useAuthFlow(portal: AuthPortal = "customer") {
 
   const completeAuth = useCallback(
     (data: AuthResponse) => {
-      login(data.user, data.token);
+      login(data.user, data.token, portal);
       redirectAfterAuth(data.user.role);
     },
-    [login, redirectAfterAuth],
+    [login, portal, redirectAfterAuth],
   );
 
   const handleAuthSuccess = useCallback(

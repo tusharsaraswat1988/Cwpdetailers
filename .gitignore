@@ -12,7 +12,7 @@ out-tsc
 node_modules
 
 # IDEs and editors
-/.idea
+.idea/
 .project
 .classpath
 .c9/
@@ -60,7 +60,7 @@ artifacts/cwp-staff-app/android/app/build/
 artifacts/cwp-staff-app/android/build/
 artifacts/cwp-staff-app/android/local.properties
 artifacts/cwp-staff-app/android/captures/
-artifacts/cwp-staff-app/android/.idea/
+artifacts/cwp-staff-app/android.idea//
 *.apk
 *.aab
 *.ap_

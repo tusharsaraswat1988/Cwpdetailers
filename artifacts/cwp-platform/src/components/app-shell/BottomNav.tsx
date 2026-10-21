@@ -27,8 +27,7 @@ export function BottomNav({ items, testId = "bottom-nav" }: BottomNavProps) {
       data-testid={testId}
     >
       <div
-        className="flex items-stretch justify-around max-w-lg mx-auto px-1"
-        style={{ height: "var(--bottom-nav-height)" }}
+        className="flex items-stretch justify-around max-w-lg mx-auto px-1 h-16"
       >
         {items.map(({ href, label, icon: Icon, fab, comingSoon }) => {
           const active = !comingSoon && (location === href || location.startsWith(href + "/"));
@@ -58,7 +57,7 @@ export function BottomNav({ items, testId = "bottom-nav" }: BottomNavProps) {
               <span
                 key={href}
                 aria-label={`${label} — coming soon`}
-                className="flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[var(--bottom-nav-height)] py-1 text-muted-foreground/60 cursor-default"
+                className="flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[4rem] py-1 text-muted-foreground/60 cursor-default"
               >
                 <Icon size={22} strokeWidth={2} className="shrink-0" />
                 <span className="text-[9px] leading-tight text-center">{label}</span>
@@ -70,7 +69,7 @@ export function BottomNav({ items, testId = "bottom-nav" }: BottomNavProps) {
               key={href}
               href={href}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[var(--bottom-nav-height)] py-1 transition-colors",
+                "flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[4rem] py-1 transition-colors",
                 active ? "text-primary" : "text-muted-foreground",
               )}
             >

@@ -5,7 +5,7 @@ import { useStaffLocation } from "./LocationProvider";
 export function LocationStatusIndicator({ className }: { className?: string }) {
   const { permissionState, gpsReady, isRefreshing, accuracy } = useStaffLocation();
 
-  if (permissionState === "unsupported" || permissionState === "denied") {
+  if (permissionState === "unsupported" || permissionState === "denied" || permissionState === "location_off") {
     return (
       <span
         className={cn(
@@ -13,7 +13,7 @@ export function LocationStatusIndicator({ className }: { className?: string }) {
           className,
         )}
         data-testid="location-status"
-        title="GPS off"
+        title={permissionState === "location_off" ? "Location / GPS Off" : "GPS Off"}
       >
         <MapPinOff size={11} />
         GPS Off

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
-import { setBaseUrl as setApiClientBaseUrl } from "@workspace/api-client-react";
-import { getApiBaseUrl, isTrustedApiUrl, resolveApiUrl } from "./apiConfig";
+import { setBaseUrl as setApiClientBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
+import { getApiBaseUrl, isNativeApp, isTrustedApiUrl, resolveApiUrl } from "./apiConfig";
 import {
   authPortalHeaders,
   migrateLegacySession,
@@ -42,8 +42,8 @@ interface AuthContextType {
   permissions: PermissionTuple[];
   scope: TenantScope | null;
   hasPermission: (resource: string, action: string) => boolean;
-  login: (user: AuthUser, token: string) => void;
-  logout: () => void;
+  login: (user: AuthUser, token: string, portal?: AuthPortal) => void;
+  logout: (portal?: AuthPortal) => void;
   isLoading: boolean;
 }
 
@@ -147,16 +147,20 @@ async function validateStoredSession(
     return { user: null, token: null };
   }
 
-  const attempts: Array<string | null> = [null];
-  if (bearerToken) attempts.push(bearerToken);
+  // When a bearerToken is available (native app or stored session),
+  // probe directly with the bearer token to avoid needless 401s on platforms
+  // without cookies. If no bearerToken, probe with cookie (null).
+  const attempts: Array<string | null> = bearerToken ? [bearerToken] : [null];
 
   for (const attemptToken of attempts) {
     for (let retry = 0; retry < SESSION_VALIDATE_RETRIES; retry++) {
       try {
         const res = await fetchAuthMe(portal, attemptToken);
 
-        // 401 = definitive "no session for this portal" — do not retry.
-        if (res.status === 401) break;
+        // 401 = definitive rejection by server — token is genuinely invalid or revoked.
+        if (res.status === 401) {
+          return { user: null, token: null };
+        }
 
         if (res.ok) {
           const fresh = normalizeAuthUser(await res.json());
@@ -166,19 +170,20 @@ async function validateStoredSession(
           return { user: fallbackUser, token: bearerToken };
         }
 
-        // Server/proxy hiccup — keep cached session.
+        // Server error (500, 502, 503) or unexpected status — preserve cached session.
         return { user: fallbackUser, token: bearerToken };
       } catch {
         if (retry + 1 < SESSION_VALIDATE_RETRIES) {
           await sleep(SESSION_VALIDATE_RETRY_MS * (retry + 1));
           continue;
         }
+        // Network error / connectivity loss — preserve cached session.
         return { user: fallbackUser, token: bearerToken };
       }
     }
   }
 
-  return { user: null, token: null };
+  return { user: fallbackUser, token: bearerToken };
 }
 
 let fetchPatched = false;
@@ -241,6 +246,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     installFetchInterceptor();
     const apiBase = getApiBaseUrl();
     if (apiBase) setApiClientBaseUrl(apiBase);
+
+    // Register token getter for generated react-query / customFetch calls
+    setAuthTokenGetter(() => {
+      const p = resolveAuthPortal();
+      return localStorage.getItem(tokenStorageKey(p));
+    });
+
     const portal = resolveAuthPortal();
     portalRef.current = portal;
     cachedRef.current = loadCachedSession(portal);
@@ -269,8 +281,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     })();
 
+    let removeResumeListener: (() => void) | undefined;
+    if (isNativeApp()) {
+      void import("@capacitor/app").then(({ App: CapApp }) => {
+        if (cancelled) return;
+        const sub = CapApp.addListener("appStateChange", ({ isActive }) => {
+          if (isActive) {
+            const p = resolveAuthPortal();
+            const reloaded = loadCachedSession(p);
+            if (reloaded.user && reloaded.token) {
+              setUser(prev => prev ?? reloaded.user);
+              setToken(prev => prev ?? reloaded.token);
+              setSessionReady(true);
+            }
+          }
+        });
+        void sub.then(handle => {
+          if (cancelled) {
+            void handle.remove();
+          } else {
+            removeResumeListener = () => {
+              void handle.remove();
+            };
+          }
+        });
+      });
+    }
+
     return () => {
       cancelled = true;
+      removeResumeListener?.();
     };
   }, []);
 
@@ -301,8 +341,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [sessionReady, user]);
 
-  const login = (u: AuthUser, t: string) => {
-    const portal = resolveAuthPortal();
+  const login = (u: AuthUser, t: string, intendedPortal?: AuthPortal) => {
+    const portal = intendedPortal ?? resolveAuthPortal();
     portalRef.current = portal;
     bootstrapGeneration.current += 1;
     cachedRef.current = { user: u, token: t };
@@ -313,8 +353,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistSession(portal, u, t);
   };
 
-  const logout = () => {
-    const portal = resolveAuthPortal();
+  const logout = (intendedPortal?: AuthPortal) => {
+    const portal = intendedPortal ?? resolveAuthPortal();
     bootstrapGeneration.current += 1;
     cachedRef.current = { user: null, token: null };
     fetch("/api/auth/logout", {

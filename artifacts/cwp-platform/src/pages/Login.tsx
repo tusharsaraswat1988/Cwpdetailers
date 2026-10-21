@@ -27,6 +27,7 @@ import {
   authLinkClass,
   authMutedLinkClass,
 } from "@/components/auth/authStyles";
+import { isCustomerNativeApp } from "@/lib/native/portalNative";
 import { AlertCircle, ArrowRight, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -275,12 +276,14 @@ export default function Login() {
             <ArrowRight size={14} className="opacity-50" aria-hidden />
           </Link>
         </p>
-        <p className="text-xs text-muted-foreground">
-          Field staff?{" "}
-          <Link href="/staff/login" className={authMutedLinkClass}>
-            Staff portal
-          </Link>
-        </p>
+        {!isCustomerNativeApp() && (
+          <p className="text-xs text-muted-foreground">
+            Field staff?{" "}
+            <Link href="/staff/login" className={authMutedLinkClass}>
+              Staff portal
+            </Link>
+          </p>
+        )}
         <p className="text-[11px] leading-relaxed pt-1 text-muted-foreground" data-testid="login-trust-line">
           Secure sign-in · Your data stays private · OTP never shared
         </p>

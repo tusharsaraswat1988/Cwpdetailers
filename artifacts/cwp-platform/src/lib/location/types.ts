@@ -9,6 +9,7 @@ export type LocationPermissionState =
   | "granted"
   | "prompt"
   | "denied"
+  | "location_off"
   | "unsupported";
 
 /** navigation = cached 30s; action = fresh high-accuracy fix */

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useLogin } from "@workspace/api-client-react";
 import type { AuthResponse } from "@workspace/api-client-react";
@@ -11,12 +11,85 @@ import { submitMobile } from "@/lib/contactForm";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useBranding } from "@/lib/branding";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { isStaffNativeApp } from "@/lib/native/portalNative";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { StaffThemeRoot, StaffButton } from "@/features/staff-ds";
 
+export function categorizeStaffLoginError(err: unknown): { title: string; message: string } {
+  if (!err) return { title: "Login failed", message: "Invalid mobile number or password." };
+
+  const rawMessage = err instanceof Error ? err.message : String(err);
+  const status =
+    typeof err === "object" && err !== null && "status" in err
+      ? Number((err as { status?: unknown }).status)
+      : undefined;
+  const data =
+    typeof err === "object" && err !== null && "data" in err
+      ? (err as { data?: unknown }).data
+      : undefined;
+  const backendError =
+    typeof data === "object" && data !== null && "error" in data
+      ? String((data as { error?: unknown }).error)
+      : "";
+
+  // 1. Offline / Network connectivity failures
+  const isNetwork =
+    /failed to fetch|networkerror|load failed|network request failed|connection refused|timeout/i.test(
+      rawMessage,
+    ) || (status === 0 || (status === undefined && /fetch/i.test(rawMessage)));
+  if (isNetwork) {
+    return {
+      title: "Connection problem",
+      message: "Server se connect nahi ho pa rahe hain. Internet check karein aur dobara try karein.",
+    };
+  }
+
+  // 2. Account suspended / inactive
+  if (/suspended|inactive|deactivated/i.test(backendError) || /suspended/i.test(rawMessage)) {
+    return {
+      title: "Account suspended",
+      message: "Aapka staff account inactive hai. Kripya apne supervisor ya admin se sampark karein.",
+    };
+  }
+
+  // 3. Portal / Role mismatch
+  if (status === 403 || /portal|role|access denied/i.test(backendError)) {
+    return {
+      title: "Staff access only",
+      message: backendError || "Ye portal sirf CWP field staff ke liye hai.",
+    };
+  }
+
+  // 4. Server error
+  if (status && status >= 500) {
+    return {
+      title: "Server issue",
+      message: "Server par takneeki samasya aayi hai. Kripya thodi der baad dobara prayas karein.",
+    };
+  }
+
+  // 5. Invalid credentials (401)
+  if (
+    status === 401 ||
+    /invalid credentials|incorrect/i.test(backendError) ||
+    /invalid credentials/i.test(rawMessage)
+  ) {
+    return {
+      title: "Incorrect details",
+      message: "Mobile number ya password galat hai. Check karke dobara dalein.",
+    };
+  }
+
+  const sanitized = getApiErrorMessage(err, "Mobile number ya password verify karein.");
+  return {
+    title: "Login failed",
+    message: sanitized,
+  };
+}
+
 export default function StaffLogin() {
   const [, setLocation] = useLocation();
-  const { login } = useAuth();
+  const { user, isLoading, login } = useAuth();
   const branding = useBranding();
   const { toast } = useToast();
   const [phone, setPhone] = useState("");
@@ -24,6 +97,13 @@ export default function StaffLogin() {
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Auto-redirect already-authenticated staff
+  useEffect(() => {
+    if (!isLoading && user?.role === "staff") {
+      setLocation("/staff/dashboard");
+    }
+  }, [user, isLoading, setLocation]);
 
   const loginMutation = useLogin({
     mutation: {
@@ -39,9 +119,9 @@ export default function StaffLogin() {
         setLocation("/staff/dashboard");
       },
       onError: (err: unknown) => {
-        const message = getApiErrorMessage(err, "Invalid phone number or password.");
-        setFormError(message);
-        toast({ title: "Login failed", description: message, variant: "destructive" });
+        const errorInfo = categorizeStaffLoginError(err);
+        setFormError(errorInfo.message);
+        toast({ title: errorInfo.title, description: errorInfo.message, variant: "destructive" });
       },
     },
   });
@@ -153,12 +233,14 @@ export default function StaffLogin() {
             <p className="px-2 text-xs text-white/35">
               Credentials are created by admin after profile verification.
             </p>
-            <p className="text-sm text-white/45">
-              Customer?{" "}
-              <Link href="/login" className="text-primary hover:underline">
-                Customer login
-              </Link>
-            </p>
+            {!isStaffNativeApp() && (
+              <p className="text-sm text-white/45">
+                Customer?{" "}
+                <Link href="/login" className="text-primary hover:underline">
+                  Customer login
+                </Link>
+              </p>
+            )}
           </div>
         </div>
       </div>

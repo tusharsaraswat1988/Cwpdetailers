@@ -40,6 +40,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
   }, [refresh]);
 
   const handleToggle = async (enabled: boolean) => {
+    if (!supported) return;
     setToggling(true);
     try {
       if (enabled) {
@@ -69,14 +70,15 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
           ? "Enabled"
           : "Disabled";
 
-  const statusVariant = status?.subscribed ? "default" : "secondary";
+  const statusVariant = supported && status?.subscribed ? "default" : "secondary";
+  const isChecked = supported && Boolean(status?.subscribed);
 
   return (
     <Card>
       <CardContent className="p-4 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex gap-3">
-            {status?.subscribed ? (
+            {isChecked ? (
               <Bell className="h-5 w-5 text-primary shrink-0 mt-0.5" />
             ) : (
               <BellOff className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
@@ -85,7 +87,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
               <p className="font-medium">Push Notifications</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {variant === "staff"
-                  ? "Auto-enabled for job alerts — vibration + popup when admin assigns work"
+                  ? "Field job alerts — vibration + popup when new assignments or route changes arrive"
                   : "Browser alerts for visits, routes, and account updates"}
               </p>
             </div>
@@ -105,25 +107,34 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
               </Label>
               <Switch
                 id="push-enabled"
-                checked={Boolean(status?.subscribed)}
+                checked={isChecked}
                 disabled={!supported || !status?.pushConfigured || permission === "denied" || toggling}
                 onCheckedChange={v => void handleToggle(Boolean(v))}
               />
             </div>
 
-            {variant === "staff" && permission === "default" && !status?.subscribed && status?.pushConfigured && (
+            {!supported && (
+              <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-semibold text-foreground">Push notifications unavailable on this device</p>
+                <p>
+                  Background web push is not supported in this runtime environment. While the app is open, in-app alerts and vibration will notify you when new jobs or route updates are assigned.
+                </p>
+              </div>
+            )}
+
+            {supported && variant === "staff" && permission === "default" && !status?.subscribed && status?.pushConfigured && (
               <p className="text-xs text-muted-foreground">
                 Turn on the switch above — browser will ask Allow once for job alerts.
               </p>
             )}
 
-            {permission === "denied" && (
+            {supported && permission === "denied" && (
               <p className="text-xs text-destructive">
-                Notifications are blocked. Enable them in your browser site settings.
+                Notifications are blocked. Enable them in your browser or application site settings.
               </p>
             )}
 
-            {!status?.pushConfigured && (
+            {supported && !status?.pushConfigured && (
               <div className="text-xs text-muted-foreground space-y-1 rounded-lg border border-dashed p-3">
                 <p>Server push is not configured yet (VAPID keys required).</p>
                 {variant === "staff" ? (
@@ -143,7 +154,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
             <div className="text-xs space-y-1 pt-1 border-t">
               <p className="text-muted-foreground">Notification status</p>
               <p>{statusLabel}</p>
-              {status?.subscriptionCount != null && status.subscribed && (
+              {supported && status?.subscriptionCount != null && status.subscribed && (
                 <p className="text-muted-foreground">{status.subscriptionCount} device(s) registered</p>
               )}
             </div>
@@ -159,7 +170,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
                   </p>
                 </div>
               ) : (
-                <p>No notifications delivered yet</p>
+                <p className="text-muted-foreground">No notifications delivered yet</p>
               )}
             </div>
 
@@ -167,7 +178,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
               Refresh status
             </Button>
 
-            {status?.subscribed && status?.pushConfigured && (
+            {supported && status?.subscribed && status?.pushConfigured && (
               <Button
                 variant="outline"
                 size="sm"
