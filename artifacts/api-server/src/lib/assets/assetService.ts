@@ -504,6 +504,8 @@ export async function getAssetDetail(assetId: number) {
       effectiveUntil: locationAssetLinksTable.effectiveUntil,
       locationLabel: serviceLocationsTable.label,
       locationAddress: serviceLocationsTable.address,
+      latitude: serviceLocationsTable.latitude,
+      longitude: serviceLocationsTable.longitude,
     })
     .from(locationAssetLinksTable)
     .innerJoin(serviceLocationsTable, eq(locationAssetLinksTable.serviceLocationId, serviceLocationsTable.id))

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { assetsTable, vehiclesTable, solarSitesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { isAssetsModuleEnabled } from "../lib/assets/featureFlag";
 import {
@@ -206,8 +206,40 @@ router.patch("/assets/:id", async (req, res) => {
           ? null
           : parseInt(String(req.body.seatCategoryId), 10);
       }
+      if (req.body.serviceAddress !== undefined) {
+        vUpdate.serviceAddress = req.body.serviceAddress ? String(req.body.serviceAddress).trim() : null;
+      }
+      if (req.body.serviceLat !== undefined) {
+        const lat = typeof req.body.serviceLat === "number" ? req.body.serviceLat : parseFloat(String(req.body.serviceLat));
+        vUpdate.serviceLat = Number.isFinite(lat) ? lat : null;
+      }
+      if (req.body.serviceLng !== undefined) {
+        const lng = typeof req.body.serviceLng === "number" ? req.body.serviceLng : parseFloat(String(req.body.serviceLng));
+        vUpdate.serviceLng = Number.isFinite(lng) ? lng : null;
+      }
+      if (req.body.locationLabel !== undefined) {
+        vUpdate.locationLabel = req.body.locationLabel ? String(req.body.locationLabel).trim() : null;
+      }
+
       if (Object.keys(vUpdate).length > 1) {
         await db.update(vehiclesTable).set(vUpdate).where(eq(vehiclesTable.id, existing.vehicleId));
+        if (vUpdate.serviceAddress !== undefined || vUpdate.serviceLat !== undefined || vUpdate.serviceLng !== undefined) {
+          const [activeLink] = await db
+            .select()
+            .from(locationAssetLinksTable)
+            .where(and(eq(locationAssetLinksTable.assetId, id), isNull(locationAssetLinksTable.effectiveUntil)))
+            .limit(1);
+          if (activeLink) {
+            const locUp = {};
+            if (vUpdate.serviceAddress !== undefined) locUp.address = vUpdate.serviceAddress;
+            if (vUpdate.serviceLat !== undefined) locUp.latitude = vUpdate.serviceLat;
+            if (vUpdate.serviceLng !== undefined) locUp.longitude = vUpdate.serviceLng;
+            if (vUpdate.locationLabel !== undefined) locUp.label = vUpdate.locationLabel;
+            if (Object.keys(locUp).length > 0) {
+              await db.update(serviceLocationsTable).set(locUp).where(eq(serviceLocationsTable.id, activeLink.serviceLocationId));
+            }
+          }
+        }
       }
     }
 

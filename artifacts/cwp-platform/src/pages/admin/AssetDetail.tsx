@@ -9,7 +9,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Car, Sun, History, MapPin, Pencil } from "lucide-react";
+import {
+  ArrowLeft,
+  Car,
+  Sun,
+  History,
+  MapPin,
+  Pencil,
+  Navigation,
+  Compass,
+  Loader2,
+  ExternalLink,
+  AlertTriangle,
+  CheckCircle2,
+} from "lucide-react";
 import {
   getAsset,
   updateAsset,
@@ -29,6 +42,29 @@ import { CustomerProfileBackLink } from "@/components/layout/CustomerBookingData
 import { CustomerSearchSelect, type CustomerSearchValue } from "@/features/customers/components/CustomerSearchSelect";
 import { categorySlugToVehicleType } from "@/lib/vehicleMaster";
 
+function parseCoordinateInput(input: string): { lat: number; lng: number } | null {
+  const trimmed = input.trim();
+  // 1. Google Maps link: ...@25.298541,82.991245... or ?q=25.298541,82.991245
+  const linkMatch = trimmed.match(/[@?&](?:q=|ll=|location=)?(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (linkMatch) {
+    const lat = parseFloat(linkMatch[1]!);
+    const lng = parseFloat(linkMatch[2]!);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+  // 2. Direct coordinate string: "25.298541, 82.991245" or "25.298541 82.991245"
+  const directMatch = trimmed.match(/^(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)$/);
+  if (directMatch) {
+    const lat = parseFloat(directMatch[1]!);
+    const lng = parseFloat(directMatch[2]!);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+  return null;
+}
+
 export default function AssetDetail() {
   const [, params] = useRoute("/admin/assets/:id");
   const id = parseInt(params?.id ?? "", 10);
@@ -40,6 +76,15 @@ export default function AssetDetail() {
   const [locationFrom, setLocationFrom] = useState("");
   const [busy, setBusy] = useState(false);
   const [selectedModel, setSelectedModel] = useState<VehicleModel | null>(null);
+
+  // Address & GPS Coordinates state
+  const [addressEdit, setAddressEdit] = useState("");
+  const [latEdit, setLatEdit] = useState("");
+  const [lngEdit, setLngEdit] = useState("");
+  const [coordPaste, setCoordPaste] = useState("");
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [gettingGps, setGettingGps] = useState(false);
+
   const [vehicleEdit, setVehicleEdit] = useState({
     registrationNumber: "",
     seatCategoryId: null as number | null,
@@ -77,6 +122,19 @@ export default function AssetDetail() {
         label: asset.label ?? "",
         notes: asset.notes ?? "",
       });
+
+      // Populate initial service address and coordinates
+      const activeLocLink = (asset.locationLinks as Array<Record<string, unknown>> | undefined)?.find(l => !l.effectiveUntil)
+        ?? (asset.locationLinks as Array<Record<string, unknown>> | undefined)?.[0];
+
+      const initialAddr = (v.serviceAddress ? String(v.serviceAddress) : "") || (activeLocLink?.locationAddress ? String(activeLocLink.locationAddress) : "");
+      const initialLat = (v.serviceLat != null ? String(v.serviceLat) : "") || (activeLocLink?.latitude != null ? String(activeLocLink.latitude) : "");
+      const initialLng = (v.serviceLng != null ? String(v.serviceLng) : "") || (activeLocLink?.longitude != null ? String(activeLocLink.longitude) : "");
+
+      setAddressEdit(initialAddr);
+      setLatEdit(initialLat);
+      setLngEdit(initialLng);
+
       const modelId = v.vehicleModelId != null ? Number(v.vehicleModelId) : null;
       if (modelId) {
         setSelectedModel({
@@ -105,6 +163,10 @@ export default function AssetDetail() {
         label: asset.label ?? "",
         notes: asset.notes ?? "",
       });
+
+      if (s.address) setAddressEdit(String(s.address));
+      if (s.serviceLat != null) setLatEdit(String(s.serviceLat));
+      if (s.serviceLng != null) setLngEdit(String(s.serviceLng));
     }
   }, [asset?.id, asset?.updatedAt]);
 
@@ -176,6 +238,81 @@ export default function AssetDetail() {
     }
   };
 
+  const handleSaveLocation = async () => {
+    setSavingLocation(true);
+    try {
+      const latNum = latEdit.trim() ? parseFloat(latEdit.trim()) : null;
+      const lngNum = lngEdit.trim() ? parseFloat(lngEdit.trim()) : null;
+
+      if (latNum !== null && (!Number.isFinite(latNum) || latNum < -90 || latNum > 90)) {
+        toast({ title: "Invalid Latitude", description: "Latitude must be between -90 and 90", variant: "destructive" });
+        setSavingLocation(false);
+        return;
+      }
+      if (lngNum !== null && (!Number.isFinite(lngNum) || lngNum < -180 || lngNum > 180)) {
+        toast({ title: "Invalid Longitude", description: "Longitude must be between -180 and 180", variant: "destructive" });
+        setSavingLocation(false);
+        return;
+      }
+
+      await updateAsset(id, {
+        serviceAddress: addressEdit.trim() || null,
+        serviceLat: latNum,
+        serviceLng: lngNum,
+        address: addressEdit.trim() || undefined,
+      });
+
+      toast({
+        title: "Location & GPS coordinates saved",
+        description: "Directions and Google Maps link updated for Staff app Daily Clean.",
+      });
+      await refetch();
+      qc.invalidateQueries({ queryKey: ["assets"] });
+    } catch (err) {
+      toast({
+        title: "Save failed",
+        description: err instanceof Error ? err.message : "Failed to save location",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
+  const handlePasteCoord = (value: string) => {
+    setCoordPaste(value);
+    const parsed = parseCoordinateInput(value);
+    if (parsed) {
+      setLatEdit(parsed.lat.toFixed(6));
+      setLngEdit(parsed.lng.toFixed(6));
+      toast({ title: "Coordinates detected!", description: `Lat: ${parsed.lat.toFixed(6)}, Lng: ${parsed.lng.toFixed(6)}` });
+    }
+  };
+
+  const handleDetectCurrentGps = () => {
+    if (!navigator.geolocation) {
+      toast({ title: "Geolocation not supported", description: "Browser does not support GPS", variant: "destructive" });
+      return;
+    }
+    setGettingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setLatEdit(pos.coords.latitude.toFixed(6));
+        setLngEdit(pos.coords.longitude.toFixed(6));
+        setGettingGps(false);
+        toast({
+          title: "GPS Location detected",
+          description: `Lat: ${pos.coords.latitude.toFixed(6)}, Lng: ${pos.coords.longitude.toFixed(6)}`,
+        });
+      },
+      err => {
+        setGettingGps(false);
+        toast({ title: "GPS detection failed", description: err.message, variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
   const handleSaveDetails = async () => {
     setBusy(true);
     try {
@@ -224,76 +361,77 @@ export default function AssetDetail() {
 
   if (!Number.isFinite(id) || id <= 0) return null;
 
+  const currentLat = vehicle?.serviceLat != null ? Number(vehicle.serviceLat) : (latEdit ? parseFloat(latEdit) : null);
+  const currentLng = vehicle?.serviceLng != null ? Number(vehicle.serviceLng) : (lngEdit ? parseFloat(lngEdit) : null);
+  const hasValidGps = currentLat !== null && currentLng !== null && !isNaN(currentLat) && !isNaN(currentLng) && currentLat !== 0 && currentLng !== 0;
+
   return (
     <AdminLayout>
       <div className="p-6 space-y-6 max-w-3xl">
         {activeCustomerId ? (
-          <CustomerProfileBackLink customerId={activeCustomerId} label="Back to customer profile" />
+          <CustomerProfileBackLink customerId={activeCustomerId} />
         ) : (
-          <Link href="/admin/customers" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-            <ArrowLeft size={14} /> Back to Customer Profile
+          <Link href="/admin/assets" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+            <ArrowLeft size={16} /> Back to Assets
           </Link>
         )}
 
         {isLoading ? (
-          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-64 w-full" />
         ) : asset ? (
           <>
-            <div className="flex items-start gap-3">
-              {asset.assetType === "vehicle" ? <Car size={28} className="text-primary" /> : <Sun size={28} className="text-primary" />}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                {asset.assetType === "vehicle" ? <Car size={28} className="text-primary" /> : <Sun size={28} className="text-primary" />}
+              </div>
               <div>
-                <h1 className="font-display font-bold text-2xl">{asset.label}</h1>
-                <p className="text-sm text-muted-foreground">{ASSET_TYPE_LABELS[asset.assetType]} · {asset.status}</p>
+                <h1 className="text-2xl font-bold font-mono tracking-tight">{asset.assetIdentifier}</h1>
+                <p className="text-sm text-muted-foreground capitalize">
+                  {ASSET_TYPE_LABELS[asset.assetType]} · {asset.status}
+                </p>
                 {vehicle && (
                   <p className="text-sm mt-1">{String(vehicle.make)} {String(vehicle.model)} · {String(vehicle.vehicleType)}</p>
                 )}
                 {solar && (
-                  <p className="text-sm mt-1">{String(solar.panelCapacityKw)} kW · {String(solar.panelCount)} panels</p>
+                  <p className="text-sm mt-1">{String(solar.siteName)} · {String(solar.panelCount)} panels</p>
                 )}
               </div>
             </div>
 
+            {/* Edit details Card */}
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Pencil size={16} className="text-primary" /> Edit details
-                </CardTitle>
+                <CardTitle className="text-base flex items-center gap-2"><Pencil size={16} className="text-primary" /> Edit details</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
                 {asset.assetType === "vehicle" ? (
                   <>
                     <VehicleModelSelect
-                      selected={selectedModel}
-                      modelId={selectedModel?.id}
-                      onSelect={model => {
-                        setSelectedModel(model);
-                        if (model?.seatCategoryId != null) {
-                          setVehicleEdit(f => ({ ...f, seatCategoryId: model.seatCategoryId }));
-                        }
-                      }}
+                      value={selectedModel}
+                      onChange={m => setSelectedModel(m)}
+                      required
                     />
                     <SeatCategorySelect
                       value={vehicleEdit.seatCategoryId}
-                      onChange={seatId => setVehicleEdit(f => ({ ...f, seatCategoryId: seatId }))}
-                      model={selectedModel}
+                      onChange={id => setVehicleEdit(f => ({ ...f, seatCategoryId: id }))}
+                      required
                     />
                     <div>
                       <Label>Registration number *</Label>
                       <Input
-                        className="mt-1"
+                        className="mt-1 font-mono uppercase"
                         value={vehicleEdit.registrationNumber}
                         onChange={e => setVehicleEdit(f => ({ ...f, registrationNumber: e.target.value.toUpperCase() }))}
-                        data-testid="input-admin-edit-reg"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label>Year</Label>
                         <Input
-                          type="number"
                           className="mt-1"
                           value={vehicleEdit.year}
                           onChange={e => setVehicleEdit(f => ({ ...f, year: e.target.value }))}
+                          placeholder="e.g. 2022"
                         />
                       </div>
                       <div>
@@ -302,6 +440,7 @@ export default function AssetDetail() {
                           className="mt-1"
                           value={vehicleEdit.color}
                           onChange={e => setVehicleEdit(f => ({ ...f, color: e.target.value }))}
+                          placeholder="e.g. White"
                         />
                       </div>
                     </div>
@@ -311,6 +450,7 @@ export default function AssetDetail() {
                         className="mt-1"
                         value={vehicleEdit.label}
                         onChange={e => setVehicleEdit(f => ({ ...f, label: e.target.value }))}
+                        placeholder="Optional nickname"
                       />
                     </div>
                     <div>
@@ -373,6 +513,122 @@ export default function AssetDetail() {
                 <Button onClick={() => void handleSaveDetails()} disabled={busy} data-testid="btn-admin-save-asset">
                   {busy ? "Saving…" : "Save changes"}
                 </Button>
+              </CardContent>
+            </Card>
+
+            {/* PARKING / SERVICE LOCATION & GPS COORDINATES (NEW DIRECT CONTROLS) */}
+            <Card className="border-primary/30">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Navigation size={17} className="text-primary" />
+                    Parking Location & GPS Coordinates
+                  </CardTitle>
+                  {hasValidGps ? (
+                    <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs gap-1">
+                      <CheckCircle2 size={13} /> GPS Linked
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-300 text-xs gap-1">
+                      <AlertTriangle size={13} /> Coordinates Missing
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Daily Clean staff uses these coordinates for turn-by-turn Google Maps navigation. If coordinates are missing, the staff app displays &quot;Location nahi mili&quot;.
+                </p>
+
+                {/* Service Address */}
+                <div>
+                  <Label htmlFor="asset-service-address">Service / Parking Address</Label>
+                  <Input
+                    id="asset-service-address"
+                    className="mt-1"
+                    placeholder="e.g. B 75 Gurudham Colony, Durgakund, Varanasi"
+                    value={addressEdit}
+                    onChange={e => setAddressEdit(e.target.value)}
+                  />
+                </div>
+
+                {/* Quick Paste Box */}
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-1.5">
+                  <Label htmlFor="paste-coord-box" className="text-xs font-semibold text-foreground">
+                    Quick Paste: Google Maps Link or Coordinates
+                  </Label>
+                  <Input
+                    id="paste-coord-box"
+                    placeholder="Paste link (https://maps.google.com/...) or e.g. 25.281234, 82.986321"
+                    value={coordPaste}
+                    onChange={e => handlePasteCoord(e.target.value)}
+                    className="h-9 text-xs font-mono"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Tip: Open Google Maps, tap car location, copy link or coordinates, and paste here. Lat/Lng will auto-fill.
+                  </p>
+                </div>
+
+                {/* Latitude & Longitude Inputs */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="asset-lat">Latitude</Label>
+                    <Input
+                      id="asset-lat"
+                      placeholder="e.g. 25.298541"
+                      className="mt-1 font-mono text-sm"
+                      value={latEdit}
+                      onChange={e => setLatEdit(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="asset-lng">Longitude</Label>
+                    <Input
+                      id="asset-lng"
+                      placeholder="e.g. 82.991245"
+                      className="mt-1 font-mono text-sm"
+                      value={lngEdit}
+                      onChange={e => setLngEdit(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Button
+                    onClick={handleSaveLocation}
+                    disabled={savingLocation}
+                    className="h-9 px-4 font-semibold text-xs"
+                    data-testid="btn-save-location-coords"
+                  >
+                    {savingLocation ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Navigation size={14} className="mr-1.5" />}
+                    Save Location & Coordinates
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 text-xs gap-1.5"
+                    disabled={gettingGps}
+                    onClick={handleDetectCurrentGps}
+                  >
+                    {gettingGps ? <Loader2 size={13} className="animate-spin" /> : <Compass size={13} />}
+                    Detect My GPS
+                  </Button>
+
+                  {hasValidGps && (
+                    <a
+                      href={`https://www.google.com/maps?q=${currentLat},${currentLng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline h-9 px-3 rounded-md border border-primary/20 bg-primary/5"
+                    >
+                      <ExternalLink size={13} />
+                      Preview on Google Maps
+                    </a>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
