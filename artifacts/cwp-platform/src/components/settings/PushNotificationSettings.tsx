@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, BellOff, Loader2 } from "lucide-react";
+import { Bell, BellRing, Loader2, RotateCw, Vibrate, Clock } from "lucide-react";
 import { format } from "date-fns";
 import {
   getPushStatus,
@@ -16,6 +16,9 @@ import {
   getBrowserNotificationPermission,
   type PushStatus,
 } from "@/lib/pushNotifications";
+import { vibrateStaffJobAlert } from "@/lib/staff-vibration";
+
+const VIBRATION_STORAGE_KEY = "cwp_staff_vibration_enabled";
 
 export function PushNotificationSettings({ variant = "default" }: { variant?: "default" | "staff" }) {
   const { toast } = useToast();
@@ -24,6 +27,14 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
   const [toggling, setToggling] = useState(false);
   const supported = isPushSupported();
   const permission = getBrowserNotificationPermission();
+
+  const [vibrationEnabled, setVibrationEnabled] = useState(() => {
+    try {
+      return localStorage.getItem(VIBRATION_STORAGE_KEY) !== "false";
+    } catch {
+      return true;
+    }
+  });
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -39,7 +50,22 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
     void refresh();
   }, [refresh]);
 
-  const handleToggle = async (enabled: boolean) => {
+  const handleVibrationToggle = (enabled: boolean) => {
+    setVibrationEnabled(enabled);
+    try {
+      localStorage.setItem(VIBRATION_STORAGE_KEY, enabled ? "true" : "false");
+    } catch {
+      // ignore
+    }
+    if (enabled) {
+      vibrateStaffJobAlert();
+      toast({ title: "Alert vibration enabled" });
+    } else {
+      toast({ title: "Alert vibration muted" });
+    }
+  };
+
+  const handleBrowserPushToggle = async (enabled: boolean) => {
     if (!supported) return;
     setToggling(true);
     try {
@@ -49,7 +75,7 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
           toast({ title: "Could not enable notifications", description: result.error, variant: "destructive" });
           return;
         }
-        toast({ title: variant === "staff" ? "Job alerts enabled" : "Notifications enabled" });
+        toast({ title: "Notifications enabled" });
       } else {
         await unsubscribeFromPush();
         toast({ title: "Notifications disabled" });
@@ -60,8 +86,134 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
     }
   };
 
+  const handleTestVibration = () => {
+    vibrateStaffJobAlert();
+    toast({
+      title: "Vibration alert tested",
+      description: "Haptic alert pattern triggered for job notifications.",
+    });
+  };
+
+  // Staff mobile UI view
+  if (variant === "staff") {
+    return (
+      <Card className="border border-border/80 shadow-sm overflow-hidden">
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                <BellRing className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm sm:text-base text-foreground">
+                  Job Alerts & Notifications
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  Real-time alerts for new job assignments, schedule changes, and route updates.
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Active
+            </span>
+          </div>
+
+          {/* Alert Options */}
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Vibrate className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <Label htmlFor="staff-vibration" className="text-sm font-medium cursor-pointer">
+                  Vibration & Sound Alert
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Vibrate phone when a new job is assigned
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="staff-vibration"
+              checked={vibrationEnabled}
+              onCheckedChange={handleVibrationToggle}
+            />
+          </div>
+
+          {/* Last notification received - Spacious, readable card */}
+          <div className="rounded-xl border border-border/80 bg-muted/20 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Clock className="h-3.5 w-3.5 text-primary" />
+                <span>Last Notification Received</span>
+              </div>
+              {status?.lastNotification && (
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                  Delivered
+                </span>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground justify-center">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span>Checking latest notifications…</span>
+              </div>
+            ) : status?.lastNotification ? (
+              <div className="space-y-2.5">
+                <p className="text-sm font-bold text-foreground leading-snug">
+                  {status.lastNotification.title}
+                </p>
+                <div className="rounded-lg bg-card border border-border/60 p-3 text-xs sm:text-sm text-foreground/90 font-medium leading-relaxed">
+                  {status.lastNotification.body}
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-0.5">
+                  <Clock className="h-3 w-3" />
+                  <span>
+                    {format(new Date(status.lastNotification.receivedAt), "dd MMMM yyyy, hh:mm a")}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="py-4 text-center space-y-1">
+                <p className="text-xs font-medium text-foreground">No notifications received yet</p>
+                <p className="text-[11px] text-muted-foreground">
+                  When new jobs or route updates are assigned, full details will appear here.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 text-xs font-medium gap-1.5"
+              onClick={() => void refresh()}
+              disabled={loading}
+            >
+              <RotateCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh status
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs font-medium gap-1.5 text-muted-foreground hover:text-foreground"
+              onClick={handleTestVibration}
+            >
+              <Vibrate className="h-3.5 w-3.5" />
+              Test vibration
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Default browser push notification settings view (admin / customer)
   const statusLabel = !supported
-    ? "Not supported"
+    ? "Not supported in this browser"
     : !status?.pushConfigured
       ? "Server not configured"
       : permission === "denied"
@@ -78,17 +230,11 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
       <CardContent className="p-4 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex gap-3">
-            {isChecked ? (
-              <Bell className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-            ) : (
-              <BellOff className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-            )}
+            <Bell className="h-5 w-5 text-primary shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium">Push Notifications</p>
+              <p className="font-medium">Web Push Notifications</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {variant === "staff"
-                  ? "Field job alerts — vibration + popup when new assignments or route changes arrive"
-                  : "Browser alerts for visits, routes, and account updates"}
+                Browser alerts for bookings, visits, routes, and account updates.
               </p>
             </div>
           </div>
@@ -103,78 +249,42 @@ export function PushNotificationSettings({ variant = "default" }: { variant?: "d
           <>
             <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
               <Label htmlFor="push-enabled" className="text-sm cursor-pointer">
-                {variant === "staff" ? "Job alerts" : "Enable notifications"}
+                Enable browser notifications
               </Label>
               <Switch
                 id="push-enabled"
                 checked={isChecked}
                 disabled={!supported || !status?.pushConfigured || permission === "denied" || toggling}
-                onCheckedChange={v => void handleToggle(Boolean(v))}
+                onCheckedChange={v => void handleBrowserPushToggle(Boolean(v))}
               />
             </div>
 
-            {!supported && (
-              <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-                <p className="font-semibold text-foreground">Push notifications unavailable on this device</p>
-                <p>
-                  Background web push is not supported in this runtime environment. While the app is open, in-app alerts and vibration will notify you when new jobs or route updates are assigned.
-                </p>
-              </div>
-            )}
-
-            {supported && variant === "staff" && permission === "default" && !status?.subscribed && status?.pushConfigured && (
-              <p className="text-xs text-muted-foreground">
-                Turn on the switch above — browser will ask Allow once for job alerts.
-              </p>
-            )}
-
             {supported && permission === "denied" && (
               <p className="text-xs text-destructive">
-                Notifications are blocked. Enable them in your browser or application site settings.
+                Notifications are blocked. Please enable them in your browser site permissions.
               </p>
             )}
 
-            {supported && !status?.pushConfigured && (
-              <div className="text-xs text-muted-foreground space-y-1 rounded-lg border border-dashed p-3">
-                <p>Server push is not configured yet (VAPID keys required).</p>
-                {variant === "staff" ? (
-                  <p>
-                    Dev setup: run{" "}
-                    <code className="text-[11px] bg-muted px-1 py-0.5 rounded">
-                      pnpm --filter @workspace/scripts run setup:vapid
-                    </code>{" "}
-                    then restart the API server. In-app job popups still work while the app is open.
-                  </p>
-                ) : (
-                  <p>Ask your administrator to configure VAPID keys on the server.</p>
-                )}
-              </div>
-            )}
-
-            <div className="text-xs space-y-1 pt-1 border-t">
-              <p className="text-muted-foreground">Notification status</p>
-              <p>{statusLabel}</p>
-              {supported && status?.subscriptionCount != null && status.subscribed && (
-                <p className="text-muted-foreground">{status.subscriptionCount} device(s) registered</p>
-              )}
-            </div>
-
-            <div className="text-xs space-y-1">
-              <p className="text-muted-foreground">Last notification received</p>
+            {/* Last notification received - Clean layout */}
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-4 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Last Notification Received
+              </p>
               {status?.lastNotification ? (
-                <div className="rounded bg-muted/60 p-2 space-y-0.5">
-                  <p className="font-medium">{status.lastNotification.title}</p>
-                  <p>{status.lastNotification.body}</p>
-                  <p className="text-muted-foreground">
+                <div className="rounded-lg bg-card border border-border/60 p-3 space-y-1">
+                  <p className="text-sm font-semibold">{status.lastNotification.title}</p>
+                  <p className="text-xs text-muted-foreground">{status.lastNotification.body}</p>
+                  <p className="text-[11px] text-muted-foreground pt-1">
                     {format(new Date(status.lastNotification.receivedAt), "dd MMM yyyy, hh:mm a")}
                   </p>
                 </div>
               ) : (
-                <p className="text-muted-foreground">No notifications delivered yet</p>
+                <p className="text-xs text-muted-foreground">No notifications delivered yet</p>
               )}
             </div>
 
             <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+              <RotateCw className="h-3.5 w-3.5 mr-1.5" />
               Refresh status
             </Button>
 
