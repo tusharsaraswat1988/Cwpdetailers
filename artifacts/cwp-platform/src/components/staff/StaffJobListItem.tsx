@@ -13,6 +13,10 @@ interface Props {
 }
 
 export function StaffJobListItem({ job, compact, showAmount, linkToDashboard }: Props) {
+  const isSolar =
+    job.taskType === "solar_cleaning" ||
+    job.serviceType?.toLowerCase().includes("solar") ||
+    job.serviceName?.toLowerCase().includes("solar");
   const where = formatStaffAddressLine(job.address, job.area) || undefined;
   const subtitle = [
     (job.serviceName ?? job.serviceType)?.replace(/_/g, " "),
@@ -28,6 +32,13 @@ export function StaffJobListItem({ job, compact, showAmount, linkToDashboard }: 
       status={job.status ?? "scheduled"}
       where={where}
       compact={compact}
+      trailing={
+        isSolar ? (
+          <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+            ☀️ Solar
+          </span>
+        ) : undefined
+      }
       amount={
         showAmount && job.status === "completed" && jobAmount(job) > 0
           ? `₹${jobAmount(job).toLocaleString("en-IN")}`

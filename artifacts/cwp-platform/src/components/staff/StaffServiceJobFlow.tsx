@@ -59,10 +59,25 @@ function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: s
 }
 
 function JobDetailsCard({ job, addressLine }: { job: StaffJob; addressLine: string | undefined }) {
+  const isSolar =
+    job.taskType === "solar_cleaning" ||
+    job.serviceType?.toLowerCase().includes("solar") ||
+    job.serviceName?.toLowerCase().includes("solar");
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3 text-sm">
-      <p className="font-medium">Job details</p>
-      {job.vehicleName && <p className="text-muted-foreground">Vehicle: {job.vehicleName}</p>}
+      <div className="flex items-center justify-between">
+        <p className="font-medium">Job details</p>
+        {isSolar && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+            ☀️ Solar Cleaning
+          </span>
+        )}
+      </div>
+      {job.vehicleName && (
+        <p className="text-muted-foreground">
+          {isSolar ? `Solar Site: ${job.vehicleName}` : `Vehicle: ${job.vehicleName}`}
+        </p>
+      )}
       {addressLine && (
         <div className="flex items-start gap-2 text-muted-foreground">
           <MapPin size={14} className="shrink-0 mt-0.5 text-primary" />
@@ -70,7 +85,9 @@ function JobDetailsCard({ job, addressLine }: { job: StaffJob; addressLine: stri
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        3 before photos → car wash → 3 after photos → remark → complete.
+        {isSolar
+          ? "3 before photos (array/panels) → solar panel cleaning → 3 after photos → remark → complete."
+          : "3 before photos → car wash → 3 after photos → remark → complete."}
       </p>
     </div>
   );
@@ -113,6 +130,10 @@ export function StaffServiceJobFlow({
   const isUploading = uploadingJobId === job.id;
   const { beforePhotos, afterPhotos } = getJobPhotoArrays(job);
   const addressLine = job.area ? `${job.area}, ${job.address}` : job.address ?? undefined;
+  const isSolar =
+    job.taskType === "solar_cleaning" ||
+    job.serviceType?.toLowerCase().includes("solar") ||
+    job.serviceName?.toLowerCase().includes("solar");
   const isExecution = job.source === "execution";
   const beforeDone = before >= REQUIRED_SERVICE_PHOTOS;
   const afterDone = after >= REQUIRED_SERVICE_PHOTOS;
@@ -284,7 +305,7 @@ export function StaffServiceJobFlow({
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
           <p className="font-medium text-primary">Before photos done</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Ab car wash shuru karein. Kaam khatam hone ke baad clean car ki photos lenge.
+            {isSolar ? "Ab solar cleaning shuru karein. Kaam khatam hone ke baad clean panels ki photos lenge." : "Ab car wash shuru karein. Kaam khatam hone ke baad clean car ki photos lenge."}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -312,7 +333,7 @@ export function StaffServiceJobFlow({
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <StaffStatusBadge status={job.status === "in_progress" ? "in_progress" : "en_route"} />
-          <p className="text-xs text-muted-foreground">Step 1 — Before photos (dirty car)</p>
+          <p className="text-xs text-muted-foreground">{isSolar ? "Step 1 — Before photos (uncleaned panels)" : "Step 1 — Before photos (dirty car)"}</p>
         </div>
         <GeoPhotoSlotGrid
           label="Before — uncleaned"
@@ -375,7 +396,7 @@ export function StaffServiceJobFlow({
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <StaffStatusBadge status="in_progress" pulse />
-          <p className="text-xs text-muted-foreground">Step 3 — After photos (clean car)</p>
+          <p className="text-xs text-muted-foreground">{isSolar ? "Step 3 — After photos (clean panels)" : "Step 3 — After photos (clean car)"}</p>
         </div>
 
         <GeoPhotoSlotGrid

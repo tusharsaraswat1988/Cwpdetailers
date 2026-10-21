@@ -47,6 +47,33 @@ export function LocationPicker({ value, onChange, savedLocations, onSaveNew, req
     }
   };
 
+  const parsePastedCoords = (input: string) => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    const urlMatch = trimmed.match(/[@?&](?:q=|ll=|query=)?(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+    if (urlMatch) {
+      const parsedLat = parseFloat(urlMatch[1]);
+      const parsedLng = parseFloat(urlMatch[2]);
+      if (parsedLat >= -90 && parsedLat <= 90 && parsedLng >= -180 && parsedLng <= 180) {
+        setLat(parsedLat.toFixed(6));
+        setLng(parsedLng.toFixed(6));
+        emitChange(address, parsedLat.toFixed(6), parsedLng.toFixed(6), placeId);
+        return;
+      }
+    }
+    const coordMatch = trimmed.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+    if (coordMatch) {
+      const parsedLat = parseFloat(coordMatch[1]);
+      const parsedLng = parseFloat(coordMatch[2]);
+      if (parsedLat >= -90 && parsedLat <= 90 && parsedLng >= -180 && parsedLng <= 180) {
+        setLat(parsedLat.toFixed(6));
+        setLng(parsedLng.toFixed(6));
+        emitChange(address, parsedLat.toFixed(6), parsedLng.toFixed(6), placeId);
+        return;
+      }
+    }
+  };
+
   const useCurrentLocation = () => {
     if (!navigator.geolocation) return;
     setLocating(true);
@@ -158,6 +185,14 @@ export function LocationPicker({ value, onChange, savedLocations, onSaveNew, req
                   onChange={e => { setAddress(e.target.value); emitChange(e.target.value, lat, lng, placeId); }}
                   placeholder="Full address with landmark"
                   data-testid="input-location-address"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Paste Google Maps link or coordinates</Label>
+                <Input
+                  className="mt-1 text-xs"
+                  placeholder="e.g. 25.3176, 82.9739 or Google Maps link"
+                  onChange={e => parsePastedCoords(e.target.value)}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">

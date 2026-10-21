@@ -203,6 +203,43 @@ router.patch("/vehicles/:id", async (req, res) => {
     }
 
     const [vehicle] = await db.update(vehiclesTable).set(updateData).where(eq(vehiclesTable.id, id)).returning();
+
+    if (vehicle && (vehicle.serviceLat != null && vehicle.serviceLng != null || vehicle.serviceAddress)) {
+      try {
+        const subs = await db.select({ id: dcmsSubscriptionsTable.id })
+          .from(dcmsSubscriptionsTable)
+          .where(and(eq(dcmsSubscriptionsTable.vehicleId, id), eq(dcmsSubscriptionsTable.status, "active")));
+
+        for (const sub of subs) {
+          const [existingLoc] = await db.select({ id: dcmsSubscriptionLocationsTable.id })
+            .from(dcmsSubscriptionLocationsTable)
+            .where(eq(dcmsSubscriptionLocationsTable.subscriptionId, sub.id))
+            .limit(1);
+
+          if (existingLoc) {
+            await db.update(dcmsSubscriptionLocationsTable)
+              .set({
+                latitude: vehicle.serviceLat ?? undefined,
+                longitude: vehicle.serviceLng ?? undefined,
+                address: vehicle.serviceAddress ?? undefined,
+                updatedAt: new Date(),
+              })
+              .where(eq(dcmsSubscriptionLocationsTable.id, existingLoc.id));
+          } else if (vehicle.serviceLat != null && vehicle.serviceLng != null) {
+            await db.insert(dcmsSubscriptionLocationsTable).values({
+              subscriptionId: sub.id,
+              latitude: vehicle.serviceLat,
+              longitude: vehicle.serviceLng,
+              address: vehicle.serviceAddress ?? null,
+              radiusMeters: 100,
+              updatedAt: new Date(),
+            });
+          }
+        }
+      } catch (syncErr) {
+        req.log.warn({ err: syncErr, vehicleId: id }, "Failed to sync vehicle location to dcms subscriptions");
+      }
+    }
     return res.json(vehicle);
   } catch (err) {
     req.log.error({ err }, "Update vehicle error");

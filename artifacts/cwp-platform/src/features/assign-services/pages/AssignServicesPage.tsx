@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,7 +190,9 @@ function toPendingRow(p: PendingAssignment): DispatchRow {
     assignedAt: null,
     createdAt: p.createdAt,
     taskType: null,
-    taskTypeLabel: null,
+    taskTypeLabel: p.requiredTasks?.length > 1
+      ? p.requiredTasks.map(t => t.taskTypeLabel).join(" + ")
+      : p.requiredTasks?.[0]?.taskTypeLabel ?? null,
     notes: p.notes,
     missingLocation: !p.serviceLocationId,
     isOverdue: isScheduleOverdue(p.scheduledDate, waiting),
@@ -248,61 +251,299 @@ function timelineIcon(eventType: string): TimelineEvent["icon"] {
   return UserCheck;
 }
 
-function TaskStaffPicker({
+export function getTaskOperationalDescription(taskType: ServiceTaskType): string {
+  switch (taskType) {
+    case "daily_cleaning":
+      return "Daily morning vehicle exterior wipe, windshield cleaning, and dust removal.";
+    case "car_wash":
+      return "Full exterior foam pressure wash, tire dressing, and deep dry.";
+    case "solar_cleaning":
+      return "Solar panel wash, efficiency inspection, and debris removal.";
+    case "interior_detailing":
+      return "Cabin vacuuming, upholstery shampoo, and interior sanitization.";
+    case "one_time_service":
+      return "Dedicated single-session specialized vehicle detailing.";
+    default:
+      return "Scheduled service task execution.";
+  }
+}
+
+export function computeAssignmentButtonLabel({
+  isPending,
+  totalTasks,
+  unassignedTasks,
+}: {
+  isPending: boolean;
+  totalTasks: number;
+  unassignedTasks: number;
+}): string {
+  if (isPending) return "Assigning…";
+  if (unassignedTasks === 0) return "All tasks assigned";
+  if (totalTasks > 1) {
+    if (unassignedTasks === totalTasks) {
+      return "Assign both tasks";
+    }
+    return "Assign remaining task";
+  }
+  return "Assign technician";
+}
+
+function TaskStaffPickerSelect({
   taskType,
+  roleSlug,
   value,
   onChange,
   disabled,
-  assignedName,
 }: {
   taskType: ServiceTaskType;
+  roleSlug: ReturnType<typeof roleSlugForTaskType>;
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
-  assignedName?: string;
 }) {
-  const roleSlug = roleSlugForTaskType(taskType);
   const { data: staffList = [], isLoading } = useQuery({
     queryKey: [...ASSIGNMENTS_QUERY_KEY, "staff", taskType, roleSlug],
     queryFn: () => fetchStaffForAssignment(roleSlug),
-    enabled: !assignedName,
   });
 
-  if (assignedName) {
-    return (
-      <div className="rounded-md border px-3 py-2 text-sm bg-muted/30">
-        <span className="text-muted-foreground">{taskTypeLabel(taskType)}:</span>{" "}
-        <span className="font-medium">{assignedName}</span>
-        <StatusBadge status="assigned" className="ml-2" />
-      </div>
-    );
-  }
+  const roleLabel = roleLabelForSlug(roleSlug);
 
   return (
     <div className="space-y-1">
-      <Label>{taskTypeLabel(taskType)}</Label>
-      <p className="text-xs text-muted-foreground">Role: {roleLabelForSlug(roleSlug)}</p>
       <Select value={value} onValueChange={onChange} disabled={disabled || isLoading}>
-        <SelectTrigger>
-          <SelectValue placeholder={isLoading ? "Loading…" : staffList.length === 0 ? "No matching staff" : "Select staff"} />
+        <SelectTrigger id={`select-staff-${taskType}`} aria-label={`Select ${roleLabel} for ${taskTypeLabel(taskType)}`}>
+          <SelectValue
+            placeholder={
+              isLoading
+                ? "Loading staff…"
+                : staffList.length === 0
+                  ? `No matching ${roleLabel} available`
+                  : `Select ${roleLabel}…`
+            }
+          />
         </SelectTrigger>
         <SelectContent>
-          {staffList.map(s => (
-            <SelectItem key={s.id} value={String(s.id)}>
-              {s.name}
-              {s.employeeCode ? ` · ${s.employeeCode}` : ""}
-              {s.operationalRoles?.length
-                ? ` (${s.operationalRoles.map(r => r.roleName).join(", ")})`
-                : ""}
-            </SelectItem>
-          ))}
+          {staffList.map(s => {
+            const status = s.todayAttendanceStatus === "present"
+              ? "On Duty"
+              : s.isActive !== false
+                ? "Active"
+                : "Inactive";
+            return (
+              <SelectItem key={s.id} value={String(s.id)}>
+                {s.name} ({status})
+              </SelectItem>
+            );
+          })}
         </SelectContent>
       </Select>
       {!isLoading && staffList.length === 0 && (
-        <p className="text-xs text-amber-700">
-          No staff with {roleLabelForSlug(roleSlug)} role. Add it on the staff profile.
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          No active staff with {roleLabel} role found. Add this role on a staff profile in Staff Management.
         </p>
       )}
+    </div>
+  );
+}
+
+function CustomerPlanAssignmentSection({
+  pending,
+  taskStaff,
+  onTaskStaffChange,
+  assignNotes,
+  onAssignNotesChange,
+  canAssign,
+  isAssigning,
+  onAssign,
+  primaryButtonLabel,
+}: {
+  pending: PendingAssignment;
+  taskStaff: Partial<Record<ServiceTaskType, string>>;
+  onTaskStaffChange: (taskType: ServiceTaskType, staffId: string) => void;
+  assignNotes: string;
+  onAssignNotesChange: (notes: string) => void;
+  canAssign: boolean;
+  isAssigning: boolean;
+  onAssign: () => void;
+  primaryButtonLabel: string;
+}) {
+  const isMultiTask = pending.requiredTasks.length > 1;
+
+  return (
+    <div className="space-y-4">
+      {/* Customer Service Plan Context */}
+      <div className="rounded-lg border bg-muted/20 p-3.5 space-y-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <span className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+              Customer Service Plan
+            </span>
+            <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+              <span>{pending.customerName}</span>
+            </h3>
+          </div>
+          <CustomerProfileLink
+            customerId={pending.customerId}
+            customerBasePath="/admin/customers"
+            name="View Customer"
+            className="h-7 text-xs"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-border/50">
+          <div>
+            <span className="text-muted-foreground">Vehicle:</span>{" "}
+            <span className="font-medium text-foreground">{pending.assetLabel ?? "—"}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Plan:</span>{" "}
+            <span className="font-medium text-foreground">{pending.serviceName}</span>
+          </div>
+          <div className="col-span-2">
+            <span className="text-muted-foreground">Service Address:</span>{" "}
+            <span className="font-medium text-foreground">
+              {pending.serviceLocationLabel
+                ? formatAssignmentLocation({
+                    serviceLocationLabel: pending.serviceLocationLabel,
+                    serviceLocationType: pending.serviceLocationType,
+                    serviceLocationCity: pending.serviceLocationCity,
+                  })
+                : "Missing address"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Missing Location Warning & Recovery */}
+      {!pending.serviceLocationId && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3.5 space-y-2">
+          <div className="flex items-center gap-2 text-destructive font-semibold text-sm">
+            <AlertTriangle size={15} />
+            <span>Missing Service Address</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Technicians cannot be assigned because this customer has no confirmed service address. Please add an address to the customer profile before assigning tasks.
+          </p>
+          <div className="pt-1">
+            <CustomerProfileLink
+              customerId={pending.customerId}
+              customerBasePath="/admin/customers"
+              name="Open Customer Profile to Add Address"
+              className="text-xs h-7"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Task Service Plan Explanation */}
+      {isMultiTask && (
+        <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs space-y-1">
+          <div className="flex items-center gap-1.5 font-medium text-blue-900 dark:text-blue-200">
+            <Zap size={14} className="text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>Plan Bundle: {pending.requiredTasks.length} Separate Operational Tasks</span>
+          </div>
+          <p className="text-muted-foreground leading-relaxed">
+            This customer service plan ({pending.serviceName}) combines distinct tasks. Each task requires qualified technicians and generates its own scheduled execution record.
+          </p>
+        </div>
+      )}
+
+      {/* Grouped Task Assignment Sections */}
+      <div className="space-y-3">
+        {pending.requiredTasks.map((slot, idx) => {
+          const isAssigned = Boolean(slot.staffId);
+          const roleSlug = roleSlugForTaskType(slot.taskType);
+          const roleLabel = roleLabelForSlug(roleSlug);
+          const desc = getTaskOperationalDescription(slot.taskType);
+          const currentVal = taskStaff[slot.taskType] ?? "";
+          const otherAssignedStaff = Object.entries(taskStaff)
+            .find(([tt, sId]) => tt !== slot.taskType && Boolean(sId))?.[1];
+          const isSameStaffSelected = Boolean(currentVal && otherAssignedStaff && currentVal === otherAssignedStaff);
+
+          return (
+            <div
+              key={slot.taskType}
+              className={cn(
+                "rounded-lg border p-3.5 space-y-3 transition-colors",
+                isAssigned ? "border-green-500/30 bg-green-500/5" : "border-border bg-card",
+              )}
+              data-testid={`task-assignment-section-${slot.taskType}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Task {idx + 1}
+                  </span>
+                  <h4 className="font-semibold text-sm text-foreground">{slot.taskTypeLabel}</h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                </div>
+                {isAssigned ? (
+                  <StatusBadge status="assigned" label="Assigned" tone="success" />
+                ) : (
+                  <StatusBadge status="waiting_assignment" label="Needs Assignment" tone="warning" />
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 rounded px-2.5 py-1">
+                <span className="font-medium text-foreground">Required Role:</span>
+                <span>{roleLabel}</span>
+              </div>
+
+              {isAssigned ? (
+                <div className="rounded-md border border-border/60 bg-background/80 p-2.5 text-xs flex items-center justify-between">
+                  <span className="text-muted-foreground">Assigned employee:</span>
+                  <span className="font-semibold text-foreground">{slot.staffName}</span>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`select-staff-${slot.taskType}`} className="text-xs">
+                    Select {roleLabel} for {slot.taskTypeLabel}
+                  </Label>
+                  <TaskStaffPickerSelect
+                    taskType={slot.taskType}
+                    roleSlug={roleSlug}
+                    value={currentVal}
+                    onChange={v => onTaskStaffChange(slot.taskType, v)}
+                    disabled={!pending.serviceLocationId || isAssigning}
+                  />
+                  {isSameStaffSelected && (
+                    <p className="text-[11px] text-muted-foreground italic">
+                      Note: Same employee selected for multiple tasks (permitted if employee holds both roles).
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Assignment Notes */}
+      <div className="space-y-1 pt-1">
+        <Label htmlFor="assign-notes" className="text-xs">Assignment notes (optional)</Label>
+        <Textarea
+          id="assign-notes"
+          value={assignNotes}
+          onChange={e => onAssignNotesChange(e.target.value)}
+          rows={2}
+          placeholder="Internal notes or specific instructions for the technician(s)..."
+          disabled={isAssigning}
+        />
+      </div>
+
+      {/* Tab In-Page Primary Action Button */}
+      <Button
+        className="w-full"
+        disabled={!canAssign || isAssigning}
+        onClick={onAssign}
+        data-testid="assign-tasks-submit-btn"
+      >
+        {isAssigning ? (
+          <><Loader2 size={14} className="mr-2 animate-spin" /> Assigning…</>
+        ) : (
+          primaryButtonLabel
+        )}
+      </Button>
     </div>
   );
 }
@@ -331,6 +572,7 @@ export default function AssignServicesPage() {
 
   const [taskStaff, setTaskStaff] = useState<Partial<Record<ServiceTaskType, string>>>({});
   const [assignNotes, setAssignNotes] = useState("");
+  const [overrideLocationId, setOverrideLocationId] = useState<string>("");
 
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignTargets, setReassignTargets] = useState<DispatchRow[]>([]);
@@ -365,6 +607,7 @@ export default function AssignServicesPage() {
   } = useQuery({
     queryKey: [...ASSIGNMENTS_QUERY_KEY, "pending", serverFilters],
     queryFn: () => fetchPendingAssignments(serverFilters),
+    refetchInterval: isOnline ? 25_000 : false,
   });
 
   const {
@@ -375,6 +618,7 @@ export default function AssignServicesPage() {
   } = useQuery({
     queryKey: [...ASSIGNMENTS_QUERY_KEY, "assigned", serverFilters],
     queryFn: () => fetchAssignedServices(serverFilters),
+    refetchInterval: isOnline ? 25_000 : false,
   });
 
   const allRows = useMemo(() => {
@@ -505,15 +749,25 @@ export default function AssignServicesPage() {
     return drawerPending.requiredTasks.filter(t => !t.staffId);
   }, [drawerPending]);
 
+  const { data: customerLocationsData } = useQuery({
+    queryKey: ["service-locations", "customer-assign", drawerPending?.customerId],
+    queryFn: () => listServiceLocations({ customerId: drawerPending?.customerId, limit: 20 }),
+    enabled: Boolean(drawerPending?.customerId),
+  });
+  const customerLocations = customerLocationsData?.data ?? [];
+
+  const effectiveLocationId = overrideLocationId ? parseInt(overrideLocationId, 10) : drawerPending?.serviceLocationId;
+
   const canAssign = useMemo(() => {
-    if (!drawerPending?.serviceLocationId || unassignedTasks.length === 0) return false;
+    if (!effectiveLocationId || unassignedTasks.length === 0) return false;
     return unassignedTasks.every(t => Boolean(taskStaff[t.taskType]?.trim()));
-  }, [drawerPending, unassignedTasks, taskStaff]);
+  }, [effectiveLocationId, unassignedTasks, taskStaff]);
 
   const openDrawer = (row: DispatchRow) => {
     setDrawerKey(row.key);
     setTaskStaff({});
     setAssignNotes("");
+    setOverrideLocationId(row.serviceLocationId ? String(row.serviceLocationId) : "");
   };
 
   const assignMutation = useMutation({
@@ -523,7 +777,12 @@ export default function AssignServicesPage() {
         taskType: t.taskType,
         staffId: parseInt(taskStaff[t.taskType]!, 10),
       }));
-      return assignPendingServiceTasks(drawerPending.id, tasks, assignNotes.trim() || undefined);
+      return assignPendingServiceTasks(
+        drawerPending.id,
+        tasks,
+        assignNotes.trim() || undefined,
+        overrideLocationId ? parseInt(overrideLocationId, 10) : undefined,
+      );
     },
     onSuccess: () => {
       toast({ title: "Staff assigned — ready for execution" });
@@ -533,11 +792,22 @@ export default function AssignServicesPage() {
       setStatusFilter("ready_for_execution");
       setPage(1);
       queryClient.invalidateQueries({ queryKey: ASSIGNMENTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["ops-console-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["job-orchestration", "jobs"] });
     },
     onError: (e: Error) => {
       toast({ title: "Assignment failed", description: e.message, variant: "destructive" });
     },
   });
+
+  const primaryButtonLabel = useMemo(() => {
+    return computeAssignmentButtonLabel({
+      isPending: assignMutation.isPending,
+      totalTasks: drawerPending?.requiredTasks.length ?? 0,
+      unassignedTasks: unassignedTasks.length,
+    });
+  }, [assignMutation.isPending, drawerPending?.requiredTasks.length, unassignedTasks.length]);
 
   const reassignRoleSlug = reassignTargets[0]?.taskType
     ? roleSlugForTaskType(reassignTargets[0].taskType)
@@ -1141,6 +1411,7 @@ export default function AssignServicesPage() {
 
       <EntityDrawer
         open={!!drawerKey}
+        size="lg"
         onOpenChange={open => {
           if (!open) setDrawerKey(null);
         }}
@@ -1209,7 +1480,7 @@ export default function AssignServicesPage() {
                                   serviceLocationType: drawerRow.locationType,
                                   serviceLocationCity: drawerRow.city,
                                 })
-                              : "Missing — cannot assign"}
+                              : (effectiveLocationId && customerLocations.find(l => l.id === effectiveLocationId)?.address) || "Missing — select location below"}
                           </p>
                         </div>
                         {drawerRow.bookingId && (
@@ -1233,44 +1504,40 @@ export default function AssignServicesPage() {
                   label: "Assignment",
                   content: drawerPending ? (
                     <div className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Assign each required task to a technician. Job becomes ready for execution when tasks are covered.
-                      </p>
-                      <div className="space-y-3">
-                        {drawerPending.requiredTasks.map(slot => (
-                          <TaskStaffPicker
-                            key={slot.taskType}
-                            taskType={slot.taskType}
-                            value={taskStaff[slot.taskType] ?? ""}
-                            onChange={v => setTaskStaff(prev => ({ ...prev, [slot.taskType]: v }))}
-                            disabled={!drawerPending.serviceLocationId}
-                            assignedName={slot.staffName}
-                          />
-                        ))}
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="assign-notes">Assignment notes (optional)</Label>
-                        <Textarea
-                          id="assign-notes"
-                          value={assignNotes}
-                          onChange={e => setAssignNotes(e.target.value)}
-                          rows={2}
-                          placeholder="Internal note for this assignment"
-                        />
-                      </div>
-                      <Button
-                        className="w-full"
-                        disabled={!canAssign || assignMutation.isPending}
-                        onClick={() => assignMutation.mutate()}
-                      >
-                        {assignMutation.isPending ? (
-                          <><Loader2 size={14} className="mr-2 animate-spin" /> Assigning…</>
-                        ) : unassignedTasks.length > 1 ? (
-                          `Assign ${unassignedTasks.length} tasks`
-                        ) : (
-                          "Assign staff"
-                        )}
-                      </Button>
+                      {customerLocations.length > 0 && (
+                        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1.5">
+                          <Label className="text-xs font-semibold text-primary">Service location for this job</Label>
+                          <Select
+                            value={effectiveLocationId ? String(effectiveLocationId) : ""}
+                            onValueChange={setOverrideLocationId}
+                          >
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              <SelectValue placeholder="Choose service location…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {customerLocations.map(loc => (
+                                <SelectItem key={loc.id} value={String(loc.id)}>
+                                  {loc.label} — {loc.address || loc.city || "Saved location"}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <CustomerPlanAssignmentSection
+                        pending={drawerPending}
+                        taskStaff={taskStaff}
+                        onTaskStaffChange={(tt, staffId) => setTaskStaff(prev => ({ ...prev, [tt]: staffId }))}
+                        assignNotes={assignNotes}
+                        onAssignNotesChange={setAssignNotes}
+                        canAssign={canAssign}
+                        isAssigning={assignMutation.isPending}
+                        onAssign={() => {
+                          if (!canAssign || assignMutation.isPending) return;
+                          assignMutation.mutate();
+                        }}
+                        primaryButtonLabel={primaryButtonLabel}
+                      />
                     </div>
                   ) : (
                     <div className="space-y-3 text-sm">
@@ -1372,63 +1639,66 @@ export default function AssignServicesPage() {
                     </div>
                   ),
                 },
-                {
-                  id: "actions",
-                  label: "Actions",
-                  content: (
-                    <div className="space-y-3">
-                      {drawerRow.kind === "pending" && (
-                        <Button
-                          className="w-full"
-                          size="sm"
-                          disabled={!canAssign || assignMutation.isPending}
-                          onClick={() => assignMutation.mutate()}
-                        >
-                          <UserCheck size={14} className="mr-2" />
-                          Assign technician
-                        </Button>
-                      )}
-                      {drawerRow.kind === "assigned" && (
-                        <>
-                          <Button
-                            className="w-full"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openReassign([drawerRow])}
-                          >
-                            <RefreshCw size={14} className="mr-2" /> Reassign
-                          </Button>
-                          <Button
-                            className="w-full"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSubstituteRow(drawerRow);
-                              setSubstituteStaffId("");
-                              setSubstituteReason("");
-                              setSubstituteOpen(true);
-                            }}
-                          >
-                            <UserPlus size={14} className="mr-2" /> Substitute for today
-                          </Button>
-                          <Button
-                            className="w-full"
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => {
-                              setRemoveTarget(drawerRow);
-                              setRemoveConfirm(true);
-                            }}
-                          >
-                            <Trash2 size={14} className="mr-2" /> Cancel assignment
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  ),
-                },
               ]
             : []
+        }
+        actions={
+          drawerPending ? (
+            <div className="w-full flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground">
+                {unassignedTasks.length === 0
+                  ? "All tasks assigned"
+                  : `${unassignedTasks.length} task${unassignedTasks.length > 1 ? "s" : ""} pending`}
+              </span>
+              <Button
+                size="sm"
+                disabled={!canAssign || assignMutation.isPending}
+                onClick={() => {
+                  if (!canAssign || assignMutation.isPending) return;
+                  assignMutation.mutate();
+                }}
+                data-testid="assign-sticky-cta"
+              >
+                {assignMutation.isPending ? (
+                  <><Loader2 size={14} className="mr-2 animate-spin" /> Assigning…</>
+                ) : (
+                  primaryButtonLabel
+                )}
+              </Button>
+            </div>
+          ) : drawerRow?.kind === "assigned" ? (
+            <div className="w-full flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openReassign([drawerRow])}
+              >
+                <RefreshCw size={14} className="mr-2" /> Reassign
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSubstituteRow(drawerRow);
+                  setSubstituteStaffId("");
+                  setSubstituteReason("");
+                  setSubstituteOpen(true);
+                }}
+              >
+                <UserPlus size={14} className="mr-2" /> Substitute for today
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setRemoveTarget(drawerRow);
+                  setRemoveConfirm(true);
+                }}
+              >
+                <Trash2 size={14} className="mr-2" /> Cancel assignment
+              </Button>
+            </div>
+          ) : null
         }
       />
 
@@ -1503,14 +1773,18 @@ export default function AssignServicesPage() {
                 <SelectContent>
                   {substituteStaffList
                     .filter(s => s.id !== substituteRow?.staffId)
-                    .map(s => (
-                      <SelectItem key={s.id} value={String(s.id)}>
-                        {s.name}
-                        {s.operationalRoles?.length
-                          ? ` (${s.operationalRoles.map(r => r.roleName).join(", ")})`
-                          : ""}
-                      </SelectItem>
-                    ))}
+                    .map(s => {
+                      const status = s.todayAttendanceStatus === "present"
+                        ? "On Duty"
+                        : s.isActive !== false
+                          ? "Active"
+                          : "Inactive";
+                      return (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.name} ({status})
+                        </SelectItem>
+                      );
+                    })}
                 </SelectContent>
               </Select>
             </div>

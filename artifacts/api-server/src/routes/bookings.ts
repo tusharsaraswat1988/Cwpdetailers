@@ -275,7 +275,7 @@ router.post("/bookings", async (req, res) => {
       }
     }
 
-    const initialStatus: BookingStatus = req.user?.role === "customer" ? "draft" : "scheduled";
+    const initialStatus: BookingStatus = "scheduled";
     const resolvedBranchId = branchId ?? customer.branchId ?? undefined;
     const tenantValues = tenantStamp(req, {});
     const traceId = resolveBookingTraceId(req.headers["x-trace-id"] ?? req.headers["x-request-id"]);
@@ -324,7 +324,7 @@ router.post("/bookings", async (req, res) => {
         id: booking.id,
       });
 
-      if (booking.status !== "cancelled" && booking.status !== "draft") {
+      if (booking.status !== "cancelled") {
         const { bridgeLegacyBookingToContractAndQueue } = await import("../lib/assignments/enqueueAdapters");
         let serviceName: string | null = null;
         if (serviceId) {
@@ -484,6 +484,12 @@ router.post("/bookings/:id/confirm", async (req, res) => {
       actorId: req.user?.id,
       actorName: req.user?.name,
     });
+    try {
+      const { bridgeLegacyBookingToContractAndQueue } = await import("../lib/assignments/enqueueAdapters");
+      await bridgeLegacyBookingToContractAndQueue(booking);
+    } catch (e) {
+      req.log.warn({ err: e }, "Failed to bridge confirmed booking to assignment queue");
+    }
     return res.json(booking);
   } catch (err) {
     if (err instanceof BookingValidationError) {

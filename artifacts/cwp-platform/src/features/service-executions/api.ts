@@ -19,6 +19,7 @@ export type ServiceExecution = {
   serviceAssignmentId: number | null;
   customerId: number;
   customerName: string;
+  customerPhone?: string | null;
   serviceLocationId: number | null;
   serviceLocationLabel: string | null;
   serviceLocationAddress: string | null;

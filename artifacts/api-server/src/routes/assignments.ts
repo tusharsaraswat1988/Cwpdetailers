@@ -107,6 +107,7 @@ router.post("/assignments/:pendingId/assign", async (req, res) => {
     if (!Number.isFinite(pendingId)) return res.status(400).json({ error: "Invalid pending assignment id" });
 
     const notes = typeof req.body?.notes === "string" ? req.body.notes : undefined;
+    const serviceLocationId = req.body?.serviceLocationId ? Number(req.body.serviceLocationId) : undefined;
     const rawTasks = req.body?.tasks;
     if (Array.isArray(rawTasks) && rawTasks.length > 0) {
       const tasks = rawTasks.map((t: { taskType?: string; staffId?: number }) => {
@@ -117,7 +118,7 @@ router.post("/assignments/:pendingId/assign", async (req, res) => {
         }
         return { taskType, staffId };
       });
-      const result = await assignPendingServiceTasks(req, pendingId, tasks, { notes });
+      const result = await assignPendingServiceTasks(req, pendingId, tasks, { notes, serviceLocationId });
       return res.status(201).json(result);
     }
 
@@ -155,6 +156,7 @@ router.post("/assignments/:id/reassign", async (req, res) => {
       return res.status(400).json({ error: "staffId is required" });
     }
     const notes = typeof req.body?.notes === "string" ? req.body.notes : undefined;
+    const serviceLocationId = req.body?.serviceLocationId ? Number(req.body.serviceLocationId) : undefined;
     const result = await reassignAssignment(req, id, staffId, { notes });
     return res.json(result);
   } catch (e) {
@@ -171,6 +173,7 @@ router.post("/assignments/:id/remove", async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid assignment id" });
     const notes = typeof req.body?.notes === "string" ? req.body.notes : undefined;
+    const serviceLocationId = req.body?.serviceLocationId ? Number(req.body.serviceLocationId) : undefined;
     const result = await removeAssignment(req, id, { notes });
     return res.json(result);
   } catch (e) {

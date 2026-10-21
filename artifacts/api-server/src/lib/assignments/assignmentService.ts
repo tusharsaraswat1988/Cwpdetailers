@@ -481,6 +481,26 @@ export async function assignPendingServiceTasks(
   })) {
     throw new Error("Pending assignment not found");
   }
+  let effectiveLocationId = pending.serviceLocationId ?? options?.serviceLocationId ?? null;
+  if (!effectiveLocationId) {
+    const [contractRow] = await db.select({ locId: customerContractsTable.serviceLocationId })
+      .from(customerContractsTable).where(eq(customerContractsTable.id, pending.contractRegistryId)).limit(1);
+    effectiveLocationId = contractRow?.locId ?? null;
+  }
+  if (!effectiveLocationId) {
+    const { customerLocationLinksTable } = await import("@workspace/db");
+    const [linkRow] = await db.select({ locId: customerLocationLinksTable.serviceLocationId })
+      .from(customerLocationLinksTable)
+      .where(and(eq(customerLocationLinksTable.customerId, pending.customerId), eq(customerLocationLinksTable.isDefault, true)))
+      .limit(1);
+    effectiveLocationId = linkRow?.locId ?? null;
+  }
+  if (effectiveLocationId && !pending.serviceLocationId) {
+    await db.update(pendingServiceAssignmentsTable)
+      .set({ serviceLocationId: effectiveLocationId, updatedAt: new Date() })
+      .where(eq(pendingServiceAssignmentsTable.id, pending.id));
+    pending.serviceLocationId = effectiveLocationId;
+  }
   if (!pending.serviceLocationId) {
     throw new Error("Service location is required before assignment");
   }
@@ -582,6 +602,21 @@ export async function assignPendingServiceTasks(
       assignment = inserted!;
     }
 
+    let targetScheduledDate = getTodayIST();
+    let targetScheduledTime: string | null = null;
+    if (bookingId) {
+      const [bRow] = await db.select({
+        scheduledDate: bookingsTable.scheduledDate,
+        scheduledTime: bookingsTable.scheduledTime,
+      }).from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
+      if (bRow?.scheduledDate) {
+        targetScheduledDate = String(bRow.scheduledDate).slice(0, 10);
+      }
+      if (bRow?.scheduledTime) {
+        targetScheduledTime = bRow.scheduledTime;
+      }
+    }
+
     const executionId = await createScheduledExecutionForAssignment({
       serviceAssignmentId: assignment.id,
       contractId: pending.contractRegistryId,
@@ -590,7 +625,8 @@ export async function assignPendingServiceTasks(
       assetId: pending.assetId,
       assignedStaffId: staffId,
       taskType,
-      scheduledDate: getTodayIST(),
+      scheduledDate: targetScheduledDate,
+      scheduledTime: targetScheduledTime,
       companyId: tenant.companyId,
       franchiseeId: tenant.franchiseeId,
       branchId: tenant.branchId,

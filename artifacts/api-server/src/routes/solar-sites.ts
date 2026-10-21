@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
 import { db } from "@workspace/db";
-import { solarSitesTable, customersTable } from "@workspace/db";
+import { solarSitesTable, customersTable, serviceLocationsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { registerSolarAsset } from "../lib/assets/assetService";
@@ -63,12 +63,29 @@ router.post("/solar-sites", async (req, res) => {
     if (allowed !== null && !allowed.includes(customerId)) {
       return res.status(404).json({ error: "Customer not found" });
     }
+    let finalLat = serviceLat ?? null;
+    let finalLng = serviceLng ?? null;
+    let finalAddress = typeof address === "string" ? address.trim() : "";
+
+    if (serviceLocationId && (finalLat == null || finalLng == null || !finalAddress)) {
+      const [loc] = await db.select().from(serviceLocationsTable)
+        .where(eq(serviceLocationsTable.id, parseInt(String(serviceLocationId), 10))).limit(1);
+      if (loc) {
+        if (finalLat == null) finalLat = loc.latitude;
+        if (finalLng == null) finalLng = loc.longitude;
+        if (!finalAddress && loc.address) finalAddress = loc.address;
+      }
+    }
+
     const base: Record<string, unknown> = {
       customerId,
-      locationComplete: true,
+      address: finalAddress || address,
+      serviceLat: finalLat,
+      serviceLng: finalLng,
+      locationComplete: Boolean(finalAddress && finalLat != null && finalLng != null),
     };
     for (const k of SOLAR_SITE_FIELDS) {
-      if (req.body[k] !== undefined) base[k] = req.body[k];
+      if (req.body[k] !== undefined && base[k] === undefined) base[k] = req.body[k];
     }
     if (!base.siteName || !String(base.siteName).trim()) {
       base.siteName = String(address).slice(0, 80);

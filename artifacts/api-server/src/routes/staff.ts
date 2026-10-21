@@ -92,6 +92,12 @@ router.get("/staff", async (req, res) => {
         AND DATE_TRUNC('month', e.scheduled_date::date) = DATE_TRUNC('month', NOW())
       )`,
       rating: sql<number>`0`,
+      todayAttendanceStatus: sql<string | null>`(
+        SELECT a.status FROM attendance a
+        WHERE a.staff_id = ${staffTable.id}
+        AND a.date = CURRENT_DATE
+        ORDER BY a.id DESC LIMIT 1
+      )`,
       createdAt: staffTable.createdAt,
     }).from(staffTable)
       .leftJoin(branchesTable, eq(staffTable.branchId, branchesTable.id))

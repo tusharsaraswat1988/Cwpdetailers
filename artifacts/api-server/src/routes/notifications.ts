@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { db, usersTable } from "@workspace/db";
 import { notificationsTable } from "@workspace/db";
 import { eq, and, or, desc, isNull } from "drizzle-orm";
 import { deliverPushToUser } from "../lib/push/subscriptionService";
 import { isWebPushConfigured } from "../lib/push/webPushService";
+import { tenantFilters } from "../middlewares/tenantScope";
 
 const router = Router();
 
@@ -17,43 +18,60 @@ const router = Router();
  * renewal reminders are visible to them.
  */
 
+/**
+ * Builds authorization and filtering conditions for notifications based on the caller's scope and role.
+ */
+export function buildNotificationQueryConditions(
+  req: Pick<Request, "scope" | "user">,
+  query: { userId?: string; isRead?: string },
+) {
+  const conditions = [];
+
+  if (req.scope?.isSuperAdmin) {
+    // Super-admins can query any userId, or all notifications if none given
+    if (query.userId) {
+      conditions.push(eq(notificationsTable.userId, parseInt(query.userId)));
+    }
+    const tFilters = tenantFilters(req as any, { companyCol: notificationsTable.companyId });
+    if (tFilters.length) conditions.push(...tFilters);
+  } else if (req.user) {
+    const userPred = eq(notificationsTable.userId, req.user.id);
+    if (req.user.role === "admin" || req.user.role === "manager") {
+      const tFilters = tenantFilters(req as any, {
+        companyCol: notificationsTable.companyId,
+        branchCol: notificationsTable.branchId,
+        franchiseeCol: notificationsTable.franchiseeId,
+      });
+      const scopedAdminPred = and(isNull(notificationsTable.userId), ...tFilters);
+      conditions.push(or(userPred, scopedAdminPred));
+    } else {
+      // Non-admin (customer or staff): strictly only their own notifications
+      conditions.push(userPred);
+    }
+  } else {
+    throw new Error("Authentication required");
+  }
+
+  if (query.isRead !== undefined) {
+    conditions.push(eq(notificationsTable.isRead, query.isRead === "true"));
+  }
+
+  return conditions;
+}
+
 router.get("/notifications", async (req, res) => {
   try {
     const { userId, isRead } = req.query as Record<string, string>;
-    const conditions = [];
-
-    if (req.scope?.isSuperAdmin) {
-      // Super-admins can query any userId, or all notifications if none given
-      if (userId) conditions.push(eq(notificationsTable.userId, parseInt(userId)));
-    } else if (req.user) {
-      // Regular users: see their own notifications OR company/branch-scoped
-      // notifications that are not tied to a specific user
-      const userPred = eq(notificationsTable.userId, req.user.id);
-      const companyPred = req.user.companyId
-        ? eq(notificationsTable.companyId, req.user.companyId)
-        : undefined;
-      const branchPred = req.user.branchId
-        ? eq(notificationsTable.branchId, req.user.branchId)
-        : undefined;
-      // Admin roles: include user notifications + scoped admin notifications
-      if (req.user.role === "admin" || req.user.role === "manager") {
-        const adminPreds: Array<ReturnType<typeof eq | typeof and>> = [userPred];
-        if (companyPred) {
-          adminPreds.push(and(companyPred, isNull(notificationsTable.userId)));
-        }
-        if (branchPred) {
-          adminPreds.push(and(branchPred, isNull(notificationsTable.userId)));
-        }
-        conditions.push(or(...adminPreds));
-      } else {
-        // Non-admin: only their own notifications
-        conditions.push(userPred);
+    let conditions;
+    try {
+      conditions = buildNotificationQueryConditions(req, { userId, isRead });
+    } catch (authErr: any) {
+      if (authErr?.message === "Authentication required") {
+        return res.status(401).json({ error: "Authentication required" });
       }
-    } else {
-      return res.status(401).json({ error: "Authentication required" });
+      throw authErr;
     }
 
-    if (isRead !== undefined) conditions.push(eq(notificationsTable.isRead, isRead === "true"));
     const where = conditions.length ? and(...conditions) : undefined;
     const data = await db.select().from(notificationsTable).where(where).orderBy(desc(notificationsTable.createdAt)).limit(100);
     return res.json(data);

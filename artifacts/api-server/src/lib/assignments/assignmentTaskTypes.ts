@@ -53,7 +53,8 @@ export function getRequiredTaskTypes(
   if (productLine === "wash_package" || productLine === "monthly_wash") {
     return ["car_wash"];
   }
-  if (productLine === "solar_amc") return ["solar_cleaning"];
+  const summaryName = String(summary.serviceName ?? summary.serviceType ?? summary.category ?? "").toLowerCase();
+  if (productLine === "solar_amc" || summaryName.includes("solar")) return ["solar_cleaning"];
   if (productLine === "detailing_plan") return ["interior_detailing"];
 
   const role = roleSlugForProductLine(productLine);

@@ -9,11 +9,14 @@ import { BillingSection } from "./account/BillingSection";
 import { NotificationSection } from "./account/NotificationSection";
 import { SupportSection } from "./account/SupportSection";
 import { LogoutSection } from "./account/LogoutSection";
+import { SavedAddressesSection } from "./account/SavedAddressesSection";
+import { useAccountScope } from "@/lib/account-scope";
 import { useCustomerProfile } from "./account/useCustomerProfile";
 import { useAccountSummary } from "./account/useAccountSummary";
 
 export default function CustomerAccount() {
   const { logout } = useAuth();
+  const { customerId: scopeCustomerId } = useAccountScope();
 
   const {
     profile,
@@ -63,6 +66,7 @@ export default function CustomerAccount() {
               onPhotoUpdated={() => void loadProfile()}
             />
             <AccountSummary metrics={summaryMetrics} />
+            <SavedAddressesSection customerId={profile?.id ?? scopeCustomerId} />
           </div>
 
           <div className="flex flex-col gap-6">

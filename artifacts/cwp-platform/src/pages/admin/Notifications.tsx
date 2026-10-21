@@ -17,7 +17,15 @@ export default function AdminNotifications() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: "", message: "", type: "broadcast" });
 
-  const { data: notifications, isLoading } = useListNotifications({}, { query: { queryKey: getListNotificationsQueryKey({}) } });
+  const { data: notifications, isLoading } = useListNotifications(
+    {},
+    {
+      query: {
+        queryKey: getListNotificationsQueryKey({}),
+        refetchInterval: 25_000,
+      },
+    },
+  );
 
   const createMutation = useCreateNotification({
     mutation: {
@@ -83,7 +91,14 @@ export default function AdminNotifications() {
                 <div className="flex-1">
                   <p className="font-medium text-sm">{n.title}</p>
                   <p className="text-muted-foreground text-xs mt-0.5">{n.message}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{new Date(n.createdAt!).toLocaleDateString("en-IN")}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-xs text-muted-foreground">{new Date(n.createdAt!).toLocaleDateString("en-IN")}</p>
+                    {n.externalId && (
+                      <Link href={n.externalId} className="text-xs font-medium text-primary hover:underline">
+                        View details →
+                      </Link>
+                    )}
+                  </div>
                 </div>
                 {!n.isRead && (
                   <Button variant="ghost" size="sm" className="text-xs h-7 text-primary"

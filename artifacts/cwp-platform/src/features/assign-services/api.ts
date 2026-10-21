@@ -166,12 +166,13 @@ export async function assignPendingServiceTasks(
   pendingId: number,
   tasks: TaskAssignmentInput[],
   notes?: string,
+  serviceLocationId?: number,
 ): Promise<AssignedService[]> {
   const res = await fetch(`/api/assignments/${pendingId}/assign`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tasks, notes }),
+    body: JSON.stringify({ tasks, notes, serviceLocationId }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -184,6 +185,7 @@ export async function reassignAssignment(
   assignmentId: number,
   staffId: number,
   notes?: string,
+  serviceLocationId?: number,
 ): Promise<AssignedService> {
   const res = await fetch(`/api/assignments/${assignmentId}/reassign`, {
     method: "POST",
@@ -236,6 +238,9 @@ export type StaffOption = {
   id: number;
   name: string;
   employeeCode?: string | null;
+  isActive?: boolean;
+  verificationStatus?: string | null;
+  todayAttendanceStatus?: string | null;
   operationalRoles?: Array<{ roleName: string; roleSlug: string }>;
 };
 

@@ -133,6 +133,7 @@ export function executionToStaffJob(e: {
   id: number;
   customerId?: number;
   customerName: string;
+  customerPhone?: string | null;
   assetId?: number | null;
   serviceLabel?: string | null;
   assetLabel?: string | null;
@@ -163,6 +164,7 @@ export function executionToStaffJob(e: {
     vehicleId: e.assetId ?? undefined,
     taskType: e.taskType ?? null,
     customerName: e.customerName,
+    customerPhone: e.customerPhone ?? undefined,
     serviceName,
     serviceType: taskLabel ?? e.serviceLabel ?? "assigned service",
     scheduledDate: e.scheduledDate.slice(0, 10),

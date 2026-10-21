@@ -16,6 +16,8 @@ import {
   customersTable,
   serviceLocationsTable,
   assetsTable,
+  vehiclesTable,
+  solarSitesTable,
   staffTable,
   customerContractsTable,
 } from "@workspace/db";
@@ -47,6 +49,15 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   one_time_service: "One-Time Service",
 };
 
+
+const SOLAR_CHECKLIST = [
+  "Arrive at solar installation site & inspect safety",
+  "Inspect panel surface, shading, and debris",
+  "Clean solar panels with purified water and specialized brush",
+  "Clean up work area and confirm no water pooling",
+  "Confirm with customer (if present)",
+];
+
 const DEFAULT_CHECKLIST = [
   "Arrive at service location",
   "Inspect vehicle / asset condition",
@@ -76,6 +87,7 @@ export type ExecutionView = {
   contractId: number;
   customerId: number;
   customerName: string;
+  customerPhone: string | null;
   serviceLocationId: number | null;
   serviceLocationLabel: string | null;
   serviceLocationAddress: string | null;
@@ -121,6 +133,7 @@ export type ExecutionDetail = ExecutionView & {
 function mapExecutionRow(row: {
   execution: typeof serviceExecutionsTable.$inferSelect;
   customerName: string;
+  customerPhone: string | null;
   staffName: string;
   locationLabel: string | null;
   locationAddress: string | null;
@@ -135,6 +148,7 @@ function mapExecutionRow(row: {
     contractId: row.execution.contractId,
     customerId: row.execution.customerId,
     customerName: row.customerName,
+    customerPhone: row.customerPhone ?? null,
     serviceLocationId: row.execution.serviceLocationId,
     serviceLocationLabel: row.locationLabel,
     serviceLocationAddress: row.locationAddress,
@@ -165,12 +179,13 @@ function mapExecutionRow(row: {
 const executionJoinSelect = {
   execution: serviceExecutionsTable,
   customerName: customersTable.name,
+  customerPhone: customersTable.phone,
   staffName: staffTable.name,
-  locationLabel: serviceLocationsTable.label,
-  locationAddress: serviceLocationsTable.address,
-  locationLatitude: serviceLocationsTable.latitude,
-  locationLongitude: serviceLocationsTable.longitude,
-  assetLabel: assetsTable.label,
+  locationLabel: sql<string | null>`coalesce(${serviceLocationsTable.label}, ${vehiclesTable.locationLabel}, ${solarSitesTable.siteName}, ${solarSitesTable.locationLabel})`,
+  locationAddress: sql<string | null>`coalesce(${serviceLocationsTable.address}, ${vehiclesTable.serviceAddress}, ${solarSitesTable.address}, ${customersTable.address})`,
+  locationLatitude: sql<number | null>`coalesce(${serviceLocationsTable.latitude}, ${vehiclesTable.serviceLat}, ${solarSitesTable.serviceLat})`,
+  locationLongitude: sql<number | null>`coalesce(${serviceLocationsTable.longitude}, ${vehiclesTable.serviceLng}, ${solarSitesTable.serviceLng})`,
+  assetLabel: sql<string | null>`coalesce(${assetsTable.label}, ${vehiclesTable.registrationNumber}, ${solarSitesTable.siteName})`,
   serviceLabel: serviceAssignmentsTable.serviceLabel,
 };
 
@@ -181,6 +196,8 @@ function executionJoinQuery() {
     .innerJoin(staffTable, eq(serviceExecutionsTable.assignedStaffId, staffTable.id))
     .leftJoin(serviceLocationsTable, eq(serviceExecutionsTable.serviceLocationId, serviceLocationsTable.id))
     .leftJoin(assetsTable, eq(serviceExecutionsTable.assetId, assetsTable.id))
+    .leftJoin(vehiclesTable, eq(assetsTable.vehicleId, vehiclesTable.id))
+    .leftJoin(solarSitesTable, eq(assetsTable.solarSiteId, solarSitesTable.id))
     .leftJoin(serviceAssignmentsTable, eq(serviceExecutionsTable.serviceAssignmentId, serviceAssignmentsTable.id));
 }
 
@@ -391,14 +408,15 @@ function eventBase(execution: typeof serviceExecutionsTable.$inferSelect, actorI
   });
 }
 
-async function ensureDefaultChecklist(executionId: number): Promise<void> {
+async function ensureDefaultChecklist(executionId: number, taskType?: string): Promise<void> {
   const existing = await db.select({ id: serviceExecutionChecklistItemsTable.id })
     .from(serviceExecutionChecklistItemsTable)
     .where(eq(serviceExecutionChecklistItemsTable.executionId, executionId))
     .limit(1);
   if (existing.length) return;
+  const list = taskType === "solar_cleaning" ? SOLAR_CHECKLIST : DEFAULT_CHECKLIST;
   await db.insert(serviceExecutionChecklistItemsTable).values(
-    DEFAULT_CHECKLIST.map((label, i) => ({
+    list.map((label, i) => ({
       executionId,
       label,
       isCompleted: false,
@@ -424,7 +442,7 @@ export async function startExecution(req: Request, executionId: number, gps?: {
     .set({ status: "started", startedAt: now, updatedAt: now })
     .where(eq(serviceExecutionsTable.id, executionId));
 
-  await ensureDefaultChecklist(executionId);
+  await ensureDefaultChecklist(executionId, execution.taskType);
 
   if (gps?.latitude != null && gps?.longitude != null) {
     await db.insert(serviceExecutionLocationLogsTable).values({

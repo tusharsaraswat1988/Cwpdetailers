@@ -11,12 +11,15 @@ import {
   staffTable,
   serviceLocationsTable,
   assetsTable,
+  notificationsTable,
   type JobOpsStatus,
   type JobPriority,
   type ServiceExecution,
 } from "@workspace/db";
 import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { tenantFilters, rowInScope } from "../../middlewares/tenantScope";
+import { logger } from "../logger";
+import { taskTypeLabel } from "../assignments/assignmentTaskTypes";
 import { isTerminal } from "../executions/executionValidation";
 import { recordExecutionTimeline } from "../executions/executionTimeline";
 import {
@@ -204,35 +207,151 @@ async function assertDependencySatisfied(dependsOnExecutionId: number | null): P
   }
 }
 
+/**
+ * Pure builder for admin execution completion notification payload.
+ * Formats user-facing details, assigns stable dedupe key, deep link, and tenant scoping.
+ */
+export function buildExecutionCompletionNotificationData({
+  jobId,
+  customerName,
+  vehicleLabel,
+  taskType,
+  staffName,
+  completedAt,
+  companyId,
+  branchId,
+  franchiseeId,
+}: {
+  jobId: number;
+  customerName?: string | null;
+  vehicleLabel?: string | null;
+  taskType: string;
+  staffName?: string | null;
+  completedAt?: Date | null;
+  companyId?: number | null;
+  branchId?: number | null;
+  franchiseeId?: number | null;
+}) {
+  const dedupeKey = `execution_completed:${jobId}`;
+  const taskLabel = taskTypeLabel(taskType);
+  const cust = customerName ?? "Customer";
+  const veh = vehicleLabel ?? "Vehicle";
+  const staff = staffName ?? "Technician";
+  const completedDate = completedAt ?? new Date();
+  const completedTime = completedDate.toISOString();
+
+  const title = `Field Work Completed — ${taskLabel}`;
+  const message = `Customer: ${cust} | Vehicle: ${veh} | Task: ${taskLabel} | Staff: ${staff} | Completed: ${completedTime}`;
+
+  return {
+    userId: null,
+    title,
+    message,
+    type: "service_complete" as const,
+    channel: "in_app" as const,
+    deliveryStatus: "sent" as const,
+    dedupeKey,
+    externalId: `/admin/jobs?id=${jobId}`,
+    companyId: companyId ?? null,
+    branchId: branchId ?? null,
+    franchiseeId: franchiseeId ?? null,
+  };
+}
+
+/**
+ * Persist an admin-visible completion notification with deduplication.
+ * Includes customer, vehicle, completed task, assigned technician, and completion time.
+ */
+export async function createExecutionCompletionAdminNotification(
+  job: Pick<ServiceExecution, "id" | "customerId" | "assetId" | "assignedStaffId" | "taskType" | "completedAt" | "companyId" | "branchId" | "franchiseeId">,
+): Promise<void> {
+  const dedupeKey = `execution_completed:${job.id}`;
+
+  const [existing] = await db.select({ id: notificationsTable.id })
+    .from(notificationsTable)
+    .where(eq(notificationsTable.dedupeKey, dedupeKey))
+    .limit(1);
+
+  if (existing) {
+    logger.info({ executionId: job.id, dedupeKey }, "Execution completion notification already exists (idempotent skip)");
+    return;
+  }
+
+  const [customer] = await db.select({ name: customersTable.name })
+    .from(customersTable)
+    .where(eq(customersTable.id, job.customerId))
+    .limit(1);
+
+  const [asset] = job.assetId
+    ? await db.select({ label: assetsTable.label })
+        .from(assetsTable)
+        .where(eq(assetsTable.id, job.assetId))
+        .limit(1)
+    : [null];
+
+  const [staff] = await db.select({ name: staffTable.name })
+    .from(staffTable)
+    .where(eq(staffTable.id, job.assignedStaffId))
+    .limit(1);
+
+  const notificationData = buildExecutionCompletionNotificationData({
+    jobId: job.id,
+    customerName: customer?.name,
+    vehicleLabel: asset?.label,
+    taskType: job.taskType,
+    staffName: staff?.name,
+    completedAt: job.completedAt,
+    companyId: job.companyId,
+    branchId: job.branchId,
+    franchiseeId: job.franchiseeId,
+  });
+
+  await db.insert(notificationsTable).values(notificationData);
+
+  logger.info({ executionId: job.id, dedupeKey, title: notificationData.title }, "Admin completion notification created successfully");
+}
+
 /** Called from ExecutionCompleted subscriber — does not require HTTP actor. */
 export async function enterQualityReviewFromFieldComplete(executionId: number): Promise<void> {
   const [job] = await db.select().from(serviceExecutionsTable)
     .where(eq(serviceExecutionsTable.id, executionId))
     .limit(1);
   if (!job) return;
-  if (job.opsStatus === "cancelled" || job.opsStatus === "ready_for_billing") return;
-  if (job.opsStatus === "pending_quality_review" || job.opsStatus === "approved") return;
+  if (job.opsStatus === "cancelled" || job.opsStatus === "ready_for_billing" || job.opsStatus === "approved") {
+    return;
+  }
 
   const now = new Date();
-  await db.update(serviceExecutionsTable)
-    .set({
-      opsStatus: "pending_quality_review",
-      qualityReviewStartedAt: now,
-      updatedAt: now,
-    })
-    .where(eq(serviceExecutionsTable.id, executionId));
+  if (job.opsStatus !== "pending_quality_review") {
+    await db.update(serviceExecutionsTable)
+      .set({
+        opsStatus: "pending_quality_review",
+        qualityReviewStartedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(serviceExecutionsTable.id, executionId));
 
-  await recordJobTimeline({
-    executionId,
-    eventType: "JOB_ENTERED_QUALITY_REVIEW",
-    description: "Field execution completed — entered quality review",
-  });
+    await recordJobTimeline({
+      executionId,
+      eventType: "JOB_ENTERED_QUALITY_REVIEW",
+      description: "Field execution completed — entered quality review",
+    });
 
-  jobDomainEventPublisher.publish({
-    ...eventBase(job, null),
-    type: "JobCompleted",
-    metadata: { opsStatus: "pending_quality_review" },
-  });
+    jobDomainEventPublisher.publish({
+      ...eventBase(job, null),
+      type: "JobCompleted",
+      metadata: { opsStatus: "pending_quality_review" },
+    });
+  }
+
+  try {
+    await createExecutionCompletionAdminNotification({
+      ...job,
+      completedAt: job.completedAt ?? now,
+    });
+  } catch (notifErr) {
+    logger.error({ err: notifErr, executionId }, "Failed to create execution completion admin notification");
+  }
 }
 
 /** Sync ops cancel when Field Execution cancels (subscriber). */
