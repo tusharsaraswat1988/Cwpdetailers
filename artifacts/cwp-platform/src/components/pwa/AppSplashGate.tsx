@@ -16,10 +16,18 @@ export function AppSplashGate() {
   }, [branding.version]);
 
   useEffect(() => {
-    if (!authLoading && branding.isFetched) {
+    if (!authLoading && (branding.isFetched || !branding.isLoading)) {
       hideAppSplash();
     }
-  }, [authLoading, branding.isFetched]);
+  }, [authLoading, branding.isFetched, branding.isLoading]);
+
+  // Safety fallback: guaranteed dismissal after 2.5s
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      hideAppSplash();
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
   return null;
 }

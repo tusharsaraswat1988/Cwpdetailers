@@ -1,3 +1,5 @@
+import { resolveApiUrl } from "@/lib/apiConfig";
+
 export type ConnectivityState = "online" | "offline" | "server_unavailable" | "recovering";
 
 export type ConnectivitySnapshot = {
@@ -9,6 +11,15 @@ export type ConnectivitySnapshot = {
 };
 
 type Listener = (snapshot: ConnectivitySnapshot) => void;
+
+function createTimeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+}
 
 const HEALTH_PATH = "/api/healthz";
 const HEALTH_TIMEOUT_MS = 30_000;
@@ -84,9 +95,10 @@ class ConnectivityService {
     }
 
     try {
-      const res = await fetch(HEALTH_PATH, {
+      const targetUrl = resolveApiUrl(HEALTH_PATH) as string;
+      const res = await fetch(targetUrl, {
         cache: "no-store",
-        signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+        signal: createTimeoutSignal(HEALTH_TIMEOUT_MS),
       });
 
       if (res.ok) {

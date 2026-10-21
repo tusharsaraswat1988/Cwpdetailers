@@ -12,6 +12,25 @@ type BrandLogoProps = {
   lazy?: boolean;
 };
 
+const VARIANT_DIMENSIONS: Record<BrandLogoVariant, { maxHeight: number; maxWidth: number }> = {
+  navbar: { maxHeight: 39, maxWidth: 196 },
+  mobile: { maxHeight: 31, maxWidth: 126 },
+  login: { maxHeight: 67, maxWidth: 252 },
+  full: { maxHeight: 39, maxWidth: 210 },
+  light: { maxHeight: 34, maxWidth: 182 },
+  dark: { maxHeight: 34, maxWidth: 182 },
+  white: { maxHeight: 67, maxWidth: 252 },
+  transparent: { maxHeight: 34, maxWidth: 182 },
+  square: { maxHeight: 34, maxWidth: 34 },
+  icon: { maxHeight: 28, maxWidth: 28 },
+  email: { maxHeight: 34, maxWidth: 182 },
+  invoice: { maxHeight: 34, maxWidth: 182 },
+  pdf: { maxHeight: 34, maxWidth: 182 },
+  favicon: { maxHeight: 22, maxWidth: 22 },
+  pwa: { maxHeight: 28, maxWidth: 28 },
+  splash: { maxHeight: 80, maxWidth: 200 },
+};
+
 const VARIANT_IMG_CLASS: Record<BrandLogoVariant, string> = {
   navbar: "h-[39px] max-w-[196px]",
   mobile: "h-[31px] w-auto max-w-[126px]",
@@ -64,13 +83,24 @@ export function BrandLogo({
   const label = alt ?? branding.brandName;
 
   if (src) {
+    const dims = VARIANT_DIMENSIONS[variant];
     return (
-      <div className={cn("flex shrink-0 items-center", className)}>
+      <div
+        className={cn("flex shrink-0 items-center justify-center", className)}
+        style={{ maxHeight: dims.maxHeight, maxWidth: dims.maxWidth }}
+      >
         <img
           src={src}
           alt={label}
           loading={lazy ? "lazy" : "eager"}
           decoding="async"
+          style={{
+            maxHeight: `${dims.maxHeight}px`,
+            maxWidth: `${dims.maxWidth}px`,
+            height: "auto",
+            width: "auto",
+            objectFit: "contain",
+          }}
           className={cn(
             "block max-h-full max-w-full object-contain object-left",
             imgClassName ?? VARIANT_IMG_CLASS[variant],

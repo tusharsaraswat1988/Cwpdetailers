@@ -78,6 +78,7 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
     <AppShell
       testId="staff-app-shell"
       maxWidth="md"
+      className="flex-1 min-h-0"
       appBar={{
         leading: (
           <div className="flex items-center gap-2 shrink-0">

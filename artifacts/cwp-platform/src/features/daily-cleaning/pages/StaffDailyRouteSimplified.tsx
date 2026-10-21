@@ -180,21 +180,21 @@ export function StaffDailyRouteSimplified() {
           <span>{stats.completed}/{stats.total} Cleaned</span>
         </div>
 
-        <div className="grid grid-cols-4 gap-2 text-center">
-          <div className="rounded-xl bg-muted/50 p-2.5">
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-tight">Total</p>
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center">
+          <div className="rounded-xl bg-muted/50 p-1.5 sm:p-2.5">
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium uppercase tracking-tight truncate">Total</p>
             <p className="text-lg font-bold font-display text-foreground mt-0.5">{stats.total}</p>
           </div>
-          <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-2.5">
-            <p className="text-[11px] text-green-800 font-medium uppercase tracking-tight">Cleaned</p>
+          <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-1.5 sm:p-2.5">
+            <p className="text-[10px] sm:text-[11px] text-green-800 font-medium uppercase tracking-tight truncate">Cleaned</p>
             <p className="text-lg font-bold font-display text-green-700 mt-0.5">{stats.completed}</p>
           </div>
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5">
-            <p className="text-[11px] text-amber-800 font-medium uppercase tracking-tight">Pending</p>
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-1.5 sm:p-2.5">
+            <p className="text-[10px] sm:text-[11px] text-amber-800 font-medium uppercase tracking-tight truncate">Pending</p>
             <p className="text-lg font-bold font-display text-amber-700 mt-0.5">{stats.pending}</p>
           </div>
-          <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-2.5">
-            <p className="text-[11px] text-orange-800 font-medium uppercase tracking-tight">Nahi mili</p>
+          <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-1.5 sm:p-2.5">
+            <p className="text-[10px] sm:text-[11px] text-orange-800 font-medium uppercase tracking-tight truncate">Nahi mili</p>
             <p className="text-lg font-bold font-display text-orange-700 mt-0.5">{stats.notAvailable}</p>
           </div>
         </div>
@@ -266,7 +266,7 @@ export function StaffDailyRouteSimplified() {
                         openExternalNavigation(navUrl);
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline h-8 px-2.5 rounded-lg bg-primary/5 border border-primary/20"
+                    className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline h-8 px-2.5 rounded-lg bg-primary/10 border border-primary/20 shrink-0 text-xs"
                     data-testid={`dcms-navigate-${stop.subscriptionId}`}
                   >
                     <Navigation className="h-3.5 w-3.5 text-primary" />

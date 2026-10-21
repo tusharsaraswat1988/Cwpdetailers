@@ -40,7 +40,7 @@ export function StaffThemeRoot({ children, className }: StaffThemeRootProps) {
   }, [branding.cssVariables, branding.version]);
 
   return (
-    <div className={cn("staff-root h-full min-h-0", className)} data-staff-ds="cwp">
+    <div className={cn("staff-root h-full min-h-0 flex-1 flex flex-col w-full", className)} data-staff-ds="cwp">
       {children}
     </div>
   );

@@ -57,10 +57,10 @@ export function BottomNav({ items, testId = "bottom-nav" }: BottomNavProps) {
               <span
                 key={href}
                 aria-label={`${label} — coming soon`}
-                className="flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[4rem] py-1 text-muted-foreground/60 cursor-default"
+                className="flex flex-col items-center justify-center gap-0.5 flex-1 min-w-0 min-h-[4rem] py-1 text-muted-foreground/60 cursor-default px-0.5"
               >
-                <Icon size={22} strokeWidth={2} className="shrink-0" />
-                <span className="text-[9px] leading-tight text-center">{label}</span>
+                <Icon size={20} strokeWidth={2} className="shrink-0" />
+                <span className="text-[9px] leading-tight text-center truncate max-w-full">{label}</span>
               </span>
             );
           }
@@ -69,16 +69,16 @@ export function BottomNav({ items, testId = "bottom-nav" }: BottomNavProps) {
               key={href}
               href={href}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[4rem] py-1 transition-colors",
+                "flex flex-col items-center justify-center gap-0.5 flex-1 min-w-0 min-h-[4rem] py-1 transition-colors px-0.5",
                 active ? "text-primary" : "text-muted-foreground",
               )}
             >
               <Icon
-                size={22}
+                size={20}
                 strokeWidth={active ? 2.5 : 2}
                 className="shrink-0"
               />
-              <span className={cn("text-[10px] leading-tight", active && "font-semibold")}>
+              <span className={cn("text-[10px] leading-tight truncate max-w-full text-center", active && "font-semibold")}>
                 {label}
               </span>
             </Link>

@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
+import { processCssDirectory } from "./unwrap-css-layers.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const appTarget = process.argv[2] && !process.argv[2].startsWith("-") ? process.argv[2] : "staff";
@@ -83,6 +84,7 @@ async function main() {
   if (isBundled) {
     console.log(`\x1b[33mMode:\x1b[0m RESTORE BUNDLED ASSETS (offline/production mode)`);
     console.log(`Clearing CAP_LIVE_RELOAD and syncing bundled webDir...`);
+    processCssDirectory(path.join(root, "artifacts", "cwp-platform", "dist", "public", "assets"));
     
     const syncRes = spawnSync("npx", ["cap", "sync", "android"], {
       cwd: appDir,
@@ -92,6 +94,7 @@ async function main() {
     });
 
     if (syncRes.status === 0) {
+      processCssDirectory(path.join(appDir, "android", "app", "src", "main", "assets", "public"));
       console.log(`\n\x1b[32m✔ Bundled configuration successfully synced to Android project!\x1b[0m`);
       console.log(`Assets load from local APK package (no dev server needed).\n`);
     } else {

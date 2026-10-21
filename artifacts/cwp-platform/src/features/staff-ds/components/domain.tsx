@@ -102,7 +102,7 @@ export function StaffJobCard({
               target="_blank"
               rel="noreferrer"
               onClick={e => e.stopPropagation()}
-              className="staff-tap inline-flex items-center justify-center gap-1.5 rounded-[var(--staff-radius-sm)] border border-primary/30 bg-primary/5 px-3 text-xs font-semibold text-primary hover:bg-primary/10"
+              className="staff-tap inline-flex items-center justify-center gap-1.5 rounded-[var(--staff-radius-sm)] border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/15"
             >
               <Navigation size={14} aria-hidden />
               Navigate

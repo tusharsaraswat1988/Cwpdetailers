@@ -85,7 +85,11 @@
     <script>
       (function () {
         var splash = document.getElementById("cwp-app-splash");
-        fetch("/api/branding", { credentials: "same-origin" })
+        var isNativeLocal = location.hostname === "localhost" || location.protocol === "capacitor:" || location.protocol === "file:";
+        var brandingApiUrl = isNativeLocal
+          ? "https://cwpdetailers-production.up.railway.app/api/branding"
+          : "/api/branding";
+        fetch(brandingApiUrl, { credentials: isNativeLocal ? "omit" : "same-origin" })
           .then(function (r) { return r.ok ? r.json() : null; })
           .then(function (b) {
             if (!b || !splash) return;

@@ -87,6 +87,7 @@ const config = {
     StatusBar: {
       style: "DARK",
       backgroundColor: "#21252e",
+      overlaysWebView: false,
     },
     Camera: {
       saveToGallery: false,

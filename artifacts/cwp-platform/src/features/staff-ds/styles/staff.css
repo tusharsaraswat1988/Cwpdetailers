@@ -30,6 +30,7 @@ html.staff-theme [data-radix-collection-item]:focus-visible {
 .staff-root {
   --staff-accent: var(--brand-primary, #0072f8);
   --staff-surface-tint: var(--brand-accent, #e8f4ff);
+  --staff-icon-surface: #e8f4ff;
   --staff-icon-surface: color-mix(in srgb, var(--staff-accent) 14%, white);
   font-family: var(--font-sans);
 }
@@ -40,6 +41,7 @@ html.staff-theme [data-radix-collection-item]:focus-visible {
 }
 
 .staff-root .staff-surface-tint {
+  background-color: #f0f7ff;
   background-color: color-mix(in srgb, var(--staff-surface-tint) 75%, white);
 }
 
@@ -85,6 +87,7 @@ html.staff-theme [data-radix-collection-item]:focus-visible {
   transition: border-color var(--duration-fast), box-shadow var(--duration-fast), transform var(--duration-fast);
 }
 .staff-root .staff-action-card:hover {
+  border-color: #bfdbfe;
   border-color: color-mix(in srgb, var(--staff-accent) 30%, hsl(var(--border)));
   box-shadow: var(--shadow-md);
 }
@@ -107,7 +110,9 @@ html.staff-theme [data-radix-collection-item]:focus-visible {
 .staff-root .staff-hero,
 .staff-root .staff-dashboard-hero {
   border-radius: var(--staff-radius-xl, 1.375rem);
+  border: 2px solid #bfdbfe;
   border: 2px solid color-mix(in srgb, var(--staff-accent) 32%, hsl(var(--border)));
+  background: linear-gradient(160deg, #eff6ff 0%, hsl(var(--card)) 55%);
   background: linear-gradient(
     160deg,
     color-mix(in srgb, var(--staff-accent) 12%, white) 0%,
@@ -157,6 +162,7 @@ html.staff-theme [data-radix-collection-item]:focus-visible {
 }
 .staff-root .staff-photo-slot[data-filled="true"] {
   border-style: solid;
+  border-color: #93c5fd;
   border-color: color-mix(in srgb, var(--staff-accent) 40%, hsl(var(--border)));
 }
 .staff-root .staff-photo-slot img {
@@ -194,7 +200,9 @@ html.staff-theme [data-radix-collection-item]:focus-visible {
   background: hsl(var(--card));
 }
 .staff-root .staff-checklist-item[data-done="true"] {
+  border-color: #86efac;
   border-color: color-mix(in srgb, hsl(var(--tone-success, 142 72% 36%)) 35%, hsl(var(--border)));
+  background: #f0fdf4;
   background: color-mix(in srgb, hsl(var(--tone-success, 142 72% 36%)) 8%, white);
 }
 
@@ -251,6 +259,10 @@ html.staff-theme [data-radix-collection-item]:focus-visible {
 html.staff-theme .staff-auth-shell {
   background: hsl(var(--secondary));
   color: hsl(var(--secondary-foreground));
+  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
 }
 
 html.staff-theme .staff-auth-panel {
