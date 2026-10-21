@@ -1,0 +1,54 @@
+name: CI - Authentication & Production Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  auth-resilience-and-build:
+    name: Authentication Tests & Production Builds
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: test
+      PORT: 8080
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cwp_test
+      FAST2SMS_SENDER_ID: CWPDTL
+      ADMIN_PHONE: "9999999999"
+      ADMIN_PASSWORD: "adminTestPassword123"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Run API Server Tests (Auth, DCMS, Permissions)
+        run: pnpm --filter @workspace/api-server test
+
+      - name: Run CWP Platform Tests (Auth UX, State Machine, Components)
+        run: pnpm --filter @workspace/cwp-platform test
+
+      - name: Build API Server (esbuild)
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build CWP Platform (Vite & PWA)
+        run: pnpm --filter @workspace/cwp-platform run build

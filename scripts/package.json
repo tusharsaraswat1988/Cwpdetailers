@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "auth:diagnostics": "tsx ./src/auth-diagnostics.ts",
     "seed": "tsx ./src/seed.ts",
     "seed:permissions": "tsx ./src/seed-permissions.ts",
     "dedupe:staff": "tsx ./src/dedupe-staff-by-phone.ts",
