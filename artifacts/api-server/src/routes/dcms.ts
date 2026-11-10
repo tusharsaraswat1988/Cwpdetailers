@@ -225,7 +225,7 @@ router.get(
       const subs = await listSubscriptions({
         status: req.query.status as string | undefined,
         customerId: req.query.customerId ? Number(req.query.customerId) : undefined,
-      });
+      }, req);
       return res.json(subs);
     } catch (err) {
       return handleError(req, res, err);
@@ -240,7 +240,7 @@ router.get(
   async (req, res) => {
     try {
       const detail = await getSubscriptionDetail(Number(req.params.id));
-      if (!detail) return res.status(404).json({ error: "Subscription not found" });
+      if (!detail || !rowInScope(req, detail.subscription)) return res.status(404).json({ error: "Subscription not found" });
       return res.json(detail);
     } catch (err) {
       return handleError(req, res, err);
@@ -258,6 +258,17 @@ router.post(
       if (!customerId || !vehicleId || !planId || !startDate) {
         return res.status(400).json({ error: "customerId, vehicleId, planId, and startDate are required" });
       }
+      const customer = await loadIfInScope(req,
+        () => db.select().from(customersTable).where(eq(customersTable.id, Number(customerId))).limit(1).then(r => r[0]),
+        r => ({ ...r, customerId: r.id }),
+      );
+      if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+      const [veh] = await db.select().from(vehiclesTable).where(eq(vehiclesTable.id, Number(vehicleId))).limit(1);
+      if (!veh || veh.customerId !== Number(customerId) || !rowInScope(req, veh)) {
+        return res.status(400).json({ error: "Vehicle not found for this customer" });
+      }
+
       const stamped = tenantStamp(req, {});
       const sub = await createSubscription({
         customerId: Number(customerId),
@@ -267,9 +278,9 @@ router.post(
         latitude: latitude != null ? Number(latitude) : undefined,
         longitude: longitude != null ? Number(longitude) : undefined,
         radiusMeters: radiusMeters != null ? Number(radiusMeters) : undefined,
-        companyId: stamped.companyId,
-        franchiseeId: stamped.franchiseeId,
-        branchId: stamped.branchId,
+        companyId: customer.companyId ?? stamped.companyId,
+        franchiseeId: customer.franchiseeId ?? stamped.franchiseeId,
+        branchId: customer.branchId ?? stamped.branchId,
       }, req.user!.id);
       return res.status(201).json(sub);
     } catch (err) {
@@ -605,11 +616,26 @@ router.post("/daily-cleaning/admin/sync-missed", requireAuth, requirePermission(
   } catch (err) { return handleError(req, res, err); }
 });
 
-/** External cron hook (Render cron / manual). Requires CRON_SECRET header when env set. */
+import crypto from "crypto";
+
+function safeTimingCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/** External cron hook (Render cron / manual). Requires valid CRON_SECRET header and fails closed. */
 router.post("/daily-cleaning/cron/end-of-day", async (req, res) => {
   try {
     const secret = process.env.CRON_SECRET;
-    if (secret && req.headers["x-cron-secret"] !== secret) {
+    if (!secret || typeof secret !== "string" || !secret.trim()) {
+      req.log.error("CRON_SECRET not configured on server");
+      return res.status(500).json({ error: "Cron execution not configured" });
+    }
+    const incomingHeader = req.headers["x-cron-secret"];
+    const incoming = typeof incomingHeader === "string" ? incomingHeader : "";
+    if (!incoming || !safeTimingCompare(incoming, secret)) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     const date = todayStrInIST();

@@ -40,20 +40,20 @@ export default function PlanDetail() {
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
 
   const { data: subsData, isLoading: subsLoading } = useListSubscriptions(
-    { customerId: String(customerId ?? "") } as Parameters<typeof useListSubscriptions>[0],
+    { customerId: (customerId ?? 0) as any } as Parameters<typeof useListSubscriptions>[0],
     {
       query: {
-        queryKey: getListSubscriptionsQueryKey({ customerId: String(customerId ?? "") } as Parameters<typeof getListSubscriptionsQueryKey>[0]),
+        queryKey: getListSubscriptionsQueryKey({ customerId: (customerId ?? 0) as any } as Parameters<typeof getListSubscriptionsQueryKey>[0]),
         enabled: customerId != null,
       },
     },
   );
 
   const { data: bookingsData, isLoading: bookingsLoading } = useListBookings(
-    { customerId: String(customerId ?? "") } as Parameters<typeof useListBookings>[0],
+    { customerId: customerId ?? 0 } as Parameters<typeof useListBookings>[0],
     {
       query: {
-        queryKey: getListBookingsQueryKey({ customerId: String(customerId ?? "") } as Parameters<typeof getListBookingsQueryKey>[0]),
+        queryKey: getListBookingsQueryKey({ customerId: customerId ?? 0 } as Parameters<typeof getListBookingsQueryKey>[0]),
         enabled: customerId != null,
       },
     },
@@ -241,7 +241,7 @@ export default function PlanDetail() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {b.scheduledDate}
-                          {b.vehicleName ? ` · ${b.vehicleName}` : ""}
+                          {b.vehicleInfo ? ` · ${b.vehicleInfo}` : ""}
                         </p>
                         {b.staffName && (
                           <p className="text-xs text-muted-foreground">Staff: {b.staffName}</p>

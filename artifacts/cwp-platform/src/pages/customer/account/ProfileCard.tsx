@@ -51,11 +51,11 @@ export const ProfileCard = memo(function ProfileCard({
 
   return (
     <section
-      className="customer-card customer-elevated overflow-hidden"
+      className="rounded-2xl border border-slate-200/90 bg-white shadow-[0_2px_8px_rgba(11,29,54,0.04)] overflow-hidden"
       data-testid="account-profile-card"
     >
       {!editing ? (
-        <div className="flex items-center gap-4 px-4 py-4 sm:px-5">
+        <div className="flex items-center gap-4 p-5 sm:p-6">
           {profile ? (
             <CustomerPhotoEditor
               customerId={profile.id}
@@ -68,24 +68,24 @@ export const ProfileCard = memo(function ProfileCard({
               testIdPrefix="account-photo"
             />
           ) : (
-            <div className="h-16 w-16 shrink-0 rounded-full bg-muted" aria-hidden />
+            <div className="h-16 w-16 shrink-0 rounded-full bg-slate-100" aria-hidden />
           )}
 
           <div className="min-w-0 flex-1">
-            <p className="truncate font-display text-lg font-semibold leading-tight text-foreground">
+            <p className="truncate font-display text-lg font-bold leading-tight text-foreground">
               {displayName}
             </p>
             {displayPhone ? (
-              <p className="mt-1 truncate text-sm text-muted-foreground">{displayPhone}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{displayPhone}</p>
             ) : null}
             {displayEmail ? (
-              <p className="truncate text-sm text-muted-foreground">{displayEmail}</p>
+              <p className="truncate text-xs text-muted-foreground">{displayEmail}</p>
             ) : null}
 
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-primary"
+              className="mt-2 inline-flex min-h-10 items-center text-xs font-semibold text-primary hover:underline cursor-pointer"
               data-testid="btn-edit-account-profile"
             >
               Edit Profile

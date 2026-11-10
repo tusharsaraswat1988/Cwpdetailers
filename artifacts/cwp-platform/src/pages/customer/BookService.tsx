@@ -323,9 +323,35 @@ export default function BookService() {
     }
   }, [asset, assetPlans, planMode, navigate]);
 
-  // Auto-select single service
+  // Auto-select single service or match service query param from product detail page
   useEffect(() => {
     if (step !== "service" || serviceId) return;
+
+    const queryParams = new URLSearchParams(window.location.search);
+    const serviceParam = queryParams.get("service")?.toLowerCase();
+
+    if (serviceParam && availableServices.length > 0) {
+      const byId = availableServices.find(s => String(s.id) === serviceParam);
+      if (byId) {
+        setServiceId(String(byId.id));
+        return;
+      }
+      const matched = availableServices.find(s => {
+        const name = s.name.toLowerCase();
+        const cat = (s.category || "").toLowerCase();
+        if (serviceParam.includes("wash") && (name.includes("wash") || cat.includes("wash"))) return true;
+        if (serviceParam.includes("interior") && (name.includes("interior") || cat.includes("interior"))) return true;
+        if (serviceParam.includes("ceramic") && (name.includes("ceramic") || cat.includes("ceramic") || name.includes("coating"))) return true;
+        if (serviceParam.includes("solar") && (name.includes("solar") || cat.includes("solar"))) return true;
+        if (serviceParam.includes("glass") && (name.includes("glass") || name.includes("rain") || cat.includes("glass"))) return true;
+        return name.includes(serviceParam) || cat.includes(serviceParam);
+      });
+      if (matched) {
+        setServiceId(String(matched.id));
+        return;
+      }
+    }
+
     if (availableServices.length === 1) {
       setServiceId(String(availableServices[0].id));
     } else if (asset?.kind === "solar" && availableServices.length > 0 && !serviceId) {

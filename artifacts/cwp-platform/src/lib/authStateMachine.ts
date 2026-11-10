@@ -54,16 +54,24 @@ export function classifyAuthError(
     state = "provider_unavailable";
     actionableStep = "SMS service is temporarily unavailable. You can sign in using your password instead.";
   } else if (
+    code === "ACCESS_DENIED" ||
+    message === "Access denied" ||
+    /^access denied/i.test(raw) ||
+    /administrator|admin portal|superadmin/i.test(raw)
+  ) {
+    state = "recoverable_error";
+    actionableStep = /phone|mobile/i.test(raw)
+      ? "Please try another mobile number."
+      : "Please try another email ID.";
+  } else if (
     code === "PORTAL_MISMATCH" ||
     code === "ACCOUNT_LINK_CONFLICT" ||
-    /different login portal|cannot sign in here|staff portal|admin portal/i.test(raw)
+    /different login portal|cannot sign in here|staff portal/i.test(raw)
   ) {
     state = "account_conflict";
-    actionableStep = /admin/i.test(message)
-      ? "Switch to Admin Portal"
-      : /staff/i.test(message)
-        ? "Switch to Staff Portal"
-        : "Check your portal link";
+    actionableStep = /staff/i.test(message)
+      ? "Switch to Staff Portal"
+      : "Check your portal link";
   } else if (/session expired|unauthorized|jwt expired/i.test(raw) || (typeof err === "object" && err !== null && (err as { status?: number }).status === 401)) {
     state = "session_expired";
     actionableStep = "Please sign in again to continue.";

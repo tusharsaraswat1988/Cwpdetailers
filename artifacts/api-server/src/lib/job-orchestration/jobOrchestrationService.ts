@@ -393,6 +393,8 @@ export async function listJobs(req: Request, filter: JobListFilter = {}): Promis
       companyCol: serviceExecutionsTable.companyId,
       branchCol: serviceExecutionsTable.branchId,
       franchiseeCol: serviceExecutionsTable.franchiseeId,
+      staffCol: serviceExecutionsTable.assignedStaffId,
+      customerCol: serviceExecutionsTable.customerId,
     }),
   ];
 

@@ -432,4 +432,25 @@ export async function unsubscribeFromPush(): Promise<void> {
   }
 }
 
+export async function sendTestPush(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetchWithTimeout(
+      "/api/push/test",
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      },
+      API_TIMEOUT_MS,
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Failed to send test push" }));
+      return { ok: false, error: (err as { error?: string }).error ?? "Failed to send test push" };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to send test push" };
+  }
+}
+
 export { PERMISSION_HINT_MS };

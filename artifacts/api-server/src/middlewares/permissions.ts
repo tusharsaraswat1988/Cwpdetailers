@@ -29,8 +29,6 @@ const CATALOG_PUBLIC_GET_PREFIXES = [
   "/catalog/packages",
   "/catalog/addons",
   "/catalog/pricing/quote",
-  "/catalog/settings",
-  "/catalog/self-booking/check",
   "/catalog/city-content",
   "/catalog/services",
   "/catalog/plans",

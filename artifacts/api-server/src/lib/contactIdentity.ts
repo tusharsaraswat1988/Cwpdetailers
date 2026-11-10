@@ -151,28 +151,13 @@ async function findEntityByEmail(
 }
 
 export function conflictToHttpBody(conflict: ContactConflict) {
-  const body: Record<string, unknown> = {
+  return {
     error: contactConflictMessage(conflict),
     conflict: {
       field: conflict.field,
       entity: conflict.entity,
-      entityId: conflict.entityId,
-      entityName: conflict.entityName,
     },
   };
-
-  if (conflict.entity === "customer") {
-    body.existingCustomerId = conflict.entityId;
-    body.existingCustomerName = conflict.entityName;
-  } else if (conflict.entity === "staff") {
-    body.existingStaffId = conflict.entityId;
-    body.existingStaffName = conflict.entityName;
-  } else {
-    body.existingUserId = conflict.entityId;
-    body.existingUserName = conflict.entityName;
-  }
-
-  return body;
 }
 
 export async function assertContactIdentityAvailable(

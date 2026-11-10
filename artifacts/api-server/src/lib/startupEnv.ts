@@ -94,6 +94,29 @@ export function validateStartupEnvironment(): SafeEnvSummary {
   const vapidPrivate = process.env.VAPID_PRIVATE_KEY?.trim();
   const webPushConfigured = Boolean(vapidPublic && vapidPrivate);
 
+  const isProd = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
+  if (isProd) {
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    if (!cronSecret || cronSecret.length < 16) {
+      throw new Error("[FATAL_STARTUP_CONFIG] CRON_SECRET must be set and at least 16 characters in production.");
+    }
+
+    if (!adminConfigured) {
+      throw new Error("[FATAL_STARTUP_CONFIG] ADMIN_PHONE and ADMIN_PASSWORD must be configured in production.");
+    }
+    const insecure = ["admin123", "password", "admin", "12345678", "cwpadmin"];
+    if (adminPassword && (insecure.includes(adminPassword.toLowerCase()) || adminPassword.length < 8)) {
+      throw new Error("[FATAL_STARTUP_CONFIG] Insecure default ADMIN_PASSWORD is not allowed in production.");
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+    const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+    const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+    if (!cloudName || !apiKey || !apiSecret) {
+      throw new Error("[FATAL_STARTUP_CONFIG] Cloudinary storage credentials (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) are required in production.");
+    }
+  }
+
   const summary: SafeEnvSummary = {
     nodeEnv: process.env.NODE_ENV ?? "development",
     port,

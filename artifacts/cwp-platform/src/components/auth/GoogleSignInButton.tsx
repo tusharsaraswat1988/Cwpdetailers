@@ -174,8 +174,8 @@ export function GoogleSignInButton({
 
     setPending(true);
     try {
-      window.google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      (window.google?.accounts?.id?.prompt as any)?.((notification: any) => {
+        if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
           setPending(false);
           onError?.("Google sign-in popup was blocked. Allow popups and try again.");
         }

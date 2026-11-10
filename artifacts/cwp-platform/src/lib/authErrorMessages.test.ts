@@ -18,4 +18,9 @@ describe("mapAuthErrorMessage", () => {
   it("hides stack traces", () => {
     expect(mapAuthErrorMessage("Error: something at /path/to/file.ts:42")).toBe(AUTH_NEUTRAL_ERROR);
   });
+
+  it("maps admin or access denied errors to Access denied without leaking role", () => {
+    expect(mapAuthErrorMessage("This account belongs to an administrator. Use the Admin portal to sign in.")).toBe("Access denied");
+    expect(mapAuthErrorMessage("Access denied", "ACCESS_DENIED")).toBe("Access denied");
+  });
 });

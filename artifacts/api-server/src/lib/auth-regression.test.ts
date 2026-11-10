@@ -234,6 +234,21 @@ describe("P0 Auth Regression Test Suite", () => {
       expect(isRoleAllowedForPortal("staff", "customer")).toBe(false);
       expect(portalMismatchMessage("customer")).toContain("Use the correct portal");
     });
+
+    it("rejects admin role on customer portal with Access denied without mentioning admin", async () => {
+      vi.mocked(findUserByPhone).mockResolvedValue({
+        id: 99,
+        name: "Admin User",
+        phone: "9876543210",
+        role: "admin",
+        isActive: true,
+      } as any);
+
+      const identity = await resolveCustomerIdentityByPhone("9876543210");
+      expect(identity.status).toBe("INELIGIBLE_ROLE");
+      expect(identity.reason).toBe("Access denied. Please try another mobile number.");
+      expect(identity.reason).not.toContain("admin");
+    });
   });
 
   // 6. Inactive customer attempting login

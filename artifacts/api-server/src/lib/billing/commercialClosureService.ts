@@ -657,18 +657,18 @@ export async function generateJobInvoice(req: Request, jobId: number): Promise<I
   let entitlementConsumed = false;
   if (calc.billingMode === "subscription_visit") {
     if (calc.entitlementId) {
-      const already = calc.bookingId
-        ? await db.select().from(entitlementConsumptionLogTable)
-          .where(and(
-            eq(entitlementConsumptionLogTable.entitlementId, calc.entitlementId),
-            eq(entitlementConsumptionLogTable.bookingId, calc.bookingId),
-          )).limit(1)
-        : [];
+      const targetBookingId = calc.bookingId ?? job.id;
+      const already = await db.select().from(entitlementConsumptionLogTable)
+        .where(and(
+          eq(entitlementConsumptionLogTable.entitlementId, calc.entitlementId),
+          eq(entitlementConsumptionLogTable.bookingId, targetBookingId),
+          isNull(entitlementConsumptionLogTable.revertedAt),
+        )).limit(1);
       if (!already.length) {
         // bookingId optional on consumption log — Job id used only as audit metadata
         await consumeEntitlementOnCompletion(
           calc.entitlementId,
-          calc.bookingId ?? job.id,
+          targetBookingId,
           1,
         );
         entitlementConsumed = true;

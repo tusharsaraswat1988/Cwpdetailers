@@ -275,8 +275,13 @@ router.post("/bookings", async (req, res) => {
       }
     }
 
+    if (!req.scope?.isSuperAdmin && req.scope?.branchIds !== null && branchId != null && !req.scope.branchIds.includes(Number(branchId))) {
+      return res.status(403).json({ error: "Unauthorized branch for booking" });
+    }
     const initialStatus: BookingStatus = "scheduled";
-    const resolvedBranchId = branchId ?? customer.branchId ?? undefined;
+    const resolvedBranchId = (!req.scope?.isSuperAdmin && req.scope?.branchIds && req.scope.branchIds.length === 1)
+      ? req.scope.branchIds[0]
+      : (branchId ?? customer.branchId ?? undefined);
     const tenantValues = tenantStamp(req, {});
     const traceId = resolveBookingTraceId(req.headers["x-trace-id"] ?? req.headers["x-request-id"]);
 
@@ -604,6 +609,35 @@ router.post("/bookings/:id/cancel", async (req, res) => {
       actorId: req.user?.id,
       actorName: req.user?.name,
     }, { logger: req.log });
+
+    // Synchronize cancellation across pending assignments, assignments, and active executions
+    const { pendingServiceAssignmentsTable, serviceAssignmentsTable, serviceExecutionsTable } = await import("@workspace/db");
+    await db.update(pendingServiceAssignmentsTable)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(and(
+        eq(pendingServiceAssignmentsTable.bookingId, id),
+        sql`${pendingServiceAssignmentsTable.status} != 'cancelled'`,
+      ));
+    await db.update(serviceAssignmentsTable)
+      .set({ status: "removed", updatedAt: new Date() })
+      .where(and(
+        eq(serviceAssignmentsTable.bookingId, id),
+        sql`${serviceAssignmentsTable.status} != 'removed'`,
+      ));
+    await db.update(serviceExecutionsTable)
+      .set({
+        status: "cancelled",
+        cancellationReason: reason ?? "Booking cancelled",
+        updatedAt: new Date(),
+      })
+      .where(and(
+        sql`(${serviceExecutionsTable.serviceAssignmentId} IN (
+          SELECT id FROM service_assignments WHERE booking_id = ${id}
+        ) OR ${serviceExecutionsTable.contractId} IN (
+          SELECT id FROM customer_contracts WHERE source_system = 'booking' AND source_id = ${id}
+        ))`,
+        sql`${serviceExecutionsTable.status} NOT IN ('completed', 'cancelled', 'missed')`,
+      ));
 
     await logEvent(id, "cancel", {
       fromStatus: existing.status,

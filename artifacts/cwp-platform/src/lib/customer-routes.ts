@@ -16,6 +16,7 @@ export const CUSTOMER_ROUTES = {
   scheduleEntry: (params?: ScheduleEntryParams) => buildScheduleEntryUrl(params),
   scheduledServiceDetail: (id: number | string) => `/customer/schedule/${id}`,
   assets: "/customer/assets",
+  serviceProductDetail: (slug: string) => `/customer/services/${slug}`,
   account: "/customer/account",
   serviceHistory: "/customer/history",
   invoices: "/customer/invoices",

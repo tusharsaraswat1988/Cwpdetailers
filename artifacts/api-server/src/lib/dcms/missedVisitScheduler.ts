@@ -18,26 +18,49 @@ const JOB_TYPE = "dcms_missed_visit_sync";
 const IDEMPOTENCY_HOURS = 20;
 
 async function tryAcquireJob(dateStr: string): Promise<{ acquired: boolean; jobId?: number }> {
-  const windowStart = new Date(Date.now() - IDEMPOTENCY_HOURS * 60 * 60 * 1000);
-  const [existing] = await db.select().from(systemJobsTable)
-    .where(and(
-      eq(systemJobsTable.jobType, JOB_TYPE),
-      eq(systemJobsTable.status, "success"),
-      sql`${systemJobsTable.payload}->>'date' = ${dateStr}`,
-      sql`${systemJobsTable.lastRunAt} >= ${windowStart}`,
-    ))
-    .limit(1);
+  return db.transaction(async (tx) => {
+    // Acquire a transaction-level advisory lock specific to this job type and date
+    const [lockRes] = await tx.execute(
+      sql`SELECT pg_try_advisory_xact_lock(hashtext(${'dcms_missed_visit_' + dateStr})) as acquired`,
+    ) as unknown as [{ acquired: boolean }];
 
-  if (existing) return { acquired: false };
+    if (!lockRes?.acquired) {
+      return { acquired: false };
+    }
 
-  const [job] = await db.insert(systemJobsTable).values({
-    jobType: JOB_TYPE,
-    status: "running",
-    payload: { date: dateStr },
-    startedAt: new Date(),
-  }).returning();
+    const windowStart = new Date(Date.now() - IDEMPOTENCY_HOURS * 60 * 60 * 1000);
+    const [existing] = await tx.select().from(systemJobsTable)
+      .where(and(
+        eq(systemJobsTable.jobType, JOB_TYPE),
+        eq(systemJobsTable.status, "success"),
+        sql`${systemJobsTable.payload}->>'date' = ${dateStr}`,
+        sql`${systemJobsTable.lastRunAt} >= ${windowStart}`,
+      ))
+      .limit(1);
 
-  return { acquired: true, jobId: job!.id };
+    if (existing) return { acquired: false };
+
+    const [running] = await tx.select().from(systemJobsTable)
+      .where(and(
+        eq(systemJobsTable.jobType, JOB_TYPE),
+        eq(systemJobsTable.status, "running"),
+        sql`${systemJobsTable.payload}->>'date' = ${dateStr}`,
+        sql`${systemJobsTable.startedAt} >= ${new Date(Date.now() - 10 * 60 * 1000)}`,
+      ))
+      .limit(1);
+
+    if (running) return { acquired: false };
+
+    const [job] = await tx.insert(systemJobsTable).values({
+      jobType: JOB_TYPE,
+      status: "running",
+      payload: { date: dateStr },
+      startedAt: new Date(),
+      lastRunAt: new Date(),
+    }).returning();
+
+    return { acquired: true, jobId: job!.id };
+  });
 }
 
 async function completeJob(jobId: number, result: Record<string, unknown>) {

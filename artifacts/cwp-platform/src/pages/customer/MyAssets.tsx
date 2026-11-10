@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import {
   useListVehicles, getListVehiclesQueryKey,
   useListSolarSites, getListSolarSitesQueryKey,
@@ -116,6 +117,7 @@ export default function MyAssets() {
 
   const [addKind, setAddKind] = useState<"vehicle" | "solar" | null>(null);
   const [editAsset, setEditAsset] = useState<AssetCardModel | null>(null);
+  const [activeTab, setActiveTab] = useState<"vehicle" | "solar">("vehicle");
 
   const vehicleRows = (vehicles ?? []) as VehicleRecord[];
   const solarRows = (solarSites ?? []) as SolarRecord[];
@@ -225,76 +227,115 @@ export default function MyAssets() {
       <CustomerPage>
         <CustomerHeader
           title="My Vehicles & Solar Sites"
-          subtitle="What CWP takes care of for you — plans, visits, and service addresses in one place."
+          subtitle="Manage your registered cars and solar installations in dedicated sections."
         />
 
+        {/* Segmented Category Switcher */}
+        <div className="flex items-center p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80 max-w-md w-full shadow-2xs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "vehicle"}
+            onClick={() => setActiveTab("vehicle")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer",
+              activeTab === "vehicle"
+                ? "bg-white text-primary shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            data-testid="tab-vehicles"
+          >
+            <Car size={16} className={activeTab === "vehicle" ? "text-primary" : "text-slate-400"} />
+            <span>Cars / Vehicles</span>
+            <span className={cn(
+              "px-1.5 py-0.5 rounded-full text-[10px]",
+              activeTab === "vehicle" ? "bg-primary/10 text-primary font-bold" : "bg-slate-200/70 text-slate-600 font-medium"
+            )}>
+              {dashboard?.vehicles.length ?? vehicleRows.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "solar"}
+            onClick={() => setActiveTab("solar")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer",
+              activeTab === "solar"
+                ? "bg-white text-amber-700 shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            data-testid="tab-solar"
+          >
+            <Sun size={16} className={activeTab === "solar" ? "text-amber-600" : "text-slate-400"} />
+            <span>Solar Rooftops</span>
+            <span className={cn(
+              "px-1.5 py-0.5 rounded-full text-[10px]",
+              activeTab === "solar" ? "bg-amber-100 text-amber-800 font-bold" : "bg-slate-200/70 text-slate-600 font-medium"
+            )}>
+              {dashboard?.solarSites.length ?? solarRows.length}
+            </span>
+          </button>
+        </div>
+
         {loading || !dashboard ? (
-          <div className="space-y-3">
-            <CustomerSkeleton className="h-40" />
-            <CustomerSkeleton className="h-40" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CustomerSkeleton className="h-56 rounded-2xl" />
+            <CustomerSkeleton className="h-56 rounded-2xl" />
           </div>
-        ) : dashboard.totalCount === 0 ? (
-          <AssetEmptyState
-            onAddVehicle={() => setAddKind("vehicle")}
-            onAddSolar={() => setAddKind("solar")}
-          />
-        ) : (
-          <>
-            {dashboard.vehicles.length > 0 && (
-              <section aria-labelledby="vehicles-heading" className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 id="vehicles-heading" className="font-semibold text-sm flex items-center gap-1.5">
-                    <Car size={16} aria-hidden />
-                    Vehicles
-                  </h2>
-                  <CustomerButton variant="ghost" size="sm" className="h-8 gap-1 text-primary" onClick={() => setAddKind("vehicle")}>
-                    <Plus size={14} aria-hidden />
-                    Add
-                  </CustomerButton>
-                </div>
-                <div className="space-y-3">
-                  {dashboard.vehicles.map(asset => (
-                    <AssetCard key={asset.id} asset={asset} onEdit={setEditAsset} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {dashboard.solarSites.length > 0 && (
-              <section aria-labelledby="solar-heading" className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 id="solar-heading" className="font-semibold text-sm flex items-center gap-1.5">
-                    <Sun size={16} aria-hidden />
-                    Solar Sites
-                  </h2>
-                  <CustomerButton variant="ghost" size="sm" className="h-8 gap-1 text-primary" onClick={() => setAddKind("solar")}>
-                    <Plus size={14} aria-hidden />
-                    Add
-                  </CustomerButton>
-                </div>
-                <div className="space-y-3">
-                  {dashboard.solarSites.map(asset => (
-                    <AssetCard key={asset.id} asset={asset} onEdit={setEditAsset} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {(dashboard.vehicles.length === 0 || dashboard.solarSites.length === 0) && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {dashboard.vehicles.length === 0 && (
-                  <CustomerButton variant="outline" size="sm" className="gap-1" onClick={() => setAddKind("vehicle")}>
-                    <Plus size={14} /> Add Vehicle
-                  </CustomerButton>
-                )}
-                {dashboard.solarSites.length === 0 && (
-                  <CustomerButton variant="outline" size="sm" className="gap-1" onClick={() => setAddKind("solar")}>
-                    <Plus size={14} /> Add Solar Site
-                  </CustomerButton>
-                )}
+        ) : activeTab === "vehicle" ? (
+          dashboard.vehicles.length === 0 ? (
+            <AssetEmptyState
+              tab="vehicle"
+              onAddVehicle={() => setAddKind("vehicle")}
+              onAddSolar={() => setAddKind("solar")}
+            />
+          ) : (
+            <section aria-labelledby="vehicles-heading" className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 id="vehicles-heading" className="font-display font-bold text-base flex items-center gap-2 text-foreground">
+                  <Car size={18} className="text-primary" aria-hidden />
+                  Registered Cars ({dashboard.vehicles.length})
+                </h2>
+                <CustomerButton variant="ghost" size="sm" className="h-9 gap-1 text-primary font-semibold" onClick={() => setAddKind("vehicle")}>
+                  <Plus size={14} aria-hidden />
+                  Add Vehicle
+                </CustomerButton>
               </div>
-            )}
-          </>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {dashboard.vehicles.map(asset => (
+                  <AssetCard key={asset.id} asset={asset} onEdit={setEditAsset} />
+                ))}
+              </div>
+            </section>
+          )
+        ) : (
+          dashboard.solarSites.length === 0 ? (
+            <AssetEmptyState
+              tab="solar"
+              onAddVehicle={() => setAddKind("vehicle")}
+              onAddSolar={() => setAddKind("solar")}
+            />
+          ) : (
+            <section aria-labelledby="solar-heading" className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 id="solar-heading" className="font-display font-bold text-base flex items-center gap-2 text-foreground">
+                  <Sun size={18} className="text-amber-600" aria-hidden />
+                  Solar Rooftops ({dashboard.solarSites.length})
+                </h2>
+                <CustomerButton variant="ghost" size="sm" className="h-9 gap-1 text-primary font-semibold" onClick={() => setAddKind("solar")}>
+                  <Plus size={14} aria-hidden />
+                  Add Solar Site
+                </CustomerButton>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {dashboard.solarSites.map(asset => (
+                  <AssetCard key={asset.id} asset={asset} onEdit={setEditAsset} />
+                ))}
+              </div>
+            </section>
+          )
         )}
       </CustomerPage>
       </div>
@@ -323,12 +364,14 @@ export default function MyAssets() {
             } as Parameters<typeof createVehicle.mutate>[0]["data"],
           });
         }}
-        onSaveSolar={({ panelCount, location }) => {
+        onSaveSolar={({ siteName, panelCount, panelCapacityKw, location }) => {
           createSolar.mutate({
             data: {
               customerId,
+              siteName: siteName || undefined,
               address: location.address,
               panelCount: parseInt(panelCount),
+              panelCapacityKw: panelCapacityKw || undefined,
               serviceLat: location.latitude,
               serviceLng: location.longitude,
               placeId: location.placeId,

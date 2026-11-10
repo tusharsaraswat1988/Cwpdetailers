@@ -28,10 +28,32 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
 
 /* ---------- Root surfaces ---------- */
 .customer-root {
-  --customer-accent: var(--brand-primary, #0072f8);
-  --customer-surface-tint: var(--brand-accent, #eef8ff);
+  --customer-accent: var(--brand-primary, #1677FF);
+  --customer-navy: #0B1D36;
+  --customer-surface-tint: var(--brand-accent, #EBF3FF);
   --customer-icon-surface: color-mix(in srgb, var(--customer-accent) 12%, white);
   font-family: var(--font-sans);
+}
+
+.customer-root .customer-navy-card {
+  background: linear-gradient(145deg, #0B1D36 0%, #102544 100%);
+  color: #FFFFFF;
+  border-radius: var(--customer-radius-xl, 1.25rem);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 24px -4px rgba(11, 29, 54, 0.22), 0 2px 6px rgba(11, 29, 54, 0.12);
+}
+
+.customer-root .customer-card-premium {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: var(--customer-radius-lg, 1.125rem);
+  box-shadow: 0 2px 8px rgba(11, 29, 54, 0.04);
+  transition: all var(--duration-fast, 160ms) ease;
+}
+
+.customer-root .customer-card-premium:hover {
+  border-color: color-mix(in srgb, var(--customer-accent) 25%, #E2E8F0);
+  box-shadow: 0 4px 14px rgba(11, 29, 54, 0.08);
 }
 
 .customer-root .customer-icon-well {
@@ -44,12 +66,12 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
 }
 
 .customer-root .customer-elevated {
-  box-shadow: var(--customer-card-shadow, var(--shadow-sm));
-  border-radius: var(--customer-radius, var(--radius));
+  box-shadow: var(--customer-card-shadow, 0 2px 8px rgba(11, 29, 54, 0.04));
+  border-radius: var(--customer-radius-lg, 1.125rem);
 }
 
 .customer-root .customer-elevated-md {
-  box-shadow: var(--customer-hero-shadow, var(--shadow-md));
+  box-shadow: var(--customer-card-shadow-hover, 0 4px 14px rgba(11, 29, 54, 0.08));
 }
 
 .customer-root .customer-transition {
@@ -73,20 +95,20 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
 .customer-root .customer-card {
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
-  border-radius: var(--customer-radius-lg, 1.25rem);
-  box-shadow: var(--customer-card-shadow, var(--shadow-sm));
+  border-radius: var(--customer-radius-lg, 1.125rem);
+  box-shadow: var(--customer-card-shadow, 0 2px 8px rgba(11, 29, 54, 0.04));
 }
 
 .customer-root .customer-action-card {
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
-  border-radius: var(--customer-radius-lg, 1.25rem);
-  box-shadow: var(--customer-card-shadow, var(--shadow-sm));
+  border-radius: var(--customer-radius-lg, 1.125rem);
+  box-shadow: var(--customer-card-shadow, 0 2px 8px rgba(11, 29, 54, 0.04));
   transition: border-color var(--duration-fast), box-shadow var(--duration-fast), transform var(--duration-fast);
 }
 .customer-root .customer-action-card:hover {
-  border-color: color-mix(in srgb, var(--customer-accent) 28%, hsl(var(--border)));
-  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--customer-accent) 25%, hsl(var(--border)));
+  box-shadow: var(--customer-card-shadow-hover, 0 4px 14px rgba(11, 29, 54, 0.08));
 }
 .customer-root .customer-action-card:active {
   transform: scale(0.985);

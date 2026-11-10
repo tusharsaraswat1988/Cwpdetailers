@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { assertContactIdentityAvailable } from "../lib/contactIdentity";
+import { requireAuth } from "../middlewares/auth";
 
 const router = Router();
 
-router.get("/contact/verify", async (req, res) => {
+router.get("/contact/verify", requireAuth, async (req, res) => {
   try {
     const { phone, email, excludeEntity, excludeId } = req.query as Record<string, string>;
 

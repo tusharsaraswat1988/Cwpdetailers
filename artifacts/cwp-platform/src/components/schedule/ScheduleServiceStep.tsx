@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CatalogService } from "@/features/master-data/api";
 import { cn } from "@/lib/utils";
@@ -24,62 +24,80 @@ export function ScheduleServiceStep({
 }: ScheduleServiceStepProps) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-        <Loader2 size={16} className="animate-spin" /> Checking available services…
+      <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+        <Loader2 size={18} className="animate-spin text-primary" /> Checking available services…
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-3" data-testid="schedule-error-coverage">
-        <p className="font-medium text-destructive">{error}</p>
-        {onRetry && <Button size="sm" variant="outline" onClick={onRetry}>Retry</Button>}
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm space-y-3" data-testid="schedule-error-coverage">
+        <p className="font-semibold text-destructive">{error}</p>
+        {onRetry && (
+          <Button size="sm" variant="outline" className="rounded-xl" onClick={onRetry}>
+            Retry
+          </Button>
+        )}
       </div>
     );
   }
 
   if (services.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="schedule-error-no-services">
-        No services are available at this address right now.
+      <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-muted-foreground bg-slate-50/50" data-testid="schedule-error-no-services">
+        No services are currently available at this location.
       </div>
     );
   }
 
   return (
-    <div className="space-y-2" data-testid="schedule-step-service">
+    <div className="space-y-3" data-testid="schedule-step-service">
       {coveredByPlan && (
-        <p className="text-xs text-green-800 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-          Included in your active plan
-        </p>
+        <div className="flex items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5 font-medium">
+          <Sparkles size={14} className="text-emerald-600 shrink-0" />
+          <span>Covered by your active plan membership credits</span>
+        </div>
       )}
-      {services.map(s => (
-        <button
-          key={s.id}
-          type="button"
-          onClick={() => onSelect(String(s.id))}
-          data-testid={`schedule-service-${s.id}`}
-          className={cn(
-            "w-full rounded-xl border p-4 text-left transition-all",
-            selectedId === String(s.id) ? "border-primary bg-primary/5" : "border-border hover:border-primary/30",
-          )}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-medium text-sm">{s.name}</p>
-              {s.description && (
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{s.description}</p>
+      <div className="space-y-2.5">
+        {services.map(s => {
+          const isSelected = selectedId === String(s.id);
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => onSelect(String(s.id))}
+              data-testid={`schedule-service-${s.id}`}
+              className={cn(
+                "w-full rounded-2xl border p-4 text-left transition-all flex items-start justify-between gap-3 shadow-xs",
+                isSelected
+                  ? "border-primary bg-blue-50/70 ring-2 ring-primary/20 shadow-sm"
+                  : "border-slate-200/90 bg-white hover:border-primary/40 hover:shadow-sm",
               )}
-            </div>
-            {!coveredByPlan && (
-              <p className="text-sm font-semibold text-primary shrink-0">
-                ₹{Number(s.basePrice).toLocaleString("en-IN")}
-              </p>
-            )}
-          </div>
-        </button>
-      ))}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-sm sm:text-base text-foreground">{s.name}</p>
+                  {isSelected && <CheckCircle2 size={16} className="text-primary shrink-0" />}
+                </div>
+                {s.description && (
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                    {s.description}
+                  </p>
+                )}
+              </div>
+              {!coveredByPlan && (
+                <div className="text-right shrink-0">
+                  <p className="text-sm sm:text-base font-bold text-primary">
+                    ₹{Number(s.basePrice).toLocaleString("en-IN")}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">one-time</p>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

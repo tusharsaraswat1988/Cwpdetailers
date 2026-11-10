@@ -142,6 +142,7 @@ const ASSIGNED_SCOPE = {
   branchCol: serviceAssignmentsTable.branchId,
   franchiseeCol: serviceAssignmentsTable.franchiseeId,
   customerCol: serviceAssignmentsTable.customerId,
+  staffCol: serviceAssignmentsTable.assignedStaffId,
 };
 
 type TenantFields = {
@@ -1048,6 +1049,18 @@ export async function reassignAssignment(
     .where(eq(serviceAssignmentsTable.id, assignmentId))
     .returning();
 
+  // Synchronize linked active field executions with the new staff member
+  const { serviceExecutionsTable } = await import("@workspace/db");
+  await db.update(serviceExecutionsTable)
+    .set({
+      assignedStaffId: newStaffId,
+      updatedAt: now,
+    })
+    .where(and(
+      eq(serviceExecutionsTable.serviceAssignmentId, assignmentId),
+      sql`${serviceExecutionsTable.status} NOT IN ('completed', 'cancelled', 'missed')`,
+    ));
+
   await recordAssignmentTimeline({
     assignmentId,
     pendingAssignmentId: assignment.pendingAssignmentId,
@@ -1145,6 +1158,19 @@ export async function removeAssignment(
   await db.update(serviceAssignmentsTable)
     .set({ status: "removed", notes: notes ?? assignment.notes, updatedAt: now })
     .where(eq(serviceAssignmentsTable.id, assignmentId));
+
+  // Synchronize linked active field executions
+  const { serviceExecutionsTable: secTable } = await import("@workspace/db");
+  await db.update(secTable)
+    .set({
+      status: "cancelled",
+      cancellationReason: "Assignment removed",
+      updatedAt: now,
+    })
+    .where(and(
+      eq(secTable.serviceAssignmentId, assignmentId),
+      sql`${secTable.status} NOT IN ('completed', 'cancelled', 'missed')`,
+    ));
 
   await db.update(pendingServiceAssignmentsTable)
     .set({ status: "pending", updatedAt: now })

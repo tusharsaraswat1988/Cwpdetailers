@@ -78,6 +78,7 @@ import CustomerComplaints from "@/pages/customer/Complaints";
 import CustomerWallet from "@/pages/customer/Wallet";
 import CustomerMyPlans from "@/pages/customer/MyPlans";
 import PlanDetail from "@/pages/customer/PlanDetail";
+import CustomerProductDetailPage from "@/pages/customer/ProductDetail";
 import {
   RedirectToPlans, RedirectToSchedule, RedirectBookingsIdToSchedule,
 } from "@/pages/customer/CustomerRouteRedirects";
@@ -252,6 +253,8 @@ function Router() {
       <Route path="/customer/support" component={() => <ProtectedRoute component={CustomerComplaints} roles={["customer"]} />} />
       {/* Legacy route aliases */}
       <Route path="/customer/wallet" component={() => <ProtectedRoute component={CustomerWallet} roles={["customer"]} />} />
+      {/* Services & Dedicated Product Detail Pages */}
+      <Route path="/customer/services/:slug" component={() => <ProtectedRoute component={CustomerProductDetailPage} roles={["customer"]} />} />
       <Route path="/customer/services" component={() => <ProtectedRoute component={RedirectToPlans} roles={["customer"]} />} />
       <Route path="/customer/bookings/:id" component={() => <ProtectedRoute component={RedirectBookingsIdToSchedule} roles={["customer"]} />} />
       <Route path="/customer/bookings" component={() => <ProtectedRoute component={RedirectToSchedule} roles={["customer"]} />} />

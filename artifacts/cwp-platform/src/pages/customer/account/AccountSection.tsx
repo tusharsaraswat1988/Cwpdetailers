@@ -25,9 +25,8 @@ export function AccountSection({
       ) : null}
       <div
         className={cn(
-          "overflow-hidden rounded-[var(--customer-radius-lg,1.25rem)]",
-          "bg-[color-mix(in_srgb,var(--customer-surface-tint)_42%,hsl(var(--card)))]",
-          "divide-y divide-border/40",
+          "overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_2px_8px_rgba(11,29,54,0.04)]",
+          "divide-y divide-slate-100",
         )}
       >
         {children}

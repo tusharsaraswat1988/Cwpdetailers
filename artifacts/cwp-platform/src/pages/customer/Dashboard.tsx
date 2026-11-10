@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import {
   useGetCustomer,
   getGetCustomerQueryKey,
@@ -11,8 +12,15 @@ import {
   useListSolarSites,
   getListSolarSitesQueryKey,
 } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { useAccountScope } from "@/lib/account-scope";
-import { useSavedLocations, useCreateSavedLocation, useUpdateSavedLocation, useDeleteSavedLocation, useSetDefaultSavedLocation } from "@/features/master-data/api";
+import {
+  useSavedLocations,
+  useCreateSavedLocation,
+  useUpdateSavedLocation,
+  useDeleteSavedLocation,
+  useSetDefaultSavedLocation,
+} from "@/features/master-data/api";
 import { useSelectedAddress } from "@/hooks/use-selected-address";
 import { useCustomerLocationSources } from "@/hooks/use-customer-location-sources";
 import CustomerLayout from "@/components/layout/CustomerLayout";
@@ -21,19 +29,24 @@ import { PasswordSetupNudge } from "@/components/auth/PasswordSetupNudge";
 import { usePendingFeedback } from "@/features/daily-cleaning/api";
 import { buildHomeDashboard, pickPrimaryPlan } from "@/lib/home-dashboard";
 import { activePlans, type RawSubscription } from "@/lib/customer-plans";
-import { CurrentAddressBar } from "@/components/home/CurrentAddressBar";
-import { OperationalHero } from "@/components/home/OperationalHero";
-import { AdaptivePrimaryCta } from "@/components/home/AdaptivePrimaryCta";
-import { CurrentPlanWidget } from "@/components/home/CurrentPlanWidget";
-import { HomeBelowFold } from "@/components/home/HomeBelowFold";
+import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
+import { useBranding } from "@/lib/branding";
+import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
+
+import { ServiceAddressSelector } from "@/components/home/ServiceAddressSelector";
+import { HomeGreeting } from "@/components/home/HomeGreeting";
+import { MarketingHero } from "@/components/home/MarketingHero";
+import { ServicesGrid } from "@/components/home/ServicesGrid";
+import { CustomerReviewsSection } from "@/components/home/CustomerReviewsSection";
+import { TodayServiceCard } from "@/components/home/TodayServiceCard";
+import { UpcomingServicePreview } from "@/components/home/UpcomingServicePreview";
+
 import {
   CustomerPage,
   CustomerSkeleton,
   CustomerEmptyState,
 } from "@/features/customer-ds";
-
-/** Above-fold block max height — primary content fits one viewport without scroll. */
-const ABOVE_FOLD_MAX = "calc(100dvh - var(--app-bar-height) - var(--bottom-nav-height) - 2rem)";
+import { AlertCircle, ArrowRight } from "lucide-react";
 
 type VehicleRow = {
   id: number;
@@ -60,7 +73,9 @@ function querySettled(q: { isFetched: boolean; isError: boolean }): boolean {
 }
 
 export default function CustomerDashboard() {
+  const branding = useBranding();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
+  const [addressPickerOpen, setAddressPickerOpen] = useState(false);
 
   const summaryQuery = useGetCustomerSummary(customerId ?? 0, {
     query: {
@@ -170,13 +185,26 @@ export default function CustomerDashboard() {
     });
   }, [customerId, summaryQuery.data, subscriptions, pendingFeedback, vehicleRows, solarRows, selected]);
 
+  // Find upcoming future booking (excluding today's hero booking)
+  const upcomingFutureBooking = useMemo(() => {
+    const bookings = summaryQuery.data?.recentBookings ?? [];
+    return bookings.find(b => {
+      if (b.status === "cancelled" || b.status === "completed") return false;
+      const d = new Date(b.scheduledDate.includes("T") ? b.scheduledDate : `${b.scheduledDate}T00:00:00`);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      return d > today;
+    });
+  }, [summaryQuery.data?.recentBookings]);
+
+  const pendingDues = Number(summaryQuery.data?.pendingDues ?? 0);
   const loading = summaryQuery.isLoading || subsQuery.isLoading || !addressSourcesReady || !initialized;
 
   if (scopeLoading) {
     return (
       <CustomerLayout>
         <CustomerPage>
-          <CustomerSkeleton className="h-48 w-full" />
+          <CustomerSkeleton className="h-48 w-full rounded-2xl" />
         </CustomerPage>
       </CustomerLayout>
     );
@@ -199,47 +227,150 @@ export default function CustomerDashboard() {
 
   return (
     <CustomerLayout>
-      <CustomerPage className="space-y-0">
-        <div className="flex flex-col min-h-0">
-          <section
-            className="flex flex-col gap-3 shrink-0 overflow-hidden"
-            style={{ maxHeight: ABOVE_FOLD_MAX }}
-            data-testid="home-above-fold"
-            aria-label="Today's service overview"
-          >
-            {loading || !dashboard ? (
-              <>
-                <CustomerSkeleton className="h-14" />
-                <CustomerSkeleton className="h-[5rem]" />
-                <CustomerSkeleton className="h-12" />
-                <CustomerSkeleton className="h-[5rem]" />
-              </>
-            ) : (
-              <>
-                <CurrentAddressBar
-                  address={dashboard.currentAddress}
-                  selected={selected}
-                  savedLocations={savedQuery.data}
-                  customerId={customerId}
-                  onSelectAddress={selectLocation}
-                  onSaveNew={data => createSavedLocation.mutateAsync(data)}
-                  onUpdate={(id, data) => updateSavedLocation.mutateAsync({ id, ...data })}
-                  onDelete={id => deleteSavedLocation.mutateAsync({ id, customerId })}
-                  onSetDefault={id => setDefaultSavedLocation.mutateAsync({ id, customerId })}
-                />
-                <OperationalHero hero={dashboard.hero} />
-                <AdaptivePrimaryCta cta={dashboard.cta} />
-                <CurrentPlanWidget plan={dashboard.primaryPlan} />
-              </>
-            )}
-          </section>
-
-          <div className="mt-5 border-t border-border pt-4 shrink-0 space-y-3">
-            <PasswordSetupNudge />
-            {dashboard && <HomeBelowFold actionQueue={dashboard.actionQueue} />}
+      <CustomerPage className="space-y-6">
+        {loading || !dashboard ? (
+          <div className="space-y-6">
+            {/* Address Selector Skeleton */}
+            <CustomerSkeleton className="h-14 w-full rounded-2xl" />
+            {/* Greeting Skeleton */}
+            <div className="space-y-1.5 py-1">
+              <CustomerSkeleton className="h-3.5 w-24 rounded-md" />
+              <CustomerSkeleton className="h-7 w-44 rounded-md" />
+            </div>
+            {/* Cards 2-col Skeleton */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-5">
+              <CustomerSkeleton className="h-52 w-full rounded-2xl" />
+              <CustomerSkeleton className="h-52 w-full rounded-2xl" />
+            </div>
+            {/* Services 4-col Skeleton */}
+            <div className="space-y-3">
+              <CustomerSkeleton className="h-5 w-32 rounded-md" />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <CustomerSkeleton className="h-40 rounded-2xl" />
+                <CustomerSkeleton className="h-40 rounded-2xl" />
+                <CustomerSkeleton className="h-40 rounded-2xl" />
+                <CustomerSkeleton className="h-40 rounded-2xl" />
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-6">
+            {/* 1. Service Address Selector (immediately below Application Header, non-sticky, naturally scrolls) */}
+            <ServiceAddressSelector
+              selected={selected}
+              address={dashboard.currentAddress}
+              onClick={() => setAddressPickerOpen(true)}
+            />
+
+            {/* 2. Personalized Greeting */}
+            <HomeGreeting customerName={customerQuery.data?.name} />
+
+            {/* Outstanding Balance Banner if dues > 0 */}
+            {pendingDues > 0 && (
+              <div
+                className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 flex items-center justify-between gap-3 shadow-xs"
+                data-testid="home-dues-banner"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <AlertCircle size={20} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+                      Payment Due
+                    </p>
+                    <p className="font-display font-bold text-base text-foreground">
+                      ₹{pendingDues.toLocaleString("en-IN")} Outstanding
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={CUSTOMER_ROUTES.invoices}
+                  className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors shrink-0 shadow-xs"
+                >
+                  Pay Now <ArrowRight size={13} />
+                </Link>
+              </div>
+            )}
+
+            {/* Compact Active Membership Strip (Points to designated My Plans page) */}
+            {dashboard.primaryPlan && (
+              <div
+                className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50/60 border border-blue-100/90 text-xs text-foreground shadow-2xs"
+                data-testid="home-membership-strip"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 shadow-2xs" />
+                  <div className="min-w-0">
+                    <p className="font-bold text-foreground truncate">
+                      Active: {dashboard.primaryPlan.name}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {dashboard.primaryPlan.totalRemaining > 0
+                        ? `${dashboard.primaryPlan.totalRemaining} visits remaining`
+                        : "Managed doorstep care"}
+                      {dashboard.primaryPlan.vehicleOrSite ? ` · ${dashboard.primaryPlan.vehicleOrSite}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={CUSTOMER_ROUTES.plans}
+                  className="text-xs font-bold text-primary hover:underline shrink-0 flex items-center gap-1 pl-2"
+                >
+                  My Plans <ArrowRight size={13} />
+                </Link>
+              </div>
+            )}
+
+            {/* Core Product Marketing Hero */}
+            <MarketingHero />
+
+            {/* Today's Service Card (Shown when service is active / scheduled today) */}
+            {(dashboard.hero || dashboard.primaryPlan?.isDailyCleaning) && (
+              <div data-testid="home-today-service">
+                <TodayServiceCard
+                  hero={dashboard.hero}
+                  cta={dashboard.cta}
+                  hasDailyCleaningPlan={Boolean(dashboard.primaryPlan?.isDailyCleaning)}
+                />
+              </div>
+            )}
+
+            {/* CWP Signature Services Showcase: Each card links to dedicated product detail page */}
+            <ServicesGrid
+              hasDailyCleaningPlan={Boolean(dashboard.primaryPlan?.isDailyCleaning)}
+            />
+
+            {/* Customer Testimonials & Verified Reviews */}
+            <CustomerReviewsSection />
+
+            {/* Upcoming Bookings & Utility Reminders */}
+            <div className="space-y-4 pt-1">
+              {upcomingFutureBooking && (
+                <UpcomingServicePreview booking={upcomingFutureBooking} />
+              )}
+              <PasswordSetupNudge />
+            </div>
+          </div>
+        )}
       </CustomerPage>
+
+      {/* Global Address Picker Sheet for Quick Action */}
+      <AddressPickerSheet
+        open={addressPickerOpen}
+        onOpenChange={setAddressPickerOpen}
+        value={selected}
+        savedLocations={savedQuery.data}
+        customerId={customerId}
+        onSelect={(loc, meta) => {
+          selectLocation(loc, meta ? { assetLabel: meta.assetLabel } : undefined);
+          setAddressPickerOpen(false);
+        }}
+        onSaveNew={data => createSavedLocation.mutateAsync(data)}
+        onUpdate={(id, data) => updateSavedLocation.mutateAsync({ id, ...data })}
+        onDelete={id => deleteSavedLocation.mutateAsync({ id, customerId })}
+        onSetDefault={id => setDefaultSavedLocation.mutateAsync({ id, customerId })}
+      />
     </CustomerLayout>
   );
 }

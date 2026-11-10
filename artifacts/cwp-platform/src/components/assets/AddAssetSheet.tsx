@@ -25,7 +25,12 @@ interface AddAssetSheetProps {
     registrationNumber: string;
     location: LocationValue;
   }) => void;
-  onSaveSolar: (data: { panelCount: string; location: LocationValue }) => void;
+  onSaveSolar: (data: {
+    siteName?: string;
+    panelCount: string;
+    panelCapacityKw?: string;
+    location: LocationValue;
+  }) => void;
   saving?: boolean;
 }
 
@@ -41,7 +46,9 @@ export function AddAssetSheet({
   const [selectedModel, setSelectedModel] = useState<VehicleModel | null>(null);
   const [seatCategoryId, setSeatCategoryId] = useState<number | null>(null);
   const [carForm, setCarForm] = useState({ year: "", color: "", registrationNumber: "" });
+  const [siteName, setSiteName] = useState("");
   const [panelCount, setPanelCount] = useState("");
+  const [panelCapacityKw, setPanelCapacityKw] = useState("");
   const [location, setLocation] = useState<LocationValue | null>(null);
 
   useEffect(() => {
@@ -49,7 +56,9 @@ export function AddAssetSheet({
       setSelectedModel(null);
       setSeatCategoryId(null);
       setCarForm({ year: "", color: "", registrationNumber: "" });
+      setSiteName("");
       setPanelCount("");
+      setPanelCapacityKw("");
       setLocation(null);
     }
   }, [open]);
@@ -99,15 +108,45 @@ export function AddAssetSheet({
     </div>
   ) : (
     <div className="space-y-4 pb-2">
-      <LocationPicker value={location} onChange={setLocation} required />
       <div>
-        <Label>Panel count</Label>
-        <Input type="number" min={1} className="mt-1" value={panelCount} onChange={e => setPanelCount(e.target.value)} data-testid="input-solar-panels" />
+        <Label>Site / Plant Name (Optional)</Label>
+        <Input
+          className="mt-1"
+          placeholder="e.g. Home Rooftop Solar"
+          value={siteName}
+          onChange={e => setSiteName(e.target.value)}
+          data-testid="input-solar-name"
+        />
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Panel count *</Label>
+          <Input
+            type="number"
+            min={1}
+            className="mt-1"
+            placeholder="e.g. 12"
+            value={panelCount}
+            onChange={e => setPanelCount(e.target.value)}
+            data-testid="input-solar-panels"
+          />
+        </div>
+        <div>
+          <Label>Capacity (kW)</Label>
+          <Input
+            className="mt-1"
+            placeholder="e.g. 5"
+            value={panelCapacityKw}
+            onChange={e => setPanelCapacityKw(e.target.value)}
+            data-testid="input-solar-capacity"
+          />
+        </div>
+      </div>
+      <LocationPicker value={location} onChange={setLocation} required />
       <Button
         className="w-full h-11"
         disabled={!canSaveSolar || saving}
-        onClick={() => location && onSaveSolar({ panelCount, location })}
+        onClick={() => location && onSaveSolar({ siteName: siteName.trim() || undefined, panelCount, panelCapacityKw: panelCapacityKw.trim() || undefined, location })}
         data-testid="btn-add-solar"
       >
         {saving ? <Loader2 className="animate-spin" size={16} /> : "Save solar site"}

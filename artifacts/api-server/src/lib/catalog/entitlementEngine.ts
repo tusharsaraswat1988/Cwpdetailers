@@ -248,35 +248,56 @@ export async function checkSelfBookingEligibility(opts: {
   };
 }
 
-/** Consume credits only after service completion */
+import { isNull } from "drizzle-orm";
+
+/** Consume credits only after service completion (atomic and idempotent) */
 export async function consumeEntitlementOnCompletion(
   entitlementId: number,
   bookingId: number,
   credits = 1,
   tx?: Transaction,
 ) {
-  const ctx = tx ?? db;
-  const [ent] = await ctx.select().from(customerEntitlementsTable)
-    .where(eq(customerEntitlementsTable.id, entitlementId)).limit(1);
-  if (!ent || ent.status !== "active" || ent.remainingCredits < credits) {
-    throw new Error("Entitlement not available for consumption");
-  }
+  const run = async (ctx: Transaction) => {
+    // Idempotency: verify this (entitlementId, bookingId) was not already consumed
+    const [alreadyConsumed] = await ctx.select().from(entitlementConsumptionLogTable)
+      .where(and(
+        eq(entitlementConsumptionLogTable.entitlementId, entitlementId),
+        eq(entitlementConsumptionLogTable.bookingId, bookingId),
+        isNull(entitlementConsumptionLogTable.revertedAt),
+      )).limit(1);
 
-  const used = ent.usedCredits + credits;
-  const remaining = ent.totalCredits - used;
-  const status = remaining <= 0 ? "exhausted" as const : ent.status;
+    if (alreadyConsumed) {
+      logger.info({ entitlementId, bookingId }, "Entitlement already consumed for this booking, skipping duplicate deduction");
+      return;
+    }
 
-  await ctx.update(customerEntitlementsTable)
-    .set({ usedCredits: used, remainingCredits: remaining, status, updatedAt: new Date() })
-    .where(eq(customerEntitlementsTable.id, entitlementId));
+    const [ent] = await ctx.select().from(customerEntitlementsTable)
+      .where(eq(customerEntitlementsTable.id, entitlementId))
+      .for("update")
+      .limit(1);
 
-  await ctx.insert(entitlementConsumptionLogTable).values({
-    entitlementId,
-    bookingId,
-    creditsConsumed: credits,
-  });
+    if (!ent || ent.status !== "active" || ent.remainingCredits < credits) {
+      throw new Error("Entitlement not available for consumption");
+    }
 
-  logger.info({ entitlementId, bookingId, remaining }, "Entitlement consumed on completion");
+    const used = ent.usedCredits + credits;
+    const remaining = ent.totalCredits - used;
+    const status = remaining <= 0 ? "exhausted" as const : ent.status;
+
+    await ctx.update(customerEntitlementsTable)
+      .set({ usedCredits: used, remainingCredits: remaining, status, updatedAt: new Date() })
+      .where(eq(customerEntitlementsTable.id, entitlementId));
+
+    await ctx.insert(entitlementConsumptionLogTable).values({
+      entitlementId,
+      bookingId,
+      creditsConsumed: credits,
+    });
+
+    logger.info({ entitlementId, bookingId, remaining }, "Entitlement consumed on completion");
+  };
+
+  return tx ? run(tx) : db.transaction(run);
 }
 
 export async function refreshEntitlementStatuses() {

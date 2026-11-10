@@ -55,7 +55,7 @@ export function tenantFilters(req: Request, opts: TenantOpts): SQL[] {
 
   if (opts.branchCol && s.branchIds !== null) {
     if (s.branchIds.length === 0) out.push(sql`false`);
-    else out.push(or(inArray(opts.branchCol, s.branchIds), isNull(opts.branchCol)));
+    else out.push(inArray(opts.branchCol, s.branchIds));
   }
   if (s.franchiseeId && opts.franchiseeCol) out.push(eq(opts.franchiseeCol, s.franchiseeId));
   if (s.customerId && opts.customerCol) out.push(eq(opts.customerCol, s.customerId));
@@ -78,7 +78,9 @@ export function tenantStamp<T extends Record<string, unknown>>(req: Request, dat
   if (!s.isSuperAdmin || data["companyId"] == null) {
     if (s.companyId != null) out.companyId = s.companyId;
   }
-  if (!s.isSuperAdmin || data["branchId"] == null) {
+  if (!s.isSuperAdmin) {
+    if (s.branchIds && s.branchIds.length === 1) out.branchId = s.branchIds[0];
+  } else if (data["branchId"] == null) {
     if (s.branchIds && s.branchIds.length === 1) out.branchId = s.branchIds[0];
   }
   if (!s.isSuperAdmin || data["franchiseeId"] == null) {
@@ -107,7 +109,7 @@ export async function loadIfInScope<R extends Record<string, unknown>>(
  * Build a raw SQL fragment for tenant scoping in raw SQL queries.
  * For each tenant key, provide the alias.column or table.column name.
  * The function returns a SQL fragment that ANDs the active predicates.
- * Use it as:  sql\`SELECT ... FROM ... WHERE ... AND \${sqlTenant(req, {c: 'c.company_id', b: 'b.branch_id'})}\`
+ * Use it as:  sql`SELECT ... FROM ... WHERE ... AND ${sqlTenant(req, {c: 'c.company_id', b: 'b.branch_id'})}`
  */
 export function sqlTenant(req: Request, cols: { c?: string; b?: string; f?: string; cu?: string; s?: string }): SQL {
   const s = req.scope;
@@ -143,7 +145,9 @@ export function rowInScope(req: Request, row: {
     return true;
   }
   if (s.companyId && row.companyId != null && row.companyId !== s.companyId) return false;
-  if (s.branchIds !== null && row.branchId != null && !s.branchIds.includes(row.branchId)) return false;
+  if (s.branchIds !== null) {
+    if (row.branchId == null || !s.branchIds.includes(row.branchId)) return false;
+  }
   if (s.franchiseeId && row.franchiseeId != null && row.franchiseeId !== s.franchiseeId) return false;
   if (s.customerId && row.customerId != null && row.customerId !== s.customerId) return false;
   if (s.staffId && row.staffId != null && row.staffId !== s.staffId) return false;

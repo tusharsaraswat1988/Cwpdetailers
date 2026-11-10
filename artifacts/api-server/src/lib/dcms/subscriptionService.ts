@@ -9,6 +9,8 @@ import {
   staffTable,
   type DcmsSubscription,
 } from "@workspace/db";
+import type { Request } from "express";
+import { tenantFilters } from "../../middlewares/tenantScope";
 import { eq, and, desc, sql, or, asc } from "drizzle-orm";
 import { logDcmsActivity } from "./auditLog";
 import { DEFAULT_RADIUS_METERS } from "./geoFence";
@@ -103,8 +105,16 @@ export async function createSubscription(
   return sub!;
 }
 
-export async function listSubscriptions(filters?: { status?: string; customerId?: number }) {
+export async function listSubscriptions(filters?: { status?: string; customerId?: number }, req?: Request) {
   const conditions = [];
+  if (req) {
+    conditions.push(...tenantFilters(req, {
+      companyCol: dcmsSubscriptionsTable.companyId,
+      branchCol: dcmsSubscriptionsTable.branchId,
+      franchiseeCol: dcmsSubscriptionsTable.franchiseeId,
+      customerCol: dcmsSubscriptionsTable.customerId,
+    }));
+  }
   if (filters?.status) conditions.push(eq(dcmsSubscriptionsTable.status, filters.status as DcmsSubscription["status"]));
   if (filters?.customerId) conditions.push(eq(dcmsSubscriptionsTable.customerId, filters.customerId));
 

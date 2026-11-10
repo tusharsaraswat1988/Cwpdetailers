@@ -8,33 +8,43 @@
 
 /** Brand + semantic colors (aligned with Landing / Admin primary). */
 export const CUSTOMER_COLORS = {
-  primaryHex: "#0072f8",
-  primaryHsl: "212 100% 49%",
+  primaryHex: "#1677FF",
+  primaryHsl: "215 100% 54%",
   primaryForegroundHsl: "0 0% 100%",
-  secondaryHsl: "220 18% 14%",
+  secondaryHex: "#0B1D36",
+  secondaryHsl: "216 66% 13%",
   secondaryForegroundHsl: "0 0% 100%",
-  foregroundHsl: "220 40% 10%",
-  mutedForegroundHsl: "215 12% 42%",
-  destructiveHsl: "0 84% 60%",
-  successHsl: "142 71% 40%",
-  warningHsl: "38 92% 50%",
-  infoHsl: "212 100% 49%",
-  progressHsl: "262 60% 55%",
+  foregroundHex: "#111827",
+  foregroundHsl: "221 39% 11%",
+  mutedForegroundHex: "#64748B",
+  mutedForegroundHsl: "215 16% 47%",
+  destructiveHex: "#DC2626",
+  destructiveHsl: "0 72% 51%",
+  successHex: "#16A34A",
+  successHsl: "142 76% 36%",
+  warningHex: "#D97706",
+  warningHsl: "38 92% 44%",
+  infoHex: "#1677FF",
+  infoHsl: "215 100% 54%",
+  progressHsl: "215 100% 54%",
 } as const;
 
 /** Surfaces — airy, trustworthy consumer chrome. */
 export const CUSTOMER_SURFACE = {
-  backgroundHsl: "210 40% 98%",
+  backgroundHex: "#F5F7FA",
+  backgroundHsl: "216 33% 97%",
+  cardHex: "#FFFFFF",
   cardHsl: "0 0% 100%",
-  mutedHsl: "214 24% 95%",
-  borderHsl: "214 24% 90%",
-  surfaceTintHex: "#eef8ff",
-  surfaceTintHsl: "205 100% 97%",
-  accentHsl: "205 100% 94%",
-  accentForegroundHsl: "212 100% 40%",
-  ringHsl: "212 100% 49%",
-  heroGradient: "linear-gradient(145deg, hsl(212 100% 49% / 0.08) 0%, hsl(0 0% 100%) 55%)",
-  authBackgroundHsl: "220 18% 14%",
+  mutedHsl: "214 32% 95%",
+  borderHex: "#E2E8F0",
+  borderHsl: "214 32% 91%",
+  surfaceTintHex: "#EBF3FF",
+  surfaceTintHsl: "215 100% 96%",
+  accentHsl: "215 100% 96%",
+  accentForegroundHsl: "215 100% 40%",
+  ringHsl: "215 100% 54%",
+  heroGradient: "linear-gradient(135deg, #0B1D36 0%, #16325B 100%)",
+  authBackgroundHsl: "216 66% 13%",
 } as const;
 
 /** Status chip tones — reuse Platform --tone-* when ThemeRoot is mounted. */
@@ -85,11 +95,18 @@ export const CUSTOMER_SPACE = {
   gap: "gap-3",
 } as const;
 
+export const CUSTOMER_SHADOWS = {
+  card: "0 2px 8px rgba(11, 29, 54, 0.04)",
+  cardHover: "0 4px 14px rgba(11, 29, 54, 0.08)",
+  navy: "0 8px 24px -4px rgba(11, 29, 54, 0.22), 0 2px 6px rgba(11, 29, 54, 0.12)",
+  elevated: "0 4px 12px rgba(11, 29, 54, 0.05)",
+} as const;
+
 export const CUSTOMER_RADIUS = {
   sm: "0.75rem",
   md: "1rem",
-  lg: "1.25rem",
-  xl: "1.5rem",
+  lg: "1.125rem",
+  xl: "1.25rem",
   full: "9999px",
   /** CSS var defaults */
   root: "1rem",
@@ -139,7 +156,7 @@ export const CUSTOMER_DS = {
 export const CUSTOMER_THEME_CSS_VARS: Record<string, string> = {
   "--brand-primary": CUSTOMER_COLORS.primaryHex,
   "--brand-accent": CUSTOMER_SURFACE.surfaceTintHex,
-  "--brand-secondary": "#1e2430",
+  "--brand-secondary": CUSTOMER_COLORS.secondaryHex,
   "--primary": CUSTOMER_COLORS.primaryHsl,
   "--primary-foreground": CUSTOMER_COLORS.primaryForegroundHsl,
   "--ring": CUSTOMER_SURFACE.ringHsl,
@@ -159,15 +176,15 @@ export const CUSTOMER_THEME_CSS_VARS: Record<string, string> = {
 
   /* Semantic tones (StatusBadge, Timeline) */
   "--tone-info": CUSTOMER_COLORS.infoHsl,
-  "--tone-info-fg": "212 100% 35%",
+  "--tone-info-fg": "215 100% 35%",
   "--tone-success": CUSTOMER_COLORS.successHsl,
-  "--tone-success-fg": "142 72% 28%",
+  "--tone-success-fg": "142 76% 28%",
   "--tone-warning": CUSTOMER_COLORS.warningHsl,
   "--tone-warning-fg": "32 90% 32%",
   "--tone-destructive": CUSTOMER_COLORS.destructiveHsl,
   "--tone-destructive-fg": "0 72% 40%",
   "--tone-progress": CUSTOMER_COLORS.progressHsl,
-  "--tone-progress-fg": "262 55% 38%",
+  "--tone-progress-fg": "215 100% 35%",
 
   /* Status aliases */
   "--status-in-progress": CUSTOMER_COLORS.primaryHsl,
@@ -180,7 +197,8 @@ export const CUSTOMER_THEME_CSS_VARS: Record<string, string> = {
   /* Customer component tokens */
   "--customer-accent": CUSTOMER_COLORS.primaryHex,
   "--customer-surface-tint": CUSTOMER_SURFACE.surfaceTintHex,
-  "--customer-icon-surface": "color-mix(in srgb, #0072f8 12%, white)",
+  "--customer-icon-surface": "color-mix(in srgb, #1677FF 12%, white)",
+  "--customer-navy": CUSTOMER_COLORS.secondaryHex,
   "--customer-radius": CUSTOMER_RADIUS.md,
   "--customer-radius-sm": CUSTOMER_RADIUS.sm,
   "--customer-radius-lg": CUSTOMER_RADIUS.lg,
@@ -190,7 +208,9 @@ export const CUSTOMER_THEME_CSS_VARS: Record<string, string> = {
   "--customer-control-h": CUSTOMER_SPACE_RAW.controlH,
   "--customer-tap-min": CUSTOMER_SPACE_RAW.tapMin,
   "--customer-focus-ring": CUSTOMER_SURFACE.ringHsl,
-  "--customer-card-shadow": "var(--shadow-sm)",
+  "--customer-card-shadow": CUSTOMER_SHADOWS.card,
+  "--customer-card-shadow-hover": CUSTOMER_SHADOWS.cardHover,
+  "--customer-navy-shadow": CUSTOMER_SHADOWS.navy,
   "--customer-hero-shadow": "var(--shadow-md)",
   "--duration-fast": `${CUSTOMER_MOTION.fastMs}ms`,
   "--duration-base": `${CUSTOMER_MOTION.baseMs}ms`,

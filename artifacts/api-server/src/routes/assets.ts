@@ -33,8 +33,11 @@ router.get("/assets", async (req, res) => {
     const lim = Math.min(parseInt(limit, 10) || 50, 100);
     const off = parseInt(offset, 10) || 0;
 
+    // Enforce customer scoping
+    const effectiveCustomerId = req.scope?.customerId ?? (customerId ? parseInt(customerId, 10) : undefined);
+
     const result = await listAssetsForQuery({
-      customerId: customerId ? parseInt(customerId, 10) : undefined,
+      customerId: effectiveCustomerId,
       assetType,
       serviceLocationId: serviceLocationId ? parseInt(serviceLocationId, 10) : undefined,
       limit: lim,
@@ -58,6 +61,12 @@ router.get("/assets/:id", async (req, res) => {
     const detail = await getAssetDetail(id);
     if (!detail || !rowInScope(req, detail)) {
       return res.status(404).json({ error: "Asset not found" });
+    }
+    if (req.scope?.customerId) {
+      const owned = detail.customerLinks?.some(l => l.customerId === req.scope!.customerId)
+        || detail.vehicle?.customerId === req.scope!.customerId
+        || detail.solarSite?.customerId === req.scope!.customerId;
+      if (!owned) return res.status(404).json({ error: "Asset not found" });
     }
     return res.json(detail);
   } catch (err) {

@@ -285,15 +285,17 @@ export function CreateServiceAddressForm({
       )}
 
       {onSubmit && showDetails && (
-        <Button
-          type="button"
-          className="w-full h-12 sticky bottom-0"
-          disabled={!saveReady || submitting}
-          onClick={onSubmit}
-          data-testid="btn-save-address"
-        >
-          {submitting ? "Saving…" : ctaLabel}
-        </Button>
+        <div className="sticky bottom-0 -mx-5 -mb-5 mt-6 px-5 py-3.5 bg-background/95 backdrop-blur-md border-t border-border shadow-[0_-4px_16px_rgba(0,0,0,0.08)] z-20">
+          <Button
+            type="button"
+            className="w-full h-12 text-sm font-semibold rounded-xl shadow-xs"
+            disabled={!saveReady || submitting}
+            onClick={onSubmit}
+            data-testid="btn-save-address"
+          >
+            {submitting ? "Saving…" : ctaLabel}
+          </Button>
+        </div>
       )}
     </div>
   );

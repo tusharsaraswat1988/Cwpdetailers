@@ -94,13 +94,23 @@ describe("P2 Auth E2E & Resilience Test Suite (Client)", () => {
       expect(classified.error.actionableStep).toContain("wait a few minutes");
     });
 
-    it("maps portal mismatch into actionable switch navigation", () => {
+    it("maps portal mismatch into actionable switch navigation for staff", () => {
+      const details = getActionableAuthDetails(
+        new Error("This number belongs to a staff account. Use the Staff portal to sign in."),
+      );
+      expect(details).not.toBeNull();
+      expect(details.actionUrl).toBe("/staff/login");
+      expect(details.actionLabel).toBe("Go to Staff Portal");
+    });
+
+    it("prevents admin enumeration and suppresses admin portal links", () => {
       const details = getActionableAuthDetails(
         new Error("This account belongs to an administrator. Use the Admin portal to sign in."),
       );
-      expect(details).not.toBeNull();
-      expect(details.actionUrl).toBe("/admin/login");
-      expect(details.actionLabel).toBe("Go to Admin Login");
+      expect(details.message).toBe("Access denied");
+      expect(details.actionUrl).toBeUndefined();
+      expect(details.actionLabel).toBeUndefined();
+      expect(details.actionableStep).toBe("Please try another email ID.");
     });
 
     it("maps expired or invalid OTP into retry with new code suggestion", () => {

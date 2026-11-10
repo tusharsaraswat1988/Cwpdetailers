@@ -65,6 +65,9 @@ export function assertAssignedTechnician(
   req: Request,
   execution: ExecutionRow,
 ): void {
+  if (req.user?.role === "customer") {
+    throw new Error("Customers are not authorized to execute field services");
+  }
   if (req.user?.role !== "staff") return;
   const staffId = req.scope?.staffId ?? req.user.staffId;
   if (staffId == null) {

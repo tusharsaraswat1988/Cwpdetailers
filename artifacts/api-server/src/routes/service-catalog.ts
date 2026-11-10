@@ -60,7 +60,8 @@ async function genericUpdate(table: any, req: any, res: any) {
 
 // ─── Catalog Settings ────────────────────────────────────────────────────────
 
-router.get("/catalog/settings", async (_req, res) => {
+router.get("/catalog/settings", async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Authentication required" });
   const rows = await db.select().from(catalogSettingsTable);
   const settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
   return res.json(settings);
@@ -517,12 +518,17 @@ router.post("/catalog/entitlements/grant-package", async (req, res) => {
 });
 
 router.get("/catalog/self-booking/check", async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Authentication required" });
   const { customerId, serviceId, cityId, citySlug } = req.query as Record<string, string>;
   if (!customerId || !serviceId) return res.status(400).json({ error: "customerId and serviceId required" });
+  const parsedCustomerId = parseInt(customerId, 10);
+  if (req.user.role === "customer" && req.scope?.customerId !== parsedCustomerId) {
+    return res.status(403).json({ error: "Permission denied — cannot probe other customer entitlements" });
+  }
   const cid = cityId ? parseInt(cityId) : (citySlug ? await resolveCityId(citySlug) : null);
   const result = await checkSelfBookingEligibility({
-    customerId: parseInt(customerId),
-    serviceId: parseInt(serviceId),
+    customerId: parsedCustomerId,
+    serviceId: parseInt(serviceId, 10),
     cityId: cid,
   });
   return res.json(result);

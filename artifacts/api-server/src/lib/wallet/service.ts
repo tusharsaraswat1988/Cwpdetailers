@@ -112,6 +112,22 @@ export async function debitWallet(
 
   const run = async (ctx: Transaction) => {
     await lockCustomer(params.customerId, ctx);
+
+    // Idempotency check: if reference and referenceId already have a recorded debit, return existing
+    if (params.reference && params.referenceId) {
+      const [existing] = await ctx.select()
+        .from(walletTransactionsTable)
+        .where(and(
+          eq(walletTransactionsTable.customerId, params.customerId),
+          eq(walletTransactionsTable.type, "debit"),
+          eq(walletTransactionsTable.reference, params.reference),
+          eq(walletTransactionsTable.referenceId, params.referenceId),
+        )).limit(1);
+      if (existing) {
+        return existing;
+      }
+    }
+
     const current = await getLedgerBalance(params.customerId, ctx);
     if (current < params.amount) {
       throw new WalletError(

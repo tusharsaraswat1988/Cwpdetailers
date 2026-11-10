@@ -5,6 +5,7 @@ import {
   registerPushSubscription,
   unregisterPushSubscription,
   getPushStatus,
+  deliverPushToUser,
 } from "../lib/push/subscriptionService";
 import { listPushNotificationLogs, getPushLogStats } from "../lib/push/pushLogService";
 
@@ -70,6 +71,28 @@ router.post("/push/unregister", requireAuth, async (req, res) => {
     return res.status(204).send();
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : "Unregister failed" });
+  }
+});
+
+router.post("/push/test", requireAuth, async (req, res) => {
+  try {
+    if (!isWebPushConfigured()) {
+      return res.status(503).json({ error: "Push notifications not configured on server" });
+    }
+    const result = await deliverPushToUser({
+      userId: req.user!.id,
+      message: {
+        title: "CWP Detailers Test Alert",
+        body: "Web push is working properly on this device! 🚗✨",
+        url: "/customer/dashboard",
+        tag: "cwp-test-push",
+      },
+      eventType: "test_push",
+      reason: "User requested test notification",
+    });
+    return res.json({ ok: true, result });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Failed to send test push" });
   }
 });
 

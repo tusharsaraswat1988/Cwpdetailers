@@ -125,7 +125,11 @@ describe("P0 Auth Client Regression Suite", () => {
         mapAuthErrorMessage(
           "This Google account belongs to an administrator. Use the Admin portal with your phone number and password.",
         ),
-      ).toContain("Admin portal");
+      ).toBe("Access denied");
+
+      expect(
+        mapAuthErrorMessage("Access denied", "ACCESS_DENIED"),
+      ).toBe("Access denied");
     });
 
     it("extracts code from API response payloads", () => {

@@ -789,7 +789,7 @@ export async function recordPayment(
 
     if (params.invoiceId) {
 
-      const [inv] = await ctx.select().from(invoicesTable).where(eq(invoicesTable.id, params.invoiceId)).limit(1);
+      const [inv] = await ctx.select().from(invoicesTable).where(eq(invoicesTable.id, params.invoiceId)).for("update").limit(1);
 
       invoiceRow = inv ?? null;
 

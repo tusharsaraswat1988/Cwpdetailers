@@ -94,9 +94,9 @@ export default function CustomerMyPlans() {
         {isError ? (
           <CustomerErrorState onRetry={() => refetch()} />
         ) : isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <CustomerSkeleton key={i} className="h-36" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <CustomerSkeleton key={i} className="h-48 rounded-2xl" />
             ))}
           </div>
         ) : plans.length === 0 ? (
@@ -111,25 +111,23 @@ export default function CustomerMyPlans() {
             }
           />
         ) : (
-          <div className="space-y-3" data-testid="my-plans-list">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="my-plans-list">
             {plans.map(plan => (
-              <CustomerSubscriptionCard key={plan.id}>
-                <PlanSummaryCard plan={plan} variant="full" embedded />
-              </CustomerSubscriptionCard>
+              <PlanSummaryCard key={plan.id} plan={plan} variant="full" />
             ))}
           </div>
         )}
 
         {otherPlans.length > 0 && (
-          <section className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <section className="space-y-3 pt-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Plan History
             </h2>
-            {otherPlans.map(plan => (
-              <CustomerSubscriptionCard key={plan.id}>
-                <PlanSummaryCard plan={plan} variant="full" showRenew={false} embedded />
-              </CustomerSubscriptionCard>
-            ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {otherPlans.map(plan => (
+                <PlanSummaryCard key={plan.id} plan={plan} variant="full" showRenew={false} />
+              ))}
+            </div>
           </section>
         )}
 

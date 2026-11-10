@@ -26,7 +26,8 @@ function disabled(_req: unknown, res: { status: (n: number) => { json: (b: unkno
 
 function errorStatus(msg: string): number {
   if (msg.includes("not found")) return 404;
-  if (msg.includes("Wrong technician") || msg.includes("already")) return 409;
+  if (msg.includes("Wrong technician") || msg.includes("not authorized") || msg.includes("Permission denied") || msg.includes("not authorized to execute")) return 403;
+  if (msg.includes("already") || msg.includes("cannot") || msg.includes("must be") || msg.includes("require")) return 409;
   return 400;
 }
 

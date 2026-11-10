@@ -336,12 +336,12 @@ export async function runDailyTick(todayStr?: string, opts?: { force?: boolean }
       ))
       .returning();
 
-    // Mark expired subscriptions (past endDate)
+    // Mark expired subscriptions (strictly past endDate to preserve last paid day)
     const expired = await db.update(subscriptionsTable)
       .set({ status: "expired", updatedAt: new Date() })
       .where(and(
         or(eq(subscriptionsTable.status, "active"), eq(subscriptionsTable.status, "expiring")),
-        lte(subscriptionsTable.endDate, today),
+        sql`${subscriptionsTable.endDate} < ${today}`,
       ))
       .returning();
 

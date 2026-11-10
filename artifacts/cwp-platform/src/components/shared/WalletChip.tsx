@@ -1,5 +1,6 @@
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { Link } from "wouter";
+import { ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PlanChipProps {

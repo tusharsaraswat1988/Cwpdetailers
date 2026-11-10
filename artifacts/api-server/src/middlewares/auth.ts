@@ -153,7 +153,7 @@ export async function loadUserFromToken(token: string): Promise<AuthUser | null>
   };
 }
 
-async function computeScope(user: AuthUser): Promise<TenantScope> {
+export async function computeScope(user: AuthUser): Promise<TenantScope> {
   const isSuper = isSuperAdminRole(user.role);
   if (isSuper) {
     return {
@@ -184,6 +184,16 @@ async function computeScope(user: AuthUser): Promise<TenantScope> {
       branchIds: user.branchId ? [user.branchId] : [],
       franchiseeId: null,
       customerId: null,
+      staffId: null,
+    };
+  }
+  if (user.role === "customer") {
+    return {
+      isSuperAdmin: false,
+      companyId: user.companyId,
+      branchIds: null, // Customers are scoped by customerId, not branch restricted
+      franchiseeId: null,
+      customerId: user.customerId,
       staffId: null,
     };
   }

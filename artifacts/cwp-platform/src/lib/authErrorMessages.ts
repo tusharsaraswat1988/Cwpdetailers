@@ -11,6 +11,7 @@ export type StructuredAuthCode =
   | "ACCOUNT_NOT_ELIGIBLE"
   | "ACCOUNT_LINK_CONFLICT"
   | "PORTAL_MISMATCH"
+  | "ACCESS_DENIED"
   | "AUTH_INTERNAL_ERROR";
 
 export interface ActionableAuthError {
@@ -78,9 +79,9 @@ const AUTH_ERROR_PATTERNS: ReadonlyArray<{ pattern: RegExp; message: string; act
     actionableStep: "Use the Staff portal to sign in.",
   },
   {
-    pattern: /administrator|admin portal|superadmin/i,
-    message: "This account belongs to an administrator. Use the Admin portal to sign in.",
-    actionableStep: "Use the Admin portal to sign in.",
+    pattern: /^access denied|administrator|admin portal|superadmin/i,
+    message: "Access denied",
+    actionableStep: "Please try another email ID.",
   },
   {
     pattern: /cannot sign in here|correct portal|different account type/i,
@@ -116,6 +117,9 @@ export function extractApiErrorCode(err: unknown): StructuredAuthCode | null {
 }
 
 export function mapAuthErrorMessage(raw: string, code?: StructuredAuthCode | null): string {
+  if (code === "ACCESS_DENIED" || /^access denied/i.test(raw) || /administrator|admin portal|superadmin/i.test(raw)) {
+    return "Access denied";
+  }
   if (code === "OTP_PROVIDER_UNAVAILABLE") {
     return "Verification is temporarily unavailable. Please try again later.";
   }
@@ -134,7 +138,7 @@ export function mapAuthErrorMessage(raw: string, code?: StructuredAuthCode | nul
   }
   if (code === "PORTAL_MISMATCH") {
     if (/staff/i.test(raw)) return "This number belongs to a staff account. Use Staff portal login (phone + password).";
-    if (/admin/i.test(raw)) return "This account belongs to an administrator. Use the Admin portal to sign in.";
+    if (/admin/i.test(raw)) return "Access denied";
     return "This account uses a different login portal. Try customer or staff login.";
   }
 
@@ -156,15 +160,37 @@ export function getActionableAuthDetails(err: unknown, fallback = AUTH_NEUTRAL_E
   let actionUrl: string | undefined;
   let actionLabel: string | undefined;
 
-  if (code === "OTP_PROVIDER_UNAVAILABLE" || code === "OTP_DELIVERY_FAILED") {
+  const e = err as {
+    reason?: string;
+    actionableStep?: string;
+    data?: { reason?: string; actionableStep?: string };
+    response?: { data?: { reason?: string; actionableStep?: string } };
+  } | null;
+
+  const apiReason =
+    e?.data?.reason ??
+    e?.response?.data?.reason ??
+    e?.reason ??
+    e?.data?.actionableStep ??
+    e?.response?.data?.actionableStep ??
+    e?.actionableStep;
+
+  if (
+    code === "ACCESS_DENIED" ||
+    message === "Access denied" ||
+    /^access denied/i.test(raw) ||
+    /administrator|admin portal|superadmin/i.test(raw)
+  ) {
+    actionableStep =
+      apiReason ||
+      (/phone|mobile/i.test(raw) ? "Please try another mobile number." : "Please try another email ID.");
+    actionUrl = undefined;
+    actionLabel = undefined;
+  } else if (code === "OTP_PROVIDER_UNAVAILABLE" || code === "OTP_DELIVERY_FAILED") {
     actionableStep = "SMS service is unavailable. You can sign in using your password instead.";
     actionLabel = "Sign in with password";
-  } else if (code === "PORTAL_MISMATCH" || /admin|staff/i.test(message)) {
-    if (/admin/i.test(message)) {
-      actionableStep = "Switch to the administrator sign-in portal.";
-      actionUrl = "/admin/login";
-      actionLabel = "Go to Admin Login";
-    } else if (/staff/i.test(message)) {
+  } else if (code === "PORTAL_MISMATCH" || /staff/i.test(message)) {
+    if (/staff/i.test(message)) {
       actionableStep = "Switch to the field staff sign-in portal.";
       actionUrl = "/staff/login";
       actionLabel = "Go to Staff Portal";

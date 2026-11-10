@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +57,7 @@ export function SavedAddressesSection({ customerId }: Props) {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingLoc, setEditingLoc] = useState<SavedLocation | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SavedLocation | null>(null);
 
   // Form State
   const [label, setLabel] = useState("Home");
@@ -191,12 +193,12 @@ export function SavedAddressesSection({ customerId }: Props) {
     }
   };
 
-  const handleDelete = async (loc: SavedLocation) => {
-    if (!customerId) return;
-    if (!window.confirm(`Delete address "${loc.label}"?`)) return;
+  const confirmDelete = async () => {
+    if (!customerId || !deleteTarget) return;
     try {
-      await deleteMutation.mutateAsync({ id: loc.id, customerId });
+      await deleteMutation.mutateAsync({ id: deleteTarget.id, customerId });
       toast({ title: "Address removed" });
+      setDeleteTarget(null);
     } catch (e) {
       toast({ title: "Failed to delete address", description: (e as Error).message, variant: "destructive" });
     }
@@ -273,33 +275,35 @@ export function SavedAddressesSection({ customerId }: Props) {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                        className="h-9 w-9 p-0 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
                         onClick={() => openEdit(loc)}
                         title="Edit address"
+                        aria-label={`Edit address ${loc.label}`}
                       >
-                        <Pencil size={13} />
+                        <Pencil size={14} />
                       </Button>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleDelete(loc)}
+                        className="h-9 w-9 p-0 rounded-lg text-muted-foreground hover:text-destructive cursor-pointer"
+                        onClick={() => setDeleteTarget(loc)}
                         title="Delete address"
+                        aria-label={`Delete address ${loc.label}`}
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={14} />
                       </Button>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
+                  <div className="flex items-center justify-between text-xs pt-1.5 border-t border-border/40">
                     <div>
                       {hasGps ? (
                         <a
                           href={mapsViewUrl(loc.latitude!, loc.longitude!)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-[11px]"
+                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-[11px] cursor-pointer"
                         >
                           <Navigation size={11} /> View on Google Maps
                         </a>
@@ -307,7 +311,7 @@ export function SavedAddressesSection({ customerId }: Props) {
                         <button
                           type="button"
                           onClick={() => openEdit(loc)}
-                          className="text-amber-700 hover:underline text-[11px] font-medium"
+                          className="text-amber-700 hover:underline text-[11px] font-medium cursor-pointer"
                         >
                           + Add GPS pin for staff directions
                         </button>
@@ -318,7 +322,7 @@ export function SavedAddressesSection({ customerId }: Props) {
                       <button
                         type="button"
                         onClick={() => handleSetDefault(loc)}
-                        className="text-muted-foreground hover:text-foreground text-[11px] font-medium transition-colors"
+                        className="text-muted-foreground hover:text-foreground text-[11px] font-semibold transition-colors cursor-pointer"
                       >
                         Make Default
                       </button>
@@ -334,15 +338,28 @@ export function SavedAddressesSection({ customerId }: Props) {
                 variant="outline"
                 size="sm"
                 onClick={openNew}
-                className="gap-1.5 h-8 text-xs rounded-lg font-medium"
+                className="gap-1.5 h-10 px-3.5 text-xs rounded-xl font-semibold bg-white border border-slate-200 text-foreground hover:bg-slate-50 shadow-xs cursor-pointer"
                 data-testid="add-another-address-btn"
               >
-                <Plus size={13} /> Add Another Address
+                <Plus size={14} /> Add Another Address
               </Button>
             </div>
           </>
         )}
       </AccountSection>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteTarget != null}
+        onOpenChange={open => { if (!open) setDeleteTarget(null); }}
+        title={`Delete address "${deleteTarget?.label}"?`}
+        description="Are you sure you want to remove this address from your saved locations? This action cannot be undone."
+        confirmLabel="Delete Address"
+        cancelLabel="Cancel"
+        destructive
+        isConfirming={deleteMutation.isPending}
+        onConfirm={confirmDelete}
+      />
 
       {/* Add / Edit Dialog */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

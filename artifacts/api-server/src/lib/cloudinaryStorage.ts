@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import { randomUUID } from "crypto";
+import type { TenantScope } from "../middlewares/auth";
 
 export class StorageConfigError extends Error {
   constructor(message: string) {
@@ -7,6 +8,19 @@ export class StorageConfigError extends Error {
     this.name = "StorageConfigError";
   }
 }
+
+export const ALLOWED_UPLOAD_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "application/pdf",
+]);
 
 export type CloudinaryUploadSignature = {
   uploadURL: string;
@@ -48,16 +62,28 @@ function resourceTypeForContentType(contentType: string): "image" | "video" | "r
  * Returns signed upload parameters for direct browser → Cloudinary uploads.
  * The client must POST multipart form data and persist the returned secure_url.
  */
-export function createCloudinaryUploadSignature(input: {
-  name: string;
-  size: number;
-  contentType: string;
-}): CloudinaryUploadSignature {
+export function createCloudinaryUploadSignature(
+  input: {
+    name: string;
+    size: number;
+    contentType: string;
+  },
+  scope?: TenantScope,
+): CloudinaryUploadSignature {
+  const normalizedType = input.contentType.toLowerCase().trim();
+  if (!ALLOWED_UPLOAD_CONTENT_TYPES.has(normalizedType)) {
+    throw new Error(`Unsupported file type for upload: ${input.contentType}. Only images, videos, and PDFs are permitted.`);
+  }
+
   const { cloudName, apiKey, apiSecret } = getCloudinaryConfig();
-  const folder = process.env.CLOUDINARY_FOLDER ?? "cwp/varanasi";
+  let defaultFolder = "cwp/varanasi";
+  if (scope?.branchIds?.includes(2)) {
+    defaultFolder = "cwp/noida";
+  }
+  const folder = process.env.CLOUDINARY_FOLDER ?? defaultFolder;
   const publicId = randomUUID();
   const timestamp = Math.round(Date.now() / 1000);
-  const resourceType = resourceTypeForContentType(input.contentType);
+  const resourceType = resourceTypeForContentType(normalizedType);
 
   const signature = cloudinary.utils.api_sign_request(
     { timestamp, folder, public_id: publicId },
@@ -74,7 +100,10 @@ export function createCloudinaryUploadSignature(input: {
       folder,
       publicId,
     },
-    metadata: input,
+    metadata: {
+      ...input,
+      contentType: normalizedType,
+    },
   };
 }
 

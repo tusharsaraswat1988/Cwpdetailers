@@ -72,6 +72,25 @@ export async function assertGoogleEmailOkForCustomerSignup(
 
   const nonCustomer = emailUsers.find(u => u.role !== "customer");
   if (nonCustomer) {
+    const isAdmin = ["admin", "superadmin", "manager"].includes(nonCustomer.role);
+    if (isAdmin) {
+      return {
+        ok: false,
+        status: 403,
+        body: {
+          error: "Access denied",
+          reason: "Please try another email ID.",
+          code: "ACCESS_DENIED",
+          conflict: {
+            field: "email",
+            entity: "user",
+            entityId: nonCustomer.id,
+            entityName: nonCustomer.name,
+            role: nonCustomer.role,
+          },
+        },
+      };
+    }
     return {
       ok: false,
       status: 403,
@@ -79,9 +98,7 @@ export async function assertGoogleEmailOkForCustomerSignup(
         error:
           nonCustomer.role === "staff"
             ? "This Google account belongs to a staff member. Use the Staff portal with your phone number and password."
-            : ["admin", "superadmin", "manager"].includes(nonCustomer.role)
-              ? "This Google account belongs to an administrator. Use the Admin portal to sign in."
-              : "This Google account belongs to a different account type. Use the correct portal.",
+            : "This Google account belongs to a different account type. Use the correct portal.",
         code: "PORTAL_MISMATCH",
         conflict: {
           field: "email",
@@ -145,7 +162,7 @@ function staffPortalMessage(role: string): string {
     return "This mobile number belongs to a staff account. Use the Staff portal to sign in (phone + password).";
   }
   if (["admin", "superadmin", "manager"].includes(role)) {
-    return "This mobile number belongs to an administrator. Use the Admin portal to sign in.";
+    return "Access denied. Please try another mobile number.";
   }
   return "This mobile number is registered to a different account type. Use the correct portal.";
 }
@@ -160,6 +177,19 @@ export async function assertGooglePhoneOkForCustomerSignup(
 ): Promise<{ ok: true } | { ok: false; status: number; body: Record<string, unknown> }> {
   const phoneUser = await findUserByPhone(phone);
   if (phoneUser && phoneUser.role !== "customer") {
+    const isAdmin = ["admin", "superadmin", "manager"].includes(phoneUser.role);
+    if (isAdmin) {
+      return {
+        ok: false,
+        status: 403,
+        body: {
+          error: "Access denied",
+          reason: "Please try another mobile number.",
+          code: "ACCESS_DENIED",
+          conflict: { field: "phone", entity: "user", entityId: phoneUser.id, role: phoneUser.role },
+        },
+      };
+    }
     return {
       ok: false,
       status: 409,
@@ -211,6 +241,25 @@ export async function assertGooglePhoneOkForCustomerSignup(
 
     const nonCustomer = emailUsers.find(u => u.role !== "customer");
     if (nonCustomer) {
+      const isAdmin = ["admin", "superadmin", "manager"].includes(nonCustomer.role);
+      if (isAdmin) {
+        return {
+          ok: false,
+          status: 403,
+          body: {
+            error: "Access denied",
+            reason: "Please try another email ID.",
+            code: "ACCESS_DENIED",
+            conflict: {
+              field: "email",
+              entity: "user",
+              entityId: nonCustomer.id,
+              entityName: nonCustomer.name,
+              role: nonCustomer.role,
+            },
+          },
+        };
+      }
       return {
         ok: false,
         status: 409,
@@ -218,9 +267,7 @@ export async function assertGooglePhoneOkForCustomerSignup(
           error:
             nonCustomer.role === "staff"
               ? "This Google account is linked to a staff login. Use the Staff portal (phone + password)."
-              : ["admin", "superadmin", "manager"].includes(nonCustomer.role)
-                ? "This Google account belongs to an administrator. Use the Admin portal to sign in."
-                : "This Google account belongs to a different account type. Use the correct portal.",
+              : "This Google account belongs to a different account type. Use the correct portal.",
           code: "PORTAL_MISMATCH",
           conflict: {
             field: "email",

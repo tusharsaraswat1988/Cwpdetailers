@@ -27,10 +27,17 @@ describe("P1 Authentication UX & Reliability Regression Suite", () => {
 
       const portalClass = classifyAuthError({
         code: "PORTAL_MISMATCH",
-        message: "This account belongs to an administrator. Use the Admin portal to sign in.",
+        message: "This number belongs to a staff account. Use the Staff portal to sign in.",
       });
       expect(portalClass.state).toBe("account_conflict");
-      expect(portalClass.error.actionableStep).toBe("Switch to Admin Portal");
+      expect(portalClass.error.actionableStep).toBe("Switch to Staff Portal");
+
+      const accessDeniedClass = classifyAuthError({
+        code: "ACCESS_DENIED",
+        message: "Access denied",
+      });
+      expect(accessDeniedClass.state).toBe("recoverable_error");
+      expect(accessDeniedClass.error.actionableStep).toBe("Please try another email ID.");
     });
 
     it("rejects stale asynchronous responses using monotonic request IDs", () => {
@@ -92,14 +99,16 @@ describe("P1 Authentication UX & Reliability Regression Suite", () => {
   });
 
   describe("3. Actionable Error Mapping & Recovery Navigation", () => {
-    it("provides direct navigation details for admin portal mismatches", () => {
+    it("never reveals admin portal and returns access denied without links", () => {
       const details = getActionableAuthDetails({
-        code: "PORTAL_MISMATCH",
-        message: "This account belongs to an administrator. Use the Admin portal to sign in.",
+        code: "ACCESS_DENIED",
+        message: "Access denied",
+        reason: "Please try another email ID.",
       });
-      expect(details.actionUrl).toBe("/admin/login");
-      expect(details.actionLabel).toBe("Go to Admin Login");
-      expect(details.actionableStep).toBe("Switch to the administrator sign-in portal.");
+      expect(details.message).toBe("Access denied");
+      expect(details.actionUrl).toBeUndefined();
+      expect(details.actionLabel).toBeUndefined();
+      expect(details.actionableStep).toBe("Please try another email ID.");
     });
 
     it("provides direct navigation details for staff portal mismatches", () => {

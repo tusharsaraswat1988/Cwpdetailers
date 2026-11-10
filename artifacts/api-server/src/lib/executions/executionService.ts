@@ -573,6 +573,9 @@ export async function addExecutionPhotos(
   if (!photos.length) throw new Error("At least one photo is required");
 
   for (const p of photos) {
+    if (!p.url || !/^https?:\/\//i.test(p.url)) {
+      throw new Error("Photo url must be a valid https URL");
+    }
     if (p.latitude == null || p.longitude == null) {
       throw new Error("Geo-tagged location is required for every photo");
     }
@@ -789,37 +792,47 @@ export async function completeExecution(
   }
 
   const now = new Date();
-  await db.update(serviceExecutionsTable)
-    .set({
-      status: "completed",
-      startedAt: execution.startedAt ?? now,
-      completedAt: now,
-      customerSignatureUrl: input.customerSignatureUrl?.trim() || execution.customerSignatureUrl,
-      customerSignedAt: input.customerSignatureUrl?.trim()
-        ? now
-        : execution.customerSignedAt,
-      updatedAt: now,
-    })
-    .where(eq(serviceExecutionsTable.id, executionId));
 
+  // Validate incoming photos before any state mutations
   if (input.photos?.length) {
     for (const p of input.photos) {
+      if (!p.url || !/^https?:\/\//i.test(p.url)) {
+        throw new Error("Photo url must be a valid https URL");
+      }
       if (p.latitude == null || p.longitude == null) {
         throw new Error("Geo-tagged location is required for every photo");
       }
     }
-    await db.insert(serviceExecutionPhotosTable).values(
-      input.photos.map(p => ({
-        executionId,
-        kind: p.kind ?? "proof",
-        url: p.url,
-        caption: p.caption ?? null,
-        latitude: p.latitude ?? null,
-        longitude: p.longitude ?? null,
-        accuracy: p.accuracy ?? null,
-      })),
-    );
   }
+
+  await db.transaction(async (tx) => {
+    await tx.update(serviceExecutionsTable)
+      .set({
+        status: "completed",
+        startedAt: execution.startedAt ?? now,
+        completedAt: now,
+        customerSignatureUrl: input.customerSignatureUrl?.trim() || execution.customerSignatureUrl,
+        customerSignedAt: input.customerSignatureUrl?.trim()
+          ? now
+          : execution.customerSignedAt,
+        updatedAt: now,
+      })
+      .where(eq(serviceExecutionsTable.id, executionId));
+
+    if (input.photos?.length) {
+      await tx.insert(serviceExecutionPhotosTable).values(
+        input.photos.map(p => ({
+          executionId,
+          kind: p.kind ?? "proof",
+          url: p.url,
+          caption: p.caption ?? null,
+          latitude: p.latitude ?? null,
+          longitude: p.longitude ?? null,
+          accuracy: p.accuracy ?? null,
+        })),
+      );
+    }
+  });
   if (input.notes?.length) {
     await db.insert(serviceExecutionNotesTable).values(
       input.notes.map(n => ({

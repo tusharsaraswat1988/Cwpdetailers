@@ -180,19 +180,20 @@ router.post("/auth/google", async (req, res) => {
 
       const nonCustomer = emailUsers.find(u => !isRoleAllowedForPortal(u.role, portal));
       if (nonCustomer) {
+        if (["admin", "superadmin", "manager"].includes(nonCustomer.role)) {
+          logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: "ACCESS_DENIED", durationMs: span.getDurationMs(), requestId });
+          return res.status(403).json({
+            error: "Access denied",
+            reason: "Please try another email ID.",
+            code: "ACCESS_DENIED",
+            requestId,
+          });
+        }
         logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: "PORTAL_MISMATCH", durationMs: span.getDurationMs(), requestId });
         if (nonCustomer.role === "staff") {
           return res.status(403).json({
             error:
               "This Google account belongs to a staff member. Use the Staff portal with your phone number and password.",
-            code: "PORTAL_MISMATCH",
-            requestId,
-          });
-        }
-        if (["admin", "superadmin", "manager"].includes(nonCustomer.role)) {
-          return res.status(403).json({
-            error:
-              "This Google account belongs to an administrator. Use the Admin portal to sign in.",
             code: "PORTAL_MISMATCH",
             requestId,
           });
@@ -230,19 +231,20 @@ router.post("/auth/google", async (req, res) => {
 
     if (user) {
       if (!isRoleAllowedForPortal(user.role, portal)) {
+        if (["admin", "superadmin", "manager"].includes(user.role)) {
+          logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: "ACCESS_DENIED", durationMs: span.getDurationMs(), requestId });
+          return res.status(403).json({
+            error: "Access denied",
+            reason: "Please try another email ID.",
+            code: "ACCESS_DENIED",
+            requestId,
+          });
+        }
         logAuthEvent(req, "auth.google.failed", { portal, authErrorCode: "PORTAL_MISMATCH", durationMs: span.getDurationMs(), requestId });
         if (user.role === "staff") {
           return res.status(403).json({
             error:
               "This Google account belongs to a staff member. Use the Staff portal with your phone number and password.",
-            code: "PORTAL_MISMATCH",
-            requestId,
-          });
-        }
-        if (["admin", "superadmin", "manager"].includes(user.role)) {
-          return res.status(403).json({
-            error:
-              "This Google account belongs to an administrator. Use the Admin portal to sign in.",
             code: "PORTAL_MISMATCH",
             requestId,
           });

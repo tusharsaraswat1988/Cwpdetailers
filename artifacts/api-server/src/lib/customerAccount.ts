@@ -115,7 +115,7 @@ export async function ensureCustomerLoginUser(
             linked.role === "staff"
               ? "This mobile number belongs to a staff account. Use the Staff portal to sign in."
               : ["admin", "superadmin", "manager"].includes(linked.role)
-                ? "This mobile number belongs to an administrator. Use the Admin portal to sign in."
+                ? "Access denied. Please try another mobile number."
                 : "This mobile number is registered to a different account type.",
           );
         }
@@ -168,7 +168,7 @@ export async function ensureCustomerLoginUser(
         phoneUser.role === "staff"
           ? "This mobile number belongs to a staff account. Use the Staff portal to sign in."
           : ["admin", "superadmin", "manager"].includes(phoneUser.role)
-            ? "This mobile number belongs to an administrator. Use the Admin portal to sign in."
+            ? "Access denied. Please try another mobile number."
             : "This mobile number is registered to a different account type.",
       );
     }

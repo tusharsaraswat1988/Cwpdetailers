@@ -20,6 +20,7 @@ export type StructuredAuthErrorCode =
   | "ACCOUNT_NOT_ELIGIBLE"
   | "ACCOUNT_LINK_CONFLICT"
   | "PORTAL_MISMATCH"
+  | "ACCESS_DENIED"
   | "AUTH_INTERNAL_ERROR";
 
 export class AuthError extends Error {
@@ -91,7 +92,7 @@ export async function resolveCustomerIdentityByPhone(
         user.role === "staff"
           ? "This phone number belongs to a staff account. Use the Staff portal to sign in."
           : ["admin", "superadmin", "manager"].includes(user.role)
-            ? "This phone number belongs to an administrator. Use the Admin portal to sign in."
+            ? "Access denied. Please try another mobile number."
             : "This phone number is registered to a different account type.";
       return {
         status: "INELIGIBLE_ROLE",
