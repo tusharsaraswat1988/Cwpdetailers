@@ -40,7 +40,7 @@ export default function CustomerProductDetailPage() {
 
   return (
     <CustomerLayout>
-      <CustomerPage className="space-y-6 pb-20 md:pb-8">
+      <CustomerPage className="space-y-6 pb-[calc(var(--bottom-nav-height)+5.5rem)] md:pb-8">
         {/* Top Navigation & Back */}
         <div className="flex items-center justify-between gap-3">
           <Link
@@ -308,8 +308,8 @@ export default function CustomerProductDetailPage() {
           </div>
         </section>
 
-        {/* Fixed / Mobile Bottom Booking Bar */}
-        <div className="fixed bottom-0 inset-x-0 z-30 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] md:hidden">
+        {/* Fixed / Mobile Bottom Booking Bar (Positioned cleanly above bottom nav) */}
+        <div className="fixed bottom-[var(--bottom-nav-height)] inset-x-0 z-30 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] md:hidden">
           <div className="max-w-md mx-auto flex items-center justify-between gap-3">
             <div>
               <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Starts at</span>
