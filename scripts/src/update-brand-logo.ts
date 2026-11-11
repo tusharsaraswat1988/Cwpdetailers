@@ -1,12 +1,11 @@
+import "./load-env.js";
 import { v2 as cloudinary } from "cloudinary";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { loadRepoEnv } from "../../lib/env/load-env.mjs";
-import { db, platformBrandingTable, eq } from "@workspace/db";
+import { db, platformBrandingTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { processLogoAssets } from "../../artifacts/api-server/src/lib/brandIdentityService";
-
-loadRepoEnv(import.meta.url);
 
 async function main() {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;

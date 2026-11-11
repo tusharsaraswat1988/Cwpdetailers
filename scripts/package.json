@@ -36,11 +36,13 @@
     "backfill:tenant": "tsx ./src/backfill-tenant-fields.ts",
     "test:staff-alert": "tsx ./src/test-staff-job-alert.ts",
     "setup:vapid": "tsx ./src/setup-vapid-keys.ts",
+    "update:brand-logo": "tsx ./src/update-brand-logo.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
     "argon2": "^0.43.0",
+    "cloudinary": "^2.6.1",
     "drizzle-orm": "catalog:",
     "exceljs": "^4.4.0"
   },

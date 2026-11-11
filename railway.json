@@ -5,6 +5,7 @@
     "buildCommand": "pnpm --filter @workspace/cwp-platform run build && pnpm --filter @workspace/api-server run build"
   },
   "deploy": {
+    "preDeployCommand": "pnpm --filter @workspace/scripts run migrate:pending",
     "startCommand": "node --enable-source-maps artifacts/api-server/dist/index.mjs",
     "healthcheckPath": "/api/healthz",
     "restartPolicyType": "ON_FAILURE"

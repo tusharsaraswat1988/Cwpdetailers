@@ -872,6 +872,9 @@ importers:
       argon2:
         specifier: ^0.43.0
         version: 0.43.1
+      cloudinary:
+        specifier: ^2.6.1
+        version: 2.10.0
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@types/pg@8.18.0)(pg@8.20.0)
