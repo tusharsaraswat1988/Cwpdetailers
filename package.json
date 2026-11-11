@@ -5,7 +5,9 @@
   "scripts": {
     "preinstall": "node scripts/preinstall.mjs",
     "dev": "node scripts/dev.mjs",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "build": "pnpm --filter @workspace/cwp-platform run build && pnpm --filter @workspace/api-server run build",
+    "build:all": "pnpm run typecheck && pnpm -r --if-present run build",
+    "start": "node --enable-source-maps artifacts/api-server/dist/index.mjs",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "migrate:pending": "pnpm --filter @workspace/scripts run migrate:pending",

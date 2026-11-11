@@ -3,6 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import path from "node:path";
+import fs from "node:fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { optionalAuth } from "./middlewares/auth";
@@ -52,15 +53,69 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
 
 app.use("/api", optionalAuth, router);
 
-const staticRoot = process.env.STATIC_ROOT;
-if (staticRoot && process.env.NODE_ENV === "production") {
-  const resolvedRoot = path.resolve(staticRoot);
-  app.use(express.static(resolvedRoot));
+/**
+ * Robustly resolve the frontend static assets directory in production.
+ * Handles running from repo root, running from artifacts/api-server, or custom STATIC_ROOT env.
+ */
+function resolveStaticDirectory(): string | null {
+  const envPath = process.env.STATIC_ROOT;
+  const candidates: string[] = [];
+
+  if (envPath) {
+    if (path.isAbsolute(envPath)) {
+      candidates.push(envPath);
+    } else {
+      candidates.push(path.resolve(process.cwd(), envPath));
+      candidates.push(path.resolve(process.cwd(), "..", envPath));
+      candidates.push(path.resolve(process.cwd(), "../..", envPath));
+    }
+  }
+
+  // Common locations for cwp-platform dist/public
+  candidates.push(
+    path.resolve(process.cwd(), "artifacts/cwp-platform/dist/public"),
+    path.resolve(process.cwd(), "../cwp-platform/dist/public"),
+    path.resolve(process.cwd(), "../../artifacts/cwp-platform/dist/public"),
+  );
+
+  for (const candidate of candidates) {
+    const indexPath = path.join(candidate, "index.html");
+    if (fs.existsSync(indexPath)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+const resolvedStaticRoot = resolveStaticDirectory();
+if (resolvedStaticRoot && process.env.NODE_ENV === "production") {
+  logger.info({ staticRoot: resolvedStaticRoot }, "Serving static frontend bundle");
+  app.use(express.static(resolvedStaticRoot));
   app.get("{*path}", (req, res, next) => {
     if (req.path.startsWith("/api")) return next();
-    res.sendFile(path.join(resolvedRoot, "index.html"), (err) => {
+    res.sendFile(path.join(resolvedStaticRoot, "index.html"), (err) => {
       if (err) next(err);
     });
+  });
+} else if (process.env.NODE_ENV === "production") {
+  logger.warn(
+    { cwd: process.cwd(), staticRootEnv: process.env.STATIC_ROOT },
+    "Static frontend bundle (index.html) not found in any candidate path. Please check build logs.",
+  );
+  app.get("{*path}", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.status(503).type("html").send(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>CWP Detailers - Building Assets</title><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family:system-ui,-apple-system,sans-serif;padding:3rem 1.5rem;max-width:640px;margin:auto;text-align:center;color:#1e293b;">
+          <h2 style="color:#0284c7;margin-bottom:0.75rem;">Backend is Online, Frontend Not Found</h2>
+          <p style="color:#475569;line-height:1.6;">The API server is running successfully, but the frontend static build was not found at <code>artifacts/cwp-platform/dist/public</code>.</p>
+          <p style="color:#64748b;font-size:0.875rem;">Please ensure <code>@workspace/cwp-platform</code> was built during the deployment build step.</p>
+        </body>
+      </html>
+    `);
   });
 }
 
