@@ -23,7 +23,7 @@ const allStaffNavItems: StaffNavDef[] = [
   { href: "/staff/bookings", label: "Bookings", icon: ClipboardCheck, requiresCategory: "cleaning_staff" },
   {
     href: "/staff/earnings",
-    label: "Coming soon",
+    label: "Earnings",
     icon: IndianRupee,
     requiresCategory: "cleaning_staff",
     comingSoon: true,
@@ -39,7 +39,7 @@ const pageTitles: Record<string, string> = {
   "/staff/daily-cleaning": "Daily Clean",
   "/staff/work": "Work",
   "/staff/jobs": "Jobs",
-  "/staff/earnings": "Coming soon",
+  "/staff/earnings": "Earnings",
   "/staff/profile": "Profile",
 };
 

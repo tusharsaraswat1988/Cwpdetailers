@@ -49,7 +49,7 @@ export const SupportSection = memo(function SupportSection({ supervisor }: Props
         <AccountTextAction>→</AccountTextAction>
       </Link>
 
-      <a href="/#faq" className={rowClass} data-testid="account-support-faq">
+      <a href="/vehicle#faq" className={rowClass} data-testid="account-support-faq">
         <p className="min-w-0 flex-1 text-sm font-medium text-foreground">FAQ & Knowledgebase</p>
         <AccountTextAction>→</AccountTextAction>
       </a>
