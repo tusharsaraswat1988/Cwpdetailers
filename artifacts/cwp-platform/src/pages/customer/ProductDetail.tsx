@@ -30,6 +30,10 @@ export default function CustomerProductDetailPage() {
   const [selectedTier, setSelectedTier] = useState<number>(0);
 
   const handleBookNow = () => {
+    if (product.slug === "daily-car-cleaning") {
+      setLocation(CUSTOMER_ROUTES.plans);
+      return;
+    }
     // Navigate directly to schedule flow with context
     setLocation(`${CUSTOMER_ROUTES.schedule}?service=${encodeURIComponent(product.slug)}&from=product_detail`);
   };
@@ -317,7 +321,7 @@ export default function CustomerProductDetailPage() {
               onClick={handleBookNow}
               className="px-6 h-11 bg-primary hover:bg-[#1264db] text-white font-bold text-xs rounded-xl shadow-xs"
             >
-              Book Service <ChevronRight size={14} />
+              {product.slug === "daily-car-cleaning" ? "View Plans" : "Book Service"} <ChevronRight size={14} />
             </Button>
           </div>
         </div>
@@ -334,7 +338,7 @@ export default function CustomerProductDetailPage() {
             className="px-8 h-12 bg-primary hover:bg-[#1264db] text-white font-bold text-sm rounded-xl shadow-sm gap-2"
           >
             <Calendar size={16} />
-            Schedule This Service
+            {product.slug === "daily-car-cleaning" ? "View Plans & Pricing" : "Schedule This Service"}
           </Button>
         </div>
       </CustomerPage>
