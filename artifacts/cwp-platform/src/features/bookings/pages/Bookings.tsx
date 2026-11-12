@@ -55,6 +55,8 @@ export default function AdminBookings() {
   const isOnline = useOnlineStatus();
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [cityFilter, setCityFilter] = useState<string>("all");
+  const [societyFilter, setSocietyFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [dateValue, setDateValue] = useState<string | undefined>(undefined);
   const [page, setPage] = useState(1);
@@ -69,18 +71,29 @@ export default function AdminBookings() {
   const [bulkCancelConfirm, setBulkCancelConfirm] = useState(false);
   const limit = 15;
 
+  const { data: citiesData } = useCities();
+  const cities = citiesData ?? [];
+
+  const { data: societiesData } = useSocieties(
+    cityFilter !== "all" ? { cityId: Number(cityFilter) } : undefined,
+  );
+  const societies = societiesData?.data ?? [];
+
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("customerId");
     setCustomerFilter(id ?? undefined);
   }, []);
 
-  const params: ListBookingsParams = {
+  const params = {
     status: statusFilter !== "all" ? (statusFilter as ListBookingsStatus) : undefined,
     date: dateValue,
     limit,
     offset: (page - 1) * limit,
-    ...(customerFilter ? { customerId: Number(customerFilter) } as ListBookingsParams : {}),
-  };
+    ...(customerFilter ? { customerId: Number(customerFilter) } : {}),
+    ...(cityFilter !== "all" ? { cityId: Number(cityFilter) } : {}),
+    ...(societyFilter !== "all" ? { societyId: Number(societyFilter) } : {}),
+    ...(search.trim() ? { search: search.trim() } : {}),
+  } as ListBookingsParams;
 
   const { data, isLoading, isError, refetch } = useListBookings(params, {
     query: { queryKey: getListBookingsQueryKey(params) },
@@ -183,6 +196,48 @@ export default function AdminBookings() {
           <p className="text-xs text-muted-foreground capitalize">{b.serviceType?.replace(/_/g, " ")}</p>
         </div>
       ),
+    },
+    {
+      key: "location", header: "Society & Location",
+      cell: b => {
+        const item = b as typeof b & {
+          cityName?: string | null;
+          societyName?: string | null;
+          towerName?: string | null;
+          flatNumber?: string | null;
+          parkingLevel?: string | null;
+          parkingBay?: string | null;
+        };
+        return (
+          <div className="space-y-0.5 text-xs">
+            {item.societyName ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-medium text-foreground">{item.societyName}</span>
+                {item.cityName && (
+                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-normal">
+                    {item.cityName}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <p className="text-foreground truncate max-w-[200px]" title={b.address ?? ""}>
+                {b.address || "—"}
+              </p>
+            )}
+            {(item.towerName || item.flatNumber || item.parkingLevel || item.parkingBay) && (
+              <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                {item.towerName && <span>T: {item.towerName}</span>}
+                {item.flatNumber && <span>F: {item.flatNumber}</span>}
+                {(item.parkingLevel || item.parkingBay) && (
+                  <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono text-[10px]">
+                    Bay: {[item.parkingLevel, item.parkingBay].filter(Boolean).join(" / ")}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "staff", header: "Assignment", hideable: true,
