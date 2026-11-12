@@ -368,7 +368,11 @@ router.post(
   requirePermission("daily_cleaning", "complete_visits"),
   dcmsRateLimit(30, 60_000),
   async (req, res) => {
-    const { subscriptionId, visitType, imageBase64, latitude, longitude, accuracy, exif, capturedAt, ocrText, ocrConfidence, confirmedRegistration, walkIn } = req.body ?? {};
+    const {
+      subscriptionId, visitType, imageBase64, latitude, longitude, accuracy,
+      exif, capturedAt, ocrText, ocrConfidence, confirmedRegistration, walkIn,
+      gpsUnavailable, gpsUnavailableReason,
+    } = req.body ?? {};
     req.log.info({
       dcmsVisitComplete: "http_request_received",
       subscriptionId,
@@ -403,6 +407,8 @@ router.post(
         confirmedRegistration: confirmedRegistration ?? null,
         capturedAt: typeof capturedAt === "string" ? capturedAt : undefined,
         walkIn: Boolean(walkIn),
+        gpsUnavailable: Boolean(gpsUnavailable),
+        gpsUnavailableReason: typeof gpsUnavailableReason === "string" ? gpsUnavailableReason : undefined,
       }, { log: req.log });
       return res.status(201).json(result);
     } catch (err) {
@@ -423,7 +429,10 @@ router.post(
   requirePermission("daily_cleaning", "complete_visits"),
   dcmsRateLimit(30, 60_000),
   async (req, res) => {
-    const { subscriptionId, latitude, longitude, accuracy, walkIn, imageBase64, exif, capturedAt } = req.body ?? {};
+    const {
+      subscriptionId, latitude, longitude, accuracy, walkIn, imageBase64,
+      exif, capturedAt, gpsUnavailable, gpsUnavailableReason,
+    } = req.body ?? {};
     try {
       if (!subscriptionId || !imageBase64 || latitude == null || longitude == null) {
         return res.status(400).json({ error: "subscriptionId, imageBase64, latitude, and longitude are required" });
@@ -443,6 +452,8 @@ router.post(
         imageBase64,
         exif: exif ?? null,
         capturedAt: typeof capturedAt === "string" ? capturedAt : undefined,
+        gpsUnavailable: Boolean(gpsUnavailable),
+        gpsUnavailableReason: typeof gpsUnavailableReason === "string" ? gpsUnavailableReason : undefined,
       }, { log: req.log });
       return res.status(201).json(result);
     } catch (err) {
