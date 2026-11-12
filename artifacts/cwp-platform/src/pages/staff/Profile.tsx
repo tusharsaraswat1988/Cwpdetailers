@@ -13,6 +13,7 @@ import { useAccountScope } from "@/lib/account-scope";
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { StaffVerificationBadge } from "@/features/staff/components/StaffVerificationBanner";
 import { StaffOperationalRoles } from "@/features/staff/components/StaffOperationalRoles";
+import { StaffMyDocuments } from "@/features/staff/components/StaffMyDocuments";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -349,6 +350,9 @@ export default function StaffProfile() {
           )}
         </section>
       )}
+
+      {/* Compliance & Identity Documents */}
+      {profile && <StaffMyDocuments profile={profile} />}
 
       {/* Clean Job Alerts & Notifications (Streamlined, no (not supported) error text) */}
       <PushNotificationSettings variant="staff" />

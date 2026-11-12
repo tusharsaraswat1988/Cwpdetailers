@@ -417,6 +417,160 @@ export async function ensureStartupMigrations(): Promise<void> {
 
       ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_marketing BOOLEAN DEFAULT FALSE;
       ALTER TABLE notifications ADD COLUMN IF NOT EXISTS sensitive_masked BOOLEAN DEFAULT FALSE;
+
+      -- 11. Branch Governance, Assignments & Scoping (Migration 073, PRD v3.0)
+      ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'central_admin';
+      ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'branch_manager';
+      ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'supervisor';
+
+      CREATE TABLE IF NOT EXISTS branch_user_assignments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+        assignment_role TEXT NOT NULL DEFAULT 'branch_manager',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        effective_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        effective_until TIMESTAMPTZ,
+        revoked_at TIMESTAMPTZ,
+        revocation_reason TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_branch_user_assignments_user_active ON branch_user_assignments(user_id, is_active);
+      CREATE INDEX IF NOT EXISTS idx_branch_user_assignments_branch_active ON branch_user_assignments(branch_id, is_active);
+      CREATE INDEX IF NOT EXISTS idx_branch_user_assignments_user_branch ON branch_user_assignments(user_id, branch_id);
+
+      CREATE TABLE IF NOT EXISTS service_branch_overrides (
+        id SERIAL PRIMARY KEY,
+        service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+        base_price_override NUMERIC(10, 2),
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        custom_settings JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT service_branch_overrides_service_branch_unique UNIQUE (service_id, branch_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_service_branch_overrides_branch ON service_branch_overrides(branch_id);
+      CREATE INDEX IF NOT EXISTS idx_service_branch_overrides_service ON service_branch_overrides(service_id);
+
+      -- Backfill existing branch managers into branch_user_assignments
+      INSERT INTO branch_user_assignments (user_id, branch_id, assignment_role, is_active, assigned_at, created_at, updated_at)
+      SELECT u.id, u.branch_id, 'branch_manager', TRUE, NOW(), NOW(), NOW()
+      FROM users u
+      WHERE u.role IN ('manager', 'branch_manager')
+        AND u.branch_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM branch_user_assignments bua
+          WHERE bua.user_id = u.id AND bua.branch_id = u.branch_id
+        );
+    `);
+
+    // 12. Universal Multi-City Lifecycle, Configuration & City Admin (Migration 074)
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE city_status AS ENUM (
+          'draft',
+          'setup_in_progress',
+          'ready_for_launch',
+          'active',
+          'suspended',
+          'archived'
+        );
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS status city_status NOT NULL DEFAULT 'active';
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS code TEXT;
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata';
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'INR';
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'en-IN';
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS contact_phone TEXT;
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS contact_email TEXT;
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS operational_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS content_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS launched_at TIMESTAMP;
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP;
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS suspension_reason TEXT;
+      ALTER TABLE cities ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
+
+      UPDATE cities SET code = 'VNS', status = 'active' WHERE slug = 'varanasi' AND (code IS NULL OR code = '');
+      UPDATE cities SET code = 'NOI', status = 'active' WHERE slug = 'noida' AND (code IS NULL OR code = '');
+      UPDATE cities SET code = UPPER(SUBSTRING(slug, 1, 3)) WHERE code IS NULL OR code = '';
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_cities_code ON cities(code) WHERE code IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_cities_status ON cities(status);
+
+      DO $$ BEGIN
+        ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'city_admin';
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS city_id INTEGER REFERENCES cities(id);
+      CREATE INDEX IF NOT EXISTS idx_users_city_id ON users(city_id);
+    `);
+
+    // 13. Universal Multi-City Staff Compensation & Payout Ledger (Migration 075)
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE staff_payout_status AS ENUM (
+          'draft',
+          'approved',
+          'disbursed',
+          'cancelled'
+        );
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+      CREATE TABLE IF NOT EXISTS staff_payout_ledgers (
+        id SERIAL PRIMARY KEY,
+        staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+        city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+        branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+        period_month TEXT NOT NULL,
+        employment_type staff_employment_type NOT NULL DEFAULT 'salaried',
+
+        base_salary NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        per_wash_rate NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        per_daily_cleaning_rate NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        per_solar_rate NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        rate_per_km NUMERIC(10, 2) NOT NULL DEFAULT 0,
+
+        completed_washes INTEGER NOT NULL DEFAULT 0,
+        completed_daily_cleans INTEGER NOT NULL DEFAULT 0,
+        completed_solar_visits INTEGER NOT NULL DEFAULT 0,
+        distance_km NUMERIC(10, 2) NOT NULL DEFAULT 0,
+
+        wash_earnings NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        daily_cleaning_earnings NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        solar_earnings NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        distance_allowance NUMERIC(10, 2) NOT NULL DEFAULT 0,
+
+        gross_payout NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        deductions NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        incentives NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        net_payout_due NUMERIC(10, 2) NOT NULL DEFAULT 0,
+
+        status staff_payout_status NOT NULL DEFAULT 'draft',
+        approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        approved_at TIMESTAMPTZ,
+        disbursed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        disbursed_at TIMESTAMPTZ,
+        payment_method TEXT,
+        transaction_reference TEXT,
+        notes TEXT,
+
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+        CONSTRAINT staff_payout_ledgers_staff_month_unique UNIQUE (staff_id, period_month)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_staff_payout_ledgers_period_month ON staff_payout_ledgers(period_month);
+      CREATE INDEX IF NOT EXISTS idx_staff_payout_ledgers_branch ON staff_payout_ledgers(branch_id);
+      CREATE INDEX IF NOT EXISTS idx_staff_payout_ledgers_city ON staff_payout_ledgers(city_id);
+      CREATE INDEX IF NOT EXISTS idx_staff_payout_ledgers_status ON staff_payout_ledgers(status);
     `);
 
     logger.info("Startup schema migrations verified successfully.");

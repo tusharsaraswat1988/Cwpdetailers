@@ -2,7 +2,7 @@ import "./load-env.js";
 import { db, permissionsTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
-type Role = "customer" | "staff" | "admin" | "superadmin" | "franchisee" | "manager";
+type Role = "customer" | "staff" | "admin" | "superadmin" | "central_admin" | "city_admin" | "branch_manager" | "supervisor" | "franchisee" | "manager";
 type Action = "view" | "create" | "edit" | "delete" | "approve"
   | "manage_plans" | "manage_subscriptions" | "manage_assignments" | "view_reports" | "complete_visits";
 
@@ -21,11 +21,61 @@ const DAILY_CLEANING_ACTIONS: Action[] = [
 const ALL_ACTIONS: Action[] = ["view", "create", "edit", "delete", "approve"];
 
 const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>> = {
-  // super_admin: everything
+  // super_admin & central_admin: full consolidated access across company
   admin: Object.fromEntries(RESOURCES.map(r => [r, ALL_ACTIONS])) as Partial<Record<(typeof RESOURCES)[number], Action[]>>,
   superadmin: Object.fromEntries(RESOURCES.map(r => [r, ALL_ACTIONS])) as Partial<Record<(typeof RESOURCES)[number], Action[]>>,
+  central_admin: Object.fromEntries(RESOURCES.map(r => [r, ALL_ACTIONS])) as Partial<Record<(typeof RESOURCES)[number], Action[]>>,
 
-  // manager: ops without destructive financial / settings
+  // city_admin: comprehensive city-scoped operations without global system settings or permissions governance
+  city_admin: {
+    customers: ALL_ACTIONS,
+    leads: ALL_ACTIONS,
+    staff: ["view", "create", "edit"],
+    bookings: ALL_ACTIONS,
+    subscriptions: ALL_ACTIONS,
+    invoices: ["view", "create", "edit"],
+    complaints: ALL_ACTIONS,
+    branches: ["view", "edit"],
+    services: ["view", "edit"],
+    masters: ["view"],
+    catalog: ["view", "edit"],
+    pricing: ["view", "edit"],
+    packages: ["view", "edit"],
+    addons: ["view", "edit"],
+    analytics: ["view"],
+    notifications: ["view", "create"],
+    churned: ["view", "edit"],
+    daily_cleaning: DAILY_CLEANING_ACTIONS,
+    communications: ["view"],
+  },
+
+  // branch_manager: scoped operations without central finances or system settings
+  branch_manager: {
+    customers: ["view", "create", "edit"],
+    leads: ALL_ACTIONS,
+    staff: ["view", "edit"],
+    bookings: ALL_ACTIONS,
+    subscriptions: ["view", "create", "edit"],
+    invoices: ["view", "create", "edit"],
+    complaints: ALL_ACTIONS,
+    branches: ["view"],
+    services: ["view"],
+    masters: ["view"],
+    catalog: ["view"],
+    pricing: ["view"],
+    packages: ["view"],
+    addons: ["view"],
+    analytics: ["view"],
+    notifications: ["view", "create"],
+    communications: ["view", "create"],
+    franchisees: ["view"],
+    churned: ["view", "edit"],
+    inventory: ["view", "edit"],
+    billing: ["view"],
+    daily_cleaning: DAILY_CLEANING_ACTIONS,
+  },
+
+  // legacy manager (retains existing operational scope)
   manager: {
     customers: ["view", "create", "edit"],
     leads: ALL_ACTIONS,
@@ -50,6 +100,19 @@ const MATRIX: Record<Role, Partial<Record<(typeof RESOURCES)[number], Action[]>>
     billing: ["view"],
     settings: ["view"],
     daily_cleaning: DAILY_CLEANING_ACTIONS,
+  },
+
+  // supervisor: operations & quality hub without financials or salary
+  supervisor: {
+    customers: ["view"],
+    staff: ["view"],
+    bookings: ["view", "edit"],
+    complaints: ["view", "create", "edit"],
+    notifications: ["view"],
+    services: ["view"],
+    masters: ["view"],
+    analytics: ["view"],
+    daily_cleaning: ["view", "manage_assignments", "complete_visits", "view_reports"],
   },
 
   // franchise_admin (mapped to franchisee in DB)
@@ -114,7 +177,7 @@ async function seedPermissions() {
         rows.push({ role, resource, action });
       }
     }
-    if (role === "admin" || role === "superadmin") {
+    if (role === "admin" || role === "superadmin" || role === "central_admin") {
       rows.push(...dailyCleaningRows(role));
     }
   }
@@ -135,9 +198,12 @@ async function main() {
   await seedPermissions();
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch(err => {
-    console.error(err);
-    process.exit(1);
-  });
+const isDirectRun = process.argv[1]?.replace(/\\/g, "/").includes("seed-permissions");
+if (isDirectRun) {
+  main()
+    .then(() => process.exit(0))
+    .catch(err => {
+      console.error(err);
+      process.exit(1);
+    });
+}

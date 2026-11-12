@@ -1,16 +1,18 @@
 import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import { db, usersTable, sessionsTable, permissionsTable, permissionOverridesTable, franchiseesTable, customersTable, branchesTable } from "@workspace/db";
+import { db, usersTable, sessionsTable, permissionsTable, permissionOverridesTable, franchiseesTable, customersTable, branchesTable, citiesTable, staffTable } from "@workspace/db";
 import { eq, and, or, isNull, gt } from "drizzle-orm";
 import { listSessionTokens } from "../lib/sessionCookie";
+import { getUserActiveBranchIds } from "../lib/franchise/branchAssignmentService";
 
 export type AuthUser = {
   id: number;
   name: string;
   phone: string;
   email: string | null;
-  role: "customer" | "staff" | "admin" | "superadmin" | "franchisee" | "manager";
+  role: "customer" | "staff" | "admin" | "superadmin" | "central_admin" | "city_admin" | "branch_manager" | "supervisor" | "franchisee" | "manager";
   companyId: number | null;
+  cityId: number | null;
   branchId: number | null;
   franchiseeId: number | null;
   staffId: number | null;
@@ -30,6 +32,7 @@ declare global {
 export type TenantScope = {
   isSuperAdmin: boolean;
   companyId: number | null;
+  cityId: number | null;
   branchIds: number[] | null; // null = all
   franchiseeId: number | null;
   customerId: number | null;
@@ -45,7 +48,7 @@ export function generateToken(): string {
 }
 
 function isSuperAdminRole(role: string, branchId?: number | null) {
-  return role === "superadmin" || (role === "admin" && (branchId == null || branchId === 0));
+  return role === "superadmin" || role === "central_admin" || (role === "admin" && (branchId == null || branchId === 0));
 }
 
 /** Logged-in staff may read/update their own profile and attendance without RBAC seed rows. */
@@ -139,9 +142,40 @@ export async function loadUserFromToken(token: string): Promise<AuthUser | null>
     }
   }
 
+  // Staff suspension & deactivation enforcement: reject session if staff is inactive, suspended, or rejected
+  if (u.role === "staff" || u.staffId != null) {
+    const staffQuery = u.staffId != null
+      ? eq(staffTable.id, u.staffId)
+      : eq(staffTable.userId, u.id);
+    const [staffRow] = await db
+      .select({ id: staffTable.id, isActive: staffTable.isActive, verificationStatus: staffTable.verificationStatus })
+      .from(staffTable)
+      .where(staffQuery)
+      .limit(1);
+    if (staffRow && (!staffRow.isActive || staffRow.verificationStatus === "suspended" || staffRow.verificationStatus === "rejected")) {
+      return null;
+    }
+  }
+
   // Branch & Franchise suspension enforcement: reject session if assigned entity is suspended (unless central superadmin/admin)
   const isCentral = isSuperAdminRole(u.role, u.branchId);
-  if (u.branchId && !isCentral) {
+  if (!isCentral && (u.role === "branch_manager" || u.role === "manager" || u.role === "supervisor")) {
+    const activeBranches = await getUserActiveBranchIds(u.id);
+    if (activeBranches.length === 0) {
+      if (u.branchId) {
+        const [branch] = await db
+          .select({ id: branchesTable.id, status: branchesTable.status, isActive: branchesTable.isActive })
+          .from(branchesTable)
+          .where(eq(branchesTable.id, u.branchId))
+          .limit(1);
+        if (!branch || branch.status === "suspended" || !branch.isActive) {
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+  } else if (u.branchId && !isCentral) {
     const [branch] = await db
       .select({ id: branchesTable.id, status: branchesTable.status, isActive: branchesTable.isActive })
       .from(branchesTable)
@@ -151,6 +185,17 @@ export async function loadUserFromToken(token: string): Promise<AuthUser | null>
       return null;
     }
   }
+  if (u.cityId && !isCentral) {
+    const [city] = await db
+      .select({ id: citiesTable.id, status: citiesTable.status, isActive: citiesTable.isActive })
+      .from(citiesTable)
+      .where(eq(citiesTable.id, u.cityId))
+      .limit(1);
+    if (city && (city.status === "suspended" || !city.isActive)) {
+      return null;
+    }
+  }
+
   if (u.franchiseeId && !isCentral) {
     const [fr] = await db
       .select({ id: franchiseesTable.id, status: franchiseesTable.status })
@@ -169,6 +214,7 @@ export async function loadUserFromToken(token: string): Promise<AuthUser | null>
     email: u.email,
     role: u.role,
     companyId: u.companyId,
+    cityId: u.cityId,
     branchId: u.branchId,
     franchiseeId: u.franchiseeId,
     staffId: u.staffId,
@@ -182,10 +228,72 @@ export async function computeScope(user: AuthUser): Promise<TenantScope> {
     return {
       isSuperAdmin: true,
       companyId: user.companyId,
+      cityId: null,
       branchIds: null,
       franchiseeId: null,
       customerId: null,
       staffId: null,
+    };
+  }
+  if (user.role === "city_admin") {
+    let branchIds: number[] = [];
+    if (user.cityId) {
+      const cityBranches = await db
+        .select({ id: branchesTable.id })
+        .from(branchesTable)
+        .where(
+          and(
+            eq(branchesTable.cityId, user.cityId),
+            eq(branchesTable.status, "active"),
+            eq(branchesTable.isActive, true),
+          ),
+        );
+      branchIds = cityBranches.map((b) => b.id);
+    }
+    return {
+      isSuperAdmin: false,
+      companyId: user.companyId,
+      cityId: user.cityId ?? null,
+      branchIds,
+      franchiseeId: null,
+      customerId: null,
+      staffId: null,
+    };
+  }
+  if (user.role === "branch_manager" || user.role === "manager") {
+    const activeBranchIds = await getUserActiveBranchIds(user.id);
+    let finalBranchIds = activeBranchIds;
+    if (finalBranchIds.length === 0 && user.branchId) {
+      const [br] = await db
+        .select({ id: branchesTable.id, status: branchesTable.status, isActive: branchesTable.isActive })
+        .from(branchesTable)
+        .where(eq(branchesTable.id, user.branchId))
+        .limit(1);
+      if (br && br.status === "active" && br.isActive) {
+        finalBranchIds = [user.branchId];
+      }
+    }
+    return {
+      isSuperAdmin: false,
+      companyId: user.companyId,
+      cityId: user.cityId ?? null,
+      branchIds: finalBranchIds, // Empty array [] if no active assignments or suspended -> tenantFilters produces false
+      franchiseeId: null,
+      customerId: null,
+      staffId: null,
+    };
+  }
+  if (user.role === "supervisor") {
+    const activeBranchIds = await getUserActiveBranchIds(user.id);
+    const branchId = activeBranchIds[0] ?? user.branchId ?? null;
+    return {
+      isSuperAdmin: false,
+      companyId: user.companyId,
+      cityId: user.cityId ?? null,
+      branchIds: branchId ? [branchId] : [],
+      franchiseeId: null,
+      customerId: null,
+      staffId: user.staffId,
     };
   }
   if (user.role === "admin" && user.branchId != null) {
@@ -193,6 +301,7 @@ export async function computeScope(user: AuthUser): Promise<TenantScope> {
     return {
       isSuperAdmin: false,
       companyId: user.companyId,
+      cityId: user.cityId ?? null,
       branchIds: [user.branchId],
       franchiseeId: null,
       customerId: null,
@@ -205,18 +314,9 @@ export async function computeScope(user: AuthUser): Promise<TenantScope> {
     return {
       isSuperAdmin: false,
       companyId: user.companyId,
+      cityId: user.cityId ?? null,
       branchIds: branchId ? [branchId] : [],
       franchiseeId: user.franchiseeId,
-      customerId: null,
-      staffId: null,
-    };
-  }
-  if (user.role === "manager") {
-    return {
-      isSuperAdmin: false,
-      companyId: user.companyId,
-      branchIds: user.branchId ? [user.branchId] : [],
-      franchiseeId: null,
       customerId: null,
       staffId: null,
     };
@@ -225,6 +325,7 @@ export async function computeScope(user: AuthUser): Promise<TenantScope> {
     return {
       isSuperAdmin: false,
       companyId: user.companyId,
+      cityId: user.cityId ?? null,
       branchIds: null, // Customers are scoped by customerId, not branch restricted
       franchiseeId: null,
       customerId: user.customerId,
@@ -234,6 +335,7 @@ export async function computeScope(user: AuthUser): Promise<TenantScope> {
   return {
     isSuperAdmin: false,
     companyId: user.companyId,
+    cityId: user.cityId ?? null,
     branchIds: user.branchId ? [user.branchId] : [],
     franchiseeId: user.franchiseeId,
     customerId: user.customerId,

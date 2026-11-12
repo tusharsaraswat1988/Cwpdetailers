@@ -39,6 +39,14 @@ describe("Phase 5.3 assignment validation", () => {
     expect(() => assertStaffAssignable(staffFixture({ verificationStatus: "suspended" }))).toThrow(/suspended/i);
   });
 
+  it("rejects pending staff", () => {
+    expect(() => assertStaffAssignable(staffFixture({ verificationStatus: "pending" }))).toThrow(/verified/i);
+  });
+
+  it("rejects rejected staff", () => {
+    expect(() => assertStaffAssignable(staffFixture({ verificationStatus: "rejected" }))).toThrow(/rejected/i);
+  });
+
   it("accepts active staff", () => {
     expect(() => assertStaffAssignable(staffFixture())).not.toThrow();
   });

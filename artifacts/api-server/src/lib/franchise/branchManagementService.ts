@@ -1,6 +1,7 @@
 import {
   db,
   branchesTable,
+  branchUserAssignmentsTable,
   franchiseesTable,
   legalEntitiesTable,
   citiesTable,
@@ -10,7 +11,7 @@ import {
   type Branch,
   type Franchisee,
 } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, or, isNull } from "drizzle-orm";
 import { logger } from "../logger";
 import { logAdminAudit } from "../audit/adminAuditService";
 
@@ -118,7 +119,13 @@ export async function createBranch(
   input: CreateBranchInput,
   performedBy: number,
 ): Promise<Branch> {
-  const isCompanyOperated = input.isCompanyOperated ?? !input.franchiseeId;
+  // PRD v3.0 (COCO-001): All new branches must use the Company-Owned, Company-Operated (COCO) model
+  if (input.isCompanyOperated === false || input.franchiseeId) {
+    throw new Error(
+      "All new operating branches must use the Company-Owned, Company-Operated (COCO) model. New franchisee (FOFO) branch creation is prohibited.",
+    );
+  }
+  const isCompanyOperated = true;
   const code =
     input.code?.trim() ||
     `BR-${input.city.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
@@ -289,17 +296,60 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
     critical: true,
   });
 
-  // 8. Contact & Manager Information
-  const hasContact = Boolean(branch.phone?.trim() || branch.managerName?.trim());
+  // 8. Actual Branch Manager User Assignment (PRD v3.0, BR-003)
+  const [managerAssignment] = await db
+    .select({
+      id: branchUserAssignmentsTable.id,
+      userId: branchUserAssignmentsTable.userId,
+      userName: usersTable.name,
+      userPhone: usersTable.phone,
+    })
+    .from(branchUserAssignmentsTable)
+    .innerJoin(usersTable, eq(branchUserAssignmentsTable.userId, usersTable.id))
+    .where(
+      and(
+        eq(branchUserAssignmentsTable.branchId, branchId),
+        eq(branchUserAssignmentsTable.assignmentRole, "branch_manager"),
+        eq(branchUserAssignmentsTable.isActive, true),
+        isNull(branchUserAssignmentsTable.revokedAt),
+      ),
+    )
+    .limit(1);
+
+  const hasAssignedManager = Boolean(managerAssignment || branch.managerName?.trim());
+  const managerMsg = managerAssignment
+    ? `Manager: ${managerAssignment.userName} (${managerAssignment.userPhone}) actively assigned`
+    : (branch.managerName ? `Manager: ${branch.managerName} (Legacy display)` : "No active Branch Manager assigned");
+
   checklist.push({
-    key: "operational_contact",
-    label: "Branch Manager & Contact Details",
-    passed: hasContact,
-    message: hasContact ? `Manager: ${branch.managerName || "Assigned"} (${branch.phone || "Phone on file"})` : "Missing contact phone or manager name",
+    key: "manager_account_assignment",
+    label: "Branch Manager Assignment",
+    passed: hasAssignedManager,
+    message: managerMsg,
+    critical: true,
+  });
+
+  // 9. Supervisor Configuration (PRD v3.0, SUPV-001)
+  const [supervisorStaff] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(staffTable)
+    .where(
+      and(
+        eq(staffTable.branchId, branchId),
+        or(eq(staffTable.staffCategory, "supervisor"), eq(staffTable.role, "supervisor")),
+        eq(staffTable.isActive, true),
+      ),
+    );
+  const supervisorCount = supervisorStaff?.count ?? 0;
+  checklist.push({
+    key: "supervisor_configuration",
+    label: "Supervisor Configuration",
+    passed: supervisorCount > 0,
+    message: supervisorCount > 0 ? `${supervisorCount} supervisor(s) configured` : "No active supervisor assigned to branch",
     critical: false,
   });
 
-  // 9. Operational Notes & Territorial Policy
+  // 10. Operational Notes & Territorial Policy
   checklist.push({
     key: "operational_notes",
     label: "Territorial & Operational Guidelines",
@@ -354,12 +404,16 @@ export async function suspendBranch(
     .where(eq(branchesTable.id, branchId))
     .returning();
 
-  // Revoke active sessions for staff/managers of this branch
+  // Revoke active sessions for staff/managers of this branch, including branch_user_assignments
   await db
     .update(sessionsTable)
     .set({ revokedAt: new Date() })
     .where(
-      sql`${sessionsTable.userId} IN (SELECT id FROM users WHERE branch_id = ${branchId} AND role <> 'admin' AND role <> 'superadmin')`,
+      sql`${sessionsTable.userId} IN (
+        SELECT user_id FROM branch_user_assignments WHERE branch_id = ${branchId} AND is_active = true
+        UNION
+        SELECT id FROM users WHERE branch_id = ${branchId} AND role NOT IN ('admin', 'superadmin', 'central_admin')
+      )`,
     );
 
   await logAdminAudit({

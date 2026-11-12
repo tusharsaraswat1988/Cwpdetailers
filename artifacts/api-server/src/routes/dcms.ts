@@ -51,7 +51,7 @@ import {
 import { createCashfreePaymentOrder } from "../lib/cashfree/cashfreeService";
 import { pauseSubscription, resumeSubscription } from "../lib/dcms/subscriptionService";
 import { eq, desc, sql, inArray } from "drizzle-orm";
-import { OPERATIONAL_ROLE_SLUGS, staffHasOperationalRole } from "../lib/staffEcosystem/operationalRoles";
+import { OPERATIONAL_ROLE_SLUGS, staffHasOperationalRole, attachOperationalRoles } from "../lib/staffEcosystem/operationalRoles";
 
 const router = Router();
 
@@ -475,7 +475,7 @@ router.get(
 
       const conditions = [
         eq(staffTable.isActive, true),
-        sql`${staffTable.verificationStatus} NOT IN ('suspended')`,
+        eq(staffTable.verificationStatus, "verified"),
       ];
       if (cityId) conditions.push(eq(staffTable.cityId, cityId));
       if (branchId) conditions.push(eq(staffTable.branchId, branchId));
@@ -487,14 +487,15 @@ router.get(
           phone: staffTable.phone,
           cityId: staffTable.cityId,
           branchId: staffTable.branchId,
-          operationalRoles: staffTable.operationalRoles,
         })
         .from(staffTable)
         .where(and(...conditions))
         .orderBy(staffTable.name);
 
-      const enriched = staffRows.map(s => {
-        const roles = Array.isArray(s.operationalRoles) ? s.operationalRoles : [];
+      const withRoles = await attachOperationalRoles(staffRows);
+
+      const enriched = withRoles.map(s => {
+        const roles = (s.operationalRoles ?? []).map(r => r.roleSlug);
         const isCleaner = roles.includes("daily_car_cleaner") || roles.length === 0;
         const isWasher = roles.includes("car_washer") || roles.length === 0;
         return {

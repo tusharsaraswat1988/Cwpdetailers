@@ -59,3 +59,4 @@ export * from "./societies";
 export * from "./legal-entities";
 export * from "./promotions";
 export * from "./admin-audit";
+export * from "./staff-payouts";

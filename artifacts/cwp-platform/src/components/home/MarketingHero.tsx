@@ -48,23 +48,15 @@ export function MarketingHero({ cityName }: MarketingHeroProps = {}) {
     }
   };
 
-  // Content resolution: dynamic promo first, then smart fallback
-  const headlineCity = cityName || "Varanasi";
-  const isNoida = cityName?.toLowerCase().includes("noida");
+  // Content resolution: dynamic promo first, then smart city-driven fallback
+  const headlineCity = cityName || "Your City";
 
-  const badgeText = activePromo?.badgeText || (
-    isNoida
-      ? "Noida's #1 Doorstep Daily Cleaning & Society Care"
-      : `${headlineCity}'s #1 Doorstep Detailing & Solar Care`
-  );
+  const badgeText = activePromo?.badgeText || `${headlineCity}'s #1 Doorstep Detailing & Auto Care`;
 
   const title = activePromo?.title || "Showroom Shine at Your Doorstep, Every Single Morning.";
 
-  const subtitle = activePromo?.subtitle || (
-    isNoida
-      ? "Dedicated high-rise society car care. Daily morning microfiber wipe-downs, monthly full washes, and spot-free RO cleaning right in your basement parking bay."
-      : "Say goodbye to swirl marks from dirty cloths. We bring professional detailers, 100% RO water, and Korean 450 GSM microfibers right to your home or office parking."
-  );
+  const subtitle = activePromo?.subtitle ||
+    `Professional automotive care and doorstep cleaning in ${headlineCity}. We bring certified detailers, 100% RO water, and premium microfiber care right to your parking bay.`;
 
   const highlights = (activePromo?.highlights && activePromo.highlights.length > 0)
     ? activePromo.highlights

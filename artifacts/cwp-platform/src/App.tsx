@@ -36,6 +36,7 @@ import PaymentLedgerPage from "@/pages/admin/PaymentLedgerPage";
 import InvoiceBillingSettingsPage from "@/pages/admin/InvoiceBillingSettings";
 import AdminComplaints from "@/pages/admin/Complaints";
 import AdminBranches from "@/pages/admin/Branches";
+import AdminCities from "@/pages/admin/Cities";
 import SocietiesPage from "@/pages/admin/SocietiesPage";
 import ServiceLocationsPage from "@/pages/admin/ServiceLocationsPage";
 import ServiceLocationDetail from "@/pages/admin/ServiceLocationDetail";
@@ -113,6 +114,9 @@ const queryClient = new QueryClient({
   },
 });
 
+const ADMIN_ROLES = ["admin", "superadmin", "central_admin"];
+const MANAGER_ROLES = ["branch_manager", "manager", "admin", "superadmin", "central_admin"];
+
 function ProtectedRoute({ component: Component, roles, permission, loginPath = "/login" }: {
   component: React.ComponentType;
   roles?: string[];
@@ -139,8 +143,11 @@ function ProtectedRoute({ component: Component, roles, permission, loginPath = "
 function AdminRoot() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <BrandLoader fullScreen />;
-  if (user && ["admin", "superadmin", "manager"].includes(user.role)) {
+  if (user && ADMIN_ROLES.includes(user.role)) {
     return <Redirect to="/admin/dashboard" />;
+  }
+  if (user && ["branch_manager", "manager"].includes(user.role)) {
+    return <Redirect to="/manager/dashboard" />;
   }
   return <Redirect to="/admin/login" />;
 }
@@ -217,11 +224,13 @@ function Router() {
       <Route path="/admin/quality" component={() => <ProtectedRoute component={QualityHub} roles={["admin", "superadmin", "manager"]} permission={{ resource: "analytics", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/book-services" component={() => <ProtectedRoute component={BookServicesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/assign-services" component={() => <ProtectedRoute component={AssignServicesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "edit" }} loginPath="/admin/login" />} />
+      <Route path="/admin/assignments" component={() => <Redirect to="/admin/assign-services" />} />
       <Route path="/admin/jobs" component={() => <ProtectedRoute component={JobOrchestrationPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "edit" }} loginPath="/admin/login" />} />
       <Route path="/admin/assets/:id" component={() => <ProtectedRoute component={AssetDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/assets" component={() => <ProtectedRoute component={AssetsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/service-locations/:id" component={() => <ProtectedRoute component={ServiceLocationDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/service-locations" component={() => <ProtectedRoute component={ServiceLocationsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/cities" component={() => <ProtectedRoute component={AdminCities} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/branches" component={() => <ProtectedRoute component={AdminBranches} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/societies" component={() => <ProtectedRoute component={SocietiesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/masters" component={() => <ProtectedRoute component={AdminMasterData} roles={["admin", "superadmin", "manager"]} permission={{ resource: "masters", action: "view" }} loginPath="/admin/login" />} />
@@ -247,6 +256,27 @@ function Router() {
       <Route path="/admin/compliance" component={() => <ProtectedRoute component={ComplianceSettings} roles={["admin", "superadmin"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/legal" component={() => <ProtectedRoute component={LegalCMS} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin" component={AdminRoot} />
+
+      {/* Branch Manager Portal — Scoped Independent Operations */}
+      <Route path="/manager/dashboard" component={() => <ProtectedRoute component={AdminDashboard} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/customers/:id" component={() => <ProtectedRoute component={AdminCustomerDetail} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/customers" component={() => <ProtectedRoute component={AdminCustomers} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/bookings" component={() => <ProtectedRoute component={AdminBookings} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/book-services" component={() => <ProtectedRoute component={BookServicesPage} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/assign-services" component={() => <ProtectedRoute component={AssignServicesPage} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/assignments" component={() => <Redirect to="/manager/assign-services" />} />
+      <Route path="/manager/daily-cleaning/subscriptions" component={() => <ProtectedRoute component={DcmsSubscriptionsPage} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/daily-cleaning/assignments" component={() => <ProtectedRoute component={DcmsAssignmentsPage} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/daily-cleaning/history" component={() => <ProtectedRoute component={DcmsServiceHistoryPage} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/daily-cleaning" component={() => <ProtectedRoute component={DcmsDashboardPage} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/staff/:id" component={() => <ProtectedRoute component={AdminStaffDetail} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/staff" component={() => <ProtectedRoute component={AdminStaff} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/quality" component={() => <ProtectedRoute component={QualityHub} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/collections" component={() => <ProtectedRoute component={AdminDues} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/reports" component={() => <ProtectedRoute component={OperationsWall} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/profile" component={() => <ProtectedRoute component={CustomerAccount} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager" component={() => <Redirect to="/manager/dashboard" />} />
 
       {/* Customer — IA v1.0 frozen (see docs/CUSTOMER_IA_FREEZE_v1.md) */}
       <Route path="/customer/dashboard" component={() => <ProtectedRoute component={CustomerDashboard} roles={["customer"]} />} />

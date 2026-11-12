@@ -1,6 +1,10 @@
 import { useAuth } from "@/lib/auth";
-import { useGetStaffAttendance } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
+import { useGetStaffAttendance, getGetStaffAttendanceQueryKey } from "@workspace/api-client-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { markAttendanceWithLocation } from "@/lib/location";
+import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
+import { isOfflineQueued, queuedSavedMessage } from "@/services/queuedResult";
 import { Redirect, Link } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { useStaffDailyRoute } from "@/features/daily-cleaning/api";
@@ -12,7 +16,7 @@ import { StaffVerificationBanner } from "@/features/staff/components/StaffVerifi
 import { StaffAccountGate } from "@/components/staff/StaffAccountGate";
 import { ActiveJobHero } from "@/components/staff/ActiveJobHero";
 import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
-import { Calendar, CheckCircle, Clock, Sparkles, Wrench, ChevronRight } from "lucide-react";
+import { Calendar, CheckCircle, Clock, Sparkles, Wrench, ChevronRight, Camera, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   StaffPage,
@@ -123,6 +127,57 @@ export default function StaffDashboardPage() {
 
   const canDailyClean = myRoles?.slugs.includes(OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER) ?? false;
 
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const markMutation = useMutation({
+    mutationFn: (payload: {
+      date: string;
+      status: string;
+      checkInTime?: string;
+      imageBase64: string;
+      exif?: Record<string, unknown> | null;
+      capturedAt?: string;
+    }) => markAttendanceWithLocation(user?.staffId ?? jobs.staffId!, payload),
+    onSuccess: (data) => {
+      const activeStaffId = user?.staffId ?? jobs.staffId;
+      if (activeStaffId != null) {
+        qc.invalidateQueries({ queryKey: getGetStaffAttendanceQueryKey(activeStaffId) });
+      }
+      if (isOfflineQueued(data)) {
+        toast({
+          title: "Check-in saved on phone",
+          description: queuedSavedMessage("punch"),
+        });
+        return;
+      }
+      toast({ title: "Attendance marked", description: "Selfie and GPS recorded for shift check-in" });
+    },
+  });
+
+  async function handleAttendanceCheckIn() {
+    const activeStaffId = user?.staffId ?? jobs.staffId;
+    if (!activeStaffId) return;
+    try {
+      const photo = await captureStaffPhoto("front");
+      await markMutation.mutateAsync({
+        date: todayIsoDate,
+        status: "present",
+        checkInTime: new Date().toTimeString().slice(0, 5),
+        imageBase64: photo.dataUrl,
+        exif: photo.exif,
+        capturedAt: photo.capturedAt,
+      });
+    } catch (err) {
+      if (isCameraCancel(err)) return;
+      toast({
+        title: "Check-in failed",
+        description: err instanceof Error ? err.message : "Selfie capture failed",
+        variant: "destructive",
+      });
+    }
+  }
+
   if (myContext?.staffCategory === "supervisor") {
     return <Redirect to="/staff/profile" />;
   }
@@ -205,12 +260,24 @@ export default function StaffDashboardPage() {
               </div>
             </div>
             {!isCheckedIn ? (
-              <Link
-                href="/staff/profile"
-                className="staff-tap shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+              <button
+                type="button"
+                onClick={() => void handleAttendanceCheckIn()}
+                disabled={markMutation.isPending}
+                className="staff-tap shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 disabled:opacity-70"
               >
-                Check in
-              </Link>
+                {markMutation.isPending ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    Checking in…
+                  </>
+                ) : (
+                  <>
+                    <Camera size={12} />
+                    Check in
+                  </>
+                )}
+              </button>
             ) : (
               <span className="shrink-0 text-xs font-medium text-[hsl(var(--tone-success-fg))]">
                 Verified

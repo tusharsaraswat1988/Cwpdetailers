@@ -153,7 +153,7 @@ export function rowInScope(req: Request, row: {
     return true;
   }
   if (s.companyId && row.companyId != null && row.companyId !== s.companyId) return false;
-  if (s.branchIds !== null) {
+  if (s.branchIds !== null && row.branchId !== undefined) {
     if (row.branchId == null || !s.branchIds.includes(row.branchId)) return false;
   }
   if (s.cityId && row.cityId != null && row.cityId !== s.cityId) return false;

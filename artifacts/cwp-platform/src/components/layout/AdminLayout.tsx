@@ -1,8 +1,11 @@
 import { ReactNode } from "react";
+import { useLocation } from "wouter";
 import PanelShell from "./PanelShell";
 import AdminSidebar from "./AdminSidebar";
+import BranchManagerLayout from "./BranchManagerLayout";
 import { useBrandingPortal } from "@/lib/branding";
 import { useAppStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/shared/CommandPalette";
@@ -33,6 +36,17 @@ function CollapsedSidebarExpandButton() {
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const branding = useBrandingPortal("admin");
+  const { user } = useAuth();
+  const [location] = useLocation();
+
+  // If viewing manager routes or logged in as a branch manager (and not on central admin page)
+  const isBranchManagerScope =
+    location.startsWith("/manager") ||
+    (user?.role === "branch_manager" && !location.startsWith("/admin"));
+
+  if (isBranchManagerScope) {
+    return <BranchManagerLayout>{children}</BranchManagerLayout>;
+  }
 
   return (
     <AdminThemeRoot className="h-full min-h-0 overflow-hidden">

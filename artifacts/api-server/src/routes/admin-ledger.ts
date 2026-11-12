@@ -65,10 +65,17 @@ function requireAdminRole(req: Request, res: Response, next: () => void) {
       code: "UNAUTHORIZED",
     });
   }
-  const allowedRoles = ["admin", "superadmin", "manager"];
-  if (!allowedRoles.includes(user.role)) {
+  // PRD v3.0 (SEC-028, SEC-029): Central payment ledger and all-city transaction exports
+  // require central superadmin or central_admin privileges.
+  // Branch managers and supervisors are strictly barred from central ledger access and central exports.
+  const isCentral =
+    user.role === "superadmin" ||
+    user.role === "central_admin" ||
+    (user.role === "admin" && (user.branchId == null || user.branchId === 0));
+
+  if (!isCentral) {
     return res.status(403).json({
-      error: "Access denied. Administrator privileges required.",
+      error: "Access denied. Central administrator privileges required to access the central payment ledger.",
       code: "FORBIDDEN",
     });
   }

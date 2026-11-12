@@ -245,6 +245,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     variant: "admin",
     entries: [
       {
+        id: "cities",
+        href: "/admin/cities",
+        label: "Cities & Expansion",
+        icon: MapPin,
+        perm: { resource: "branches", action: "view" },
+      },
+      {
         id: "branches",
         href: "/admin/branches",
         label: "Branches",

@@ -446,7 +446,7 @@ describe("CWP PRD v1.5 — End-to-End Branch Operations & Customer Lifecycle", (
       const report = await validateBranchReadiness(2);
       expect(report.branchId).toBe(2);
       expect(report.score).toBeGreaterThan(0);
-      expect(report.checklist.length).toBe(9);
+      expect(report.checklist.length).toBe(10);
 
       // Branch 2 has basic profile, city mapping, legal entity, FOFO partner, services, staff
       expect(report.isReady).toBe(true);

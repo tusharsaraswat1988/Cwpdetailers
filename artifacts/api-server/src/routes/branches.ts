@@ -12,6 +12,17 @@ import {
   validateBranchReadiness,
 } from "../lib/franchise/branchManagementService";
 import { getBranchOperationsDashboard } from "../lib/franchise/branchOperationsService";
+import {
+  assignBranchUser,
+  replaceBranchManager,
+  revokeBranchAssignment,
+  listBranchAssignments,
+  getUserActiveBranchIds,
+} from "../lib/franchise/branchAssignmentService";
+import {
+  getBranchServiceCatalog,
+  setBranchServiceOverride,
+} from "../lib/branchConfigService";
 
 const router = Router();
 
@@ -193,6 +204,273 @@ router.delete("/branches/:id", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Delete branch error");
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/branch-assignments/candidate-users
+ * Returns eligible active users for branch assignment (Super Admin / Central Admin only).
+ */
+router.get("/branch-assignments/candidate-users", async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "Authentication required" });
+
+    const isCentral =
+      user.role === "superadmin" ||
+      user.role === "central_admin" ||
+      (user.role === "admin" && !user.branchId);
+
+    if (!isCentral) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const candidates = await db
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        phone: usersTable.phone,
+        role: usersTable.role,
+        isActive: usersTable.isActive,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.isActive, true))
+      .limit(200);
+
+    return res.json(candidates);
+  } catch (err) {
+    req.log.error({ err }, "Get candidate users error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/branch-assignments/my-branches
+ * Returns all active branches authorized for the logged-in user.
+ * Multi-branch managers will receive all assigned branches.
+ */
+router.get("/branch-assignments/my-branches", async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "Authentication required" });
+
+    const isCentral =
+      user.role === "superadmin" ||
+      user.role === "central_admin" ||
+      (user.role === "admin" && !user.branchId);
+
+    if (isCentral) {
+      const allActive = await db
+        .select()
+        .from(branchesTable)
+        .where(and(eq(branchesTable.status, "active"), eq(branchesTable.isActive, true)));
+      return res.json(allActive);
+    }
+
+    const branchIds = await getUserActiveBranchIds(user.id);
+    if (branchIds.length === 0) {
+      if (user.branchId) {
+        const [single] = await db
+          .select()
+          .from(branchesTable)
+          .where(eq(branchesTable.id, user.branchId))
+          .limit(1);
+        if (single && single.status === "active" && single.isActive) {
+          return res.json([single]);
+        }
+      }
+      return res.json([]);
+    }
+
+    const { inArray } = await import("drizzle-orm");
+    const authorized = await db
+      .select()
+      .from(branchesTable)
+      .where(
+        and(
+          inArray(branchesTable.id, branchIds),
+          eq(branchesTable.status, "active"),
+          eq(branchesTable.isActive, true),
+        ),
+      );
+    return res.json(authorized);
+  } catch (err) {
+    req.log.error({ err }, "Get my branches error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/branches/:id/assignments
+ * Returns user assignments and history for a branch.
+ */
+router.get("/branches/:id/assignments", async (req, res) => {
+  try {
+    const branchId = parseInt(req.params.id, 10);
+    if (Number.isNaN(branchId)) return res.status(400).json({ error: "Invalid branch id" });
+
+    if (!rowInScope(req, { branchId })) {
+      return res.status(404).json({ error: "Branch not found" });
+    }
+
+    const assignments = await listBranchAssignments({ branchId });
+    return res.json(assignments);
+  } catch (err) {
+    req.log.error({ err }, "List branch assignments error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * POST /api/branches/:id/assignments
+ * Appoints a user to a branch. Strictly Central Super Admin / Central Admin.
+ */
+router.post("/branches/:id/assignments", async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "Authentication required" });
+
+    const isCentral =
+      user.role === "superadmin" ||
+      user.role === "central_admin" ||
+      (user.role === "admin" && !user.branchId);
+
+    if (!isCentral) {
+      return res.status(403).json({ error: "Access denied. Only Super Admin can manage branch assignments." });
+    }
+
+    const branchId = parseInt(req.params.id, 10);
+    const { userId, assignmentRole, effectiveFrom, effectiveUntil } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+
+    const assignment = await assignBranchUser({
+      userId: parseInt(userId, 10),
+      branchId,
+      assignmentRole: assignmentRole ?? "branch_manager",
+      assignedBy: user.id,
+      effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : undefined,
+      effectiveUntil: effectiveUntil ? new Date(effectiveUntil) : undefined,
+    });
+
+    return res.status(201).json(assignment);
+  } catch (err: any) {
+    req.log.error({ err }, "Assign branch user error");
+    return res.status(400).json({ error: err.message || "Failed to assign branch user" });
+  }
+});
+
+/**
+ * POST /api/branches/:id/replace-manager
+ * Atomically replaces the branch manager. Strictly Central Super Admin / Central Admin.
+ */
+router.post("/branches/:id/replace-manager", async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "Authentication required" });
+
+    const isCentral =
+      user.role === "superadmin" ||
+      user.role === "central_admin" ||
+      (user.role === "admin" && !user.branchId);
+
+    if (!isCentral) {
+      return res.status(403).json({ error: "Access denied. Only Super Admin can replace branch managers." });
+    }
+
+    const branchId = parseInt(req.params.id, 10);
+    const { newUserId, reason } = req.body;
+    if (!newUserId) return res.status(400).json({ error: "newUserId is required" });
+
+    const assignment = await replaceBranchManager({
+      branchId,
+      newUserId: parseInt(newUserId, 10),
+      assignedBy: user.id,
+      reason,
+    });
+
+    return res.json(assignment);
+  } catch (err: any) {
+    req.log.error({ err }, "Replace branch manager error");
+    return res.status(400).json({ error: err.message || "Failed to replace branch manager" });
+  }
+});
+
+/**
+ * DELETE /api/branches/:id/assignments/:assignmentId
+ * Revokes a branch assignment immediately. Strictly Central Super Admin / Central Admin.
+ */
+router.delete("/branches/:id/assignments/:assignmentId", async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "Authentication required" });
+
+    const isCentral =
+      user.role === "superadmin" ||
+      user.role === "central_admin" ||
+      (user.role === "admin" && !user.branchId);
+
+    if (!isCentral) {
+      return res.status(403).json({ error: "Access denied. Only Super Admin can revoke branch assignments." });
+    }
+
+    const assignmentId = parseInt(req.params.assignmentId, 10);
+    const { reason = "Administrative revocation" } = req.body || {};
+
+    const revoked = await revokeBranchAssignment(assignmentId, user.id, reason);
+    return res.json(revoked);
+  } catch (err: any) {
+    req.log.error({ err }, "Revoke branch assignment error");
+    return res.status(400).json({ error: err.message || "Failed to revoke branch assignment" });
+  }
+});
+
+/**
+ * GET /api/branches/:id/services
+ * Returns effective services and pricing hierarchy for branch
+ */
+router.get("/branches/:id/services", async (req, res) => {
+  try {
+    const branchId = parseInt(req.params.id, 10);
+    if (Number.isNaN(branchId)) return res.status(400).json({ error: "Invalid branch id" });
+
+    if (!rowInScope(req, { branchId })) {
+      return res.status(404).json({ error: "Branch not found" });
+    }
+
+    const catalog = await getBranchServiceCatalog(branchId);
+    return res.json(catalog);
+  } catch (err: any) {
+    req.log.error({ err }, "Get branch services error");
+    return res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
+
+/**
+ * PUT /api/branches/:id/services/:serviceId
+ * Sets branch-specific service price or availability override
+ */
+router.put("/branches/:id/services/:serviceId", async (req, res) => {
+  try {
+    const branchId = parseInt(req.params.id, 10);
+    const serviceId = parseInt(req.params.serviceId, 10);
+    if (!rowInScope(req, { branchId })) {
+      return res.status(404).json({ error: "Branch not found" });
+    }
+
+    const { basePriceOverride, isActive, customSettings } = req.body;
+    const override = await setBranchServiceOverride({
+      branchId,
+      serviceId,
+      basePriceOverride: basePriceOverride != null ? parseFloat(basePriceOverride) : undefined,
+      isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+      customSettings,
+      performedBy: req.user?.id ?? 0,
+    });
+
+    return res.json(override);
+  } catch (err: any) {
+    req.log.error({ err }, "Set branch service override error");
+    return res.status(400).json({ error: err.message || "Failed to set branch service override" });
   }
 });
 

@@ -52,13 +52,9 @@ export function AdminScopeHeader() {
     staleTime: 60_000,
   });
 
-  // Provide realistic fallback operational branches if DB has not created any yet
+  // Dynamic operational branches
   const branches: Branch[] = useMemo(() => {
-    if (branchesData.length > 0) return branchesData;
-    return [
-      { id: 1, name: "Varanasi Hub", city: "Varanasi", cityId: 1, code: "VNS-01", status: "active" },
-      { id: 2, name: "Noida Branch", city: "Noida", cityId: 2, code: "NOI-01", status: "active" },
-    ];
+    return branchesData;
   }, [branchesData]);
 
   const selectedBranchObj = useMemo(

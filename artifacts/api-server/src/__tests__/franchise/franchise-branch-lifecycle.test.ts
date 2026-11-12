@@ -331,24 +331,21 @@ describe("CWP Multi-City — Franchise, Branch & Media Retention Architecture", 
       expect(branch.serviceAvailability).toContain("daily_cleaning");
     });
 
-    it("creates a Franchise-Operated (FOFO) branch linked to a franchisee partner", async () => {
-      const branch = await createBranch(
-        {
-          name: "Noida Expressway",
-          code: "BR-NOI-EXP",
-          city: "Noida",
-          cityId: 2,
-          franchiseeId: 10,
-          legalEntityId: 2,
-          isCompanyOperated: false,
-        },
-        1
-      );
-
-      expect(branch.code).toBe("BR-NOI-EXP");
-      expect(branch.franchiseeId).toBe(10);
-      expect(branch.isCompanyOperated).toBe(false);
-      expect(branch.status).toBe("active");
+    it("rejects creating a Franchise-Operated (FOFO) branch linked to a franchisee partner (COCO-001)", async () => {
+      await expect(
+        createBranch(
+          {
+            name: "Noida Expressway",
+            code: "BR-NOI-EXP",
+            city: "Noida",
+            cityId: 2,
+            franchiseeId: 10,
+            legalEntityId: 2,
+            isCompanyOperated: false,
+          },
+          1
+        )
+      ).rejects.toThrow("All new operating branches must use the Company-Owned, Company-Operated (COCO) model");
     });
 
     it("suspends a branch, invalidates staff sessions, and appends audit notes", async () => {

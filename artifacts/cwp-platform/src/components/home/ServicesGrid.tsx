@@ -68,8 +68,8 @@ export function ServicesGrid({ className, citySlug, cityName }: ServicesGridProp
             {cityName ? `Services in ${cityName}` : "CWP Signature Services"}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {cityName?.toLowerCase().includes("noida")
-              ? "Doorstep daily car cleaning and society care in Noida"
+            {cityName
+              ? `Doorstep vehicle care and cleaning services available in ${cityName}`
               : "Doorstep vehicle detailing & rooftop solar care with guaranteed results"}
           </p>
         </div>

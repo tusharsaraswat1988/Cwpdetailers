@@ -88,14 +88,19 @@ export async function resolveCityId(citySlugOrId?: string | number | null): Prom
   return city?.id ?? null;
 }
 
-/** Resolve default operating city from catalog settings, then common slug. */
+/** Resolve default operating city from catalog settings, then first active city. */
 export async function getDefaultCityId(): Promise<number | null> {
-  const slug = await getCatalogSetting<string | null>("default_city_slug", "varanasi");
+  const slug = await getCatalogSetting<string | null>("default_city_slug", null);
   if (slug) {
     const id = await resolveCityId(slug);
     if (id) return id;
   }
-  return resolveCityId("varanasi");
+  const [firstActiveCity] = await db
+    .select({ id: citiesTable.id })
+    .from(citiesTable)
+    .where(eq(citiesTable.isActive, true))
+    .limit(1);
+  return firstActiveCity?.id ?? null;
 }
 
 export async function isServiceAvailableInCity(serviceId: number, cityId: number): Promise<boolean> {

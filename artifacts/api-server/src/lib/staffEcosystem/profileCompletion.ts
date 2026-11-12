@@ -32,10 +32,13 @@ export function computeProfileCompletion(
   const currentDocs = documents.filter((d) => d.isCurrent);
   const hasDoc = (type: string) => currentDocs.some((d) => d.documentType === type);
 
+  // Email is optional for ground field cleaning staff, mandatory for supervisors
+  const emailValid = staff.staffCategory === "supervisor" ? filled(staff.email) : true;
+
   const identityComplete =
     filled(staff.name)
     && filled(staff.phone)
-    && filled(staff.email)
+    && emailValid
     && Boolean(staff.dateOfBirth)
     && Boolean(staff.gender)
     && Boolean(staff.joiningDate)
@@ -44,8 +47,13 @@ export function computeProfileCompletion(
     && filled(staff.profilePhotoUrl)
     && filled(staff.employeeCode);
 
+  // Driving license is mandatory ONLY if staff owns/uses a vehicle
+  const requiredDocs = staff.ownsVehicle
+    ? ["aadhaar", "pan", "driving_license", "address_proof"]
+    : ["aadhaar", "pan", "address_proof"];
+
   const documentsComplete =
-    MANDATORY_DOC_TYPES.every((t) => hasDoc(t))
+    requiredDocs.every((t) => hasDoc(t))
     && (BANK_DOC_TYPES.some((t) => hasDoc(t)));
 
   const bankComplete =
@@ -73,7 +81,7 @@ export function generateEmployeeCode(staffId: number): string {
 
 export function isStaffAssignable(staff: Pick<Staff, "isActive" | "verificationStatus">): boolean {
   if (!staff.isActive) return false;
-  if (staff.verificationStatus === "suspended") return false;
+  if (staff.verificationStatus !== "verified") return false;
   return true;
 }
 
@@ -83,8 +91,10 @@ export function staffAssignableError(
   if (staff.staffCategory === "supervisor") {
     return "Supervisors cannot be assigned to field jobs — assign cleaning staff instead";
   }
-  if (!staff.isActive) return "Staff member is inactive and cannot receive new assignments";
   if (staff.verificationStatus === "suspended") return "Staff member is suspended and cannot receive new assignments";
+  if (staff.verificationStatus === "rejected") return "Staff member is rejected and cannot receive new assignments";
+  if (!staff.isActive) return "Staff member is inactive and cannot receive new assignments";
+  if (staff.verificationStatus !== "verified") return `Staff member must be verified before receiving assignments (current status: ${staff.verificationStatus})`;
   return null;
 }
 

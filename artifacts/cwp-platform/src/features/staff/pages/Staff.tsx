@@ -339,19 +339,31 @@ export default function AdminStaff() {
                     )}
                     <div>
                       <Label>Branch</Label>
-                      <Select value={form.branchId} onValueChange={v => setForm(f => ({ ...f, branchId: v }))}>
-                        <SelectTrigger className="mt-1" data-testid="select-staff-branch"><SelectValue placeholder="Select branch" /></SelectTrigger>
-                        <SelectContent>
-                          {(branches ?? []).map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      {(branches ?? []).length === 0 ? (
+                        <div className="mt-1 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+                          <p className="font-semibold">No operational branches configured</p>
+                          <p className="mt-0.5 text-muted-foreground">
+                            At least one branch must be set up before onboarding staff.
+                          </p>
+                          <a href="/admin/branches" className="mt-1.5 inline-block font-semibold text-primary underline">
+                            Go to Branches Management →
+                          </a>
+                        </div>
+                      ) : (
+                        <Select value={form.branchId} onValueChange={v => setForm(f => ({ ...f, branchId: v }))}>
+                          <SelectTrigger className="mt-1" data-testid="select-staff-branch"><SelectValue placeholder="Select branch" /></SelectTrigger>
+                          <SelectContent>
+                            {(branches ?? []).map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                     <Button
                       onClick={handleCreate}
                       disabled={createMutation.isPending || !canSubmit}
                       className="w-full "
                       data-testid="btn-submit-staff">
-                      {createMutation.isPending ? "Creating..." : "Create Staff Member"}
+                      {(branches ?? []).length === 0 ? "Branch Setup Required" : createMutation.isPending ? "Creating..." : "Create Staff Member"}
                     </Button>
                   </div>
                 </DialogContent>

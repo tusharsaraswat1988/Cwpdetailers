@@ -32,9 +32,30 @@ import {
   Clock,
   ArrowRight,
   TrendingUp,
+  UserPlus,
+  Trash2,
+  Shield,
+  History,
+  Lock,
 } from "lucide-react";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { useMasterList, type City } from "@/features/master-data/api";
+
+type BranchAssignmentItem = {
+  id: number;
+  userId: number;
+  userName: string | null;
+  userPhone: string | null;
+  branchId: number;
+  branchName: string | null;
+  assignmentRole: string;
+  isActive: boolean;
+  assignedBy: number;
+  assignedAt: string;
+  effectiveFrom: string;
+  effectiveUntil: string | null;
+  revokedAt: string | null;
+};
 
 type BranchItem = {
   id: number;
@@ -214,9 +235,95 @@ export default function BranchesPage() {
   const [opsHubData, setOpsHubData] = useState<BranchOperationsDashboard | null>(null);
   const [opsHubLoading, setOpsHubLoading] = useState(false);
 
+  // Branch Governance / Assignments Dialog
+  const [assignmentsModal, setAssignmentsModal] = useState<BranchItem | null>(null);
+  const [assignmentsList, setAssignmentsList] = useState<BranchAssignmentItem[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [candidateUsers, setCandidateUsers] = useState<Array<{ id: number; name: string; phone: string; role: string }>>([]);
+  const [newAssignUserId, setNewAssignUserId] = useState<string>("");
+  const [newAssignRole, setNewAssignRole] = useState<string>("branch_manager");
+  const [replaceReason, setReplaceReason] = useState<string>("");
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["branches"] });
     qc.invalidateQueries({ queryKey: ["analytics"] });
+  };
+
+  const openAssignments = async (b: BranchItem) => {
+    setAssignmentsModal(b);
+    setAssignmentsLoading(true);
+    try {
+      const [assignmentsRes, candidatesRes] = await Promise.all([
+        fetch(`/api/branches/${b.id}/assignments`, { credentials: "include" }),
+        fetch("/api/branch-assignments/candidate-users", { credentials: "include" }),
+      ]);
+      if (assignmentsRes.ok) {
+        const data = await assignmentsRes.json();
+        setAssignmentsList(data);
+      }
+      if (candidatesRes.ok) {
+        const cData = await candidatesRes.json();
+        setCandidateUsers(cData);
+      }
+    } catch (err: any) {
+      toast({ title: "Failed to load assignments", description: err.message, variant: "destructive" });
+    } finally {
+      setAssignmentsLoading(false);
+    }
+  };
+
+  const handleAssignOrReplace = async (isReplace = false) => {
+    if (!assignmentsModal || !newAssignUserId) {
+      toast({ title: "Please select a user to assign", variant: "destructive" });
+      return;
+    }
+    try {
+      const url = isReplace
+        ? `/api/branches/${assignmentsModal.id}/replace-manager`
+        : `/api/branches/${assignmentsModal.id}/assignments`;
+      const payload = isReplace
+        ? { newUserId: parseInt(newAssignUserId, 10), reason: replaceReason }
+        : { userId: parseInt(newAssignUserId, 10), assignmentRole: newAssignRole };
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Assignment failed");
+      }
+      toast({ title: isReplace ? "Branch manager replaced successfully" : "User assigned successfully" });
+      setNewAssignUserId("");
+      setReplaceReason("");
+      const updated = await fetch(`/api/branches/${assignmentsModal.id}/assignments`, { credentials: "include" });
+      if (updated.ok) setAssignmentsList(await updated.json());
+      invalidate();
+    } catch (err: any) {
+      toast({ title: "Operation failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleRevokeAssignment = async (assignmentId: number) => {
+    if (!assignmentsModal) return;
+    try {
+      const res = await fetch(`/api/branches/${assignmentsModal.id}/assignments/${assignmentId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Revocation failed");
+      }
+      toast({ title: "Assignment revoked successfully" });
+      const updated = await fetch(`/api/branches/${assignmentsModal.id}/assignments`, { credentials: "include" });
+      if (updated.ok) setAssignmentsList(await updated.json());
+      invalidate();
+    } catch (err: any) {
+      toast({ title: "Revocation failed", description: err.message, variant: "destructive" });
+    }
   };
 
   const openReadiness = async (b: BranchItem) => {
@@ -506,6 +613,16 @@ export default function BranchesPage() {
                         size="sm"
                         variant="outline"
                         className="text-xs h-8 px-2"
+                        onClick={() => openAssignments(b)}
+                        title="Manage Branch Manager & Staff Assignments"
+                      >
+                        <Users className="h-3 w-3 mr-1" /> Assignments
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 px-2"
                         onClick={() => openReadiness(b)}
                         title="Check setup prerequisites"
                       >
@@ -777,13 +894,189 @@ export default function BranchesPage() {
           </DialogContent>
         </Dialog>
 
+        {/* Branch User Assignments & Governance Dialog */}
+        <Dialog open={assignmentsModal != null} onOpenChange={(open) => !open && setAssignmentsModal(null)}>
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex items-center justify-between pr-4">
+                <DialogTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-primary" />
+                  Branch Governance & Assignments — {assignmentsModal?.name}
+                </DialogTitle>
+                <Badge variant={assignmentsModal?.isCompanyOperated ? "secondary" : "outline"} className="text-xs">
+                  {assignmentsModal?.isCompanyOperated ? "COCO" : "FOFO"}
+                </Badge>
+              </div>
+              <DialogDescription>
+                Assign and replace Branch Managers, Supervisors, and view appointment history.
+              </DialogDescription>
+            </DialogHeader>
+
+            {assignmentsLoading ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">Loading branch assignments…</div>
+            ) : (
+              <div className="space-y-5 pt-2">
+                {/* Active Assignments */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-primary" /> Active Assignments
+                  </h4>
+                  {assignmentsList.filter((a) => a.isActive).length === 0 ? (
+                    <div className="p-4 rounded-xl border border-dashed text-center text-xs text-muted-foreground">
+                      No active manager or supervisor currently assigned to this branch.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border border rounded-xl overflow-hidden text-xs">
+                      {assignmentsList
+                        .filter((a) => a.isActive)
+                        .map((a) => (
+                          <div key={a.id} className="p-3 flex items-center justify-between gap-3 bg-card">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-foreground text-sm">
+                                  {a.userName || `User #${a.userId}`}
+                                </span>
+                                <Badge variant="secondary" className="text-[11px] capitalize">
+                                  {a.assignmentRole.replace("_", " ")}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">
+                                {a.userPhone && `Phone: ${a.userPhone} • `}
+                                Effective from: {new Date(a.effectiveFrom).toLocaleDateString("en-IN")}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 text-rose-600 hover:bg-rose-50 border-rose-200"
+                              onClick={() => handleRevokeAssignment(a.id)}
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" /> Revoke
+                            </Button>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Appoint or Replace Manager */}
+                <div className="p-4 bg-muted/40 rounded-xl border space-y-3">
+                  <h4 className="text-xs font-semibold uppercase text-foreground flex items-center gap-1.5">
+                    <UserPlus className="h-3.5 w-3.5 text-primary" /> Appoint or Replace Assignment
+                  </h4>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Select Candidate User *</Label>
+                      <Select value={newAssignUserId} onValueChange={setNewAssignUserId}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select user by name/phone" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-56">
+                          {candidateUsers.map((u) => (
+                            <SelectItem key={u.id} value={String(u.id)} className="text-xs">
+                              {u.name} ({u.phone}) — {u.role}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Assignment Role</Label>
+                      <Select value={newAssignRole} onValueChange={setNewAssignRole}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="branch_manager">Branch Manager</SelectItem>
+                          <SelectItem value="supervisor">Supervisor</SelectItem>
+                          <SelectItem value="staff">Staff</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {newAssignRole === "branch_manager" && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Replacement Reason (Optional)</Label>
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder="e.g. Relocation, performance, structural reorganization"
+                        value={replaceReason}
+                        onChange={(e) => setReplaceReason(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    {newAssignRole === "branch_manager" ? (
+                      <Button
+                        size="sm"
+                        className="text-xs h-8"
+                        onClick={() => handleAssignOrReplace(true)}
+                        disabled={!newAssignUserId}
+                      >
+                        <UserPlus className="h-3 w-3 mr-1" /> Replace Branch Manager
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="text-xs h-8"
+                        onClick={() => handleAssignOrReplace(false)}
+                        disabled={!newAssignUserId}
+                      >
+                        <UserPlus className="h-3 w-3 mr-1" /> Assign Role
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Assignment History */}
+                {assignmentsList.some((a) => !a.isActive) && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+                      <History className="h-3.5 w-3.5" /> Historical / Revoked Assignments
+                    </h4>
+                    <div className="divide-y divide-border border rounded-xl overflow-hidden text-xs max-h-40 overflow-y-auto">
+                      {assignmentsList
+                        .filter((a) => !a.isActive)
+                        .map((a) => (
+                          <div key={a.id} className="p-2.5 flex items-center justify-between text-muted-foreground bg-muted/10">
+                            <div>
+                              <p className="font-medium text-foreground">
+                                {a.userName || `User #${a.userId}`} ({a.assignmentRole})
+                              </p>
+                              <p className="text-[10px]">
+                                Active: {new Date(a.effectiveFrom).toLocaleDateString("en-IN")} — Revoked:{" "}
+                                {a.revokedAt ? new Date(a.revokedAt).toLocaleDateString("en-IN") : "Ended"}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                              Revoked
+                            </Badge>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setAssignmentsModal(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Create Branch Dialog */}
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Register Branch / Service Center</DialogTitle>
               <DialogDescription>
-                Configure a new company-operated or franchise-operated service center.
+                Configure a new company-operated (COCO) service center.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">
@@ -845,24 +1138,12 @@ export default function BranchesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Operating Model</Label>
-                  <Select
-                    value={createForm.isCompanyOperated ? "coco" : "fofo"}
-                    onValueChange={(v) =>
-                      setCreateForm((f) => ({
-                        ...f,
-                        isCompanyOperated: v === "coco",
-                        franchiseeId: v === "coco" ? "" : f.franchiseeId,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="coco">Company-Operated (COCO)</SelectItem>
-                      <SelectItem value="fofo">Franchise-Operated (FOFO)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2 h-9 px-3 bg-muted/40 rounded-md border text-xs font-medium text-foreground">
+                    <Shield className="h-3.5 w-3.5 text-primary" />
+                    <span>Company-Operated (COCO)</span>
+                    <Badge variant="secondary" className="text-[10px] ml-auto py-0 px-1">Mandatory</Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">New branches are strictly company-owned and operated.</p>
                 </div>
 
                 <div className="space-y-1">
@@ -884,27 +1165,6 @@ export default function BranchesPage() {
                   </Select>
                 </div>
               </div>
-
-              {!createForm.isCompanyOperated && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Franchise Partner *</Label>
-                  <Select
-                    value={createForm.franchiseeId}
-                    onValueChange={(val) => setCreateForm((f) => ({ ...f, franchiseeId: val }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select franchise partner" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {franchiseesQuery.data?.map((fr) => (
-                        <SelectItem key={fr.id} value={String(fr.id)}>
-                          {fr.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">

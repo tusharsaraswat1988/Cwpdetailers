@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
 import { db } from "@workspace/db";
-import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable, staffRoleMasterTable, staffLocationLogsTable, sessionsTable } from "@workspace/db";
+import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable, staffRoleMasterTable, staffLocationLogsTable, sessionsTable, serviceExecutionsTable, invoicesTable, dcmsVisitFeedbackTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
 import { generateEmployeeCode } from "../lib/staffEcosystem/profileCompletion";
@@ -31,6 +31,13 @@ import { assertContactIdentityAvailable } from "../lib/contactIdentity";
 import { uploadWatermarkedVisitPhoto } from "../lib/dcms/watermark";
 import { validateCameraPhoto, ImageValidationError, type ExifPayload } from "../lib/dcms/imageValidation";
 import { AttendanceSelfieError, assertSelfCheckInSelfie, selfCheckInProofRequired } from "../lib/staffAttendance/attendanceSelfie";
+import { projectStaffList, projectStaffRecord } from "../lib/projections/staffProjection";
+import {
+  calculateStaffPayout,
+  getStaffPayouts,
+  approveStaffPayout,
+  disburseStaffPayout,
+} from "../lib/payroll/staffPayoutService";
 
 const router = Router();
 
@@ -58,7 +65,8 @@ router.get("/staff", async (req, res) => {
     if (verificationStatus) conditions.push(eq(staffTable.verificationStatus, verificationStatus as (typeof staffTable.verificationStatus)["_"]["data"]));
     if (franchiseeId) conditions.push(eq(staffTable.franchiseeId, parseInt(franchiseeId)));
     if (forAssignment === "true") {
-      conditions.push(sql`${staffTable.verificationStatus} != 'suspended'`);
+      conditions.push(eq(staffTable.verificationStatus, "verified"));
+      conditions.push(eq(staffTable.isActive, true));
     }
 
     let roleFilteredIds: number[] | null = null;
@@ -104,7 +112,7 @@ router.get("/staff", async (req, res) => {
       .where(where);
 
     const withRoles = await attachOperationalRoles(data);
-    return res.json(withRoles);
+    return res.json(projectStaffList(withRoles, req.user));
   } catch (err) {
     req.log.error({ err }, "List staff error");
     return res.status(500).json({ error: "Internal server error" });
@@ -308,7 +316,7 @@ router.get("/staff/:id", async (req, res) => {
       lateDays: Number(attendanceSummary.find(a => a.status === "late")?.cnt ?? 0),
     };
 
-    return res.json({ ...staff, recentBookings, attendanceSummary: summary });
+    return res.json(projectStaffRecord({ ...staff, recentBookings, attendanceSummary: summary }, req.user));
   } catch (err) {
     req.log.error({ err }, "Get staff error");
     return res.status(500).json({ error: "Internal server error" });
@@ -351,9 +359,23 @@ router.patch("/staff/:id", async (req, res) => {
       if (updateData.email !== undefined) updateData.email = identityCheck.identity.email;
     }
 
+    // Role-based privilege check: non-central callers cannot alter salary, banking, identity or role
+    const isCentral = req.user?.role === "superadmin" || req.user?.role === "central_admin" || (req.user?.role === "admin" && !req.user?.branchId);
+    if (!isCentral) {
+      delete updateData.monthlySalary;
+      delete updateData.aadhaar;
+      delete updateData.pan;
+      delete updateData.bankAccountName;
+      delete updateData.bankAccountNumber;
+      delete updateData.bankIfsc;
+      delete updateData.bankPassbookUrl;
+      delete updateData.agreementUrl;
+      delete updateData.role;
+    }
+
     const [staff] = await db.update(staffTable).set(updateData).where(eq(staffTable.id, id)).returning();
     if (staff) await syncStaffLoginUser(staff);
-    return res.json(staff);
+    return res.json(projectStaffRecord(staff, req.user));
   } catch (err) {
     req.log.error({ err }, "Update staff error");
     return res.status(500).json({ error: "Internal server error" });
@@ -364,9 +386,9 @@ router.post("/staff/:id/verify", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (!(await loadStaffInScope(req, id))) return res.status(404).json({ error: "Staff not found" });
-    const { action, notes } = req.body as { action: "verified" | "rejected"; notes?: string };
-    if (!["verified", "rejected"].includes(action)) {
-      return res.status(400).json({ error: "action must be 'verified' or 'rejected'" });
+    const { action, notes } = req.body as { action: "verified" | "rejected" | "suspended"; notes?: string };
+    if (!["verified", "rejected", "suspended"].includes(action)) {
+      return res.status(400).json({ error: "action must be 'verified', 'rejected', or 'suspended'" });
     }
     const [staff] = await db.update(staffTable).set({
       verificationStatus: action,
@@ -374,6 +396,7 @@ router.post("/staff/:id/verify", async (req, res) => {
       verifiedAt: action === "verified" ? new Date() : null,
       updatedAt: new Date(),
     }).where(eq(staffTable.id, id)).returning();
+    if (staff) await syncStaffLoginUser(staff);
     return res.json(staff);
   } catch (err) {
     req.log.error({ err }, "Verify staff error");
@@ -384,23 +407,14 @@ router.post("/staff/:id/verify", async (req, res) => {
 router.post("/staff/:id/create-account", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    let staffMember = await loadStaffInScope(req, id);
+    const staffMember = await loadStaffInScope(req, id);
     if (!staffMember) return res.status(404).json({ error: "Staff not found" });
 
     const { password } = req.body;
     if (!password) return res.status(400).json({ error: "password is required" });
 
     if (staffMember.verificationStatus === "rejected" || staffMember.verificationStatus === "suspended") {
-      return res.status(400).json({ error: "Staff must be verified before creating an account" });
-    }
-
-    if (staffMember.verificationStatus !== "verified") {
-      const [verified] = await db.update(staffTable).set({
-        verificationStatus: "verified",
-        verifiedAt: new Date(),
-        updatedAt: new Date(),
-      }).where(eq(staffTable.id, id)).returning();
-      if (verified) staffMember = verified;
+      return res.status(400).json({ error: "Cannot create login account for rejected or suspended staff" });
     }
 
     const result = await createStaffLoginAccount(staffMember, password);
@@ -476,10 +490,29 @@ router.get("/staff/:id/performance", async (req, res) => {
         )),
     ]);
 
+    const [revResult] = await db
+      .select({
+        totalRevenue: sql<string>`COALESCE(SUM(${invoicesTable.total}::numeric), 0)`,
+      })
+      .from(invoicesTable)
+      .innerJoin(serviceExecutionsTable, eq(invoicesTable.executionId, serviceExecutionsTable.id))
+      .where(and(
+        eq(serviceExecutionsTable.assignedStaffId, id),
+        eq(serviceExecutionsTable.status, "completed"),
+        sql`TO_CHAR(${serviceExecutionsTable.scheduledDate}::date, 'YYYY-MM') = ${monthFilter}`,
+      ));
+
+    const [ratingResult] = await db
+      .select({
+        avgRating: sql<string>`COALESCE(ROUND(AVG(COALESCE(${dcmsVisitFeedbackTable.ratingScore}, CASE WHEN ${dcmsVisitFeedbackTable.rating} = 'yes' THEN 5 ELSE 1 END))::numeric, 1), 0)`,
+      })
+      .from(dcmsVisitFeedbackTable)
+      .where(eq(dcmsVisitFeedbackTable.staffId, id));
+
     const jobsCompleted = Number(jobsResult[0]?.count ?? 0);
-    const averageRating = 0;
+    const averageRating = Number(ratingResult?.avgRating ?? 0);
     const attendanceDays = Number(attendanceResult[0]?.count ?? 0);
-    const revenueGenerated = 0;
+    const revenueGenerated = Number(revResult?.totalRevenue ?? 0);
     const efficiencyScore = Math.round((jobsCompleted * 0.4 + averageRating * 10 * 0.4 + attendanceDays * 0.2) * 10) / 10;
 
     return res.json({ staffId: id, staffName: staff.name, jobsCompleted, revenueGenerated, averageRating, attendanceDays, efficiencyScore, month: monthFilter });
@@ -645,6 +678,119 @@ router.get("/staff/:id/location-logs", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Staff location logs error");
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Staff Compensation & Payouts (STAFF-018) ───────────────────────────────
+
+router.get("/staff/me/earnings", async (req, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    if (!staffId) return res.status(403).json({ error: "Staff account required" });
+
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const payouts = await getStaffPayouts(staffId);
+    let currentPeriod = payouts.find(p => p.periodMonth === currentMonth);
+
+    if (!currentPeriod) {
+      try {
+        currentPeriod = await calculateStaffPayout(staffId, currentMonth);
+      } catch (err) {
+        req.log.warn({ err, staffId }, "Failed to generate on-demand current month payout");
+      }
+    }
+
+    return res.json({
+      staffId,
+      currentMonth,
+      currentPeriod: currentPeriod ?? null,
+      history: payouts,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Staff me earnings error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/staff/:id/payouts", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const staff = await loadStaffInScope(req, id);
+    if (!staff) return res.status(404).json({ error: "Staff not found" });
+
+    // Supervisors cannot view staff compensation/payouts (SEC-028)
+    if (req.user?.role === "supervisor") {
+      return res.status(403).json({ error: "Supervisors are not authorized to view staff compensation" });
+    }
+
+    const payouts = await getStaffPayouts(id);
+    return res.json(payouts);
+  } catch (err) {
+    req.log.error({ err }, "Get staff payouts error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/staff/:id/payouts/calculate", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const staff = await loadStaffInScope(req, id);
+    if (!staff) return res.status(404).json({ error: "Staff not found" });
+
+    if (req.user?.role === "supervisor") {
+      return res.status(403).json({ error: "Supervisors are not authorized to calculate staff compensation" });
+    }
+
+    const { periodMonth, deductions, incentives, notes, forceRecalculate } = req.body;
+    const targetMonth = periodMonth || new Date().toISOString().slice(0, 7);
+
+    const payout = await calculateStaffPayout(id, targetMonth, {
+      deductions: deductions !== undefined ? Number(deductions) : undefined,
+      incentives: incentives !== undefined ? Number(incentives) : undefined,
+      notes,
+      forceRecalculate: Boolean(forceRecalculate),
+    });
+
+    return res.json(payout);
+  } catch (err) {
+    req.log.error({ err }, "Calculate staff payout error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+router.post("/staff/payouts/:payoutId/approve", async (req, res) => {
+  try {
+    const payoutId = parseInt(req.params.payoutId);
+    if (req.user?.role !== "superadmin" && req.user?.role !== "central_admin" && req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Only administrators can approve staff payouts" });
+    }
+
+    const payout = await approveStaffPayout(payoutId, req.user.id);
+    return res.json(payout);
+  } catch (err) {
+    req.log.error({ err }, "Approve staff payout error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+router.post("/staff/payouts/:payoutId/disburse", async (req, res) => {
+  try {
+    const payoutId = parseInt(req.params.payoutId);
+    if (req.user?.role !== "superadmin" && req.user?.role !== "central_admin" && req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Only administrators can disburse staff payouts" });
+    }
+
+    const { paymentMethod, transactionReference, notes } = req.body;
+    const payout = await disburseStaffPayout(payoutId, req.user.id, {
+      paymentMethod,
+      transactionReference,
+      notes,
+    });
+
+    return res.json(payout);
+  } catch (err) {
+    req.log.error({ err }, "Disburse staff payout error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
   }
 });
 

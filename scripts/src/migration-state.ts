@@ -68,6 +68,8 @@ export const PENDING_MIGRATIONS = [
   "070_customer_payment_integrity_and_subscription_lifecycle.sql",
   "071_service_reliability_notifications_and_support_tickets.sql",
   "072_service_quality_sla_retention.sql",
+  "073_branch_governance_and_assignments.sql",
+  "074_universal_city_lifecycle_and_governance.sql",
 ] as const;
 
 export type Queryable = {

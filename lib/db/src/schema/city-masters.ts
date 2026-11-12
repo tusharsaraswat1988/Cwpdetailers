@@ -1,6 +1,15 @@
-import { pgTable, serial, text, integer, boolean, timestamp, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, doublePrecision, pgEnum, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+export const cityStatusEnum = pgEnum("city_status", [
+  "draft",
+  "setup_in_progress",
+  "ready_for_launch",
+  "active",
+  "suspended",
+  "archived",
+]);
 
 export const statesTable = pgTable("states", {
   id: serial("id").primaryKey(),
@@ -16,6 +25,19 @@ export const citiesTable = pgTable("cities", {
   stateId: integer("state_id").notNull(),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
+  code: text("code"),
+  status: cityStatusEnum("status").notNull().default("active"),
+  timezone: text("timezone").notNull().default("Asia/Kolkata"),
+  currency: text("currency").notNull().default("INR"),
+  locale: text("locale").notNull().default("en-IN"),
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  operationalSettings: jsonb("operational_settings").$type<Record<string, unknown>>().notNull().default({}),
+  contentSettings: jsonb("content_settings").$type<Record<string, unknown>>().notNull().default({}),
+  launchedAt: timestamp("launched_at"),
+  suspendedAt: timestamp("suspended_at"),
+  suspensionReason: text("suspension_reason"),
+  archivedAt: timestamp("archived_at"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

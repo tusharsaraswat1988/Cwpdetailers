@@ -1,5 +1,5 @@
-import { db, staffTable, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, staffTable, usersTable, sessionsTable } from "@workspace/db";
+import { eq, and, isNull } from "drizzle-orm";
 import { hashPassword } from "./passwords";
 import { authProviderForStaffPassword } from "./userPassword";
 
@@ -28,6 +28,8 @@ export async function setStaffPortalPassword(
   const passwordHash = await hashPassword(password);
   const existing = await findStaffLoginUser(staff);
 
+  const shouldBeActive = staff.isActive && staff.verificationStatus !== "suspended" && staff.verificationStatus !== "rejected";
+
   if (existing) {
     const [updated] = await db
       .update(usersTable)
@@ -42,7 +44,7 @@ export async function setStaffPortalPassword(
         branchId: staff.branchId,
         companyId: staff.companyId ?? undefined,
         franchiseeId: staff.franchiseeId ?? undefined,
-        isActive: true,
+        isActive: shouldBeActive,
         updatedAt: new Date(),
       })
       .where(eq(usersTable.id, existing.id))
@@ -50,12 +52,17 @@ export async function setStaffPortalPassword(
 
     if (!updated) throw new Error("Failed to update staff login account");
 
+    if (!shouldBeActive) {
+      await db
+        .update(sessionsTable)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(sessionsTable.userId, existing.id), isNull(sessionsTable.revokedAt)));
+    }
+
     await db
       .update(staffTable)
       .set({
         userId: updated.id,
-        verificationStatus: staff.verificationStatus === "pending" ? "verified" : staff.verificationStatus,
-        verifiedAt: staff.verifiedAt ?? new Date(),
         updatedAt: new Date(),
       })
       .where(eq(staffTable.id, staff.id));
@@ -76,7 +83,7 @@ export async function setStaffPortalPassword(
       companyId: staff.companyId ?? undefined,
       franchiseeId: staff.franchiseeId ?? undefined,
       staffId: staff.id,
-      isActive: true,
+      isActive: shouldBeActive,
     })
     .returning();
 
@@ -86,8 +93,6 @@ export async function setStaffPortalPassword(
     .update(staffTable)
     .set({
       userId: user.id,
-      verificationStatus: staff.verificationStatus === "pending" ? "verified" : staff.verificationStatus,
-      verifiedAt: staff.verifiedAt ?? new Date(),
       updatedAt: new Date(),
     })
     .where(eq(staffTable.id, staff.id));
@@ -112,6 +117,8 @@ export async function syncStaffLoginUser(staff: StaffRow): Promise<void> {
   const loginUser = await findStaffLoginUser(staff);
   if (!loginUser) return;
 
+  const shouldBeActive = staff.isActive && staff.verificationStatus !== "suspended" && staff.verificationStatus !== "rejected";
+
   await db.update(usersTable).set({
     name: staff.name,
     phone: staff.phone,
@@ -120,8 +127,16 @@ export async function syncStaffLoginUser(staff: StaffRow): Promise<void> {
     companyId: staff.companyId,
     franchiseeId: staff.franchiseeId,
     staffId: staff.id,
+    isActive: shouldBeActive,
     updatedAt: new Date(),
   }).where(eq(usersTable.id, loginUser.id));
+
+  // If staff is inactive, suspended, or rejected, invalidate active sessions immediately
+  if (!shouldBeActive) {
+    await db.update(sessionsTable)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessionsTable.userId, loginUser.id), isNull(sessionsTable.revokedAt)));
+  }
 
   if (staff.userId !== loginUser.id) {
     await db.update(staffTable).set({

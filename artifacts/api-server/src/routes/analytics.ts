@@ -208,8 +208,19 @@ router.get("/analytics/staff-leaderboard", async (req, res) => {
       SELECT
         s.id as staff_id, s.name as staff_name,
         COUNT(e.id) FILTER (WHERE e.status = 'completed') as jobs_completed,
-        0::numeric as revenue_generated,
-        0::numeric as average_rating
+        COALESCE((
+          SELECT SUM(COALESCE(inv.total::numeric, 0))
+          FROM invoices inv
+          INNER JOIN service_executions se ON inv.execution_id = se.id
+          WHERE se.assigned_staff_id = s.id
+            AND se.status = 'completed'
+            AND TO_CHAR(se.scheduled_date::date, 'YYYY-MM') = ${monthFilter}
+        ), 0) as revenue_generated,
+        COALESCE((
+          SELECT ROUND(AVG(COALESCE(fb.rating_score, CASE WHEN fb.rating = 'yes' THEN 5 ELSE 1 END))::numeric, 1)
+          FROM dcms_visit_feedback fb
+          WHERE fb.staff_id = s.id
+        ), 0) as average_rating
       FROM staff s
       LEFT JOIN service_executions e ON e.assigned_staff_id = s.id
         AND TO_CHAR(e.scheduled_date::date, 'YYYY-MM') = ${monthFilter}
@@ -271,10 +282,35 @@ router.get("/analytics/outstanding-dues", async (req, res) => {
 
 router.get("/analytics/multi-city", async (req, res) => {
   try {
+    const userScope = req.scope;
+    let branchId: number | undefined;
+
+    // PRD v3.0 (SEC-029, TEST-003): Anti-spoofing defense on analytics scope
+    if (userScope?.isSuperAdmin) {
+      branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    } else if (userScope?.branchIds !== null) {
+      // Scoped role (branch manager / supervisor): restrict strictly to assigned branches
+      if (userScope?.branchIds && userScope.branchIds.length > 0) {
+        if (req.query.branchId) {
+          const requested = Number(req.query.branchId);
+          if (!userScope.branchIds.includes(requested)) {
+            return res.status(403).json({
+              error: "Access denied. Cannot query analytics for an unauthorized branch.",
+            });
+          }
+          branchId = requested;
+        } else {
+          branchId = userScope.branchIds[0];
+        }
+      } else {
+        // No active branch assignments
+        return res.status(403).json({
+          error: "Access denied. No active branch assignments.",
+        });
+      }
+    }
+
     const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
-    const branchId = req.query.branchId
-      ? Number(req.query.branchId)
-      : (req.scope?.branchIds?.[0] ?? undefined);
     const franchiseeId = req.query.franchiseeId
       ? Number(req.query.franchiseeId)
       : (req.scope?.franchiseeId ?? undefined);
