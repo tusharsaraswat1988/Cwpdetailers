@@ -115,10 +115,18 @@ describe("Geofence Validation & High-Rise Basement Tolerance (GEO-003, GEO-004, 
     expect(isWithinRadius(driftLat, driftLng, societyLat, societyLng, 100, { accuracy: 40 })).toBe(true);
   });
 
-  it("allows graceful fallback when cleaner is in deep B2/B3 basement with zero GPS fix (GEO-006)", () => {
-    expect(isWithinRadius(0, 0, societyLat, societyLng, 100, { isBasement: true })).toBe(true);
-    // Non-basement with 0,0 still fails
+  it("allows graceful fallback when cleaner is in deep B2/B3 basement with zero GPS fix (GEO-006, SEC-024)", () => {
+    // Street location with 0,0 fails
     expect(isWithinRadius(0, 0, societyLat, societyLng, 100, { isBasement: false })).toBe(false);
+
+    // Basement without explicit reason fails (prevents silent spoof bypass)
+    expect(isWithinRadius(0, 0, societyLat, societyLng, 100, { isBasement: true })).toBe(false);
+
+    // Basement with valid reason passes
+    expect(isWithinRadius(0, 0, societyLat, societyLng, 100, {
+      isBasement: true,
+      gpsUnavailableReason: "underground_basement_no_signal",
+    })).toBe(true);
   });
 
   it("allows completion if target coordinates are unset (legacy/migration tolerance)", () => {
