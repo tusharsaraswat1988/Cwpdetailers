@@ -70,6 +70,7 @@ export const PENDING_MIGRATIONS = [
   "072_service_quality_sla_retention.sql",
   "073_branch_governance_and_assignments.sql",
   "074_universal_city_lifecycle_and_governance.sql",
+  "075_universal_staff_payout_ledgers.sql",
 ] as const;
 
 export type Queryable = {
@@ -192,6 +193,14 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
     case "072_service_quality_sla_retention.sql":
       return (await hasTable(db, "sla_policies"))
         && (await hasColumn(db, "dcms_visit_feedback", "rating_score"));
+    case "073_branch_governance_and_assignments.sql":
+      return (await hasTable(db, "branch_user_assignments"))
+        && (await hasTable(db, "service_branch_overrides"));
+    case "074_universal_city_lifecycle_and_governance.sql":
+      return (await hasColumn(db, "users", "city_id"))
+        && (await hasColumn(db, "cities", "status"));
+    case "075_universal_staff_payout_ledgers.sql":
+      return hasTable(db, "staff_payout_ledgers");
     default:
       return false;
   }

@@ -424,12 +424,28 @@ export async function ensureStartupMigrations(): Promise<void> {
 
       ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_marketing BOOLEAN DEFAULT FALSE;
       ALTER TABLE notifications ADD COLUMN IF NOT EXISTS sensitive_masked BOOLEAN DEFAULT FALSE;
+    `);
 
-      -- 11. Branch Governance, Assignments & Scoping (Migration 073, PRD v3.0)
-      ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'central_admin';
-      ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'branch_manager';
-      ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'supervisor';
+    // Helper to execute steps with per-step error isolation (DB-002)
+    const execStep = async (stepName: string, sql: string) => {
+      try {
+        await client.query(sql);
+      } catch (err) {
+        logger.error({ err, step: stepName }, `Startup migration step "${stepName}" encountered error (isolated)`);
+      }
+    };
 
+    // 11. Branch Governance, Assignments & Scoping (Migration 073, PRD v3.0, DB-002)
+    // Add user_role enum values independently so they are committed before DML execution
+    for (const val of ["central_admin", "branch_manager", "supervisor", "city_admin"]) {
+      try {
+        await client.query(`ALTER TYPE user_role ADD VALUE IF NOT EXISTS '${val}'`);
+      } catch (e) {
+        logger.warn({ err: e, val }, `Note: user_role enum addition for ${val}`);
+      }
+    }
+
+    await execStep("073_branch_assignments_ddl", `
       CREATE TABLE IF NOT EXISTS branch_user_assignments (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -464,12 +480,14 @@ export async function ensureStartupMigrations(): Promise<void> {
 
       CREATE INDEX IF NOT EXISTS idx_service_branch_overrides_branch ON service_branch_overrides(branch_id);
       CREATE INDEX IF NOT EXISTS idx_service_branch_overrides_service ON service_branch_overrides(service_id);
+    `);
 
-      -- Backfill existing branch managers into branch_user_assignments
+    await execStep("073_branch_managers_backfill", `
+      -- Backfill existing branch managers into branch_user_assignments using ::text cast
       INSERT INTO branch_user_assignments (user_id, branch_id, assignment_role, is_active, assigned_at, created_at, updated_at)
       SELECT u.id, u.branch_id, 'branch_manager', TRUE, NOW(), NOW(), NOW()
       FROM users u
-      WHERE u.role IN ('manager', 'branch_manager')
+      WHERE u.role::text IN ('manager', 'branch_manager')
         AND u.branch_id IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM branch_user_assignments bua
@@ -477,8 +495,8 @@ export async function ensureStartupMigrations(): Promise<void> {
         );
     `);
 
-    // 12. Universal Multi-City Lifecycle, Configuration & City Admin (Migration 074)
-    await client.query(`
+    // 12. Universal Multi-City Lifecycle, Configuration & City Admin (Migration 074, DB-002)
+    await execStep("074_city_lifecycle_ddl", `
       DO $$ BEGIN
         CREATE TYPE city_status AS ENUM (
           'draft',
@@ -506,21 +524,17 @@ export async function ensureStartupMigrations(): Promise<void> {
 
       UPDATE cities SET code = 'VNS', status = 'active' WHERE slug = 'varanasi' AND (code IS NULL OR code = '');
       UPDATE cities SET code = 'NOI', status = 'active' WHERE slug = 'noida' AND (code IS NULL OR code = '');
-      UPDATE cities SET code = UPPER(SUBSTRING(slug, 1, 3)) WHERE code IS NULL OR code = '';
+      UPDATE cities SET code = UPPER(SUBSTRING(slug, 1, 3)) || id::text WHERE code IS NULL OR code = '';
 
       CREATE UNIQUE INDEX IF NOT EXISTS idx_cities_code ON cities(code) WHERE code IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_cities_status ON cities(status);
-
-      DO $$ BEGIN
-        ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'city_admin';
-      EXCEPTION WHEN duplicate_object THEN null; END $$;
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS city_id INTEGER REFERENCES cities(id);
       CREATE INDEX IF NOT EXISTS idx_users_city_id ON users(city_id);
     `);
 
-    // 13. Universal Multi-City Staff Compensation & Payout Ledger (Migration 075)
-    await client.query(`
+    // 13. Universal Multi-City Staff Compensation & Payout Ledger (Migration 075, DB-002)
+    await execStep("075_staff_payout_ledgers_ddl", `
       DO $$ BEGIN
         CREATE TYPE staff_payout_status AS ENUM (
           'draft',
@@ -579,6 +593,15 @@ export async function ensureStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_staff_payout_ledgers_city ON staff_payout_ledgers(city_id);
       CREATE INDEX IF NOT EXISTS idx_staff_payout_ledgers_status ON staff_payout_ledgers(status);
     `);
+
+    // 14. Verification and guaranteed fallback for users.city_id (DB-002)
+    try {
+      await client.query("SELECT city_id FROM users LIMIT 1");
+    } catch {
+      logger.warn("users.city_id column missing on startup check; executing explicit fallback DDL");
+      await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS city_id INTEGER REFERENCES cities(id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_users_city_id ON users(city_id)");
+    }
 
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {

@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import path from "node:path";
 import fs from "node:fs";
+import healthRouter from "./routes/health";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { optionalAuth } from "./middlewares/auth";
@@ -125,6 +126,8 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   return next(err);
 });
 
+// Liveness and health checks must execute unconditionally without running session resolution or optionalAuth
+app.use("/api", healthRouter);
 app.use("/api", optionalAuth, router);
 
 /**

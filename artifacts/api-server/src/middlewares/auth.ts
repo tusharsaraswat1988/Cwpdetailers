@@ -368,8 +368,10 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
     }
     return next();
   } catch (err) {
-    req.log.warn({ err }, "optionalAuth failed");
-    return next(err);
+    req.log.warn({ err }, "optionalAuth failed to resolve user session, proceeding unauthenticated");
+    req.user = undefined;
+    req.scope = undefined;
+    return next();
   }
 }
 

@@ -11,13 +11,19 @@ export type KycMigrationStatus = {
   migratedCount: number;
   skippedCount: number;
   failedCount: number;
+  isDryRun?: boolean;
   documents: Array<{
     id: number;
     staffId: number;
     documentType: string;
-    status: "migrated" | "skipped_already_authenticated" | "failed" | "mock_migrated";
+    status: "migrated" | "skipped_already_authenticated" | "failed" | "mock_migrated" | "dry_run_pending";
     error?: string;
   }>;
+};
+
+export type KycMigrationOptions = {
+  dryRun?: boolean;
+  limit?: number;
 };
 
 /**
@@ -108,18 +114,38 @@ export async function migrateKycDocumentToAuthenticated(
 
 /**
  * Runs a batch migration of all legacy public KYC documents.
+ * Supports dry-run and batch limit options for safe staging verification.
  */
-export async function runKycBackfillMigration(): Promise<KycMigrationStatus> {
-  const legacyDocs = await listLegacyPublicKycDocuments();
+export async function runKycBackfillMigration(
+  opts: KycMigrationOptions = {},
+): Promise<KycMigrationStatus> {
+  const isDryRun = Boolean(opts.dryRun);
+  let legacyDocs = await listLegacyPublicKycDocuments();
+  if (opts.limit && opts.limit > 0) {
+    legacyDocs = legacyDocs.slice(0, opts.limit);
+  }
+
   const status: KycMigrationStatus = {
     totalScanned: legacyDocs.length,
     migratedCount: 0,
     skippedCount: 0,
     failedCount: 0,
+    isDryRun,
     documents: [],
   };
 
   for (const doc of legacyDocs) {
+    if (isDryRun) {
+      status.migratedCount++;
+      status.documents.push({
+        id: doc.id,
+        staffId: doc.staffId,
+        documentType: doc.documentType,
+        status: "dry_run_pending",
+      });
+      continue;
+    }
+
     const res = await migrateKycDocumentToAuthenticated(doc.id);
     if (res.success) {
       status.migratedCount++;

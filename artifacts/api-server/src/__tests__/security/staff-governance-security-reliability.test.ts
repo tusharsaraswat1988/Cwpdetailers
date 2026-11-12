@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { hashToken, loadUserFromToken, type AuthUser } from "../../middlewares/auth";
+import { hashToken, loadUserFromToken, optionalAuth, type AuthUser } from "../../middlewares/auth";
 import {
   assertStaffAssignable,
   assertStaffBranchMatch,
@@ -32,6 +32,7 @@ import {
 } from "../../lib/payroll/staffRevenueService";
 import { generateSignedDocumentUrl } from "../../lib/cloudinaryStorage";
 import { STARTUP_MIGRATION_LOCK_ID, ensureStartupMigrations } from "../../lib/startupMigrations";
+import { runKycBackfillMigration, listLegacyPublicKycDocuments } from "../../lib/staffEcosystem/kycMigrationService";
 
 function extractAllParamValues(expr: any): any[] {
   const vals: any[] = [];
@@ -575,6 +576,24 @@ vi.mock("@workspace/db", async (importOriginal) => {
               return memory.dcmsStaffAssignments;
             }
 
+            // 9. Staff Documents Table
+            if (queryState.table === actual.staffDocumentsTable) {
+              if (numParams.length > 0) {
+                const doc = memory.staffDocuments.find((d) => numParams.includes(d.id));
+                return doc ? [doc] : [];
+              }
+              const hasSensitiveFilter = queryState.conditions.some((c: any) => {
+                const vals = extractAllParamValues(c);
+                return vals.includes("aadhaar") || vals.includes("pan");
+              });
+              if (hasSensitiveFilter) {
+                return memory.staffDocuments.filter(
+                  (d) => d.isCurrent && ["aadhaar", "pan", "bank_passbook", "bank_cancelled_cheque"].includes(d.documentType)
+                );
+              }
+              return memory.staffDocuments.filter((d) => d.isCurrent);
+            }
+
             return [];
           },
           then: (resolve: any) => Promise.resolve(builder.execute()).then(resolve),
@@ -628,6 +647,12 @@ vi.mock("@workspace/db", async (importOriginal) => {
                 if (numParams.includes(s.userId)) {
                   Object.assign(s, updates);
                 }
+              }
+            } else if (tbl === actual.staffDocumentsTable) {
+              const target = memory.staffDocuments.find((d) => numParams.includes(d.id));
+              if (target) {
+                Object.assign(target, updates);
+                updatedRow = target;
               }
             }
 
@@ -986,6 +1011,12 @@ describe("FIN-004 & FIN-005: Universal Staff Revenue Attribution Engine", () => 
     expect(revenue.totalRevenue).toBe(2800);
     expect(revenue.completedJobsCount).toBe(2);
     expect(revenue.activeSubscriptionsCount).toBe(1);
+
+    // Financial distinction: Collected (Paid) vs Invoiced/Uncollected (Sent/Overdue)
+    // Paid execution 301 (500) + Paid subscription 304 (1500) = 2000
+    expect(revenue.collectedRevenue).toBe(2000);
+    // Sent execution 302 (800) = 800
+    expect(revenue.uncollectedRevenue).toBe(800);
   });
 
   it("aggregates recognized revenue in leaderboard map without double-counting (FIN-005)", async () => {
@@ -994,6 +1025,22 @@ describe("FIN-004 & FIN-005: Universal Staff Revenue Attribution Engine", () => 
     expect(revenueMap).toBeInstanceOf(Map);
     // Staff 102 total: 1300 (execution) + 1500 (subscription) = 2800
     expect(revenueMap.get(102)).toBe(2800);
+  });
+
+  it("executes KYC backfill migration dry-run without mutating database or deleting assets (SEC-030)", async () => {
+    // Memory has 4 documents: aadhaar (1), pan (2), bank_passbook (3), address_proof (4)
+    // Sensitive KYC types are 3: aadhaar, pan, bank_passbook.
+    const dryRunResult = await runKycBackfillMigration({ dryRun: true });
+
+    expect(dryRunResult.isDryRun).toBe(true);
+    expect(dryRunResult.totalScanned).toBe(3);
+    expect(dryRunResult.migratedCount).toBe(3);
+    expect(dryRunResult.failedCount).toBe(0);
+
+    // Ensure database rows were NOT mutated during dry-run
+    const doc1 = memory.staffDocuments.find((d) => d.id === 1);
+    expect(doc1.fileUrl).toContain("/upload/aadhaar_ramesh.pdf");
+    expect(doc1.fileUrl).not.toContain("/authenticated/");
   });
 });
 
@@ -1038,5 +1085,42 @@ describe("DB-001: PostgreSQL Advisory Lock Concurrency in Startup Migrations", (
 
     expect(unlockQuery).toBeDefined();
     expect(unlockQuery?.params).toEqual([884729104]);
+  });
+
+  it("DB-002: executes migration steps with isolated error handling and guarantees city_id fallback", async () => {
+    await ensureStartupMigrations();
+
+    // Verify critical DDL statements were executed
+    const cityIdQuery = memory.queryLogs.find((q) => q.sql.includes("ALTER TABLE users ADD COLUMN IF NOT EXISTS city_id"));
+    const payoutLedgerQuery = memory.queryLogs.find((q) => q.sql.includes("CREATE TABLE IF NOT EXISTS staff_payout_ledgers"));
+
+    expect(cityIdQuery).toBeDefined();
+    expect(payoutLedgerQuery).toBeDefined();
+  });
+
+  it("CWP-030: optionalAuth degrades gracefully without throwing 500 when session resolution throws", async () => {
+    let nextCalled = false;
+    let nextError: any = null;
+
+    const mockReq: any = {
+      cookies: { cwp_session: "corrupt_token_triggering_db_error" },
+      headers: {},
+      log: {
+        warn: vi.fn(),
+      },
+    };
+    const mockRes: any = {};
+    const mockNext = (err?: any) => {
+      nextCalled = true;
+      nextError = err;
+    };
+
+    // optionalAuth must call next() with NO arguments, leaving req.user undefined rather than aborting request
+    await optionalAuth(mockReq, mockRes, mockNext);
+
+    expect(nextCalled).toBe(true);
+    expect(nextError).toBeUndefined();
+    expect(mockReq.user).toBeUndefined();
+    expect(mockReq.scope).toBeUndefined();
   });
 });

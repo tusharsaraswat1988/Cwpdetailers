@@ -18,6 +18,8 @@ export type StaffRevenueBreakdown = {
   subscriptionRevenue: number;
   completedJobsCount: number;
   activeSubscriptionsCount: number;
+  collectedRevenue?: number;
+  uncollectedRevenue?: number;
 };
 
 /**
@@ -60,8 +62,17 @@ export async function calculateStaffRevenue(
     );
 
   let executionRevenue = 0;
+  let collectedExecutionRevenue = 0;
+  let uncollectedExecutionRevenue = 0;
+
   for (const inv of executionInvoices) {
-    executionRevenue += Number(inv.totalAmount || 0);
+    const amt = Number(inv.totalAmount || 0);
+    executionRevenue += amt;
+    if (inv.status === "paid") {
+      collectedExecutionRevenue += amt;
+    } else {
+      uncollectedExecutionRevenue += amt;
+    }
   }
 
   // 2. DCMS Subscription Plan Revenue (Recurring daily car cleaning)
@@ -84,6 +95,8 @@ export async function calculateStaffRevenue(
     );
 
   let subscriptionRevenue = 0;
+  let collectedSubscriptionRevenue = 0;
+  let uncollectedSubscriptionRevenue = 0;
   let activeSubscriptionsCount = 0;
 
   for (const inv of subscriptionInvoices) {
@@ -129,18 +142,28 @@ export async function calculateStaffRevenue(
 
     const invAmount = Number(inv.totalAmount || 0);
 
+    let allocatedAmount = 0;
     if (totalCompletedVisits > 0) {
       // Proportional split based on verified work performed
       const share = staffVisits / totalCompletedVisits;
-      subscriptionRevenue += invAmount * share;
+      allocatedAmount = invAmount * share;
     } else {
       // Equal split among currently assigned cleaners
       const share = 1 / assignedStaffIds.length;
-      subscriptionRevenue += invAmount * share;
+      allocatedAmount = invAmount * share;
+    }
+
+    subscriptionRevenue += allocatedAmount;
+    if (inv.status === "paid") {
+      collectedSubscriptionRevenue += allocatedAmount;
+    } else {
+      uncollectedSubscriptionRevenue += allocatedAmount;
     }
   }
 
   const totalRevenue = Math.round((executionRevenue + subscriptionRevenue) * 100) / 100;
+  const collectedRevenue = Math.round((collectedExecutionRevenue + collectedSubscriptionRevenue) * 100) / 100;
+  const uncollectedRevenue = Math.round((uncollectedExecutionRevenue + uncollectedSubscriptionRevenue) * 100) / 100;
 
   return {
     staffId,
@@ -150,6 +173,8 @@ export async function calculateStaffRevenue(
     subscriptionRevenue: Math.round(subscriptionRevenue * 100) / 100,
     completedJobsCount: executionInvoices.length,
     activeSubscriptionsCount,
+    collectedRevenue,
+    uncollectedRevenue,
   };
 }
 
@@ -212,22 +237,49 @@ export async function getStaffLeaderboardRevenueMap(
 
   for (const inv of subscriptionInvoices) {
     if (!inv.subscriptionId) continue;
-    const assignments = await db
+    const completedVisits = await db
       .select({
-        staffId: dcmsStaffAssignmentsTable.staffId,
+        staffId: dcmsVisitsTable.staffId,
+        count: sql<number>`count(*)::int`,
       })
-      .from(dcmsStaffAssignmentsTable)
+      .from(dcmsVisitsTable)
       .where(
         and(
-          eq(dcmsStaffAssignmentsTable.subscriptionId, inv.subscriptionId),
-          eq(dcmsStaffAssignmentsTable.isActive, true),
+          eq(dcmsVisitsTable.subscriptionId, inv.subscriptionId),
+          eq(dcmsVisitsTable.status, "completed"),
+          sql`TO_CHAR(${dcmsVisitsTable.visitDate}::date, 'YYYY-MM') = ${periodMonth}`,
         ),
-      );
+      )
+      .groupBy(dcmsVisitsTable.staffId);
 
-    if (assignments.length > 0) {
-      const share = Number(inv.totalAmount || 0) / assignments.length;
-      for (const a of assignments) {
-        revenueMap.set(a.staffId, (revenueMap.get(a.staffId) ?? 0) + share);
+    const totalCompletedVisits = completedVisits.reduce((sum, v) => sum + v.count, 0);
+    const invAmount = Number(inv.totalAmount || 0);
+
+    if (totalCompletedVisits > 0) {
+      for (const v of completedVisits) {
+        if (v.staffId) {
+          const share = invAmount * (v.count / totalCompletedVisits);
+          revenueMap.set(v.staffId, (revenueMap.get(v.staffId) ?? 0) + share);
+        }
+      }
+    } else {
+      const assignments = await db
+        .select({
+          staffId: dcmsStaffAssignmentsTable.staffId,
+        })
+        .from(dcmsStaffAssignmentsTable)
+        .where(
+          and(
+            eq(dcmsStaffAssignmentsTable.subscriptionId, inv.subscriptionId),
+            eq(dcmsStaffAssignmentsTable.isActive, true),
+          ),
+        );
+
+      if (assignments.length > 0) {
+        const share = invAmount / assignments.length;
+        for (const a of assignments) {
+          revenueMap.set(a.staffId, (revenueMap.get(a.staffId) ?? 0) + share);
+        }
       }
     }
   }
