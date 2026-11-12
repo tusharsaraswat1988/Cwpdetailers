@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { useListInvoices, getListInvoicesQueryKey } from "@workspace/api-client-react";
+import {
+  useListInvoices,
+  getListInvoicesQueryKey,
+  getGetCustomerSummaryQueryKey,
+  getGetCustomerQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAccountScope } from "@/lib/account-scope";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { FileText, Download, AlertCircle, ArrowRight } from "lucide-react";
@@ -18,6 +24,7 @@ import {
 } from "@/features/customer-ds";
 
 export default function CustomerInvoices() {
+  const qc = useQueryClient();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
   const [selectedInvoice, setSelectedInvoice] = useState<{ id: number; amount: number } | null>(null);
   const { data, isLoading, isError, refetch } = useListInvoices(
@@ -30,10 +37,11 @@ export default function CustomerInvoices() {
     },
   );
 
-  const totalDue = (data?.data ?? []).reduce(
-    (s, inv) => s + Number((inv as any).balanceDue ?? inv.dueAmount ?? 0),
-    0,
-  );
+  const totalDue = (data?.data ?? []).reduce((s, inv) => {
+    if (inv.status === "paid" || inv.status === "cancelled") return s;
+    const due = Number((inv as any).balanceDue ?? inv.dueAmount ?? 0);
+    return s + (due > 0 ? due : 0);
+  }, 0);
 
   return (
     <CustomerLayout>
@@ -89,7 +97,9 @@ export default function CustomerInvoices() {
           ) : (
             <div className="space-y-3">
               {(data?.data ?? []).map(inv => {
-                const effectiveDue = Number((inv as any).balanceDue ?? inv.dueAmount ?? 0);
+                const isPaidOrCancelled = inv.status === "paid" || inv.status === "cancelled";
+                const rawDue = Number((inv as any).balanceDue ?? inv.dueAmount ?? 0);
+                const effectiveDue = isPaidOrCancelled ? 0 : Math.max(0, rawDue);
                 return (
                 <div key={inv.id} data-testid={`invoice-${inv.id}`}>
                   <CustomerInvoiceCard
@@ -108,7 +118,7 @@ export default function CustomerInvoices() {
                         >
                           <Download size={12} /> Download PDF
                         </InvoicePdfButton>
-                        {effectiveDue > 0 && (
+                        {effectiveDue > 0 && !isPaidOrCancelled && (
                           <div className="flex items-center gap-2.5 pt-1">
                             <p className="text-xs font-semibold text-destructive">
                               ₹{effectiveDue.toLocaleString("en-IN")} due
@@ -146,6 +156,10 @@ export default function CustomerInvoices() {
         payableAmount={selectedInvoice?.amount}
         onPaymentSuccess={() => {
           refetch();
+          if (customerId) {
+            qc.invalidateQueries({ queryKey: getGetCustomerSummaryQueryKey(customerId) });
+            qc.invalidateQueries({ queryKey: getGetCustomerQueryKey(customerId) });
+          }
           setSelectedInvoice(null);
         }}
       />

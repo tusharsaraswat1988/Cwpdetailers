@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import {
   CheckCircle2,
@@ -30,6 +31,7 @@ interface VerificationResponse {
 }
 
 export default function CustomerPaymentReturn() {
+  const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const [status, setStatus] = useState<VerificationStatus>("VERIFYING");
   const [verificationData, setVerificationData] = useState<VerificationResponse | null>(null);
@@ -66,6 +68,9 @@ export default function CustomerPaymentReturn() {
 
       setVerificationData(data);
       setStatus(data.status || "PENDING");
+      if (data.status === "PAID") {
+        qc.invalidateQueries();
+      }
     } catch (err: any) {
       setStatus("FAILED");
       setErrorMessage(err.message || "Network error while connecting to payment verification service.");

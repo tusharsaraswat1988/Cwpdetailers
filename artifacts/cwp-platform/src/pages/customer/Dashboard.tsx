@@ -200,8 +200,20 @@ export default function CustomerDashboard() {
   }, [summaryQuery.data?.recentBookings]);
 
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const pendingDues = Number(summaryQuery.data?.pendingDues ?? 0);
-  const loading = summaryQuery.isLoading || subsQuery.isLoading || !addressSourcesReady || !initialized;
+  const pendingDues = useMemo(() => {
+    const summaryVal = summaryQuery.data?.pendingDues;
+    if (summaryVal !== undefined && summaryVal !== null) {
+      const num = Number(summaryVal);
+      if (num > 0) return num;
+    }
+    const profileVal = customerQuery.data?.totalDues;
+    if (profileVal !== undefined && profileVal !== null) {
+      const num = Number(profileVal);
+      if (num > 0) return num;
+    }
+    return Number(summaryVal ?? profileVal ?? 0);
+  }, [summaryQuery.data?.pendingDues, customerQuery.data?.totalDues]);
+  const loading = (summaryQuery.isLoading && customerQuery.isLoading) || !addressSourcesReady || !initialized;
 
   const currentCityName = useMemo(() => {
     return selected?.cityName || (selected?.address ? guessCityFromAddress(selected.address) : null) || "Varanasi";
