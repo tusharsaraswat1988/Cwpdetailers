@@ -8,7 +8,7 @@
 **Existing market:** Varanasi, Uttar Pradesh  
 **Planned expansion markets:** Ghaziabad, Greater Noida, Gurgaon, Delhi and additional tier-1/tier-2 cities  
 **Status:** Canonical Living PRD — Operational Exceptions, Hardened Geofence Security & Society Operations Hub Verified  
-**Version:** 1.2 (Operational Exceptions Triage, Basement GPS Fallback Hardening, Society Daily Operations Hub, Media Privacy & Routine Purge Worker)  
+**Version:** 1.3 (Operational Exceptions Triage, Basement GPS Fallback Hardening, Society Daily Operations Hub, Media Privacy & Routine Purge Worker)  
 **Last updated:** 2026-11-12  
 **Owner:** CWP Detailers Architecture & Engineering Team  
 **Canonical Repository Path:** `docs/product/CWP_NOIDA_MULTI_CITY_PRD.md`  
@@ -494,6 +494,10 @@ Content-Type: application/json
 | **CUST-016** | Online Payment Gateway (Cashfree PG) | Billing & Customer | P0 | **Done** | `payment_attempts`, `cashfreeService.ts`, `cashfreeWebhook.ts`, `CustomerPaymentReviewDialog.tsx`, `PaymentReturn.tsx` | Full Cashfree Hosted Web Checkout integration, raw-body HMAC-SHA256 signature verification, strict server-side amount derivation, atomic ledger reconciliation, 149/149 passing automated tests, browser QA verified |
 | **ADMIN-016** | Admin Payment Ledger & Reconciliation Dashboard | Billing & Admin | P0 | **Done** | `routes/admin-ledger.ts`, `PaymentLedgerPage.tsx`, `TransactionDetailsDrawer.tsx`, `admin-ledger.test.ts` | Dedicated `/admin/payments/ledger` page, 7 summary metric cards in IST, multi-filters, real-time auto-refresh (30s), transaction drawer with raw payloads, CSV export, RBAC enforcement, 40/40 tests passing |
 | **CUST-017** | In-App Invoice PDF Download & Direct Navigation Auth | Customer & Billing | P0 | **Done** | `sessionCookie.ts`, `downloadInvoicePdf.ts`, `CommercialOperationsCenter.tsx`, `auth-regression.test.ts` | Multi-portal session cookie fallback on direct browser navigation without `x-auth-portal` header; query token/portal support; Commercial Operations drawer upgraded to `InvoicePdfButton`; explicit credentials inclusion; 26/26 unit tests passed |
+| **SEC-024** | Basement Geofence Fallback Security Hardening | Security & Geolocation | P0 | **Done** | `geoFence.ts`, `visitService.ts`, `operational-exceptions.test.ts` | Strict fail-closed validation for degraded / 0,0 GPS: street coordinates strictly rejected; underground completions require valid reason code (`underground_basement_no_signal`, etc.) and photo evidence; automatically flags `requiresAudit: true` and logs operational exception for supervisor triage |
+| **EXC-001** | Daily Cleaning Operational Exception Management | Operations | P0 | **Done** | `dcms_operational_exceptions`, migration 067, `exceptionService.ts`, `routes/dcms.ts`, `SocietiesPage.tsx` | Full lifecycle for Car Not Available (CNA), vehicle moved bay, gate access denied, staff unavailable, missed cleaning, customer complaints, reclean requests, basement audits; atomic resolution actions (`grant_makeup_credit`, `reassign_staff`, `schedule_reclean`, `dismiss`) with customer notifications |
+| **DASH-002** | Society Daily Operations Hub & Cleaner Route Tracking | Operations & Admin | P0 | **Done** | `societyOperationsService.ts`, `SocietiesPage.tsx` | Real-time society-level operational dashboard: total active subscriptions, completed vs pending, CNA rates, cleaner route performance breakdown, open exception badges, multi-city filtering, 15s auto-polling |
+| **DCMS-010** | DCMS Subscription Lifecycle (Cancel & Expiring Subscriptions) | Operations & Subscriptions | P0 | **Done** | `subscriptionService.ts`, `routes/dcms.ts` | Graceful subscription cancellation (`POST /api/daily-cleaning/subscriptions/:id/cancel`) deactivating active assignments; expiring/inactive query API (`GET /api/daily-cleaning/subscriptions/expiring`) for low-balance (<3 cleanings) renewals |
 
 ---
 
