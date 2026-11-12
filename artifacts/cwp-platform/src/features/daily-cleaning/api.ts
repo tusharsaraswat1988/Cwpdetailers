@@ -290,7 +290,27 @@ export function useDcmsSubscriptionMutations() {
         dcmsFetch(`/daily-cleaning/subscriptions/${id}/renew`, { method: "POST" }),
       onSuccess: invalidate,
     }),
+    cancel: useMutation({
+      mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
+        dcmsFetch(`/daily-cleaning/subscriptions/${id}/cancel`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        }),
+      onSuccess: invalidate,
+    }),
   };
+}
+
+export function useExpiringSubscriptions(params?: { cityId?: number; societyId?: number; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.cityId) query.set("cityId", String(params.cityId));
+  if (params?.societyId) query.set("societyId", String(params.societyId));
+  if (params?.status) query.set("status", params.status);
+  const qStr = query.toString() ? `?${query.toString()}` : "";
+  return useQuery({
+    queryKey: ["dcms", "subscriptions", "expiring", params],
+    queryFn: () => dcmsFetch<{ data: any[]; total: number }>(`/daily-cleaning/subscriptions/expiring${qStr}`),
+  });
 }
 
 export function useDcmsPlanMutations() {

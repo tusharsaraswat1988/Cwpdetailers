@@ -63,6 +63,7 @@ export const PENDING_MIGRATIONS = [
   "065_legal_entities_and_invoice_sequences.sql",
   "066_promotions_and_banners.sql",
   "067_operational_exceptions_and_media_retention.sql",
+  "068_franchise_branches_and_media_purge_audit.sql",
 ] as const;
 
 export type Queryable = {
@@ -168,6 +169,12 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
         && (await hasColumn(db, "invoices", "legal_entity_id"));
     case "066_promotions_and_banners.sql":
       return hasTable(db, "promotions");
+    case "067_operational_exceptions_and_media_retention.sql":
+      return (await hasTable(db, "dcms_operational_exceptions"))
+        && (await hasColumn(db, "dcms_visits", "media_purged_at"));
+    case "068_franchise_branches_and_media_purge_audit.sql":
+      return (await hasColumn(db, "branches", "is_company_operated"))
+        && (await hasColumn(db, "dcms_visits", "cloudinary_deletion_status"));
     default:
       return false;
   }

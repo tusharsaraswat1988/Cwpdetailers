@@ -4,6 +4,7 @@ import { bookingsTable, customersTable, subscriptionsTable, staffTable, invoices
 import { eq, sql, and, inArray } from "drizzle-orm";
 import { tenantFilters, sqlTenant } from "../middlewares/tenantScope";
 import { countActiveContractsForTenant } from "../lib/contracts/contractRegistry";
+import { getUnifiedPlatformAnalytics } from "../lib/analytics/multiCityAnalyticsService";
 
 const router = Router();
 
@@ -264,6 +265,30 @@ router.get("/analytics/outstanding-dues", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Outstanding dues error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/analytics/multi-city", async (req, res) => {
+  try {
+    const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
+    const branchId = req.query.branchId
+      ? Number(req.query.branchId)
+      : (req.scope?.branchIds?.[0] ?? undefined);
+    const franchiseeId = req.query.franchiseeId
+      ? Number(req.query.franchiseeId)
+      : (req.scope?.franchiseeId ?? undefined);
+    const companyId = req.scope?.companyId ?? undefined;
+
+    const analytics = await getUnifiedPlatformAnalytics({
+      cityId,
+      branchId,
+      franchiseeId,
+      companyId,
+    });
+    return res.json(analytics);
+  } catch (err) {
+    req.log.error({ err }, "Multi-city analytics error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });

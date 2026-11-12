@@ -241,6 +241,32 @@ export async function ensureStartupMigrations(): Promise<void> {
       );
     `);
 
+    // 6. Franchise Branches & Media Purge Audit (Migration 068)
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TYPE franchisee_status ADD VALUE IF NOT EXISTS 'onboarding';
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+      DO $$ BEGIN
+        ALTER TYPE franchisee_status ADD VALUE IF NOT EXISTS 'suspended';
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS is_company_operated BOOLEAN NOT NULL DEFAULT true;
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS code TEXT;
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS service_availability JSONB;
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS operational_notes TEXT;
+
+      ALTER TABLE franchisees ADD COLUMN IF NOT EXISTS suspension_reason TEXT;
+      ALTER TABLE franchisees ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP;
+      ALTER TABLE franchisees ADD COLUMN IF NOT EXISTS suspended_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE franchisees ADD COLUMN IF NOT EXISTS agreement_number TEXT;
+      ALTER TABLE franchisees ADD COLUMN IF NOT EXISTS commission_percentage NUMERIC(5, 2) DEFAULT 15.00;
+
+      ALTER TABLE dcms_visits ADD COLUMN IF NOT EXISTS cloudinary_deletion_status TEXT;
+      ALTER TABLE dcms_visits ADD COLUMN IF NOT EXISTS media_purged_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+    `);
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

@@ -114,3 +114,37 @@ export function resolveStoredMediaUrl(stored: string): string {
   // Legacy Replit object paths are no longer served locally.
   return stored;
 }
+
+/**
+ * Extracts publicId from Cloudinary URL (e.g. /upload/v1234/folder/id.jpg -> folder/id).
+ */
+export function extractCloudinaryPublicId(url: string): string | null {
+  if (!url || typeof url !== "string") return null;
+  const match = url.match(/\/upload\/(?:v\d+\/)?([^\.\?]+)(?:\.[a-zA-Z0-9]+)?(?:\?.*)?$/);
+  if (match && match[1]) {
+    return decodeURIComponent(match[1]);
+  }
+  return null;
+}
+
+/**
+ * Deletes an asset directly from Cloudinary by URL or publicId.
+ */
+export async function deleteCloudinaryAsset(
+  urlOrPublicId: string,
+): Promise<{ success: boolean; result?: string; error?: string }> {
+  try {
+    getCloudinaryConfig();
+    const publicId = extractCloudinaryPublicId(urlOrPublicId) || urlOrPublicId;
+    const res = await cloudinary.uploader.destroy(publicId);
+    return {
+      success: res.result === "ok" || res.result === "not found",
+      result: res.result,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}

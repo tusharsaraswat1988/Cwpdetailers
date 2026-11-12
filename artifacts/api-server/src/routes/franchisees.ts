@@ -12,6 +12,11 @@ import {
   applyOptionalEmailField,
   applyOptionalMobileField,
 } from "../lib/contactFields";
+import {
+  listFranchiseesDetailed,
+  suspendFranchisee,
+  activateFranchisee,
+} from "../lib/franchise/branchManagementService";
 
 const router = Router();
 
@@ -23,34 +28,12 @@ const SCOPE_COLS = {
 
 router.get("/franchisees", async (req, res) => {
   try {
-    const { status, branchId } = req.query as Record<string, string>;
-    const conditions = [...tenantFilters(req, SCOPE_COLS)];
-    if (status) conditions.push(eq(franchiseesTable.status, status as (typeof franchiseesTable.status)["_"]["data"]));
-    if (branchId) conditions.push(eq(franchiseesTable.branchId, parseInt(branchId)));
-
-    const data = await db.select({
-      id: franchiseesTable.id, userId: franchiseesTable.userId,
-      branchId: franchiseesTable.branchId, branchName: branchesTable.name,
-      name: franchiseesTable.name, phone: franchiseesTable.phone, email: franchiseesTable.email,
-      secondaryPhone: franchiseesTable.secondaryPhone,
-      currentAddress: franchiseesTable.currentAddress, permanentAddress: franchiseesTable.permanentAddress,
-      aadhaar: franchiseesTable.aadhaar, pan: franchiseesTable.pan,
-      rentAgreementUrl: franchiseesTable.rentAgreementUrl,
-      franchiseeAgreementUrl: franchiseesTable.franchiseeAgreementUrl,
-      tenureStartDate: franchiseesTable.tenureStartDate, tenureEndDate: franchiseesTable.tenureEndDate,
-      finalAmountAgreed: franchiseesTable.finalAmountAgreed,
-      amountDeposited: franchiseesTable.amountDeposited, dueAmount: franchiseesTable.dueAmount,
-      bankAccountName: franchiseesTable.bankAccountName,
-      bankAccountNumber: franchiseesTable.bankAccountNumber,
-      bankIfsc: franchiseesTable.bankIfsc, bankName: franchiseesTable.bankName,
-      status: franchiseesTable.status, notes: franchiseesTable.notes,
-      createdAt: franchiseesTable.createdAt,
-      staffCount: sql<number>`(SELECT COUNT(*) FROM staff s WHERE s.franchisee_id = ${franchiseesTable.id})`,
-    }).from(franchiseesTable)
-      .leftJoin(branchesTable, eq(franchiseesTable.branchId, branchesTable.id))
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(franchiseesTable.createdAt));
-
+    const { status, cityId } = req.query as Record<string, string>;
+    const data = await listFranchiseesDetailed({
+      cityId: cityId ? parseInt(cityId) : undefined,
+      status,
+      companyId: req.scope?.companyId ?? undefined,
+    });
     return res.json(data);
   } catch (err) {
     req.log.error({ err }, "List franchisees error");
@@ -61,13 +44,13 @@ router.get("/franchisees", async (req, res) => {
 router.post("/franchisees", async (req, res) => {
   try {
     const {
-      name, phone, email, secondaryPhone, branchId,
+      name, phone, email, secondaryPhone, branchId, cityId, legalEntityId,
       currentAddress, permanentAddress, aadhaar, pan,
-      rentAgreementUrl, franchiseeAgreementUrl,
+      rentAgreementUrl, franchiseeAgreementUrl, agreementNumber, commissionPercentage,
       tenureStartDate, tenureEndDate,
       finalAmountAgreed, amountDeposited,
       bankAccountName, bankAccountNumber, bankIfsc, bankName,
-      notes,
+      notes, status,
     } = req.body;
 
     if (!name) return res.status(400).json({ error: "name is required" });
@@ -89,14 +72,18 @@ router.post("/franchisees", async (req, res) => {
     const stamped = tenantStamp(req, {
       name, phone: phoneResult.value, email: emailResult.value, secondaryPhone: secondaryResult.value,
       branchId: branchId ? parseInt(branchId) : undefined,
+      cityId: cityId ? parseInt(cityId) : undefined,
+      legalEntityId: legalEntityId ? parseInt(legalEntityId) : undefined,
       currentAddress, permanentAddress, aadhaar, pan,
       rentAgreementUrl, franchiseeAgreementUrl,
+      agreementNumber,
+      commissionPercentage: commissionPercentage ? commissionPercentage.toString() : "15.00",
       tenureStartDate, tenureEndDate,
       finalAmountAgreed: finalAmountAgreed?.toString(),
       amountDeposited: amountDeposited?.toString() ?? "0",
       dueAmount: due,
       bankAccountName, bankAccountNumber, bankIfsc, bankName,
-      notes, status: "active" as const,
+      notes, status: status || ("onboarding" as const),
     });
     delete (stamped as { franchiseeId?: number }).franchiseeId;
 
@@ -158,8 +145,9 @@ router.patch("/franchisees/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     if (!(await loadFranchiseeInScope(req, id))) return res.status(404).json({ error: "Franchisee not found" });
     const allowed = [
-      "name", "phone", "email", "secondaryPhone", "branchId", "currentAddress",
-      "permanentAddress", "aadhaar", "pan", "rentAgreementUrl", "franchiseeAgreementUrl",
+      "name", "phone", "email", "secondaryPhone", "branchId", "cityId", "legalEntityId",
+      "currentAddress", "permanentAddress", "aadhaar", "pan",
+      "rentAgreementUrl", "franchiseeAgreementUrl", "agreementNumber", "commissionPercentage",
       "tenureStartDate", "tenureEndDate", "finalAmountAgreed", "amountDeposited",
       "dueAmount", "bankAccountName", "bankAccountNumber", "bankIfsc", "bankName",
       "status", "notes",
@@ -240,6 +228,31 @@ router.post("/franchisees/:id/reset-password", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Reset franchisee password error");
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/franchisees/:id/suspend", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { reason } = req.body;
+    if (!reason?.trim()) return res.status(400).json({ error: "Suspension reason is required" });
+
+    const suspended = await suspendFranchisee(id, reason.trim(), req.user?.id ?? 0);
+    return res.json(suspended);
+  } catch (err) {
+    req.log.error({ err }, "Suspend franchisee error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+router.post("/franchisees/:id/activate", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const activated = await activateFranchisee(id, req.user?.id ?? 0);
+    return res.json(activated);
+  } catch (err) {
+    req.log.error({ err }, "Activate franchisee error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
   }
 });
 

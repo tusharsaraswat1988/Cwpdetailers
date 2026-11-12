@@ -294,6 +294,10 @@ export const dcmsVisitsTable = pgTable("dcms_visits", {
 
   retentionHold: boolean("retention_hold").default(false),
 
+  cloudinaryDeletionStatus: text("cloudinary_deletion_status"),
+
+  mediaPurgedBy: integer("media_purged_by"),
+
   createdAt: timestamp("created_at").notNull().defaultNow(),
 
 }, t => ({

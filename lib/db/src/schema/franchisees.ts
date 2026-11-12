@@ -2,7 +2,14 @@ import { pgTable, serial, text, integer, numeric, date, timestamp, pgEnum } from
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const franchiseeStatusEnum = pgEnum("franchisee_status", ["active", "inactive", "terminated", "pending"]);
+export const franchiseeStatusEnum = pgEnum("franchisee_status", [
+  "active",
+  "inactive",
+  "terminated",
+  "pending",
+  "onboarding",
+  "suspended",
+]);
 
 export const franchiseesTable = pgTable("franchisees", {
   id: serial("id").primaryKey(),
@@ -21,6 +28,8 @@ export const franchiseesTable = pgTable("franchisees", {
   pan: text("pan"),
   rentAgreementUrl: text("rent_agreement_url"),
   franchiseeAgreementUrl: text("franchisee_agreement_url"),
+  agreementNumber: text("agreement_number"),
+  commissionPercentage: numeric("commission_percentage", { precision: 5, scale: 2 }).default("15.00"),
   tenureStartDate: date("tenure_start_date"),
   tenureEndDate: date("tenure_end_date"),
   finalAmountAgreed: numeric("final_amount_agreed", { precision: 12, scale: 2 }),
@@ -31,6 +40,9 @@ export const franchiseesTable = pgTable("franchisees", {
   bankIfsc: text("bank_ifsc"),
   bankName: text("bank_name"),
   status: franchiseeStatusEnum("status").notNull().default("pending"),
+  suspensionReason: text("suspension_reason"),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedBy: integer("suspended_by"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

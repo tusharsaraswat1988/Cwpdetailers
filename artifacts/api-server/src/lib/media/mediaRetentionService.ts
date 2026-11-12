@@ -6,6 +6,7 @@ import {
 } from "@workspace/db";
 import { eq, and, sql, lte, isNull, isNotNull, inArray, or } from "drizzle-orm";
 import { logger } from "../logger";
+import { deleteCloudinaryAsset } from "../cloudinaryStorage";
 
 export const DEFAULT_ROUTINE_MEDIA_RETENTION_DAYS = 30;
 export const DEFAULT_EXCEPTION_MEDIA_RETENTION_DAYS = 90;
@@ -14,15 +15,46 @@ export type MediaRetentionPolicy = {
   routineRetentionDays: number;
   exceptionRetentionDays: number;
   notice: string;
+  privacyNotice: string;
+  privacyControls: {
+    cloudinaryAssetPurge: boolean;
+    plateOcrMasking: boolean;
+    gpsCoarseGraining: boolean;
+    disputeHoldProtection: boolean;
+  };
 };
 
 export function getMediaRetentionPolicy(): MediaRetentionPolicy {
+  const noticeText =
+    "Daily car cleaning verification photos are retained for 30 days for service quality assurance. Disputed visits or open exceptions are retained for 90 days or until resolved. Upon expiration, photographic binaries are purged from Cloudinary while preserving visit verification timestamps, cleaner audit trails, and coarse operational metrics. Plate OCR and precise GPS coordinates are redacted to protect residential privacy.";
   return {
     routineRetentionDays: DEFAULT_ROUTINE_MEDIA_RETENTION_DAYS,
     exceptionRetentionDays: DEFAULT_EXCEPTION_MEDIA_RETENTION_DAYS,
-    notice:
-      "Daily car cleaning verification photos are retained for 30 days for service quality assurance. Disputed visits or open exceptions are retained for 90 days or until resolved. Upon expiration, photographic binaries are purged while preserving visit verification timestamps, GPS, plate recognition, and cleaner audit trails.",
+    notice: noticeText,
+    privacyNotice: noticeText,
+    privacyControls: {
+      cloudinaryAssetPurge: true,
+      plateOcrMasking: true,
+      gpsCoarseGraining: true,
+      disputeHoldProtection: true,
+    },
   };
+}
+
+/** Masks plate OCR text e.g. UP65AB1234 -> UP65****1234 */
+export function maskPlateText(ocrText?: string | null): string | null {
+  if (!ocrText) return null;
+  const clean = ocrText.trim();
+  if (clean.length <= 4) return "****";
+  const start = clean.slice(0, 4);
+  const end = clean.length > 6 ? clean.slice(-2) : "";
+  return `${start}****${end}`;
+}
+
+/** Coarse-grains GPS coordinate to 2 decimal places (~1.1 km) for aggregate reporting */
+export function coarseGrainCoordinate(coord?: number | null): number | null {
+  if (coord == null || coord === 0) return coord ?? null;
+  return Math.round(coord * 100) / 100;
 }
 
 export type PurgeExpiredMediaOptions = {
@@ -30,6 +62,8 @@ export type PurgeExpiredMediaOptions = {
   dryRun?: boolean;
   performedBy?: number;
   limit?: number;
+  deleteCloudinary?: boolean;
+  maskPrivacyData?: boolean;
 };
 
 export type PurgeExpiredMediaResult = {
@@ -38,6 +72,8 @@ export type PurgeExpiredMediaResult = {
   cutoffDate: Date;
   eligibleCount: number;
   purgedCount: number;
+  cloudinaryDeletedCount: number;
+  cloudinaryFailedCount: number;
   visitIds: number[];
 };
 
@@ -48,6 +84,8 @@ export async function purgeExpiredVisitMedia(
   const dryRun = options?.dryRun ?? false;
   const lim = Math.min(options?.limit ?? 500, 2000);
   const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const deleteCloudinary = options?.deleteCloudinary !== false;
+  const maskPrivacy = options?.maskPrivacyData !== false;
 
   // 1. Find visits with photoUrl older than cutoffDate where retentionHold is not set
   const eligibleVisits = await db
@@ -55,6 +93,10 @@ export async function purgeExpiredVisitMedia(
       id: dcmsVisitsTable.id,
       visitTime: dcmsVisitsTable.visitTime,
       subscriptionId: dcmsVisitsTable.subscriptionId,
+      photoUrl: dcmsVisitsTable.photoUrl,
+      latitude: dcmsVisitsTable.latitude,
+      longitude: dcmsVisitsTable.longitude,
+      ocrText: dcmsVisitsTable.ocrText,
     })
     .from(dcmsVisitsTable)
     .where(
@@ -77,6 +119,8 @@ export async function purgeExpiredVisitMedia(
       cutoffDate,
       eligibleCount: 0,
       purgedCount: 0,
+      cloudinaryDeletedCount: 0,
+      cloudinaryFailedCount: 0,
       visitIds: [],
     };
   }
@@ -99,7 +143,8 @@ export async function purgeExpiredVisitMedia(
       .filter((id): id is number => id != null),
   );
 
-  const finalVisitIds = candidateIds.filter((id) => !blockedVisitIds.has(id));
+  const finalVisits = eligibleVisits.filter((v) => !blockedVisitIds.has(v.id));
+  const finalVisitIds = finalVisits.map((v) => v.id);
 
   if (finalVisitIds.length === 0 || dryRun) {
     return {
@@ -108,28 +153,65 @@ export async function purgeExpiredVisitMedia(
       cutoffDate,
       eligibleCount: finalVisitIds.length,
       purgedCount: 0,
+      cloudinaryDeletedCount: 0,
+      cloudinaryFailedCount: 0,
       visitIds: finalVisitIds,
     };
   }
 
+  let cldDeleted = 0;
+  let cldFailed = 0;
+
+  // 3. Purge Cloudinary assets and apply privacy redactions
   const now = new Date();
-  await db
-    .update(dcmsVisitsTable)
-    .set({
+  for (const v of finalVisits) {
+    let deletionStatus = "skipped";
+    if (deleteCloudinary && v.photoUrl) {
+      try {
+        const cldRes = await deleteCloudinaryAsset(v.photoUrl);
+        if (cldRes.success) {
+          cldDeleted++;
+          deletionStatus = "deleted";
+        } else {
+          cldFailed++;
+          deletionStatus = "failed";
+        }
+      } catch (err) {
+        cldFailed++;
+        deletionStatus = "error";
+      }
+    }
+
+    const updates: Record<string, unknown> = {
       photoUrl: null,
       mediaPurgedAt: now,
-    })
-    .where(inArray(dcmsVisitsTable.id, finalVisitIds));
+      cloudinaryDeletionStatus: deletionStatus,
+      mediaPurgedBy: options?.performedBy ?? null,
+    };
+
+    if (maskPrivacy) {
+      if (v.ocrText) updates.ocrText = maskPlateText(v.ocrText);
+      if (v.latitude) updates.latitude = coarseGrainCoordinate(v.latitude);
+      if (v.longitude) updates.longitude = coarseGrainCoordinate(v.longitude);
+    }
+
+    await db
+      .update(dcmsVisitsTable)
+      .set(updates)
+      .where(eq(dcmsVisitsTable.id, v.id));
+  }
 
   logger.info(
     {
       action: "media_retention_purge",
       purgedCount: finalVisitIds.length,
+      cloudinaryDeleted: cldDeleted,
+      cloudinaryFailed: cldFailed,
       retentionDays: days,
       cutoffDate,
       performedBy: options?.performedBy,
     },
-    `Purged photo media for ${finalVisitIds.length} visits older than ${days} days`,
+    `Purged photo media for ${finalVisitIds.length} visits older than ${days} days (${cldDeleted} Cloudinary assets removed)`,
   );
 
   return {
@@ -138,6 +220,8 @@ export async function purgeExpiredVisitMedia(
     cutoffDate,
     eligibleCount: finalVisitIds.length,
     purgedCount: finalVisitIds.length,
+    cloudinaryDeletedCount: cldDeleted,
+    cloudinaryFailedCount: cldFailed,
     visitIds: finalVisitIds,
   };
 }
