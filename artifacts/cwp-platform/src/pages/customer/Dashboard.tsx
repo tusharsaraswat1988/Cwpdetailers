@@ -46,7 +46,8 @@ import {
   CustomerSkeleton,
   CustomerEmptyState,
 } from "@/features/customer-ds";
-import { AlertCircle, ArrowRight } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { CustomerPaymentReviewDialog } from "@/components/payment/CustomerPaymentReviewDialog";
 
 type VehicleRow = {
   id: number;
@@ -197,6 +198,7 @@ export default function CustomerDashboard() {
     });
   }, [summaryQuery.data?.recentBookings]);
 
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const pendingDues = Number(summaryQuery.data?.pendingDues ?? 0);
   const loading = summaryQuery.isLoading || subsQuery.isLoading || !addressSourcesReady || !initialized;
 
@@ -266,10 +268,11 @@ export default function CustomerDashboard() {
             <HomeGreeting customerName={customerQuery.data?.name} />
 
             {/* Outstanding Balance Banner if dues > 0 */}
-            {pendingDues > 0 && (
+            {pendingDues > 0 ? (
               <div
-                className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 flex items-center justify-between gap-3 shadow-xs"
+                className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 flex items-center justify-between gap-3 shadow-xs cursor-pointer hover:bg-amber-100/70 transition-colors"
                 data-testid="home-dues-banner"
+                onClick={() => setPaymentDialogOpen(true)}
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
@@ -284,11 +287,41 @@ export default function CustomerDashboard() {
                     </p>
                   </div>
                 </div>
-                <Link
-                  href={CUSTOMER_ROUTES.invoices}
-                  className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors shrink-0 shadow-xs"
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPaymentDialogOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold transition-colors shrink-0 shadow-xs cursor-pointer"
+                  data-testid="pay-now-button"
                 >
                   Pay Now <ArrowRight size={13} />
+                </button>
+              </div>
+            ) : (
+              <div
+                className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 flex items-center justify-between gap-3 shadow-2xs"
+                data-testid="home-all-clear-banner"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-800">
+                      All Payments Clear
+                    </p>
+                    <p className="text-[11px] text-emerald-600">
+                      No outstanding dues on your account
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={CUSTOMER_ROUTES.invoices}
+                  className="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline shrink-0"
+                >
+                  View Invoices
                 </Link>
               </div>
             )}
@@ -370,6 +403,20 @@ export default function CustomerDashboard() {
         onUpdate={(id, data) => updateSavedLocation.mutateAsync({ id, ...data })}
         onDelete={id => deleteSavedLocation.mutateAsync({ id, customerId })}
         onSetDefault={id => setDefaultSavedLocation.mutateAsync({ id, customerId })}
+      />
+
+      {/* Cashfree Payment Review Dialog */}
+      <CustomerPaymentReviewDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        customerId={customerId ?? undefined}
+        customerName={customerQuery.data?.name}
+        outstandingAmount={pendingDues}
+        payableAmount={pendingDues}
+        onPaymentSuccess={() => {
+          summaryQuery.refetch();
+          customerQuery.refetch();
+        }}
       />
     </CustomerLayout>
   );

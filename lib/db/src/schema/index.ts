@@ -26,6 +26,7 @@ export * from "./bookings";
 export * from "./attendance";
 export * from "./complaints";
 export * from "./invoices";
+export * from "./payment-attempts";
 export * from "./quotations";
 export * from "./expenses";
 export * from "./notifications";

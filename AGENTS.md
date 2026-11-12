@@ -1,6 +1,54 @@
-# AGENTS.md
+# AGENTS.md --- CWP Detailers Project Rules
 
-## Cursor Cloud specific instructions
+## Living PRD --- Mandatory
+
+Canonical PRD: `docs/product/CWP_NOIDA_MULTI_CITY_PRD.md`
+
+For every task under this project:
+
+1.  Read the canonical PRD before planning, modifying code, creating UI,
+    changing schemas, fixing bugs or proposing scope.
+2.  Identify and reuse relevant requirement IDs. If the work introduces
+    a new requirement, assign a stable ID and add it to the PRD.
+3.  Check the PRD's status, architecture notes, dependencies, open
+    decisions, risks and acceptance criteria.
+4.  Update the PRD in the same work cycle as the code/product work. PRD
+    synchronization is a required deliverable, not optional.
+5.  Before implementation, add/update the backlog item and mark it
+    `In Progress` when work begins.
+6.  After implementation, record the actual change, affected modules,
+    migration/deployment notes, security/privacy impact, tests run and
+    test results, known limitations, and remaining work.
+7.  Mark an item `Done` only after its acceptance criteria have been
+    verified with appropriate evidence. If evidence is absent, use
+    `Unverified`, `Needs Audit`, `Blocked` or `In Progress`.
+8.  Update the PRD change log and affected requirement/backlog statuses.
+    Preserve stable IDs and prior history.
+9.  Do not infer completion from a plan, code-generation output, or a
+    prior chat message. Inspect repository/test evidence.
+10. If the canonical PRD file is unavailable, state that explicitly and
+    create a proposed Markdown update; do not claim the repository PRD
+    was synchronized.
+11. Keep the PRD consistent with the implementation. If scope or design
+    changes, update requirements and acceptance criteria before treating
+    the work as complete.
+12. Do not perform destructive production changes or migrations without
+    explicit authorization and the required backup/review process.
+
+## Project Integrity
+
+-   Preserve existing working Varanasi flows while implementing Noida
+    and multi-city behavior.
+-   Enforce city, branch, customer and staff authorization on the
+    backend; frontend hiding is not access control.
+-   Prefer configuration-driven behavior over city-specific hardcoding.
+-   Treat customer, vehicle, residential society, parking, location and
+    media data as sensitive.
+-   Use incremental, reviewable and tested migrations.
+-   Report honestly what was implemented, tested, left unverified and
+    still planned.
+
+## Monorepo & Environment Instructions (Preserved)
 
 This is a **pnpm monorepo** (`artifacts/*` apps, `lib/*` shared libs, `scripts`) for the **CWP Detailers / Kleansolar** platform: a React 19 + Vite frontend (`@workspace/cwp-platform`) and an Express API (`@workspace/api-server`) backed by **PostgreSQL** (Drizzle ORM). Node/pnpm are enforced (`scripts/preinstall.mjs` rejects npm/yarn). Standard commands live in root `package.json`, `lib/db/package.json`, and `scripts/package.json` — prefer those over duplicating here.
 

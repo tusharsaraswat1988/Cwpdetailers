@@ -4,7 +4,15 @@ import { z } from "zod/v4";
 
 export const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "sent", "paid", "overdue", "cancelled"]);
 export const invoiceDocumentTypeEnum = pgEnum("invoice_document_type", ["tax_invoice", "credit_note", "debit_note"]);
-export const paymentMethodEnum = pgEnum("payment_method", ["cash", "upi", "card", "bank_transfer", "wallet", "razorpay"]);
+export const paymentMethodEnum = pgEnum("payment_method", [
+  "cash",
+  "upi",
+  "card",
+  "bank_transfer",
+  "wallet",
+  "razorpay",
+  "cashfree",
+]);
 export const paymentStatusEnum = pgEnum("payment_status", ["pending", "completed", "failed", "refunded", "reversed"]);
 
 /** Phase 5.6 — commercial lifecycle (orthogonal to legacy invoice status). */
@@ -159,4 +167,6 @@ export type Payment = typeof paymentsTable.$inferSelect;
 export type InvoiceDocumentType = Invoice["documentType"];
 export type InvoiceCommercialStatus = Invoice["commercialStatus"];
 export type InvoiceBillingMode = NonNullable<Invoice["billingMode"]>;
+export type PaymentMethod = (typeof paymentMethodEnum.enumValues)[number];
+
 

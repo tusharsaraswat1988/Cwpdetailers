@@ -37,6 +37,7 @@
     "test:staff-alert": "tsx ./src/test-staff-job-alert.ts",
     "setup:vapid": "tsx ./src/setup-vapid-keys.ts",
     "update:brand-logo": "tsx ./src/update-brand-logo.ts",
+    "verify:m1-adversarial": "tsx ./src/verify-m1-adversarial.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

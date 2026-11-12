@@ -83,6 +83,7 @@ import {
   RedirectToPlans, RedirectToSchedule, RedirectBookingsIdToSchedule,
 } from "@/pages/customer/CustomerRouteRedirects";
 import CustomerAccount from "@/pages/customer/Account";
+import CustomerPaymentReturn from "@/pages/customer/PaymentReturn";
 
 import StaffPortalRouter from "@/components/layout/StaffPortalRouter";
 
@@ -250,6 +251,7 @@ function Router() {
       <Route path="/customer/account" component={() => <ProtectedRoute component={CustomerAccount} roles={["customer"]} />} />
       <Route path="/customer/history" component={() => <ProtectedRoute component={CustomerHistory} roles={["customer"]} />} />
       <Route path="/customer/invoices" component={() => <ProtectedRoute component={CustomerInvoices} roles={["customer"]} />} />
+      <Route path="/customer/payment/return" component={() => <ProtectedRoute component={CustomerPaymentReturn} roles={["customer"]} />} />
       <Route path="/customer/support" component={() => <ProtectedRoute component={CustomerComplaints} roles={["customer"]} />} />
       {/* Legacy route aliases */}
       <Route path="/customer/wallet" component={() => <ProtectedRoute component={CustomerWallet} roles={["customer"]} />} />

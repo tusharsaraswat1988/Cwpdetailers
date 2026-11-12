@@ -32,7 +32,14 @@ app.use(
 app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
 /** Camera visit uploads send multi-MB base64 JSON; default 100kb rejects before route handler. */
-app.use(express.json({ limit: "15mb" }));
+app.use(
+  express.json({
+    limit: "15mb",
+    verify: (req, _res, buf) => {
+      (req as any).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {

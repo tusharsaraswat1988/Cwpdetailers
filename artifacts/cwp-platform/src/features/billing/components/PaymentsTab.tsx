@@ -30,7 +30,15 @@ export function PaymentsTab({ customerId }: Props) {
               <tr key={p.id} className="hover:bg-muted/20" data-testid={`payment-row-${p.id}`}>
                 <td className="px-4 py-3 font-medium">{p.customerName}</td>
                 <td className="px-4 py-3 font-semibold text-primary">₹{Number(p.amount).toLocaleString("en-IN")}</td>
-                <td className="px-4 py-3 uppercase text-xs text-muted-foreground">{p.method}</td>
+                <td className="px-4 py-3 text-xs">
+                  {p.method?.toLowerCase() === "cashfree" ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                      Cashfree
+                    </span>
+                  ) : (
+                    <span className="uppercase text-muted-foreground">{p.method}</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">{p.invoiceId ? `#${p.invoiceId}` : "—"}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.transactionId ?? "—"}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(p.createdAt!).toLocaleDateString("en-IN")}</td>

@@ -22,6 +22,7 @@ import type {
 } from "./types";
 import { BookingCoverageError, BookingValidationError } from "./types";
 import type { CoverageResult } from "../coverage/CoverageTypes";
+import { resolveAuthoritativeService } from "./services/ServiceResolutionService";
 
 export type BookingServiceOptions = {
   traceId?: string;
@@ -72,6 +73,14 @@ export class BookingService {
     }
     const window = scheduleCheck.window;
 
+    let effectiveServiceId = input.serviceId;
+    if (!effectiveServiceId && input.serviceType) {
+      const resolved = await resolveAuthoritativeService({ serviceType: input.serviceType });
+      if (resolved.success) {
+        effectiveServiceId = resolved.serviceId;
+      }
+    }
+
     let coverage: CoverageResult | undefined;
     const hasCoords = input.locationLat != null && input.locationLng != null
       && Number.isFinite(input.locationLat) && Number.isFinite(input.locationLng)
@@ -90,7 +99,7 @@ export class BookingService {
       const validationResult = await bookingValidationPolicy.execute(
         {
           customerId: input.customerId,
-          serviceId: input.serviceId,
+          serviceId: effectiveServiceId,
           address: input.address,
           locationLat: input.locationLat,
           locationLng: input.locationLng,
@@ -135,6 +144,7 @@ export class BookingService {
     const creationResult = await bookingCreationPolicy.execute(
       {
         ...input,
+        serviceId: effectiveServiceId,
         coverageStatus: typeof coverageStatus === "string" ? coverageStatus : undefined,
       },
       { trace, logger: opts?.logger },
@@ -163,7 +173,7 @@ export class BookingService {
       assetId: input.assetId ?? null,
       vehicleId: input.vehicleId ?? null,
       solarSiteId: input.solarSiteId ?? null,
-      serviceId: input.serviceId ?? null,
+      serviceId: effectiveServiceId ?? input.serviceId ?? null,
       branchId: input.branchId ?? null,
       companyId: input.companyId ?? null,
       franchiseeId: input.franchiseeId ?? null,

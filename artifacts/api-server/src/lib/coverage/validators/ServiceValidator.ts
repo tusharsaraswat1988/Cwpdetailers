@@ -16,8 +16,10 @@ export const serviceValidator: CoverageValidator = {
         state.city.id,
       );
       if (!available) {
-        return halt("SERVICE_UNAVAILABLE");
+        return halt("SERVICE_UNAVAILABLE", "SERVICE_UNAVAILABLE_IN_CITY");
       }
+    } else if (state.requestSource?.includes("booking")) {
+      return halt("SERVICE_UNAVAILABLE", "SERVICE_UNAVAILABLE_IN_CITY");
     }
 
     return cont({

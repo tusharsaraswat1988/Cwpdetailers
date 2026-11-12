@@ -24,6 +24,17 @@ describe("apiConfig", () => {
       (import.meta.env as Record<string, unknown>).VITE_API_URL = "https://backend.example.com///";
       expect(getApiBaseUrl()).toBe("https://backend.example.com");
     });
+
+    it("prefers relative paths on localhost web during development even if VITE_API_URL is populated", () => {
+      const origMode = import.meta.env.MODE;
+      try {
+        (import.meta.env as Record<string, unknown>).MODE = "development";
+        (import.meta.env as Record<string, unknown>).VITE_API_URL = "https://cwpdetailers-production.up.railway.app";
+        expect(getApiBaseUrl()).toBe("");
+      } finally {
+        (import.meta.env as Record<string, unknown>).MODE = origMode;
+      }
+    });
   });
 
   describe("isTrustedApiUrl", () => {

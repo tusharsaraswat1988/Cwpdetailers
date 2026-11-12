@@ -58,6 +58,7 @@ export const PENDING_MIGRATIONS = [
   "060_staff_extra_service_requests.sql",
   "061_attendance_selfie.sql",
   "062_saved_locations_structured.sql",
+  "063_cashfree_payment_gateway.sql",
 ] as const;
 
 export type Queryable = {
@@ -151,6 +152,9 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
       return hasTable(db, "extra_service_requests");
     case "061_attendance_selfie.sql":
       return hasColumn(db, "attendance", "selfie_photo_url");
+    case "063_cashfree_payment_gateway.sql":
+      return (await hasTable(db, "payment_attempts"))
+        && (await hasEnumLabel(db, "payment_method", "cashfree"));
     default:
       return false;
   }

@@ -20,6 +20,7 @@ export const CUSTOMER_ROUTES = {
   account: "/customer/account",
   serviceHistory: "/customer/history",
   invoices: "/customer/invoices",
+  paymentReturn: "/customer/payment/return",
   support: "/customer/support",
 } as const;
 

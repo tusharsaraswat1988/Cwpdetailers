@@ -101,4 +101,4 @@ export function parseGoogleAddressComponents(
   return googleAddressParser.parse({ addressComponents: components });
 }
 
-export { extractPincodeFromText };
+export { extractPincodeFromText, googleAddressParser, manualAddressParser };

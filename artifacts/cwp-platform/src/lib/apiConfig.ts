@@ -35,8 +35,26 @@ export function getApiBaseUrl(): string {
       ? window.__CWP_API_URL__.trim()
       : undefined;
 
+  if (custom) {
+    return custom.replace(/\/+$/, "");
+  }
+
+  // In local web development (e.g. running in browser on localhost/127.0.0.1),
+  // always use relative /api paths so the Vite proxy handles them locally.
+  // This prevents accidental CORS preflight errors against external environments.
+  if (
+    !isNativeApp() &&
+    import.meta.env.MODE !== "test" &&
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "0.0.0.0")
+  ) {
+    return "";
+  }
+
   const envUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-  const configured = custom || envUrl || "";
+  const configured = envUrl || "";
 
   if (configured) {
     return configured.replace(/\/+$/, "");

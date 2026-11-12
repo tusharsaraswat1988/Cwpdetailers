@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { useListInvoices, getListInvoicesQueryKey } from "@workspace/api-client-react";
 import { useAccountScope } from "@/lib/account-scope";
 import CustomerLayout from "@/components/layout/CustomerLayout";
-import { FileText, Download, AlertCircle } from "lucide-react";
+import { FileText, Download, AlertCircle, ArrowRight } from "lucide-react";
 import { InvoicePdfButton } from "@/features/billing/components/InvoicePdfButton";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
+import { CustomerPaymentReviewDialog } from "@/components/payment/CustomerPaymentReviewDialog";
 import {
   CustomerPage,
   CustomerHeader,
@@ -17,6 +19,7 @@ import {
 
 export default function CustomerInvoices() {
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
+  const [selectedInvoice, setSelectedInvoice] = useState<{ id: number; amount: number } | null>(null);
   const { data, isLoading, isError, refetch } = useListInvoices(
     { customerId: String(customerId ?? "") } as any,
     {
@@ -27,7 +30,10 @@ export default function CustomerInvoices() {
     },
   );
 
-  const totalDue = (data?.data ?? []).reduce((s, inv) => s + Number(inv.dueAmount), 0);
+  const totalDue = (data?.data ?? []).reduce(
+    (s, inv) => s + Number((inv as any).balanceDue ?? inv.dueAmount ?? 0),
+    0,
+  );
 
   return (
     <CustomerLayout>
@@ -82,14 +88,16 @@ export default function CustomerInvoices() {
             />
           ) : (
             <div className="space-y-3">
-              {(data?.data ?? []).map(inv => (
+              {(data?.data ?? []).map(inv => {
+                const effectiveDue = Number((inv as any).balanceDue ?? inv.dueAmount ?? 0);
+                return (
                 <div key={inv.id} data-testid={`invoice-${inv.id}`}>
                   <CustomerInvoiceCard
                     invoiceNumber={inv.invoiceNumber}
                     amount={`₹${Number(inv.totalAmount).toLocaleString("en-IN")}`}
                     date={inv.createdAt ? new Date(inv.createdAt).toLocaleDateString("en-IN") : undefined}
                     status={inv.status ?? "draft"}
-                    dueAmount={Number(inv.dueAmount)}
+                    dueAmount={effectiveDue}
                     downloadSlot={
                       <div className="mt-1.5 space-y-1">
                         <InvoicePdfButton
@@ -100,21 +108,47 @@ export default function CustomerInvoices() {
                         >
                           <Download size={12} /> Download PDF
                         </InvoicePdfButton>
-                        {Number(inv.dueAmount) > 0 && (
-                          <p className="text-xs font-medium text-destructive">
-                            ₹{Number(inv.dueAmount).toLocaleString("en-IN")} due
-                            {inv.dueDate ? ` · Due ${inv.dueDate}` : ""}
-                          </p>
+                        {effectiveDue > 0 && (
+                          <div className="flex items-center gap-2.5 pt-1">
+                            <p className="text-xs font-semibold text-destructive">
+                              ₹{effectiveDue.toLocaleString("en-IN")} due
+                              {inv.dueDate ? ` · Due ${inv.dueDate}` : ""}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedInvoice({ id: inv.id!, amount: effectiveDue })}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-[11px] font-semibold transition-colors cursor-pointer shadow-2xs"
+                              data-testid={`pay-invoice-${inv.id}`}
+                            >
+                              Pay Now <ArrowRight size={11} />
+                            </button>
+                          </div>
                         )}
                       </div>
                     }
                   />
                 </div>
-              ))}
+              );})}
             </div>
           )}
         </CustomerPage>
       )}
+
+      {/* Cashfree Payment Review Dialog */}
+      <CustomerPaymentReviewDialog
+        open={selectedInvoice !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedInvoice(null);
+        }}
+        customerId={customerId ?? undefined}
+        invoiceId={selectedInvoice?.id}
+        outstandingAmount={selectedInvoice?.amount}
+        payableAmount={selectedInvoice?.amount}
+        onPaymentSuccess={() => {
+          refetch();
+          setSelectedInvoice(null);
+        }}
+      />
     </CustomerLayout>
   );
 }

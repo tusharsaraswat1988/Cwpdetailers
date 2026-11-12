@@ -47,6 +47,7 @@ import assignmentsRouter from "./assignments";
 import serviceExecutionsRouter from "./service-executions";
 import jobsRouter from "./jobs";
 import bookingPlatformRouter from "./booking-platform";
+import cashfreeRouter from "./cashfree";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -57,6 +58,7 @@ router.use(coverageRouter);
 router.use(communicationsWebhooksRouter);
 router.use(authRouter);
 router.use(contactRouter);
+router.use(cashfreeRouter);
 
 // Resource-guarded routers. Each guard maps HTTP method → permission action
 // (GET=view, POST=create, PUT/PATCH=edit, DELETE=delete) for that resource.

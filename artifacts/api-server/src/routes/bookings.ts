@@ -12,6 +12,7 @@ import {
   bookingEventsTable,
   vehiclesTable,
   solarSitesTable,
+  serviceLocationsTable,
   type BookingStatus,
 } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
@@ -19,6 +20,7 @@ import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middle
 import { getTodayIST } from "../subscriptions/service";
 import { isDailyCleanCatalogServiceName } from "../lib/dcms/dailyCleanCatalogGuard";
 import { savedLocationService } from "../lib/saved-locations/SavedLocationService";
+import { resolveAuthoritativeService } from "../lib/booking/services/ServiceResolutionService";
 import {
   serviceabilityBlockedLogPayload,
   serviceabilityHttpBody,
@@ -192,11 +194,15 @@ router.post("/bookings", async (req, res) => {
       customerId, vehicleId, solarSiteId, serviceId, branchId,
       scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng,
       placeId, savedLocationId, notes, cityId, citySlug, assetId, serviceLocationId,
-      contractRegistryId, addressId, postalCode, addressComponents, cityName,
+      contractRegistryId, addressId, postalCode, addressComponents,
     } = req.body;
+    let cityName = typeof req.body.cityName === "string" ? req.body.cityName : undefined;
 
-    if (!customerId || !scheduledDate || !serviceType) {
-      return res.status(400).json({ error: "customerId, scheduledDate, and serviceType are required" });
+    if (!customerId || !scheduledDate || (!serviceType && !serviceId)) {
+      return res.status(400).json({
+        error: "customerId, scheduledDate, and service identification (serviceId or serviceType) are required",
+        code: "INVALID_SERVICE",
+      });
     }
 
     let snapshotAddress = typeof address === "string" ? address : "";
@@ -207,6 +213,24 @@ router.post("/bookings", async (req, res) => {
     let snapshotCityId = cityId ?? null;
     let snapshotPostal = typeof postalCode === "string" ? postalCode : undefined;
     let resolvedSavedLocationId = savedLocationId ?? null;
+
+    if (serviceLocationId) {
+      const [loc] = await db
+        .select()
+        .from(serviceLocationsTable)
+        .where(eq(serviceLocationsTable.id, Number(serviceLocationId)))
+        .limit(1);
+      if (loc) {
+        snapshotAddress = snapshotAddress.trim() || loc.address || "";
+        snapshotArea = snapshotArea || loc.label || undefined;
+        snapshotLat = snapshotLat ?? loc.latitude;
+        snapshotLng = snapshotLng ?? loc.longitude;
+        snapshotPlaceId = snapshotPlaceId || loc.placeId;
+        if (loc.city) {
+          cityName = cityName || loc.city;
+        }
+      }
+    }
 
     if (savedLocationId) {
       const saved = await savedLocationService.getOwned(Number(savedLocationId), customerId);
@@ -265,12 +289,31 @@ router.post("/bookings", async (req, res) => {
       }
     }
 
-    if (serviceId) {
-      const [svc] = await db.select({ name: servicesTable.name }).from(servicesTable)
-        .where(eq(servicesTable.id, serviceId)).limit(1);
-      if (svc && isDailyCleanCatalogServiceName(svc.name)) {
+    const serviceResolution = await resolveAuthoritativeService({
+      serviceId,
+      serviceType,
+    });
+    if (!serviceResolution.success) {
+      return res.status(400).json({
+        error: serviceResolution.error,
+        code: serviceResolution.code,
+      });
+    }
+
+    const authoritativeService = serviceResolution.service;
+    const resolvedServiceId = serviceResolution.serviceId;
+    const resolvedServiceType = serviceResolution.serviceType;
+
+    if (isDailyCleanCatalogServiceName(authoritativeService.name)) {
+      if (
+        !contractRegistryId &&
+        req.body.bookingType !== "contract_visit" &&
+        req.body.bookingType !== "subscription_visit" &&
+        resolvedServiceType !== "daily_cleaning"
+      ) {
         return res.status(400).json({
           error: "Daily cleaning is sold via monthly DCMS plans. Use Book Service → Plan, not one-time catalog service.",
+          code: "DAILY_CLEANING_PLAN_REQUIRED",
         });
       }
     }
@@ -293,13 +336,13 @@ router.post("/bookings", async (req, res) => {
         assetId: assetId ?? null,
         vehicleId,
         solarSiteId,
-        serviceId,
+        serviceId: resolvedServiceId,
         branchId: resolvedBranchId,
         companyId: tenantValues.companyId,
         franchiseeId: tenantValues.franchiseeId,
         scheduledDate,
         scheduledTime,
-        serviceType,
+        serviceType: resolvedServiceType,
         address: snapshotAddress,
         area: snapshotArea,
         locationLat: snapshotLat,
@@ -331,12 +374,7 @@ router.post("/bookings", async (req, res) => {
 
       if (booking.status !== "cancelled") {
         const { bridgeLegacyBookingToContractAndQueue } = await import("../lib/assignments/enqueueAdapters");
-        let serviceName: string | null = null;
-        if (serviceId) {
-          const [svc] = await db.select({ name: servicesTable.name }).from(servicesTable)
-            .where(eq(servicesTable.id, serviceId)).limit(1);
-          serviceName = svc?.name ?? null;
-        }
+        const serviceName = authoritativeService.name ?? null;
         await bridgeLegacyBookingToContractAndQueue(booking, serviceName);
         await bookingCapability.markWaitingAssignment(booking.id, {
           traceId,
@@ -356,8 +394,20 @@ router.post("/bookings", async (req, res) => {
       });
     } catch (err) {
       if (err instanceof BookingCoverageError) {
+        if (
+          err.coverage.status === "SERVICE_UNAVAILABLE" ||
+          err.coverage.legacyStatus === "SERVICE_NOT_AVAILABLE" ||
+          err.coverage.message === "SERVICE_UNAVAILABLE_IN_CITY" ||
+          err.message === "SERVICE_UNAVAILABLE_IN_CITY"
+        ) {
+          const targetCity = err.coverage.city?.name ?? cityName ?? "this city";
+          return res.status(400).json({
+            error: `Service is not available in ${targetCity}`,
+            code: "SERVICE_UNAVAILABLE_IN_CITY",
+          });
+        }
         req.log.warn(
-          serviceabilityBlockedLogPayload(err.coverage, { customerId, serviceId: serviceId ?? null }),
+          serviceabilityBlockedLogPayload(err.coverage, { customerId, serviceId: resolvedServiceId ?? null }),
           "Booking blocked by serviceability validation",
         );
         return res.status(SERVICEABILITY_HTTP_STATUS).json(serviceabilityHttpBody(err.coverage));

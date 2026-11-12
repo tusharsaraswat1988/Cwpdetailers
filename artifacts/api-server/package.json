@@ -12,6 +12,7 @@
     "test:serviceability": "vitest run src/lib/coverage src/lib/serviceability src/lib/location-intelligence",
     "test:coverage": "vitest run src/lib/coverage src/lib/location-intelligence",
     "test:address": "vitest run src/lib/address",
+    "test:cashfree": "tsx test/cashfree/run-all.ts",
     "migrate:legacy-addresses": "tsx src/lib/address/migration/run-legacy-migration.ts"
   },
   "dependencies": {
