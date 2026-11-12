@@ -58,7 +58,7 @@ export function CustomerPaymentReviewDialog({
         credentials: "include",
         body: JSON.stringify({
           invoiceId: invoiceId ?? undefined,
-          returnUrl: `${origin}/customer/payment/return?order_id={order_id}`,
+          returnUrl: "/customer/payment/return?order_id={order_id}",
         }),
       });
 

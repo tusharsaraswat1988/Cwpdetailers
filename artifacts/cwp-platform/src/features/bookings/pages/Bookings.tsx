@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import {
   Calendar, Clock, User, CheckCircle, XCircle, ArrowRight, Loader2,
-  ClipboardList, UserCog, RotateCcw, Ban, StickyNote, Car,
+  ClipboardList, UserCog, RotateCcw, Ban, StickyNote, Car, Building2, MapPin,
 } from "lucide-react";
 import { Can } from "@/components/Can";
 import {
@@ -27,6 +27,9 @@ import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHub
 import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
 import { format, parseISO } from "date-fns";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCities } from "@/features/master-data/api";
+import { useSocieties } from "@/features/societies/api";
 
 const STATUS_FILTERS = ["all", "draft", "scheduled", "confirmed", "waiting_assignment", "rescheduled", "cancelled"] as const;
 

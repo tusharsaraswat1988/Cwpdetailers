@@ -73,6 +73,13 @@ export type LocationValue = {
   landmark?: string;
   cityName?: string;
   cityId?: number;
+  citySlug?: string;
+  serviceLocationId?: number;
+  societyId?: number;
+  towerId?: number;
+  flatNumber?: string;
+  parkingLevel?: string;
+  parkingBay?: string;
   pincode?: string;
   formattedAddress?: string;
   savedLocationId?: number;

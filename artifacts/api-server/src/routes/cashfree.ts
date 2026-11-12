@@ -93,10 +93,16 @@ router.post("/payments/cashfree/create-order", requireAuth, async (req: Request,
   }
 
   try {
+    const host = req.get("host");
+    const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+    const origin = req.get("origin");
+    const inferredBaseUrl = origin || (host ? `${proto}://${host}` : undefined);
+
     const result = await createCashfreePaymentOrder({
       customerId,
       invoiceId: parsedInvoiceId,
       returnUrl: validatedReturnUrl,
+      baseUrl: inferredBaseUrl,
       idempotencyKey,
     });
 

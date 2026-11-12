@@ -18,6 +18,7 @@ export interface CreateOrderParams {
   customerId: number;
   invoiceId?: number;
   returnUrl?: string;
+  baseUrl?: string;
   idempotencyKey?: string;
 }
 
@@ -355,6 +356,7 @@ export async function createCashfreePaymentOrder(
   // 7. Invoke Cashfree REST Client to create hosted order session
   const client = new CashfreeClient();
   const defaultBaseUrl =
+    params.baseUrl ||
     process.env.APP_URL ||
     process.env.PUBLIC_APP_URL ||
     "https://cwpdetailers-production.up.railway.app";

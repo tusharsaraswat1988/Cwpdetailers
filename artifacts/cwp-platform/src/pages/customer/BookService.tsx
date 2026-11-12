@@ -70,6 +70,8 @@ type VehicleRow = {
   placeId?: string | null;
   locationComplete?: boolean;
   vehicleModelId?: number;
+  serviceLocationId?: number | null;
+  cityId?: number | null;
 };
 
 type SolarRow = {
@@ -489,6 +491,9 @@ export default function BookService() {
         locationLng: bookingLocation.longitude,
         placeId: bookingLocation.placeId,
         savedLocationId: bookingLocation.savedLocationId,
+        serviceLocationId: bookingLocation.serviceLocationId ?? selectedVehicle?.serviceLocationId ?? undefined,
+        cityId: bookingLocation.cityId ?? selectedVehicle?.cityId ?? undefined,
+        citySlug: bookingLocation.citySlug ?? undefined,
         postalCode: bookingLocation.pincode,
         cityName: bookingLocation.cityName,
         area: bookingLocation.area,
