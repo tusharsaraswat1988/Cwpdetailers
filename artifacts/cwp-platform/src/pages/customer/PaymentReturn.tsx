@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import {
   CheckCircle2,
-  AlertCircle,
   Clock,
   ArrowRight,
   RefreshCw,
@@ -12,9 +11,11 @@ import {
   RotateCcw,
   ShieldCheck,
   ChevronLeft,
+  MessageCircle,
 } from "lucide-react";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { ReceiptModal, type ReceiptData } from "@/components/payment/ReceiptModal";
+import { buildWhatsAppPaymentUrl } from "@/lib/paymentCustomerShield";
 
 type VerificationStatus = "VERIFYING" | "PAID" | "FAILED" | "PENDING" | "USER_DROPPED";
 
@@ -197,48 +198,50 @@ export default function CustomerPaymentReturn() {
           </div>
         )}
 
-        {/* State 3: Failure */}
+        {/* State 3: Reassuring Status Update (Zero Alarming Errors) */}
         {status === "FAILED" && (
           <div className="bg-white rounded-2xl border border-[#E2E8F0] p-8 text-center shadow-xl space-y-6 animate-in zoom-in-95 duration-300">
-            <div className="w-16 h-16 rounded-full bg-red-50 border-2 border-red-200 flex items-center justify-center mx-auto text-red-600 shadow-sm">
-              <AlertCircle size={36} />
+            <div className="w-16 h-16 rounded-full bg-slate-100 border-2 border-slate-200 flex items-center justify-center mx-auto text-slate-700 shadow-xs">
+              <ShieldCheck size={36} className="text-slate-600" />
             </div>
 
             <div>
-              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 mb-2">
-                Payment Failed
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 mb-2">
+                Payment Update
               </span>
               <h1 className="text-2xl font-extrabold text-[#111827] tracking-tight">
-                Payment Could Not Be Completed
+                Payment Assistance
               </h1>
               <p className="text-xs text-[#64748B] mt-1.5 leading-relaxed">
-                {errorMessage || verificationData?.message || "Your payment could not be processed by Cashfree. No amount was debited from your account."}
+                If any amount was debited from your account, it is completely secure and will be automatically reconciled or refunded within 24–48 hours. No duplicate charge will be made.
               </p>
             </div>
 
             {orderId && (
               <div className="bg-[#F5F7FA] rounded-xl p-3 border border-[#E2E8F0] text-center text-xs">
-                <span className="text-[11px] text-[#64748B] block mb-0.5">Order ID</span>
+                <span className="text-[11px] text-[#64748B] block mb-0.5">Reference ID</span>
                 <span className="font-mono font-medium text-[#111827]">{orderId}</span>
               </div>
             )}
 
             <div className="space-y-3 pt-2">
+              <a
+                href={buildWhatsAppPaymentUrl(verificationData?.amount ?? 0, "917054007733", orderId || undefined)}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full min-h-[46px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+              >
+                <MessageCircle size={16} />
+                <span>Chat with WhatsApp Support</span>
+              </a>
+
               <button
                 type="button"
                 onClick={() => setLocation(CUSTOMER_ROUTES.dashboard)}
                 className="w-full min-h-[46px] rounded-xl bg-[#1677FF] hover:bg-[#0958d9] text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <RotateCcw size={15} />
-                <span>Try Again from Dashboard</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setLocation(CUSTOMER_ROUTES.dashboard)}
-                className="w-full py-2.5 rounded-xl border border-transparent hover:bg-slate-100 text-[#64748B] hover:text-[#111827] text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Back to Dashboard
+                <span>Back to Dashboard</span>
               </button>
             </div>
           </div>

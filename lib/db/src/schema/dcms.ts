@@ -11,9 +11,7 @@ import { z } from "zod/v4";
 
 
 export const dcmsSubscriptionStatusEnum = pgEnum("dcms_subscription_status", [
-
-  "active", "paused", "completed", "expired", "cancelled",
-
+  "pending_payment", "active", "paused", "completed", "expired", "cancelled",
 ]);
 
 

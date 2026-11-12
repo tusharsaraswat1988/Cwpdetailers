@@ -288,6 +288,19 @@ export async function ensureStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_logs(created_at DESC);
     `);
 
+    // 8. Customer Payment Integrity & Subscription Lifecycle (Migration 070)
+    await client.query(`
+      ALTER TYPE dcms_subscription_status ADD VALUE IF NOT EXISTS 'pending_payment';
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS city_id INTEGER;
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS branch_id INTEGER;
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS subscription_id INTEGER;
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS legal_entity_id INTEGER;
+      ALTER TABLE payment_attempts ADD COLUMN IF NOT EXISTS metadata JSONB;
+      CREATE INDEX IF NOT EXISTS payment_attempts_subscription_id_idx ON payment_attempts(subscription_id);
+      CREATE INDEX IF NOT EXISTS payment_attempts_city_id_idx ON payment_attempts(city_id);
+      CREATE INDEX IF NOT EXISTS payment_attempts_branch_id_idx ON payment_attempts(branch_id);
+    `);
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

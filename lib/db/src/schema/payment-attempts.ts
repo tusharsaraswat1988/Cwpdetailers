@@ -33,6 +33,10 @@ export const paymentAttemptsTable = pgTable(
       .notNull()
       .references(() => customersTable.id),
     invoiceId: integer("invoice_id").references(() => invoicesTable.id),
+    cityId: integer("city_id"),
+    branchId: integer("branch_id"),
+    subscriptionId: integer("subscription_id"),
+    legalEntityId: integer("legal_entity_id"),
     amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("INR"),
     cfPaymentSessionId: text("cf_payment_session_id"),
@@ -40,6 +44,7 @@ export const paymentAttemptsTable = pgTable(
     cfPaymentId: text("cf_payment_id"),
     paymentMethod: text("payment_method"),
     idempotencyKey: text("idempotency_key").notNull().unique(),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
     rawWebhookPayload: jsonb("raw_webhook_payload").$type<Record<string, unknown> | null>(),
     rawVerificationPayload: jsonb("raw_verification_payload").$type<Record<string, unknown> | null>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -48,6 +53,9 @@ export const paymentAttemptsTable = pgTable(
   (t) => [
     index("payment_attempts_customer_id_idx").on(t.customerId),
     index("payment_attempts_invoice_id_idx").on(t.invoiceId),
+    index("payment_attempts_subscription_id_idx").on(t.subscriptionId),
+    index("payment_attempts_city_id_idx").on(t.cityId),
+    index("payment_attempts_branch_id_idx").on(t.branchId),
     index("payment_attempts_status_idx").on(t.status),
     index("payment_attempts_attempt_id_idx").on(t.attemptId),
     index("payment_attempts_cf_order_id_idx").on(t.cfOrderId),

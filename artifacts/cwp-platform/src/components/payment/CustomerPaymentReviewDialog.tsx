@@ -6,8 +6,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ShieldCheck, Lock, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { ShieldCheck, Lock, ArrowRight, Loader2, CheckCircle2, MessageCircle, Home } from "lucide-react";
 import { launchCashfreeCheckout } from "@/lib/cashfree";
+import { toast } from "@/hooks/use-toast";
+import { buildWhatsAppPaymentUrl } from "@/lib/paymentCustomerShield";
 
 export interface CustomerPaymentReviewDialogProps {
   open: boolean;
@@ -37,7 +39,8 @@ export function CustomerPaymentReviewDialog({
   onPaymentSuccess,
 }: CustomerPaymentReviewDialogProps) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showAlternativeOptions, setShowAlternativeOptions] = useState(false);
+  const [isSettled, setIsSettled] = useState(false);
 
   const effectiveOutstanding = Math.max(0, Number(outstandingAmount ?? payableAmount ?? 0));
   const effectivePayable = Math.max(0, Number(payableAmount ?? outstandingAmount ?? 0));
@@ -45,7 +48,6 @@ export function CustomerPaymentReviewDialog({
   const handleProceedToPayment = async () => {
     if (isProcessing) return;
     setIsProcessing(true);
-    setErrorMessage(null);
 
     try {
       // 1. Server-side payment order creation
@@ -64,12 +66,13 @@ export function CustomerPaymentReviewDialog({
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        console.warn("[CustomerPaymentReviewDialog] Gateway order creation failure:", data);
-        let safeMsg = "Payment checkout is temporarily unavailable. Please try again shortly or contact support.";
+        console.warn("[CustomerPaymentReviewDialog] Gateway order creation response:", data);
         if (data.code === "NO_OUTSTANDING_DUES") {
-          safeMsg = "All outstanding dues have already been settled for this account.";
+          setIsSettled(true);
+        } else {
+          // Never display raw technical errors, gateway rejection codes, or scary red boxes to the customer
+          setShowAlternativeOptions(true);
         }
-        setErrorMessage(safeMsg);
         setIsProcessing(false);
         return;
       }
@@ -84,13 +87,24 @@ export function CustomerPaymentReviewDialog({
       });
     } catch (err: any) {
       console.warn("[CustomerPaymentReviewDialog] Checkout exception:", err);
-      setErrorMessage("Payment checkout is temporarily unavailable. Please try again in a few moments, or reach out to our team.");
+      // Shield the customer from raw exceptions, stack traces, and network failure messages
+      setShowAlternativeOptions(true);
       setIsProcessing(false);
     }
   };
 
+  const handleClose = (val: boolean) => {
+    if (!isProcessing) {
+      if (!val) {
+        setShowAlternativeOptions(false);
+        setIsSettled(false);
+      }
+      onOpenChange(val);
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(val) => !isProcessing && onOpenChange(val)}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[440px] p-0 overflow-hidden rounded-2xl border border-[#E2E8F0] shadow-xl bg-white">
         {/* Header with CWP Branding & Security Badge */}
         <div className="bg-[#0B1D36] text-white p-6 pb-5">
@@ -163,43 +177,97 @@ export function CustomerPaymentReviewDialog({
             </div>
           </div>
 
-          {/* Friendly Customer Notice (Shields Technical Details) */}
-          {errorMessage && (
-            <div className="p-3.5 bg-blue-50/90 border border-blue-200/80 rounded-xl flex items-start gap-2.5 text-xs text-blue-900 animate-in fade-in duration-200">
-              <AlertCircle size={16} className="shrink-0 mt-0.5 text-blue-600" />
+          {/* Friendly Concierge & Alternative Payment Options (Zero Technical Errors) */}
+          {showAlternativeOptions && (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-200">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-xs font-semibold text-slate-800">Alternative Payment Options</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                You can complete your payment via WhatsApp UPI QR code, or pay our detailing specialist directly upon service delivery.
+              </p>
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                <a
+                  href={buildWhatsAppPaymentUrl(effectivePayable, "917054007733", invoiceNumber)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-h-[38px] rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <MessageCircle size={14} />
+                  <span>WhatsApp UPI</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast({
+                      title: "Doorstep Payment Noted",
+                      description: "You can pay our specialist via UPI, card, or cash during your service visit.",
+                    });
+                    handleClose(false);
+                  }}
+                  className="min-h-[38px] rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Home size={14} />
+                  <span>Pay at Doorstep</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* All Settled State */}
+          {isSettled && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-900 animate-in fade-in duration-200">
+              <CheckCircle2 size={18} className="shrink-0 text-emerald-600 mt-0.5" />
               <div className="space-y-0.5">
-                <p className="font-semibold text-blue-950">Payment Temporarily Unavailable</p>
-                <p className="text-blue-800/90 leading-relaxed text-[11px]">{errorMessage}</p>
+                <p className="font-semibold text-emerald-950">All Dues Cleared</p>
+                <p className="text-emerald-800 text-[11px] leading-relaxed">
+                  Your account has no outstanding balance at this time. Thank you!
+                </p>
               </div>
             </div>
           )}
 
           {/* Action CTAs */}
           <div className="space-y-2.5 pt-1">
-            <button
-              type="button"
-              onClick={handleProceedToPayment}
-              disabled={isProcessing}
-              data-testid="proceed-payment-button"
-              className="w-full min-h-[48px] rounded-xl bg-[#1677FF] hover:bg-[#0958d9] active:bg-[#003eb3] text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/15 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  <span>Connecting Secure Gateway...</span>
-                </>
-              ) : (
-                <>
-                  <Lock size={16} />
-                  <span>Proceed to Secure Payment</span>
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </button>
+            {isSettled ? (
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose(false);
+                  onPaymentSuccess?.();
+                }}
+                className="w-full min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+              >
+                <CheckCircle2 size={16} />
+                <span>Done</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleProceedToPayment}
+                disabled={isProcessing}
+                data-testid="proceed-payment-button"
+                className="w-full min-h-[48px] rounded-xl bg-[#1677FF] hover:bg-[#0958d9] active:bg-[#003eb3] text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/15 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>Connecting Secure Gateway...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock size={16} />
+                    <span>{showAlternativeOptions ? "Retry Online Payment" : "Proceed to Secure Payment"}</span>
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            )}
 
             <button
               type="button"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleClose(false)}
               disabled={isProcessing}
               className="w-full py-2.5 rounded-xl border border-transparent hover:bg-slate-200/60 text-[#64748B] hover:text-[#111827] text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
             >
