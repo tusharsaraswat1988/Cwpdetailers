@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -551,6 +552,7 @@ function CustomerPlanAssignmentSection({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function AssignServicesPage() {
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isOnline = useOnlineStatus();
@@ -1260,6 +1262,14 @@ export default function AssignServicesPage() {
                 } else {
                   applyStatusFilter("high_priority");
                 }
+              },
+            },
+            {
+              id: "daily-cleaning-hub",
+              label: "Daily Cleaning Center ↗",
+              active: false,
+              onClick: () => {
+                navigate("/admin/daily-cleaning/assignments");
               },
             },
           ]}

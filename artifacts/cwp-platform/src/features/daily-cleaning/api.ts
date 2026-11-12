@@ -477,4 +477,183 @@ export function usePauseMutations() {
   };
 }
 
+// ─── Daily Cleaning Dedicated Assignments API ────────────────────────────
+
+export type MonthlyCleanerSubscription = {
+  subscriptionId: number;
+  customerId: number;
+  customerName: string;
+  customerPhone: string | null;
+  vehicleId: number;
+  vehicleNumber: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleColor: string | null;
+  societyId: number | null;
+  societyName: string | null;
+  towerName: string | null;
+  parkingLevel: string | null;
+  parkingBay: string | null;
+  planName: string;
+  startDate: string;
+  status: string;
+  allocatedCleanings: number;
+  usedCleanings: number;
+  remainingCleanings: number;
+  allocatedWashes: number;
+  remainingWashes: number;
+  assignedCleaner: {
+    assignmentId: number;
+    staffId: number;
+    staffName: string;
+    staffPhone: string | null;
+    assignedAt: string;
+    routeOrder: number;
+  } | null;
+};
+
+export type DcmsPackageWash = {
+  subscriptionId: number;
+  customerId: number;
+  customerName: string;
+  customerPhone: string | null;
+  vehicleId: number;
+  vehicleNumber: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleColor: string | null;
+  societyName: string | null;
+  towerName: string | null;
+  parkingLevel: string | null;
+  parkingBay: string | null;
+  planName: string;
+  allocatedWashes: number;
+  usedWashes: number;
+  remainingWashes: number;
+  lastWashDate: string | null;
+  scheduledWash: {
+    executionId: number;
+    scheduledDate: string;
+    scheduledTime: string | null;
+    staffId: number;
+    staffName: string;
+    staffPhone: string | null;
+    status: string;
+    notes: string | null;
+  } | null;
+  status: string;
+};
+
+export type DcmsStaffOption = {
+  id: number;
+  name: string;
+  phone: string | null;
+  cityId: number | null;
+  branchId: number | null;
+  operationalRoles: string[];
+  isCleaner: boolean;
+  isWasher: boolean;
+};
+
+export function useDcmsMonthlyAssignments(filters?: {
+  cityId?: number;
+  branchId?: number;
+  societyId?: number;
+  unassignedOnly?: boolean;
+  search?: string;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.cityId) params.set("cityId", String(filters.cityId));
+  if (filters?.branchId) params.set("branchId", String(filters.branchId));
+  if (filters?.societyId) params.set("societyId", String(filters.societyId));
+  if (filters?.unassignedOnly) params.set("unassignedOnly", "true");
+  if (filters?.search) params.set("search", filters.search);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+
+  return useQuery({
+    queryKey: ["dcms", "assignments", "monthly", filters],
+    queryFn: () => dcmsFetch<MonthlyCleanerSubscription[]>(`/daily-cleaning/assignments/monthly${qs}`),
+  });
+}
+
+export function useAssignMonthlyCleaner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      subscriptionId: number;
+      staffId: number;
+      reason?: string;
+      notes?: string;
+      routeOrder?: number;
+    }) =>
+      dcmsFetch<{ ok: boolean; assignment: unknown }>("/daily-cleaning/assignments/monthly/assign", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dcms"] });
+      qc.invalidateQueries({ queryKey: ["assignments"] });
+    },
+  });
+}
+
+export function useDcmsPackageWashes(filters?: {
+  subscriptionId?: number;
+  societyId?: number;
+  hasRemainingWashes?: boolean;
+  scheduledDate?: string;
+  cityId?: number;
+  branchId?: number;
+  search?: string;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.subscriptionId) params.set("subscriptionId", String(filters.subscriptionId));
+  if (filters?.societyId) params.set("societyId", String(filters.societyId));
+  if (filters?.hasRemainingWashes) params.set("hasRemainingWashes", "true");
+  if (filters?.scheduledDate) params.set("scheduledDate", filters.scheduledDate);
+  if (filters?.cityId) params.set("cityId", String(filters.cityId));
+  if (filters?.branchId) params.set("branchId", String(filters.branchId));
+  if (filters?.search) params.set("search", filters.search);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+
+  return useQuery({
+    queryKey: ["dcms", "assignments", "washes", filters],
+    queryFn: () => dcmsFetch<DcmsPackageWash[]>(`/daily-cleaning/assignments/washes${qs}`),
+  });
+}
+
+export function useAssignPackageWash() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      subscriptionId: number;
+      staffId: number;
+      scheduledDate: string;
+      scheduledTime?: string;
+      notes?: string;
+    }) =>
+      dcmsFetch<{ ok: boolean; executionId: number; assignmentId: number }>("/daily-cleaning/assignments/washes/assign", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dcms"] });
+      qc.invalidateQueries({ queryKey: ["assignments"] });
+      qc.invalidateQueries({ queryKey: ["executions"] });
+    },
+  });
+}
+
+export function useDcmsStaffOptions(filters?: { cityId?: number; branchId?: number }) {
+  const params = new URLSearchParams();
+  if (filters?.cityId) params.set("cityId", String(filters.cityId));
+  if (filters?.branchId) params.set("branchId", String(filters.branchId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+
+  return useQuery({
+    queryKey: ["dcms", "staff-options", filters],
+    queryFn: () => dcmsFetch<DcmsStaffOption[]>(`/daily-cleaning/assignments/staff-options${qs}`),
+  });
+}
+
 export { dcmsFetch };

@@ -52,6 +52,8 @@ import adminLedgerRouter from "./admin-ledger";
 import societiesRouter from "./societies";
 import legalEntitiesRouter from "./legal-entities";
 import promotionsRouter from "./promotions";
+import supportRouter from "./support";
+import qualityRouter from "./quality";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -290,6 +292,8 @@ router.use(dcmsRouter);
 router.use(societiesRouter);
 router.use(legalEntitiesRouter);
 router.use(promotionsRouter);
+router.use(supportRouter);
+router.use(qualityRouter);
 router.use(guardMasterDataRoutes(), masterDataRouter);
 router.use(guardCatalogRoutes(), serviceCatalogRouter);
 

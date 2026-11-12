@@ -32,14 +32,28 @@ const LEGACY_TAB_MAP: Record<string, TabValue> = {
   services: "wash-services",
   packages: "wash-packages",
   "dcms-plans": "daily-cleaning",
+  "daily_cleaning": "daily-cleaning",
+  dcms: "daily-cleaning",
   pricing: "wash-services",
   solar: "solar",
   categories: "wash-services",
   settings: "advanced",
+  gst: "advanced",
+  "catalog-gst": "advanced",
   "city-matrix": "city-matrix",
   "city-availability": "city-matrix",
   matrix: "city-matrix",
+  homepage: "homepage",
+  "homepage-cms": "homepage",
 };
+
+function getSearchString(location: string): string {
+  if (location.includes("?")) return location.slice(location.indexOf("?"));
+  if (typeof window !== "undefined" && window.location.search) {
+    return window.location.search;
+  }
+  return "";
+}
 
 function tabFromSearch(search: string): TabValue {
   const raw = new URLSearchParams(search).get("tab");
@@ -56,7 +70,7 @@ export default function ProductsAndPlansPage() {
   const branding = useBranding();
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
-  const search = location.includes("?") ? location.slice(location.indexOf("?")) : "";
+  const search = getSearchString(location);
   const [tab, setTab] = useState<TabValue>(() => tabFromSearch(search));
 
   const { data: homepage } = useHomepageSections();
@@ -64,8 +78,9 @@ export default function ProductsAndPlansPage() {
   const saveSettings = useSaveCatalogSettings();
 
   useEffect(() => {
-    setTab(tabFromSearch(search));
-  }, [search]);
+    const s = getSearchString(location);
+    setTab(tabFromSearch(s));
+  }, [location]);
 
   const goTab = (next: TabValue) => {
     setTab(next);

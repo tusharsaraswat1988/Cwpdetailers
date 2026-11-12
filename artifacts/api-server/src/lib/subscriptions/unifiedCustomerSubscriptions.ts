@@ -102,14 +102,7 @@ export async function listUnifiedCustomerSubscriptions(customerId: number): Prom
       .innerJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
       .innerJoin(customersTable, eq(dcmsSubscriptionsTable.customerId, customersTable.id))
       .innerJoin(vehiclesTable, eq(dcmsSubscriptionsTable.vehicleId, vehiclesTable.id))
-      .where(and(
-        eq(dcmsSubscriptionsTable.customerId, customerId),
-        or(
-          eq(dcmsSubscriptionsTable.status, "active"),
-          eq(dcmsSubscriptionsTable.status, "paused"),
-          eq(dcmsSubscriptionsTable.status, "completed"),
-        ),
-      ))
+      .where(eq(dcmsSubscriptionsTable.customerId, customerId))
       .orderBy(desc(dcmsSubscriptionsTable.createdAt)),
   ]);
 
@@ -119,6 +112,7 @@ export async function listUnifiedCustomerSubscriptions(customerId: number): Prom
     const used = (sub.usedCleanings ?? 0) + (sub.usedWashes ?? 0);
     const remaining = (sub.remainingCleanings ?? 0) + (sub.remainingWashes ?? 0);
     const vehicleName = [row.vehicleNumber, row.vehicleMake, row.vehicleModel].filter(Boolean).join(" · ");
+    const isPendingPayment = sub.status === "pending_payment";
 
     return {
       id: sub.id,
@@ -141,8 +135,8 @@ export async function listUnifiedCustomerSubscriptions(customerId: number): Prom
       servicesRemaining: remaining,
       graceMinutes: null,
       price: row.planPrice,
-      paidAmount: null,
-      dueAmount: null,
+      paidAmount: isPendingPayment ? "0.00" : row.planPrice,
+      dueAmount: isPendingPayment ? row.planPrice : "0.00",
       branchId: sub.branchId,
       companyId: sub.companyId,
       franchiseeId: sub.franchiseeId,

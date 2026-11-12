@@ -10,6 +10,8 @@ export type PlanStatus =
   | "PAUSED"
   | "COMPLETED"
   | "PENDING_ACTIVATION"
+  | "PENDING_PAYMENT"
+  | "CANCELLED"
   | "RENEWAL_DUE";
 
 export type PlanServiceLine = {
@@ -81,7 +83,10 @@ export function mapSubscriptionStatus(status?: string | null): PlanStatus {
       return "EXPIRED";
     case "expiring":
       return "RENEWAL_DUE";
+    case "pending_payment":
+      return "PENDING_PAYMENT";
     case "cancelled":
+      return "CANCELLED";
     case "completed":
       return "COMPLETED";
     case "pending":
@@ -96,7 +101,9 @@ export const PLAN_STATUS_LABELS: Record<PlanStatus, string> = {
   EXPIRED: "Expired",
   PAUSED: "Paused",
   COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
   PENDING_ACTIVATION: "Pending Activation",
+  PENDING_PAYMENT: "Payment Pending",
   RENEWAL_DUE: "Renewal Due",
 };
 
@@ -165,7 +172,9 @@ export function subscriptionsToPlans(subs: RawSubscription[]): CustomerPlan[] {
 }
 
 export function activePlans(subs: RawSubscription[]): CustomerPlan[] {
-  return subscriptionsToPlans(subs.filter(s => s.status === "active" || s.status === "paused" || s.status === "expiring"));
+  return subscriptionsToPlans(
+    subs.filter(s => s.status === "active" || s.status === "paused" || s.status === "expiring" || s.status === "pending_payment"),
+  );
 }
 
 export function eligibleBookingPlans(subs: RawSubscription[]): CustomerPlan[] {

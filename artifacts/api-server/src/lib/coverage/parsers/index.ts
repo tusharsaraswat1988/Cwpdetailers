@@ -59,6 +59,8 @@ export function buildCoverageRequest(
   const serviceId = serviceIdRaw != null ? Number(serviceIdRaw) : null;
   const cityIdRaw = body.cityId ?? overrides?.cityId;
   const cityId = cityIdRaw != null ? Number(cityIdRaw) : null;
+  const societyIdRaw = body.societyId ?? overrides?.societyId;
+  const societyId = societyIdRaw != null ? Number(societyIdRaw) : null;
 
   const draft: CoverageRequest = {
     customerId: overrides?.customerId ?? (body.customerId != null ? Number(body.customerId) : undefined),
@@ -68,6 +70,7 @@ export function buildCoverageRequest(
     placeId: overrides?.placeId ?? (typeof body.placeId === "string" ? body.placeId : null),
     serviceId: overrides?.serviceId ?? (Number.isFinite(serviceId) ? serviceId : null),
     cityId: overrides?.cityId ?? (Number.isFinite(cityId) ? cityId : null),
+    societyId: overrides?.societyId ?? (Number.isFinite(societyId) ? societyId : null),
     citySlug: overrides?.citySlug ?? (typeof body.citySlug === "string" ? body.citySlug : null),
     cityName:
       overrides?.cityName

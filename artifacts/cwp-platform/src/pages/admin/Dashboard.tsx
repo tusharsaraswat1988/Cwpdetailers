@@ -103,7 +103,7 @@ export default function AdminDashboard() {
       description="What needs your attention today"
       primaryAction={{
         label: "View today's jobs",
-        href: "/admin/service-updates",
+        href: "/admin/jobs",
         testId: "dashboard-primary-cta",
       }}
     >

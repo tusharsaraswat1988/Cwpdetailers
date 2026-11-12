@@ -39,8 +39,10 @@ export function PlanSummaryCard({
       PAUSED: "paused",
       EXPIRED: "cancelled",
       COMPLETED: "completed",
+      CANCELLED: "cancelled",
       RENEWAL_DUE: "scheduled",
       PENDING_ACTIVATION: "scheduled",
+      PENDING_PAYMENT: "payment_pending",
     };
     return map[plan.status] ?? "active";
   })();
@@ -144,7 +146,17 @@ export function PlanSummaryCard({
       {/* Action Buttons */}
       {variant !== "compact" && (
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          {onSelect ? (
+          {plan.status === "PENDING_PAYMENT" ? (
+            <Link href={plan.detailHref} className="flex-1 cursor-pointer">
+              <Button
+                size="sm"
+                className="w-full min-h-11 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs cursor-pointer gap-1.5"
+                data-testid={`btn-complete-payment-${plan.id}`}
+              >
+                <AlertCircle size={14} /> Complete Payment to Activate
+              </Button>
+            </Link>
+          ) : onSelect ? (
             <Button size="sm" className="flex-1 min-h-11 rounded-xl cursor-pointer" onClick={() => onSelect(plan)}>
               Use Plan <ArrowRight size={14} className="ml-1" />
             </Button>

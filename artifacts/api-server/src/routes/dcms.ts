@@ -9,7 +9,11 @@ import {
   updateSubscriptionLocation, renewSubscription,
   getCustomerActiveSubscription, cancelSubscription,
   listExpiringOrInactiveSubscriptions,
+  reassignMonthlyCleaner, listMonthlyCleanerSubscriptions,
 } from "../lib/dcms/subscriptionService";
+import {
+  listDcmsPackageWashes, assignDcmsPackageWash,
+} from "../lib/dcms/washAssignmentService";
 import {
   createOperationalException, listOperationalExceptions, resolveOperationalException,
 } from "../lib/dcms/exceptionService";
@@ -35,7 +39,17 @@ import { dcmsRateLimit } from "../middlewares/dcmsRateLimit";
 import { todayStrInIST } from "../lib/dcms/dateUtils";
 import { ImageValidationError } from "../lib/dcms/imageValidation";
 import { getAdminDashboardStats, getCustomerDashboardStats } from "../lib/dcms/analyticsService";
-import { db, dcmsActivityLogsTable, dcmsSubscriptionsTable } from "@workspace/db";
+import {
+  db,
+  dcmsActivityLogsTable,
+  dcmsSubscriptionsTable,
+  customersTable,
+  vehiclesTable,
+  invoicesTable,
+  staffTable,
+} from "@workspace/db";
+import { createCashfreePaymentOrder } from "../lib/cashfree/cashfreeService";
+import { pauseSubscription, resumeSubscription } from "../lib/dcms/subscriptionService";
 import { eq, desc, sql, inArray } from "drizzle-orm";
 import { OPERATIONAL_ROLE_SLUGS, staffHasOperationalRole } from "../lib/staffEcosystem/operationalRoles";
 
@@ -330,6 +344,172 @@ router.patch(
         req.user!.id,
       );
       return res.json({ ok: true });
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+// ─── Daily Cleaning Dedicated Assignment Endpoints ────────────────────────
+
+router.get(
+  "/daily-cleaning/assignments/monthly",
+  requireAuth,
+  requirePermission("daily_cleaning", "view"),
+  async (req, res) => {
+    try {
+      const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const societyId = req.query.societyId ? Number(req.query.societyId) : undefined;
+      const status = req.query.status as string | undefined;
+      const unassignedOnly = req.query.unassignedOnly === "true";
+      const search = req.query.search as string | undefined;
+
+      const data = await listMonthlyCleanerSubscriptions({
+        cityId,
+        branchId,
+        societyId,
+        status,
+        unassignedOnly,
+        search,
+      });
+      return res.json(data);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.post(
+  "/daily-cleaning/assignments/monthly/assign",
+  requireAuth,
+  requirePermission("daily_cleaning", "manage_subscriptions"),
+  async (req, res) => {
+    try {
+      const { subscriptionId, staffId, reason, notes, routeOrder } = req.body;
+      if (!subscriptionId || !staffId) {
+        return res.status(400).json({ error: "subscriptionId and staffId are required" });
+      }
+
+      const assignment = await reassignMonthlyCleaner({
+        subscriptionId: Number(subscriptionId),
+        newStaffId: Number(staffId),
+        assignedBy: req.user!.id,
+        reason: typeof reason === "string" ? reason : undefined,
+        notes: typeof notes === "string" ? notes : undefined,
+        routeOrder: routeOrder != null ? Number(routeOrder) : undefined,
+      });
+
+      return res.status(200).json({ ok: true, assignment });
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.get(
+  "/daily-cleaning/assignments/washes",
+  requireAuth,
+  requirePermission("daily_cleaning", "view"),
+  async (req, res) => {
+    try {
+      const subscriptionId = req.query.subscriptionId ? Number(req.query.subscriptionId) : undefined;
+      const societyId = req.query.societyId ? Number(req.query.societyId) : undefined;
+      const hasRemainingWashes = req.query.hasRemainingWashes === "true";
+      const scheduledDate = req.query.scheduledDate as string | undefined;
+      const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const search = req.query.search as string | undefined;
+
+      const data = await listDcmsPackageWashes({
+        subscriptionId,
+        societyId,
+        hasRemainingWashes,
+        scheduledDate,
+        cityId,
+        branchId,
+        search,
+      });
+      return res.json(data);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.post(
+  "/daily-cleaning/assignments/washes/assign",
+  requireAuth,
+  requirePermission("daily_cleaning", "manage_subscriptions"),
+  async (req, res) => {
+    try {
+      const { subscriptionId, staffId, scheduledDate, scheduledTime, notes } = req.body;
+      if (!subscriptionId || !staffId || !scheduledDate) {
+        return res.status(400).json({ error: "subscriptionId, staffId, and scheduledDate are required" });
+      }
+
+      const result = await assignDcmsPackageWash({
+        subscriptionId: Number(subscriptionId),
+        staffId: Number(staffId),
+        scheduledDate: String(scheduledDate),
+        scheduledTime: typeof scheduledTime === "string" ? scheduledTime : undefined,
+        assignedBy: req.user!.id,
+        notes: typeof notes === "string" ? notes : undefined,
+      });
+
+      return res.status(200).json({ ok: true, ...result });
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.get(
+  "/daily-cleaning/assignments/staff-options",
+  requireAuth,
+  requirePermission("daily_cleaning", "view"),
+  async (req, res) => {
+    try {
+      const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+
+      const conditions = [
+        eq(staffTable.isActive, true),
+        sql`${staffTable.verificationStatus} NOT IN ('suspended')`,
+      ];
+      if (cityId) conditions.push(eq(staffTable.cityId, cityId));
+      if (branchId) conditions.push(eq(staffTable.branchId, branchId));
+
+      const staffRows = await db
+        .select({
+          id: staffTable.id,
+          name: staffTable.name,
+          phone: staffTable.phone,
+          cityId: staffTable.cityId,
+          branchId: staffTable.branchId,
+          operationalRoles: staffTable.operationalRoles,
+        })
+        .from(staffTable)
+        .where(and(...conditions))
+        .orderBy(staffTable.name);
+
+      const enriched = staffRows.map(s => {
+        const roles = Array.isArray(s.operationalRoles) ? s.operationalRoles : [];
+        const isCleaner = roles.includes("daily_car_cleaner") || roles.length === 0;
+        const isWasher = roles.includes("car_washer") || roles.length === 0;
+        return {
+          id: s.id,
+          name: s.name,
+          phone: s.phone,
+          cityId: s.cityId,
+          branchId: s.branchId,
+          operationalRoles: roles,
+          isCleaner,
+          isWasher,
+        };
+      });
+
+      return res.json(enriched);
     } catch (err) {
       return handleError(req, res, err);
     }
@@ -855,6 +1035,326 @@ router.get(
         allVisits.push(...visits.filter(v => v.visit.photoUrl));
       }
       return res.json(allVisits);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+/**
+ * Customer Self-Service: Available Daily Cleaning Plans
+ * GET /api/daily-cleaning/customer/available-plans
+ * Filters plans strictly for customer's city and vehicle seater tier.
+ */
+router.get(
+  "/daily-cleaning/customer/available-plans",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const customerId = req.user!.customerId;
+      if (!customerId) return res.status(403).json({ error: "Customer account required" });
+
+      const [customer] = await db
+        .select({ id: customersTable.id, cityId: customersTable.cityId })
+        .from(customersTable)
+        .where(eq(customersTable.id, customerId))
+        .limit(1);
+
+      const cityId = req.query.cityId ? Number(req.query.cityId) : (customer?.cityId ?? undefined);
+      const vehicleId = req.query.vehicleId ? Number(req.query.vehicleId) : undefined;
+
+      const plans = await listPlans(true, vehicleId, true, false, cityId);
+      return res.json(plans);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+/**
+ * Customer Self-Service: Initiate Subscription Purchase Order
+ * POST /api/daily-cleaning/customer/subscribe-order
+ * Creates subscription in 'pending_payment' status without enqueuing cleaner routes,
+ * generates invoice, and creates Cashfree hosted checkout session.
+ */
+router.post(
+  "/daily-cleaning/customer/subscribe-order",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const customerId = req.user!.customerId;
+      if (!customerId) return res.status(403).json({ error: "Customer account required" });
+
+      const {
+        vehicleId,
+        planId,
+        startDate,
+        societyId,
+        towerId,
+        flatNumber,
+        parkingLevel,
+        parkingBay,
+        parkingNotes,
+        returnUrl,
+      } = req.body;
+
+      if (!vehicleId || !planId || !startDate) {
+        return res.status(400).json({
+          error: "VALIDATION_FAILED",
+          message: "vehicleId, planId, and startDate are required",
+        });
+      }
+
+      // 1. Verify customer and vehicle ownership
+      const [customer] = await db
+        .select()
+        .from(customersTable)
+        .where(eq(customersTable.id, customerId))
+        .limit(1);
+      if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+      const [vehicle] = await db
+        .select()
+        .from(vehiclesTable)
+        .where(and(eq(vehiclesTable.id, Number(vehicleId)), eq(vehiclesTable.customerId, customerId)))
+        .limit(1);
+      if (!vehicle) {
+        return res.status(400).json({ error: "Vehicle not found for this customer" });
+      }
+
+      // 2. Guard: Prevent duplicate active subscriptions on the same vehicle
+      const [existingActive] = await db
+        .select()
+        .from(dcmsSubscriptionsTable)
+        .where(
+          and(
+            eq(dcmsSubscriptionsTable.vehicleId, Number(vehicleId)),
+            eq(dcmsSubscriptionsTable.status, "active"),
+          ),
+        )
+        .limit(1);
+
+      if (existingActive) {
+        return res.status(409).json({
+          error: "ACTIVE_SUBSCRIPTION_EXISTS",
+          message: "An active subscription already exists for this vehicle. Please renew or cancel before subscribing again.",
+          subscriptionId: existingActive.id,
+        });
+      }
+
+      // 3. Resolve plan and city
+      const plan = await getPlanById(Number(planId));
+      if (!plan || !plan.isActive) {
+        return res.status(400).json({ error: "Plan not found or currently inactive" });
+      }
+
+      const effectiveCityId = customer.cityId ?? plan.cityId ?? 1;
+
+      // 4. Create subscription in 'pending_payment' state (cleaner routes NOT assigned yet)
+      const sub = await createSubscription(
+        {
+          customerId,
+          vehicleId: Number(vehicleId),
+          planId: Number(planId),
+          startDate,
+          initialStatus: "pending_payment",
+          cityId: effectiveCityId,
+          branchId: customer.branchId ?? null,
+          societyId: societyId ? Number(societyId) : null,
+          towerId: towerId ? Number(towerId) : null,
+          parkingBay: parkingBay || null,
+        },
+        req.user!.id,
+      );
+
+      // 5. Look up invoice created for this plan
+      const [invoice] = await db
+        .select()
+        .from(invoicesTable)
+        .where(
+          and(
+            eq(invoicesTable.customerId, customerId),
+            eq(invoicesTable.status, "sent"),
+          ),
+        )
+        .orderBy(desc(invoicesTable.id))
+        .limit(1);
+
+      // 6. Generate Cashfree payment order session
+      const host = req.get("host");
+      const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+      const origin = req.get("origin");
+      let inferredBaseUrl = origin || (host ? `${proto}://${host}` : undefined);
+      if (inferredBaseUrl && inferredBaseUrl.startsWith("http://") && !inferredBaseUrl.includes("localhost") && !inferredBaseUrl.includes("127.0.0.1")) {
+        inferredBaseUrl = inferredBaseUrl.replace("http://", "https://");
+      }
+
+      const checkoutSession = await createCashfreePaymentOrder({
+        customerId,
+        invoiceId: invoice?.id,
+        subscriptionId: sub.id,
+        cityId: effectiveCityId,
+        branchId: customer.branchId ?? undefined,
+        returnUrl: returnUrl || "/customer/payment/return?order_id={order_id}",
+        baseUrl: inferredBaseUrl,
+      });
+
+      return res.status(201).json({
+        success: true,
+        subscriptionId: sub.id,
+        status: sub.status,
+        invoiceId: invoice?.id,
+        ...checkoutSession,
+      });
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+/**
+ * Customer Self-Service: Retry Payment for Pending Subscription
+ * POST /api/daily-cleaning/customer/subscriptions/:id/retry-payment
+ */
+router.post(
+  "/daily-cleaning/customer/subscriptions/:id/retry-payment",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const customerId = req.user!.customerId;
+      if (!customerId) return res.status(403).json({ error: "Customer account required" });
+
+      const subId = Number(req.params.id);
+      const [sub] = await db
+        .select()
+        .from(dcmsSubscriptionsTable)
+        .where(and(eq(dcmsSubscriptionsTable.id, subId), eq(dcmsSubscriptionsTable.customerId, customerId)))
+        .limit(1);
+
+      if (!sub) return res.status(404).json({ error: "Subscription not found" });
+      if (sub.status !== "pending_payment") {
+        return res.status(400).json({
+          error: "INVALID_STATE",
+          message: `Subscription is in '${sub.status}' state and does not require payment`,
+        });
+      }
+
+      const host = req.get("host");
+      const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+      const origin = req.get("origin");
+      let inferredBaseUrl = origin || (host ? `${proto}://${host}` : undefined);
+      if (inferredBaseUrl && inferredBaseUrl.startsWith("http://") && !inferredBaseUrl.includes("localhost") && !inferredBaseUrl.includes("127.0.0.1")) {
+        inferredBaseUrl = inferredBaseUrl.replace("http://", "https://");
+      }
+
+      const checkoutSession = await createCashfreePaymentOrder({
+        customerId,
+        subscriptionId: sub.id,
+        cityId: sub.cityId ?? undefined,
+        branchId: sub.branchId ?? undefined,
+        returnUrl: "/customer/payment/return?order_id={order_id}",
+        baseUrl: inferredBaseUrl,
+      });
+
+      return res.json({
+        success: true,
+        subscriptionId: sub.id,
+        status: sub.status,
+        ...checkoutSession,
+      });
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+/**
+ * Customer Self-Service: Pause Subscription
+ * POST /api/daily-cleaning/customer/subscriptions/:id/pause
+ */
+router.post(
+  "/daily-cleaning/customer/subscriptions/:id/pause",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const customerId = req.user!.customerId;
+      if (!customerId) return res.status(403).json({ error: "Customer account required" });
+
+      const subId = Number(req.params.id);
+      const [sub] = await db
+        .select()
+        .from(dcmsSubscriptionsTable)
+        .where(and(eq(dcmsSubscriptionsTable.id, subId), eq(dcmsSubscriptionsTable.customerId, customerId)))
+        .limit(1);
+
+      if (!sub) return res.status(404).json({ error: "Subscription not found" });
+
+      const { pauseStartDate, pauseEndDate, pauseReason } = req.body;
+      const updated = await pauseSubscription(
+        subId,
+        { pauseStartDate, pauseEndDate, pauseReason },
+        req.user!.id,
+      );
+
+      return res.json(updated);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+/**
+ * Customer Self-Service: Resume Subscription
+ * POST /api/daily-cleaning/customer/subscriptions/:id/resume
+ */
+router.post(
+  "/daily-cleaning/customer/subscriptions/:id/resume",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const customerId = req.user!.customerId;
+      if (!customerId) return res.status(403).json({ error: "Customer account required" });
+
+      const subId = Number(req.params.id);
+      const [sub] = await db
+        .select()
+        .from(dcmsSubscriptionsTable)
+        .where(and(eq(dcmsSubscriptionsTable.id, subId), eq(dcmsSubscriptionsTable.customerId, customerId)))
+        .limit(1);
+
+      if (!sub) return res.status(404).json({ error: "Subscription not found" });
+
+      const updated = await resumeSubscription(subId, req.user!.id);
+      return res.json(updated);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+/**
+ * Customer Self-Service: Cancel Subscription
+ * POST /api/daily-cleaning/customer/subscriptions/:id/cancel
+ */
+router.post(
+  "/daily-cleaning/customer/subscriptions/:id/cancel",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const customerId = req.user!.customerId;
+      if (!customerId) return res.status(403).json({ error: "Customer account required" });
+
+      const subId = Number(req.params.id);
+      const [sub] = await db
+        .select()
+        .from(dcmsSubscriptionsTable)
+        .where(and(eq(dcmsSubscriptionsTable.id, subId), eq(dcmsSubscriptionsTable.customerId, customerId)))
+        .limit(1);
+
+      if (!sub) return res.status(404).json({ error: "Subscription not found" });
+
+      const updated = await cancelSubscription(subId, req.user!.id, req.body.reason);
+      return res.json(updated);
     } catch (err) {
       return handleError(req, res, err);
     }

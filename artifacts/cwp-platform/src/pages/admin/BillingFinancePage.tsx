@@ -108,7 +108,7 @@ export default function BillingFinancePage() {
           qc.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
         }}
       />
-      <RecordPaymentDialog open={payOpen} onOpenChange={setPayOpen} prefillCustomerId={prefillCustomerId} />
+      <RecordPaymentDialog trigger={false} open={payOpen} onOpenChange={setPayOpen} prefillCustomerId={prefillCustomerId} />
 
       {customerFilter && prefillCustomerId && (
         <CustomerFilterBanner customerId={prefillCustomerId} onClear={clearCustomerFilter} />

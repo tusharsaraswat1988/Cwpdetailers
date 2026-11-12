@@ -1,10 +1,11 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, CreditCard, ClipboardList, Sparkles, History, Users } from "lucide-react";
+import { LayoutDashboard, CreditCard, ClipboardList, Sparkles, History, Users, UserCheck } from "lucide-react";
 
 const tabs = [
   { href: "/admin/daily-cleaning", label: "Dashboard", icon: LayoutDashboard, exact: true as const },
   { href: "/admin/daily-cleaning/subscriptions", label: "Subscriptions", icon: CreditCard, exact: false as const },
+  { href: "/admin/daily-cleaning/assignments", label: "Assignments", icon: UserCheck, exact: false as const },
   { href: "/admin/daily-cleaning/history", label: "Service History", icon: History, exact: false as const },
   { href: "/admin/daily-cleaning/staff-performance", label: "Staff Performance", icon: Users, exact: false as const },
 ] as const;

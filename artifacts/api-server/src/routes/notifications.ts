@@ -23,7 +23,7 @@ const router = Router();
  */
 export function buildNotificationQueryConditions(
   req: Pick<Request, "scope" | "user">,
-  query: { userId?: string; isRead?: string },
+  query: { userId?: string; isRead?: string; cityId?: string },
 ) {
   const conditions = [];
 
@@ -35,7 +35,12 @@ export function buildNotificationQueryConditions(
     const tFilters = tenantFilters(req as any, { companyCol: notificationsTable.companyId });
     if (tFilters.length) conditions.push(...tFilters);
   } else if (req.user) {
-    const userPred = eq(notificationsTable.userId, req.user.id);
+    const userConditions = [eq(notificationsTable.userId, req.user.id)];
+    if (req.user.customerId) {
+      userConditions.push(eq(notificationsTable.customerId, req.user.customerId));
+    }
+    const userPred = userConditions.length > 1 ? or(...userConditions) : userConditions[0];
+
     if (req.user.role === "admin" || req.user.role === "manager") {
       const tFilters = tenantFilters(req as any, {
         companyCol: notificationsTable.companyId,
@@ -54,6 +59,9 @@ export function buildNotificationQueryConditions(
 
   if (query.isRead !== undefined) {
     conditions.push(eq(notificationsTable.isRead, query.isRead === "true"));
+  }
+  if (query.cityId !== undefined && query.cityId !== "") {
+    conditions.push(eq(notificationsTable.cityId, parseInt(query.cityId)));
   }
 
   return conditions;
@@ -149,12 +157,64 @@ router.post("/notifications/test-sms", async (req, res) => {
   }
 });
 
+router.get("/notifications/unread-count", async (req, res) => {
+  try {
+    let conditions;
+    try {
+      conditions = buildNotificationQueryConditions(req, { isRead: "false" });
+    } catch (authErr: any) {
+      if (authErr?.message === "Authentication required") {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      throw authErr;
+    }
+
+    const where = conditions.length ? and(...conditions) : undefined;
+    const countResult = await db.select().from(notificationsTable).where(where);
+    return res.json({ unreadCount: countResult.length });
+  } catch (err) {
+    req.log.error({ err }, "Get unread notifications count error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/notifications/mark-all-read", async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Authentication required" });
+
+    const conditions = [];
+    const userConditions = [eq(notificationsTable.userId, req.user.id)];
+    if (req.user.customerId) {
+      userConditions.push(eq(notificationsTable.customerId, req.user.customerId));
+    }
+    conditions.push(userConditions.length > 1 ? or(...userConditions) : userConditions[0]);
+    conditions.push(eq(notificationsTable.isRead, false));
+
+    const updated = await db
+      .update(notificationsTable)
+      .set({ isRead: true })
+      .where(and(...conditions))
+      .returning();
+
+    return res.json({ success: true, count: updated.length });
+  } catch (err) {
+    req.log.error({ err }, "Mark all notifications read error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.patch("/notifications/:id/read", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const [existing] = await db.select().from(notificationsTable).where(eq(notificationsTable.id, id)).limit(1);
     if (!existing) return res.status(404).json({ error: "Notification not found" });
-    if (!req.scope?.isSuperAdmin && req.user?.id !== existing.userId) {
+
+    const isOwner =
+      req.scope?.isSuperAdmin ||
+      req.user?.id === existing.userId ||
+      (req.user?.customerId && existing.customerId === req.user.customerId);
+
+    if (!isOwner) {
       return res.status(404).json({ error: "Notification not found" });
     }
     const [notification] = await db.update(notificationsTable).set({ isRead: true }).where(eq(notificationsTable.id, id)).returning();

@@ -50,6 +50,9 @@ export interface LedgerRowData {
   internalReference: string;
   status: "success" | "pending" | "failed" | "abandoned" | "reversed";
   notes: string | null;
+  subscriptionId?: number | null;
+  branchId?: number | null;
+  branchName?: string | null;
   rawWebhookPayload?: Record<string, unknown> | null;
   rawVerificationPayload?: Record<string, unknown> | null;
 }
@@ -174,6 +177,22 @@ export function TransactionDetailsDrawer({
                   <span>{transaction.city}</span>
                 </p>
               </div>
+              {transaction.branchName && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Branch</p>
+                  <p className="text-foreground font-medium text-xs">
+                    {transaction.branchName}
+                  </p>
+                </div>
+              )}
+              {transaction.subscriptionId && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Linked Subscription</p>
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-mono font-bold">
+                    DCMS #{transaction.subscriptionId}
+                  </Badge>
+                </div>
+              )}
             </div>
           </div>
 

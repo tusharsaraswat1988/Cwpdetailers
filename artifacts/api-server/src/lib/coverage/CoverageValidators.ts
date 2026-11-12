@@ -5,6 +5,7 @@ import { addressValidator } from "./validators/AddressValidator";
 import { pinValidator } from "./validators/PinValidator";
 import { serviceAreaValidator } from "./validators/ServiceAreaValidator";
 import { cityValidator } from "./validators/CityValidator";
+import { societyValidator } from "./validators/SocietyValidator";
 import { serviceValidator } from "./validators/ServiceValidator";
 import type { CoverageValidator, PipelineState, PipelineResult } from "./validators/types";
 
@@ -13,6 +14,7 @@ const DEFAULT_PIPELINE: CoverageValidator[] = [
   pinValidator,
   serviceAreaValidator,
   cityValidator,
+  societyValidator,
   serviceValidator,
 ];
 
@@ -60,5 +62,6 @@ export {
   pinValidator,
   serviceAreaValidator,
   cityValidator,
+  societyValidator,
   serviceValidator,
 };

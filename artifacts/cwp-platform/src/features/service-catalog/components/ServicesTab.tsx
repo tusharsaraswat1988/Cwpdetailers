@@ -343,7 +343,7 @@ export function ServicesTab({ revenueLine }: Props) {
               : "One-time wash and detailing services customers can book"}
           </CardDescription>
         </div>
-        {hqEditor && (
+        {hqEditor && filtered.length > 0 && (
           <Button size="sm" onClick={openCreate} className="shrink-0">
             <Plus size={14} className="mr-1" />Add service
           </Button>

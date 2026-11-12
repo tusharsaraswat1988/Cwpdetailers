@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Pause, Play, CalendarCheck, XCircle, AlertTriangle, Search } from "lucide-react";
+import { RefreshCw, Pause, Play, CalendarCheck, XCircle, AlertTriangle, Search, UserCheck } from "lucide-react";
 
 export default function DcmsSubscriptionsPage() {
   const { data: subs, isLoading } = useDcmsSubscriptions();
@@ -96,8 +96,13 @@ export default function DcmsSubscriptionsPage() {
                 className="pl-8 h-9 w-60 text-xs"
               />
             </div>
+            <Link href="/admin/daily-cleaning/assignments">
+              <Button size="sm" variant="default" className="text-xs">
+                <UserCheck className="h-4 w-4 mr-1" /> Assignments Center
+              </Button>
+            </Link>
             <Link href="/admin/book-services">
-              <Button size="sm" variant="outline">
+              <Button size="sm" variant="outline" className="text-xs">
                 <CalendarCheck className="h-4 w-4 mr-1" /> Create Service Request
               </Button>
             </Link>
@@ -140,6 +145,11 @@ export default function DcmsSubscriptionsPage() {
                       <Badge variant={s.status === "active" ? "default" : s.status === "cancelled" ? "destructive" : "secondary"}>
                         {s.status}
                       </Badge>
+                      <Link href="/admin/daily-cleaning/assignments">
+                        <Button size="sm" variant="outline" className="text-xs">
+                          <UserCheck className="h-3 w-3 mr-1" /> Assignments
+                        </Button>
+                      </Link>
                       {s.status === "active" && (
                         <Button size="sm" variant="outline" onClick={() => setPauseOpen(s.id)}>
                           <Pause className="h-3 w-3 mr-1" /> Pause

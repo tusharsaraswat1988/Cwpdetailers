@@ -1091,6 +1091,25 @@ export async function reassignAssignment(
       sql`${serviceExecutionsTable.status} NOT IN ('completed', 'cancelled', 'missed')`,
     ));
 
+  // If this assignment is linked to a DCMS daily cleaning subscription, synchronize the persistent cleaner route table
+  if (assignment.pendingAssignmentId && taskType === "daily_cleaning") {
+    const [pendingRow] = await db.select({
+      sourceSystem: pendingServiceAssignmentsTable.sourceSystem,
+      sourceId: pendingServiceAssignmentsTable.sourceId,
+    })
+      .from(pendingServiceAssignmentsTable)
+      .where(eq(pendingServiceAssignmentsTable.id, assignment.pendingAssignmentId))
+      .limit(1);
+
+    if (pendingRow?.sourceSystem === "dcms") {
+      try {
+        await assignDcmsStaff(pendingRow.sourceId, newStaffId, actor.actorId ?? 0);
+      } catch {
+        // Best effort sync
+      }
+    }
+  }
+
   await recordAssignmentTimeline({
     assignmentId,
     pendingAssignmentId: assignment.pendingAssignmentId,
@@ -1205,6 +1224,24 @@ export async function removeAssignment(
   await db.update(pendingServiceAssignmentsTable)
     .set({ status: "pending", updatedAt: now })
     .where(eq(pendingServiceAssignmentsTable.id, assignment.pendingAssignmentId));
+
+  // Deactivate DCMS persistent cleaner route if daily_cleaning
+  if (assignment.pendingAssignmentId && assignment.taskType === "daily_cleaning") {
+    const [pendingRow] = await db.select({
+      sourceSystem: pendingServiceAssignmentsTable.sourceSystem,
+      sourceId: pendingServiceAssignmentsTable.sourceId,
+    })
+      .from(pendingServiceAssignmentsTable)
+      .where(eq(pendingServiceAssignmentsTable.id, assignment.pendingAssignmentId))
+      .limit(1);
+
+    if (pendingRow?.sourceSystem === "dcms") {
+      const { dcmsStaffAssignmentsTable } = await import("@workspace/db");
+      await db.update(dcmsStaffAssignmentsTable)
+        .set({ isActive: false })
+        .where(eq(dcmsStaffAssignmentsTable.subscriptionId, pendingRow.sourceId));
+    }
+  }
 
   await recordAssignmentTimeline({
     assignmentId,

@@ -62,6 +62,7 @@ import LegalCMS from "@/pages/admin/LegalCMS";
 import BusinessInfoPage from "@/pages/admin/BusinessInfo";
 import ComplianceSettings from "@/pages/admin/ComplianceSettings";
 import SeoSettingsPage from "@/pages/admin/SeoSettings";
+import QualityHub from "@/pages/admin/QualityHub";
 
 import PrivacyPolicy from "@/pages/legal/PrivacyPolicy";
 import TermsAndConditions from "@/pages/legal/TermsAndConditions";
@@ -99,7 +100,7 @@ import FranchiseeCustomerDetail from "@/pages/franchisee/CustomerDetail";
 import OperationsWall from "@/pages/admin/OperationsWall";
 import FounderDashboard from "@/pages/admin/FounderDashboard";
 import {
-  DcmsDashboardPage, DcmsSubscriptionsPage, DcmsServiceHistoryPage, DcmsStaffPerformancePage,
+  DcmsDashboardPage, DcmsSubscriptionsPage, DcmsAssignmentsPage, DcmsServiceHistoryPage, DcmsStaffPerformancePage,
   CustomerDailyCleaningPage, CustomerDcmsHistoryPage, CustomerDcmsGalleryPage,
 } from "@/features/daily-cleaning";
 
@@ -202,7 +203,7 @@ function Router() {
       <Route path="/admin/daily-cleaning/visits" component={() => <Redirect to="/admin/daily-cleaning/history" />} />
       <Route path="/admin/daily-cleaning/washes" component={() => <Redirect to="/admin/daily-cleaning/history" />} />
       <Route path="/admin/daily-cleaning/staff-performance" component={() => <ProtectedRoute component={DcmsStaffPerformancePage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view_reports" }} loginPath="/admin/login" />} />
-      <Route path="/admin/daily-cleaning/assignments" component={() => <Redirect to="/admin/assign-services" />} />
+      <Route path="/admin/daily-cleaning/assignments" component={() => <ProtectedRoute component={DcmsAssignmentsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "manage_subscriptions" }} loginPath="/admin/login" />} />
       <Route path="/admin/daily-cleaning" component={() => <ProtectedRoute component={DcmsDashboardPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view_reports" }} loginPath="/admin/login" />} />
       <Route path="/admin/subscriptions" component={() => <ProtectedRoute component={AdminSubscriptions} roles={["admin", "superadmin", "manager"]} permission={{ resource: "subscriptions", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/billing" component={() => <ProtectedRoute component={BillingFinancePage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
@@ -213,6 +214,7 @@ function Router() {
       <Route path="/admin/expenses" component={() => <Redirect to="/admin/billing?tab=expenses" />} />
       <Route path="/admin/settings/invoice-billing" component={() => <ProtectedRoute component={InvoiceBillingSettingsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={["admin", "superadmin", "manager"]} permission={{ resource: "complaints", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/quality" component={() => <ProtectedRoute component={QualityHub} roles={["admin", "superadmin", "manager"]} permission={{ resource: "analytics", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/book-services" component={() => <ProtectedRoute component={BookServicesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/assign-services" component={() => <ProtectedRoute component={AssignServicesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "edit" }} loginPath="/admin/login" />} />
       <Route path="/admin/jobs" component={() => <ProtectedRoute component={JobOrchestrationPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "edit" }} loginPath="/admin/login" />} />

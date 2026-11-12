@@ -166,7 +166,10 @@ async function fetchBranches(cityId?: string): Promise<BranchItem[]> {
 async function fetchLegalEntities(): Promise<Array<{ id: number; name: string; code: string }>> {
   const res = await fetch("/api/legal-entities", { credentials: "include" });
   if (!res.ok) return [];
-  return res.json();
+  const body = await res.json();
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  return [];
 }
 
 async function fetchFranchisees(): Promise<Array<{ id: number; name: string }>> {
@@ -183,6 +186,7 @@ export default function BranchesPage() {
   const citiesQuery = useMasterList<City>("cities");
   const legalEntitiesQuery = useQuery({ queryKey: ["legal-entities"], queryFn: fetchLegalEntities });
   const franchiseesQuery = useQuery({ queryKey: ["franchisees"], queryFn: fetchFranchisees });
+  const legalEntitiesList = Array.isArray(legalEntitiesQuery.data) ? legalEntitiesQuery.data : [];
 
   const { data: branches = [], isLoading } = useQuery({
     queryKey: ["branches", selectedCityId],
@@ -871,7 +875,7 @@ export default function BranchesPage() {
                       <SelectValue placeholder="Select legal entity" />
                     </SelectTrigger>
                     <SelectContent>
-                      {legalEntitiesQuery.data?.map((le) => (
+                      {legalEntitiesList.map((le) => (
                         <SelectItem key={le.id} value={String(le.id)}>
                           {le.name} ({le.code})
                         </SelectItem>
@@ -999,7 +1003,7 @@ export default function BranchesPage() {
                       <SelectValue placeholder="Select legal entity" />
                     </SelectTrigger>
                     <SelectContent>
-                      {legalEntitiesQuery.data?.map((le) => (
+                      {legalEntitiesList.map((le) => (
                         <SelectItem key={le.id} value={String(le.id)}>
                           {le.name} ({le.code})
                         </SelectItem>

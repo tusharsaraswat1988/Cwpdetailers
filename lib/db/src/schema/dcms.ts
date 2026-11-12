@@ -190,6 +190,14 @@ export const dcmsSubscriptionsTable = pgTable("dcms_subscriptions", {
 
   pauseReason: text("pause_reason"),
 
+  cancellationReason: text("cancellation_reason"),
+
+  cancellationFeedback: text("cancellation_feedback"),
+
+  churnRiskLevel: text("churn_risk_level").default("low"),
+
+  cancellationRequestedAt: timestamp("cancellation_requested_at"),
+
   version: integer("version").notNull().default(1),
 
   companyId: integer("company_id"),
@@ -386,19 +394,43 @@ export const dcmsVisitFeedbackTable = pgTable("dcms_visit_feedback", {
 
   visitId: integer("visit_id").notNull(),
 
+  subscriptionId: integer("subscription_id"),
+
   customerId: integer("customer_id").notNull(),
+
+  staffId: integer("staff_id"),
+
+  cityId: integer("city_id"),
+
+  branchId: integer("branch_id"),
 
   rating: text("rating").notNull(),
 
+  ratingScore: integer("rating_score"),
+
   comment: text("comment"),
 
+  tags: json("tags").$type<string[]>().default([]),
+
+  issueReported: boolean("issue_reported").default(false),
+
+  complaintId: integer("complaint_id"),
+
   createdAt: timestamp("created_at").notNull().defaultNow(),
+
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 
 }, t => ({
 
   visitUnique: uniqueIndex("dcms_visit_feedback_visit_unique").on(t.visitId),
 
   customerIdx: index("idx_dcms_visit_feedback_customer").on(t.customerId),
+
+  subscriptionIdx: index("idx_dcms_visit_feedback_sub").on(t.subscriptionId),
+
+  staffIdx: index("idx_dcms_visit_feedback_staff").on(t.staffId),
+
+  ratingScoreIdx: index("idx_dcms_visit_feedback_score").on(t.ratingScore),
 
 }));
 
@@ -470,6 +502,7 @@ export const dcmsOperationalExceptionsTable = pgTable("dcms_operational_exceptio
   resolutionNotes: text("resolution_notes"),
   resolvedAt: timestamp("resolved_at"),
   resolvedBy: integer("resolved_by"),
+  complaintId: integer("complaint_id"),
   companyId: integer("company_id"),
   branchId: integer("branch_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -478,6 +511,7 @@ export const dcmsOperationalExceptionsTable = pgTable("dcms_operational_exceptio
   subIdx: index("idx_dcms_exceptions_sub").on(t.subscriptionId),
   societyIdx: index("idx_dcms_exceptions_society").on(t.societyId),
   statusIdx: index("idx_dcms_exceptions_status").on(t.status),
+  complaintIdx: index("idx_dcms_exceptions_complaint").on(t.complaintId),
 }));
 
 export const insertDcmsOperationalExceptionSchema = createInsertSchema(dcmsOperationalExceptionsTable).omit({

@@ -6,8 +6,26 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Droplets, History, Camera, ArrowRight, Pause, Calendar, AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  Sparkles,
+  Droplets,
+  History,
+  Camera,
+  ArrowRight,
+  Pause,
+  Calendar,
+  AlertCircle,
+  CheckCircle2,
+  CreditCard,
+  RefreshCw,
+} from "lucide-react";
 import { CustomerVisitFeedback } from "../components/CustomerVisitFeedback";
+import { CustomerSubscribeModal } from "../components/CustomerSubscribeModal";
+import { CustomerCancelModal } from "../components/CustomerCancelModal";
+import { VisitFeedbackCard } from "@/components/feedback/VisitFeedbackCard";
+import { qualityApi } from "@/lib/quality/api";
+import { launchCashfreeCheckout } from "@/lib/cashfree";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CustomerPage,
   CustomerHeader,
@@ -100,13 +118,96 @@ export function DcmsHomeCard() {
 export default function CustomerDailyCleaningPage() {
   const { data, isLoading } = useCustomerDcmsDashboard();
   const { data: pendingFeedback, refetch: refetchFeedback } = usePendingFeedback();
+  const { data: pendingFeedbackList, refetch: refetchPendingFeedback } = useQuery({
+    queryKey: ["customer-pending-feedback"],
+    queryFn: qualityApi.getPendingFeedback,
+  });
   const { requestPause } = usePauseMutations();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [isRetryingPayment, setIsRetryingPayment] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const [pauseForm, setPauseForm] = useState({ pauseStartDate: "", pauseEndDate: "", pauseReason: "" });
   const [touched, setTouched] = useState({ pauseStartDate: false, pauseEndDate: false, pauseReason: false });
 
   const stats = data?.stats as DcmsStats | null;
+
+  const handleRetryPayment = async (subscriptionId: number) => {
+    setIsRetryingPayment(true);
+    try {
+      const res = await fetch(`/api/daily-cleaning/customer/subscriptions/${subscriptionId}/retry-payment`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData.error || "Failed to initiate payment retry");
+      }
+      if (resData.paymentSessionId) {
+        await launchCashfreeCheckout({
+          paymentSessionId: resData.paymentSessionId,
+          environment: resData.environment || "sandbox",
+          redirectTarget: "_self",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Payment Error",
+        description: err.message || "Failed to launch payment checkout.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRetryingPayment(false);
+    }
+  };
+
+  const handleResume = async (subscriptionId: number) => {
+    setIsResuming(true);
+    try {
+      const res = await fetch(`/api/daily-cleaning/customer/subscriptions/${subscriptionId}/resume`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData.error || "Failed to resume subscription");
+      }
+      toast({ title: "Subscription Resumed", description: "Your daily cleaning service is active again." });
+      queryClient.invalidateQueries({ queryKey: ["dcms"] });
+    } catch (err: any) {
+      toast({ title: "Resume Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  const handleCancel = async (subscriptionId: number) => {
+    if (!window.confirm("Are you sure you want to cancel this daily cleaning subscription?")) return;
+    setIsCancelling(true);
+    try {
+      const res = await fetch(`/api/daily-cleaning/customer/subscriptions/${subscriptionId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ reason: "Customer self-service cancellation" }),
+      });
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData.error || "Failed to cancel subscription");
+      }
+      toast({ title: "Subscription Cancelled", description: "Your subscription has been cancelled." });
+      queryClient.invalidateQueries({ queryKey: ["dcms"] });
+    } catch (err: any) {
+      toast({ title: "Cancel Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -158,12 +259,31 @@ export default function CustomerDailyCleaningPage() {
           subtitle="Doorstep vehicle maintenance, cleaning progress & schedules"
         />
 
-        {(pendingFeedback ?? []).length > 0 && (
-          <CustomerVisitFeedback
+        {pendingFeedbackList && pendingFeedbackList.length > 0 ? (
+          <div className="space-y-3">
+            {pendingFeedbackList.map((item) => (
+              <VisitFeedbackCard
+                key={item.visitId}
+                visitId={item.visitId}
+                vehicleName={`${item.vehicleName} (${item.vehicleNumber})`}
+                visitDate={item.visitTime}
+                onSubmitted={() => {
+                  void refetchPendingFeedback();
+                  void refetchFeedback();
+                }}
+              />
+            ))}
+          </div>
+        ) : (pendingFeedback ?? []).length > 0 ? (
+          <VisitFeedbackCard
             visitId={pendingFeedback![0]!.visit.id}
-            onSubmitted={() => void refetchFeedback()}
+            visitDate={pendingFeedback![0]!.visit.visitTime}
+            onSubmitted={() => {
+              void refetchPendingFeedback();
+              void refetchFeedback();
+            }}
           />
-        )}
+        ) : null}
 
         {isLoading ? (
           <div className="space-y-4">
@@ -175,13 +295,130 @@ export default function CustomerDailyCleaningPage() {
             <CustomerSkeleton className="h-64 w-full rounded-2xl" />
           </div>
         ) : !stats ? (
-          <CustomerEmptyState
-            title="No active daily cleaning subscription"
-            description="Your daily cleaning plan will appear here once activated."
-            hint="Contact your CWP representative or explore available plans."
-          />
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-[0_2px_12px_rgba(11,29,54,0.04)] space-y-6">
+            <div className="max-w-xl space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-primary text-xs font-bold uppercase tracking-wider">
+                <Sparkles size={13} className="text-yellow-500" /> Doorstep Service
+              </div>
+              <h2 className="font-display font-bold text-2xl sm:text-3xl text-foreground tracking-tight">
+                Daily Car Cleaning at Your Society
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Start your mornings with a spotless, dusted car right at your assigned society parking bay. Professional microfiber cleaning and scheduled foam washes.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 pt-1">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                <p className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-primary" /> Daily Dusting & Wiping
+                </p>
+                <p className="text-[11px] text-muted-foreground">Premium microfiber cleaning before you leave for work.</p>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                <p className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                  <Droplets size={14} className="text-cyan-600" /> Periodic Foam Washes
+                </p>
+                <p className="text-[11px] text-muted-foreground">Scheduled comprehensive foam wash and tyre shine dressing.</p>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                <p className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                  <Camera size={14} className="text-emerald-600" /> Photo Transparency
+                </p>
+                <p className="text-[11px] text-muted-foreground">Real-time before/after photos uploaded with GPS verification.</p>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                <p className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                  <Pause size={14} className="text-amber-600" /> Travel Flexibility
+                </p>
+                <p className="text-[11px] text-muted-foreground">Pause your plan anytime so no cleaning visits are wasted.</p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <CustomerButton
+                size="lg"
+                className="font-bold gap-2 shadow-sm"
+                onClick={() => setSubscribeModalOpen(true)}
+              >
+                <Sparkles size={16} /> Subscribe to Daily Car Cleaning <ArrowRight size={16} />
+              </CustomerButton>
+            </div>
+          </div>
         ) : (
           <div className="space-y-6">
+            {/* Payment Pending Alert Card */}
+            {stats.status === "pending_payment" && (
+              <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/80 p-5 sm:p-6 shadow-[0_2px_12px_rgba(245,158,11,0.12)] space-y-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 flex items-center justify-center shrink-0">
+                    <CreditCard size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-amber-600 text-white hover:bg-amber-700 text-[10px] font-bold uppercase tracking-wider">
+                        Payment Pending
+                      </Badge>
+                      <span className="text-xs text-amber-800 font-medium">Activation Required</span>
+                    </div>
+                    <h2 className="font-display font-bold text-lg sm:text-xl text-amber-950 mt-1">
+                      Complete Payment to Activate Daily Cleaning
+                    </h2>
+                    <p className="text-xs sm:text-sm text-amber-900/80 mt-1 leading-relaxed">
+                      Your daily cleaning plan is reserved. Complete payment to activate your service and assign a dedicated doorstep specialist to your vehicle. Daily cleaning visits will not commence until payment is authoritatively received.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3 pt-2 border-t border-amber-200/80">
+                  <CustomerButton
+                    size="default"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-semibold gap-1.5 shadow-sm"
+                    loading={isRetryingPayment}
+                    onClick={() => handleRetryPayment(stats.subscriptionId!)}
+                  >
+                    <CreditCard size={15} /> Complete Payment Now
+                  </CustomerButton>
+                  <CustomerButton
+                    variant="outline"
+                    size="default"
+                    className="border-amber-300 text-amber-900 hover:bg-amber-100/60"
+                    onClick={() => setCancelModalOpen(true)}
+                  >
+                    Cancel Request
+                  </CustomerButton>
+                </div>
+              </div>
+            )}
+
+            {/* Upcoming Plan Renewal Alert */}
+            {stats.status === "active" && (stats.renewalEligible || (stats.remainingCleanings ?? 0) <= 3) && (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-primary flex items-center justify-center shrink-0">
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm sm:text-base text-foreground">
+                      {stats.renewalEligible
+                        ? "Plan Completed — Ready for Renewal"
+                        : `Plan Renewal Due — Only ${stats.remainingCleanings} cleanings remaining`}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Renew today to ensure seamless, uninterrupted daily car cleaning at your parking bay.
+                    </p>
+                  </div>
+                </div>
+                <CustomerButton
+                  size="sm"
+                  onClick={() => setSubscribeModalOpen(true)}
+                  className="shrink-0 font-semibold gap-1.5"
+                >
+                  <RefreshCw size={14} /> Renew Plan
+                </CustomerButton>
+              </div>
+            )}
+
             {/* Plan Overview Card */}
             <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-[0_2px_8px_rgba(11,29,54,0.04)]">
               <div className="flex items-start justify-between gap-3 mb-4">
@@ -195,10 +432,12 @@ export default function CustomerDailyCleaningPage() {
                         "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border",
                         stats.status === "paused"
                           ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : stats.status === "pending_payment"
+                          ? "bg-amber-100 text-amber-800 border-amber-300 font-bold"
                           : "bg-emerald-50 text-emerald-700 border-emerald-200",
                       )}
                     >
-                      {stats.status}
+                      {stats.status === "pending_payment" ? "Pending Payment" : stats.status}
                     </span>
                   </div>
                   <h2 className="font-display font-bold text-xl sm:text-2xl text-foreground mt-1 tracking-tight">
@@ -214,12 +453,22 @@ export default function CustomerDailyCleaningPage() {
               </div>
 
               {/* Pause period banner if paused */}
-              {stats.status === "paused" && stats.pauseStartDate && (
-                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex items-center gap-2.5 text-xs text-amber-900">
-                  <Pause size={15} className="text-amber-700 shrink-0" />
-                  <span>
-                    Subscription is currently paused from <strong>{stats.pauseStartDate}</strong> to <strong>{stats.pauseEndDate}</strong>. Visits will resume automatically.
-                  </span>
+              {stats.status === "paused" && (
+                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
+                  <div className="flex items-center gap-2.5">
+                    <Pause size={16} className="text-amber-700 shrink-0" />
+                    <span>
+                      Subscription is currently paused{stats.pauseStartDate ? ` from ${stats.pauseStartDate} to ${stats.pauseEndDate}` : ""}. Cleaner visits are temporarily held.
+                    </span>
+                  </div>
+                  <CustomerButton
+                    size="sm"
+                    className="bg-amber-700 hover:bg-amber-800 text-white shrink-0 font-semibold text-xs h-8"
+                    loading={isResuming}
+                    onClick={() => handleResume(stats.subscriptionId!)}
+                  >
+                    Resume Service Now
+                  </CustomerButton>
                 </div>
               )}
 
@@ -450,7 +699,36 @@ export default function CustomerDailyCleaningPage() {
                 </div>
               </div>
             )}
+
+            {stats.subscriptionId && stats.status !== "pending_payment" && (
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOpen(true)}
+                  className="text-xs text-muted-foreground hover:text-rose-600 underline underline-offset-4 transition-colors"
+                >
+                  Discontinue plan? Cancel Subscription
+                </button>
+              </div>
+            )}
           </div>
+        )}
+
+        <CustomerSubscribeModal
+          open={subscribeModalOpen}
+          onOpenChange={setSubscribeModalOpen}
+          defaultVehicleId={stats?.subscriptionId ? undefined : undefined}
+        />
+
+        {stats?.subscriptionId && (
+          <CustomerCancelModal
+            open={cancelModalOpen}
+            onOpenChange={setCancelModalOpen}
+            subscriptionId={stats.subscriptionId}
+            onCancelled={() => {
+              queryClient.invalidateQueries({ queryKey: ["dcms"] });
+            }}
+          />
         )}
       </CustomerPage>
     </CustomerLayout>

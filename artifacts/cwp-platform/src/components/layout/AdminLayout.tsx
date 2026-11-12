@@ -7,6 +7,7 @@ import { PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/shared/CommandPalette";
 import { AdminThemeRoot } from "@/features/admin-ds";
+import { AdminScopeHeader } from "./AdminScopeHeader";
 
 function CollapsedSidebarExpandButton() {
   const collapsed = useAppStore(s => s.sidebarCollapsed);
@@ -42,7 +43,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       >
         <CommandPalette />
         <CollapsedSidebarExpandButton />
-        {children}
+        <div className="flex flex-col min-h-full">
+          <AdminScopeHeader />
+          <div className="flex-1 min-w-0">
+            {children}
+          </div>
+        </div>
       </PanelShell>
     </AdminThemeRoot>
   );

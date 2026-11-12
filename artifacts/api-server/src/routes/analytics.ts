@@ -173,7 +173,7 @@ router.get("/analytics/customers", async (req, res) => {
       `),
       db.execute(sql`
         SELECT customer_id FROM bookings
-        WHERE status = 'completed' AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id" })}
+        WHERE status <> 'cancelled' AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id" })}
         GROUP BY customer_id
         HAVING COUNT(*) > 1
       `),

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAppStore } from "@/lib/store";
 import {
   useGetRevenueAnalytics,
   getGetRevenueAnalyticsQueryKey,
@@ -46,6 +47,7 @@ import {
   XCircle,
   Clock,
   Sparkles,
+  Globe,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -72,103 +74,114 @@ async function fetchMultiCityAnalytics(cityId?: string, branchId?: string) {
 }
 
 async function fetchCities() {
-  const res = await fetch("/api/cities");
-  return res.json();
+  try {
+    const res = await fetch("/api/masters/cities", { credentials: "include" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : data?.data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 async function fetchBranches() {
-  const res = await fetch("/api/branches");
-  return res.json();
+  try {
+    const res = await fetch("/api/branches", { credentials: "include" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : data?.data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export default function AdminAnalytics() {
-  const [selectedCity, setSelectedCity] = useState<string>("all");
-  const [selectedBranch, setSelectedBranch] = useState<string>("all");
+  const activeCityId = useAppStore((s) => s.activeCityId);
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const clearScope = useAppStore((s) => s.clearScope);
 
   const { data: cities = [] } = useQuery({ queryKey: ["cities"], queryFn: fetchCities });
   const { data: branches = [] } = useQuery({ queryKey: ["branches"], queryFn: fetchBranches });
 
+  const selectedCityObj = cities.find((c: any) => c.id === activeCityId);
+  const selectedBranchObj = branches.find((b: any) => b.id === activeBranchId);
+
   const { data: multiCity, isLoading: multiCityLoading } = useQuery({
-    queryKey: ["analytics", "multi-city", selectedCity, selectedBranch],
-    queryFn: () => fetchMultiCityAnalytics(selectedCity, selectedBranch),
+    queryKey: ["analytics", "multi-city", activeCityId, activeBranchId],
+    queryFn: () =>
+      fetchMultiCityAnalytics(
+        activeCityId ? String(activeCityId) : undefined,
+        activeBranchId ? String(activeBranchId) : undefined,
+      ),
   });
 
   const { data: revenue, isLoading: revLoading } = useGetRevenueAnalytics(
     { period: "month" },
-    { query: { queryKey: getGetRevenueAnalyticsQueryKey({ period: "month" }) } }
+    { query: { queryKey: getGetRevenueAnalyticsQueryKey({ period: "month" }) } },
   );
   const { data: customers, isLoading: custLoading } = useGetCustomerAnalytics({
     query: { queryKey: getGetCustomerAnalyticsQueryKey() },
   });
   const { data: leaderboard } = useGetStaffLeaderboard(
     {},
-    { query: { queryKey: getGetStaffLeaderboardQueryKey({}) } }
+    { query: { queryKey: getGetStaffLeaderboardQueryKey({}) } },
   );
   const { data: dues } = useGetOutstandingDues(
     {},
-    { query: { queryKey: getGetOutstandingDuesQueryKey({}) } }
+    { query: { queryKey: getGetOutstandingDuesQueryKey({}) } },
   );
   const { data: cancelledPlans = [], isLoading: plansLoading } = useQuery({
     queryKey: ["analytics", "cancelled-plans"],
     queryFn: fetchCancelledPlans,
   });
 
-  const filteredBranches = branches.filter(
-    (b: any) => selectedCity === "all" || String(b.cityId) === selectedCity
-  );
-
   return (
     <AdminLayout>
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
-        {/* Header & Filter Toolbar */}
+        {/* Header & Synchronized Scope View */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-display font-bold text-2xl">Platform Analytics</h1>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                Multi-City Unified
+              <h1 className="font-display font-bold text-2xl">
+                {activeBranchId ? `${selectedBranchObj?.name ?? "Branch"} Analytics` : "Platform Analytics"}
+              </h1>
+              <span
+                className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+                  activeBranchId
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                    : "bg-primary/10 text-primary border-primary/20"
+                }`}
+              >
+                {activeBranchId
+                  ? `🏢 ${selectedBranchObj?.name ?? "Branch"}`
+                  : "Founder View (All Branches)"}
               </span>
             </div>
             <p className="text-muted-foreground text-sm mt-0.5">
-              Cross-city operations, subscription health, financial performance &amp; branch productivity
+              {activeBranchId
+                ? `Operational performance, daily cleaning fulfillment, cleaner leaderboard & collections for ${selectedBranchObj?.name ?? "this branch"}`
+                : "Cross-branch operations, subscription health, financial performance & branch productivity"}
             </p>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs shadow-sm">
-              <MapPin size={13} className="text-muted-foreground" />
-              <select
-                value={selectedCity}
-                onChange={(e) => {
-                  setSelectedCity(e.target.value);
-                  setSelectedBranch("all");
-                }}
-                className="bg-transparent text-foreground focus:outline-none cursor-pointer"
+          <div className="flex items-center gap-2">
+            {activeBranchId ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearScope}
+                className="text-xs gap-1.5 h-8 text-muted-foreground hover:text-foreground border-border bg-card shadow-sm"
+                data-testid="reset-to-founder-view"
               >
-                <option value="all">All Cities</option>
-                {cities.map((c: any) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5 bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs shadow-sm">
-              <Building2 size={13} className="text-muted-foreground" />
-              <select
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-                className="bg-transparent text-foreground focus:outline-none cursor-pointer"
-              >
-                <option value="all">All Branches</option>
-                {filteredBranches.map((b: any) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.city})
-                  </option>
-                ))}
-              </select>
-            </div>
+                <Globe size={13} className="text-primary" />
+                <span>Reset to All Branches</span>
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 px-3 py-1.5 rounded-lg">
+                <Globe size={13} className="text-primary" />
+                <span>All Branches Scope — Filter branch via top bar</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -254,51 +267,92 @@ export default function AdminAnalytics() {
           </Card>
         </div>
 
-        {/* City & Branch Multi-Tenant Operational Performance */}
+        {/* Branch Operations & Multi-Tenant Performance */}
         <div className="grid lg:grid-cols-2 gap-5">
-          {/* City Breakdown */}
-          <Card>
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                  <MapPin size={15} className="text-primary" />
-                  City Operations Comparison
-                </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Normalized multi-city footprint</p>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {multiCityLoading ? (
-                <Skeleton className="h-44 w-full" />
-              ) : (multiCity?.cityBreakdown ?? []).length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-8">No city operations recorded</p>
-              ) : (
-                <div className="divide-y divide-border">
-                  <div className="grid grid-cols-12 text-[11px] font-semibold text-muted-foreground uppercase pb-2">
-                    <span className="col-span-4">City</span>
-                    <span className="col-span-2 text-right">Cust</span>
-                    <span className="col-span-2 text-right">Subs</span>
-                    <span className="col-span-4 text-right">Collected</span>
-                  </div>
-                  {(multiCity?.cityBreakdown ?? []).map((c: any) => (
-                    <div key={c.cityId} className="grid grid-cols-12 items-center py-2.5 text-xs">
-                      <div className="col-span-4 font-medium flex items-center gap-1.5 truncate">
-                        <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
-                        <span className="truncate">{c.cityName}</span>
-                      </div>
-                      <div className="col-span-2 text-right text-muted-foreground">{c.activeCustomers}</div>
-                      <div className="col-span-2 text-right font-semibold text-foreground">
-                        {c.activeSubscriptions}
-                      </div>
-                      <div className="col-span-4 text-right font-semibold text-primary">
-                        ₹{(c.collectedRevenue ?? 0).toLocaleString("en-IN")}
-                      </div>
-                    </div>
-                  ))}
+          {!activeBranchId ? (
+            /* Founder View: Branch Operations Comparison */
+            <Card>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                    <Building2 size={15} className="text-primary" />
+                    Branch Operations Comparison
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Footprint across all active branches</p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                {multiCityLoading ? (
+                  <Skeleton className="h-44 w-full" />
+                ) : (multiCity?.branchBreakdown ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">No branches registered</p>
+                ) : (
+                  <div className="divide-y divide-border">
+                    <div className="grid grid-cols-12 text-[11px] font-semibold text-muted-foreground uppercase pb-2">
+                      <span className="col-span-4">Branch</span>
+                      <span className="col-span-2 text-right">Staff</span>
+                      <span className="col-span-2 text-right">Subs</span>
+                      <span className="col-span-4 text-right">Collected</span>
+                    </div>
+                    {(multiCity?.branchBreakdown ?? []).map((b: any) => (
+                      <div key={b.branchId} className="grid grid-cols-12 items-center py-2.5 text-xs">
+                        <div className="col-span-4 font-medium flex items-center gap-1.5 truncate">
+                          <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                          <span className="truncate">{b.branchName}</span>
+                        </div>
+                        <div className="col-span-2 text-right text-muted-foreground">{b.staffCount}</div>
+                        <div className="col-span-2 text-right font-semibold text-foreground">
+                          {b.activeSubscriptions}
+                        </div>
+                        <div className="col-span-4 text-right font-semibold text-primary">
+                          ₹{(b.collectedRevenue ?? 0).toLocaleString("en-IN")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            /* Scoped View: Selected Branch Focus */
+            <Card>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                    <Building2 size={15} className="text-primary" />
+                    {selectedBranchObj?.name ?? "Branch"} Overview
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Operating unit details and performance</p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {multiCityLoading ? (
+                  <Skeleton className="h-44 w-full" />
+                ) : (
+                  <div className="space-y-3 py-1">
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                      <span className="text-xs text-muted-foreground">Operating Model</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                        {selectedBranchObj?.isCompanyOperated ? "COCO (Company Operated)" : "FOFO (Franchise Operated)"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                      <span className="text-xs text-muted-foreground">Assigned Personnel</span>
+                      <span className="text-xs font-bold text-foreground">
+                        {selectedBranchObj?.staffCount ?? 0} Cleaners & Supervisors
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                      <span className="text-xs text-muted-foreground">Today's Fulfillment Rate</span>
+                      <span className="text-xs font-bold text-emerald-600">
+                        {multiCity?.operational?.overallCompletionRate ?? 0}% Completed
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Branch Operations & Model */}
           <Card>

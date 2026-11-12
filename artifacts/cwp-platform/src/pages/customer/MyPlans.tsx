@@ -45,7 +45,7 @@ export default function CustomerMyPlans() {
   const allSubs = (data?.data ?? []) as RawSubscription[];
   const plans = activePlans(allSubs);
   const otherPlans = subscriptionsToPlans(allSubs.filter(s =>
-    s.status !== "active" && s.status !== "paused" && s.status !== "expiring",
+    s.status !== "active" && s.status !== "paused" && s.status !== "expiring" && s.status !== "pending_payment",
   ));
 
   if (scopeLoading) {

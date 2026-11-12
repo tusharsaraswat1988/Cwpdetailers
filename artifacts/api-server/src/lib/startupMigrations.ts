@@ -301,6 +301,124 @@ export async function ensureStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS payment_attempts_branch_id_idx ON payment_attempts(branch_id);
     `);
 
+    // 9. Notifications & Support Tickets (Migration 071)
+    await client.query(`
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'payment_initiated';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'payment_success';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'payment_failed';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'subscription_activated';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'subscription_paused';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'subscription_resumed';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'subscription_cancelled';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'subscription_renewal_due';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'cleaning_completed';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'cleaning_cna';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'cleaning_missed';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'exception_resolved';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'ticket_created';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'ticket_updated';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'ticket_resolved';
+      ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'staff_assigned';
+
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS city_id INTEGER;
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS customer_id INTEGER;
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS action_url TEXT;
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0;
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS error_message TEXT;
+
+      ALTER TYPE complaint_status ADD VALUE IF NOT EXISTS 'assigned';
+      ALTER TYPE complaint_status ADD VALUE IF NOT EXISTS 'awaiting_customer';
+      ALTER TYPE complaint_priority ADD VALUE IF NOT EXISTS 'urgent';
+      ALTER TYPE complaint_type ADD VALUE IF NOT EXISTS 'subscription';
+
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS ticket_number TEXT;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS city_id INTEGER;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS subscription_id INTEGER;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS visit_id INTEGER;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS invoice_id INTEGER;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS operational_exception_id INTEGER;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS photo_url TEXT;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS internal_notes TEXT;
+
+      CREATE TABLE IF NOT EXISTS support_ticket_messages (
+        id SERIAL PRIMARY KEY,
+        complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
+        sender_type TEXT NOT NULL,
+        sender_id INTEGER,
+        sender_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        is_internal BOOLEAN NOT NULL DEFAULT FALSE,
+        attachment_url TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      ALTER TABLE dcms_operational_exceptions ADD COLUMN IF NOT EXISTS complaint_id INTEGER;
+    `);
+
+    // 10. Service Quality, SLA Policies & Retention (Migration 072)
+    await client.query(`
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS subscription_id INTEGER;
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS staff_id INTEGER;
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS city_id INTEGER;
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS branch_id INTEGER;
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS rating_score INTEGER;
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS issue_reported BOOLEAN DEFAULT FALSE;
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS complaint_id INTEGER;
+      ALTER TABLE dcms_visit_feedback ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+
+      CREATE TABLE IF NOT EXISTS sla_policies (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        city_id INTEGER,
+        service_type TEXT,
+        category TEXT NOT NULL DEFAULT 'all',
+        priority TEXT NOT NULL DEFAULT 'all',
+        response_target_minutes INTEGER NOT NULL DEFAULT 720,
+        resolution_target_minutes INTEGER NOT NULL DEFAULT 1440,
+        pause_on_customer_response BOOLEAN NOT NULL DEFAULT TRUE,
+        escalation_level_1_minutes INTEGER,
+        escalation_level_2_minutes INTEGER,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        company_id INTEGER,
+        branch_id INTEGER,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS sla_escalation_logs (
+        id SERIAL PRIMARY KEY,
+        complaint_id INTEGER,
+        operational_exception_id INTEGER,
+        sla_policy_id INTEGER,
+        escalation_level INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        escalated_to_role TEXT NOT NULL,
+        escalated_to_user_id INTEGER,
+        metadata JSONB,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS sla_policy_id INTEGER;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS response_due_at TIMESTAMP;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolution_due_at TIMESTAMP;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS first_responded_at TIMESTAMP;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS sla_paused_at TIMESTAMP;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS sla_total_paused_minutes INTEGER DEFAULT 0;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS sla_status TEXT DEFAULT 'on_track';
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS escalation_level INTEGER DEFAULT 0;
+      ALTER TABLE complaints ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP;
+
+      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS cancellation_feedback TEXT;
+      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS churn_risk_level TEXT DEFAULT 'low';
+      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS cancellation_requested_at TIMESTAMP;
+
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_marketing BOOLEAN DEFAULT FALSE;
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS sensitive_masked BOOLEAN DEFAULT FALSE;
+    `);
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

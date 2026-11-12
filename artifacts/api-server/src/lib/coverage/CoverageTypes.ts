@@ -8,6 +8,7 @@ export type CoverageStatusCode =
   | "INVALID_ADDRESS"
   | "PIN_NOT_FOUND"
   | "SERVICE_AREA_NOT_SUPPORTED"
+  | "SOCIETY_NOT_SERVICEABLE"
   | "CITY_NOT_FOUND"
   | "CITY_DISABLED"
   | "CITY_NOT_AVAILABLE"
@@ -67,6 +68,7 @@ export type CoverageRequest = {
   cityId?: number | null;
   citySlug?: string | null;
   cityName?: string | null;
+  societyId?: number | null;
   addressComponents?: GoogleAddressComponent[];
   postalCode?: string | null;
   pincode?: string | null;
@@ -113,6 +115,8 @@ export type CoverageResult = {
   serviceAreaId?: number;
   serviceArea?: string;
   serviceAreaName?: string;
+  societyId?: number;
+  societyName?: string;
   serviceId?: number;
   parsedAddress?: ParsedAddressComponents;
   cityResolutionSource?: "pin" | "google_city" | "city_slug" | "city_id" | "city_name";
@@ -142,6 +146,7 @@ export const COVERAGE_MESSAGES: Record<Exclude<CoverageStatusCode, "SUCCESS" | "
   INVALID_ADDRESS: "A valid service address with location coordinates is required.",
   PIN_NOT_FOUND: "We could not determine a valid PIN code from the service address.",
   SERVICE_AREA_NOT_SUPPORTED: "We do not serve this PIN code yet.",
+  SOCIETY_NOT_SERVICEABLE: "We do not currently service this society. Join the waitlist for your society.",
   CITY_NOT_FOUND: "The city for this address could not be identified.",
   CITY_DISABLED: "This service is currently unavailable in your city.",
   CITY_NOT_AVAILABLE: "This service is currently unavailable in your city.",
@@ -166,6 +171,8 @@ export function toLegacyStatus(status: CoverageStatusCode): ServiceabilityStatus
       return "CITY_NOT_AVAILABLE";
     case "SERVICE_UNAVAILABLE":
       return "SERVICE_NOT_AVAILABLE";
+    case "SOCIETY_NOT_SERVICEABLE":
+      return "SERVICE_AREA_NOT_SUPPORTED";
     case "SERVICE_COMING_SOON":
     case "TEMPORARILY_UNAVAILABLE":
     case "WAITLIST":
@@ -192,6 +199,7 @@ export function toCoverageStatusLabel(
     case "TEMPORARILY_UNAVAILABLE":
       return "TEMPORARILY_UNAVAILABLE";
     case "WAITLIST":
+    case "SOCIETY_NOT_SERVICEABLE":
       return "WAITLIST";
     case "PRE_LAUNCH":
       return "PRE_LAUNCH";

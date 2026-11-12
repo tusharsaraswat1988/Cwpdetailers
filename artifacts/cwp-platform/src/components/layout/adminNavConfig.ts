@@ -36,6 +36,8 @@ import {
   Home,
   Percent,
   Wrench,
+  CreditCard,
+  Star,
 } from "lucide-react";
 
 export type AdminNavPermission = { resource: string; action: string };
@@ -103,70 +105,101 @@ export type AdminNavSection = {
  */
 export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   {
-    label: "Dashboard",
+    label: "Overview",
     entries: [
       { id: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: null },
+      { id: "analytics", href: "/admin/analytics", label: "Analytics & Reports", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
     ],
   },
   {
-    label: "Operations",
-    defaultCollapsed: true,
+    label: "Daily Operations",
     entries: [
       {
-        id: "book-services",
-        href: "/admin/book-services",
-        label: "Create Service Request",
-        icon: CalendarCheck,
-        perm: { resource: "bookings", action: "view" },
-      },
-      {
-        id: "bookings",
-        href: "/admin/bookings",
-        label: "Bookings",
-        icon: Calendar,
-        perm: { resource: "bookings", action: "view" },
-      },
-      {
-        id: "assign-services",
-        href: "/admin/assign-services",
-        label: "Staff Assignment",
-        icon: ClipboardCheck,
-        perm: { resource: "bookings", action: "edit" },
-      },
-      {
-        id: "job-orchestration",
-        href: "/admin/jobs",
-        label: "Job Orchestration",
-        icon: ListTodo,
-        perm: { resource: "bookings", action: "edit" },
-      },
-      {
-        id: "daily-clean-reports",
+        id: "daily-cleaning",
         href: "/admin/daily-cleaning",
-        label: "Daily Clean Reports",
+        label: "Daily Cleaning (DCMS)",
         icon: Sparkles,
         perm: { resource: "daily_cleaning", action: "view" },
       },
       {
-        id: "service-updates",
-        href: "/admin/service-updates",
-        label: "Operations Control Center",
-        icon: Monitor,
-        perm: null,
+        id: "subscriptions",
+        href: "/admin/subscriptions",
+        label: "Subscriptions",
+        icon: CreditCard,
+        perm: { resource: "subscriptions", action: "view" },
       },
-      { id: "leads", href: "/admin/leads", label: "Leads & CRM", icon: Funnel, perm: { resource: "leads", action: "view" } },
-      { id: "assets", href: "/admin/assets", label: "Assets", icon: Wrench, perm: { resource: "customers", action: "view" } },
-      { id: "complaints", href: "/admin/complaints", label: "Complaints", icon: AlertCircle, perm: { resource: "complaints", action: "view" } },
+      {
+        id: "bookings",
+        href: "/admin/bookings",
+        label: "Service Bookings",
+        icon: Calendar,
+        perm: { resource: "bookings", action: "view" },
+      },
+      {
+        id: "jobs",
+        href: "/admin/jobs",
+        label: "Job Board",
+        icon: ListTodo,
+        perm: { resource: "bookings", action: "edit" },
+      },
+      {
+        id: "complaints",
+        href: "/admin/complaints",
+        label: "Complaints & Support",
+        icon: AlertCircle,
+        perm: { resource: "complaints", action: "view" },
+      },
+      {
+        id: "quality-hub",
+        href: "/admin/quality",
+        label: "Service Quality & SLA",
+        icon: Star,
+        perm: { resource: "analytics", action: "view" },
+      },
     ],
   },
   {
-    label: "Commercial",
+    label: "Customers & CRM",
+    defaultCollapsed: true,
+    entries: [
+      {
+        id: "customers",
+        href: "/admin/customers",
+        label: "Customer Directory",
+        icon: Users,
+        perm: { resource: "customers", action: "view" },
+      },
+      {
+        id: "leads",
+        href: "/admin/leads",
+        label: "Leads & CRM",
+        icon: Funnel,
+        perm: { resource: "leads", action: "view" },
+      },
+      {
+        id: "assets",
+        href: "/admin/assets",
+        label: "Customer Vehicles",
+        icon: Wrench,
+        perm: { resource: "customers", action: "view" },
+      },
+      {
+        id: "migration",
+        href: "/admin/customers/migration",
+        label: "Data Migration",
+        icon: Upload,
+        perm: { resource: "customers", action: "create" },
+      },
+    ],
+  },
+  {
+    label: "Commercial & Billing",
     defaultCollapsed: true,
     entries: [
       {
         id: "billing",
         href: "/admin/billing",
-        label: "Billing & Finance",
+        label: "Billing & Invoices",
         icon: FileText,
         perm: { resource: "invoices", action: "view" },
       },
@@ -184,110 +217,88 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         icon: Package,
         perm: { resource: "services", action: "view" },
       },
+    ],
+  },
+  {
+    label: "Staff & Team",
+    defaultCollapsed: true,
+    entries: [
       {
-        id: "homepage-cms",
-        href: "/admin/services?tab=homepage",
-        label: "Homepage CMS",
-        icon: Home,
-        perm: { resource: "services", action: "view" },
-        // Content-only, secondary to Service Catalog — kept lower-priority via order, not visual demotion.
+        id: "staff",
+        href: "/admin/staff",
+        label: "Staff & Cleaners",
+        icon: UserCog,
+        perm: { resource: "staff", action: "view" },
+      },
+      {
+        id: "staff-approval",
+        href: "/admin/staff-approval",
+        label: "Verify Staff",
+        icon: ShieldCheck,
+        perm: { resource: "staff", action: "approve" },
       },
     ],
   },
   {
-    label: "Customers",
-    entries: [
-      {
-        id: "customer-profile",
-        href: "/admin/customers",
-        label: "Customer Profile",
-        icon: Users,
-        perm: { resource: "customers", action: "view" },
-      },
-    ],
-  },
-  {
-    label: "People",
-    defaultCollapsed: true,
-    entries: [
-      { id: "staff", href: "/admin/staff", label: "Staff", icon: UserCog, perm: { resource: "staff", action: "view" } },
-      { id: "staff-approval", href: "/admin/staff-approval", label: "Verify Staff", icon: ShieldCheck, perm: { resource: "staff", action: "approve" } },
-      { id: "credentials", href: "/admin/credentials", label: "Credentials", icon: Key, perm: { resource: "staff", action: "approve" } },
-      { id: "franchisees", href: "/admin/franchisees", label: "Franchisees", icon: Building2, perm: { resource: "franchisees", action: "view" } },
-      { id: "branches", href: "/admin/branches", label: "Branches", icon: GitBranch, perm: { resource: "branches", action: "view" } },
-      { id: "societies", href: "/admin/societies", label: "Societies & Towers", icon: Building2, perm: { resource: "branches", action: "view" } },
-    ],
-  },
-  {
-    label: "Reports",
-    defaultCollapsed: true,
-    entries: [
-      { id: "analytics", href: "/admin/analytics", label: "Analytics", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
-      { id: "founder", href: "/admin/founder", label: "Founder Dashboard", icon: Crown, perm: null },
-    ],
-  },
-  {
-    label: "Customer Tools",
+    label: "Network & Coverage",
     defaultCollapsed: true,
     variant: "admin",
     entries: [
       {
-        id: MIGRATION_GROUP_ID,
-        label: "Migration Tools",
-        icon: Upload,
-        perm: { resource: "customers", action: "create" },
-        description: "One-time imports and legacy contact lists — not daily operations.",
-        children: [
-          {
-            id: "import",
-            href: "/admin/customers/migration",
-            label: "Import Existing Customers",
-            icon: Upload,
-            perm: { resource: "customers", action: "create" },
-          },
-          {
-            id: "legacy_contacts",
-            href: "/admin/customers/legacy-contacts",
-            label: "Legacy Contacts",
-            icon: Contact,
-            perm: { resource: "customers", action: "view" },
-          },
-        ],
+        id: "branches",
+        href: "/admin/branches",
+        label: "Branches",
+        icon: GitBranch,
+        perm: { resource: "branches", action: "view" },
       },
-    ],
-  },
-  {
-    label: "Configuration",
-    defaultCollapsed: true,
-    variant: "admin",
-    entries: [
-      { id: "masters", href: "/admin/masters", label: "Master Data", icon: Database, perm: { resource: "masters", action: "view" } },
-      { id: "communications", href: "/admin/communications", label: "Communication Center", icon: Radio, perm: { resource: "communications", action: "view" } },
-      { id: "notifications", href: "/admin/notifications", label: "Notifications", icon: Bell, perm: { resource: "notifications", action: "view" } },
-      { id: "push-logs", href: "/admin/push-logs", label: "Push Delivery Log", icon: BellRing, perm: { resource: "notifications", action: "view" } },
-      { id: "brand", href: "/admin/settings/brand", label: "Branding", icon: Palette, perm: { resource: "settings", action: "view" } },
-      { id: "invoice_billing", href: "/admin/settings/invoice-billing", label: "Invoice & GST", icon: Receipt, perm: { resource: "invoices", action: "view" } },
       {
-        id: "catalog-gst",
-        href: "/admin/services?tab=advanced",
-        label: "Catalog GST Defaults",
-        icon: Percent,
-        perm: { resource: "services", action: "view" },
+        id: "societies",
+        href: "/admin/societies",
+        label: "Societies & Towers",
+        icon: Building2,
+        perm: { resource: "branches", action: "view" },
       },
-      { id: "business", href: "/admin/settings/business", label: "Business Info", icon: Info, perm: { resource: "settings", action: "view" } },
-      { id: "seo", href: "/admin/settings/seo", label: "SEO Management", icon: Search, perm: { resource: "settings", action: "view" } },
-      { id: "system", href: "/admin/settings/system", label: "System Status", icon: Activity, perm: { resource: "settings", action: "view" } },
-      { id: "legal", href: "/admin/legal", label: "Legal Pages CMS", icon: Scale, perm: { resource: "settings", action: "view" } },
-      { id: "compliance", href: "/admin/compliance", label: "Compliance Settings", icon: ShieldCheck, perm: { resource: "settings", action: "view" } },
+      {
+        id: "franchisees",
+        href: "/admin/franchisees",
+        label: "Franchisees",
+        icon: Building2,
+        perm: { resource: "franchisees", action: "view" },
+      },
+      {
+        id: "masters",
+        href: "/admin/masters",
+        label: "Master Data",
+        icon: Database,
+        perm: { resource: "masters", action: "view" },
+      },
+      {
+        id: "communications",
+        href: "/admin/communications",
+        label: "Communications",
+        icon: Radio,
+        perm: { resource: "communications", action: "view" },
+      },
+      {
+        id: "settings",
+        href: "/admin/settings/brand",
+        label: "Platform Settings",
+        icon: Palette,
+        perm: { resource: "settings", action: "view" },
+      },
     ],
   },
 ];
 
 export function isAdminNavItemActive(location: string, item: AdminNavItem): boolean {
-  if (item.id === "directory" || item.id === "customer-profile") {
+  if (item.id === "directory" || item.id === "customer-profile" || item.id === "customers") {
     if (location === "/admin/customers") return true;
     if (/^\/admin\/customers\/\d+/.test(location)) return true;
     return false;
+  }
+  if (item.id === "subscriptions") {
+    const path = location.split("?")[0]!;
+    return path.startsWith("/admin/subscriptions") || path.startsWith("/admin/daily-cleaning/subscriptions");
   }
   if (item.id === "book-services") {
     const path = location.split("?")[0]!;
@@ -297,15 +308,15 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
     const path = location.split("?")[0]!;
     return path === "/admin/bookings";
   }
-  if (item.id === "daily-clean-reports") {
+  if (item.id === "daily-cleaning" || item.id === "daily-clean-reports") {
     const path = location.split("?")[0]!;
-    return path.startsWith("/admin/daily-cleaning");
+    return path.startsWith("/admin/daily-cleaning") && !path.includes("/subscriptions");
   }
   if (item.id === "assign-services") {
     const path = location.split("?")[0]!;
     return path === "/admin/assign-services";
   }
-  if (item.id === "job-orchestration") {
+  if (item.id === "jobs" || item.id === "job-orchestration") {
     const path = location.split("?")[0]!;
     return path === "/admin/jobs";
   }
@@ -348,11 +359,14 @@ export function isAdminNavItemActive(location: string, item: AdminNavItem): bool
   if (item.id === "daily-clean-reports") {
     return location.startsWith("/admin/daily-cleaning");
   }
-  if (item.id === "import") {
+  if (item.id === "import" || item.id === "migration") {
     return location.startsWith("/admin/customers/migration");
   }
   if (item.id === "reactivated") {
     return location.startsWith("/admin/customers/reactivated");
+  }
+  if (item.id === "settings") {
+    return location.startsWith("/admin/settings");
   }
   if (item.href.includes("?")) {
     const [path, query] = item.href.split("?");

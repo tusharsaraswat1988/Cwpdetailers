@@ -53,8 +53,15 @@ export function CommandPalette() {
         setOpen(prev => !prev);
       }
     }
+    function onOpenEvent() {
+      setOpen(true);
+    }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("cwp:open-command-palette", onOpenEvent);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("cwp:open-command-palette", onOpenEvent);
+    };
   }, []);
 
   const entries = useMemo(() => flattenNav(hasPermission), [hasPermission]);

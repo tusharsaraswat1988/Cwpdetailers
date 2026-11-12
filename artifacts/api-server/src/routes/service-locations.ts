@@ -287,6 +287,30 @@ router.post("/service-locations", async (req, res) => {
       return res.status(400).json({ error: "Invalid status" });
     }
 
+    if (societyId) {
+      const [soc] = await db
+        .select({ id: residentialSocietiesTable.id, name: residentialSocietiesTable.name, isActive: residentialSocietiesTable.isActive })
+        .from(residentialSocietiesTable)
+        .where(eq(residentialSocietiesTable.id, Number(societyId)))
+        .limit(1);
+      if (!soc || !soc.isActive) {
+        return res.status(422).json({
+          error: "SOCIETY_NOT_SERVICEABLE",
+          message: `We do not currently service ${soc?.name ?? "this society"}. Join the waitlist for your society.`,
+        });
+      }
+      if (towerId) {
+        const [tower] = await db
+          .select({ id: societyTowersTable.id, societyId: societyTowersTable.societyId, isActive: societyTowersTable.isActive })
+          .from(societyTowersTable)
+          .where(eq(societyTowersTable.id, Number(towerId)))
+          .limit(1);
+        if (!tower || tower.societyId !== Number(societyId) || !tower.isActive) {
+          return res.status(400).json({ error: "Invalid tower for the selected society" });
+        }
+      }
+    }
+
     const base = tenantStamp(req, {
       label: String(label).trim(),
       address: address ?? null,
@@ -366,6 +390,34 @@ router.patch("/service-locations/:id", async (req, res) => {
     }
     if (req.body.status !== undefined && !LOCATION_STATUSES.includes(req.body.status)) {
       return res.status(400).json({ error: "Invalid status" });
+    }
+
+    const checkSocietyId = req.body.societyId !== undefined ? (req.body.societyId ? Number(req.body.societyId) : null) : existing.societyId;
+    const checkTowerId = req.body.towerId !== undefined ? (req.body.towerId ? Number(req.body.towerId) : null) : existing.towerId;
+
+    if (checkSocietyId && req.body.societyId !== undefined) {
+      const [soc] = await db
+        .select({ id: residentialSocietiesTable.id, name: residentialSocietiesTable.name, isActive: residentialSocietiesTable.isActive })
+        .from(residentialSocietiesTable)
+        .where(eq(residentialSocietiesTable.id, checkSocietyId))
+        .limit(1);
+      if (!soc || !soc.isActive) {
+        return res.status(422).json({
+          error: "SOCIETY_NOT_SERVICEABLE",
+          message: `We do not currently service ${soc?.name ?? "this society"}. Join the waitlist for your society.`,
+        });
+      }
+    }
+
+    if (checkTowerId && (req.body.towerId !== undefined || req.body.societyId !== undefined)) {
+      const [tower] = await db
+        .select({ id: societyTowersTable.id, societyId: societyTowersTable.societyId, isActive: societyTowersTable.isActive })
+        .from(societyTowersTable)
+        .where(eq(societyTowersTable.id, checkTowerId))
+        .limit(1);
+      if (!tower || (checkSocietyId && tower.societyId !== checkSocietyId) || !tower.isActive) {
+        return res.status(400).json({ error: "Invalid tower for the selected society" });
+      }
     }
 
     const [location] = await db.update(serviceLocationsTable).set(updateData).where(eq(serviceLocationsTable.id, id)).returning();

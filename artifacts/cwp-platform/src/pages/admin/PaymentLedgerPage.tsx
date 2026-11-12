@@ -66,6 +66,7 @@ export default function PaymentLedgerPage() {
   const [status, setStatus] = useState("all");
   const [method, setMethod] = useState("all");
   const [city, setCity] = useState("all");
+  const [branch, setBranch] = useState("all");
   const [datePreset, setDatePreset] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -128,10 +129,11 @@ export default function PaymentLedgerPage() {
     if (status !== "all") p.set("status", status);
     if (method !== "all") p.set("method", method);
     if (city !== "all") p.set("city", city);
+    if (branch !== "all") p.set("branchId", branch);
     if (startDate) p.set("startDate", startDate);
     if (endDate) p.set("endDate", endDate);
     return p.toString();
-  }, [page, limit, debouncedSearch, status, method, city, startDate, endDate]);
+  }, [page, limit, debouncedSearch, status, method, city, branch, startDate, endDate]);
 
   // Summary Metrics Query (Auto-refreshes every 30s)
   const {
@@ -170,6 +172,17 @@ export default function PaymentLedgerPage() {
     },
     refetchInterval: 30000,
     refetchIntervalInBackground: false,
+  });
+
+  // Branches Query for branch filter
+  const { data: branchesList } = useQuery<Array<{ id: number; name: string }>>({
+    queryKey: ["admin", "branches", "active-list"],
+    queryFn: async () => {
+      const res = await fetch("/api/branches", { credentials: "include" });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : json.data ?? [];
+    },
   });
 
   const isRefreshing = isSummaryFetching || isLedgerFetching;
@@ -423,7 +436,7 @@ export default function PaymentLedgerPage() {
         </div>
 
         {/* Filter Dropdowns Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 pt-1">
           {/* Date Presets */}
           <div>
             <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
@@ -520,6 +533,32 @@ export default function PaymentLedgerPage() {
             </Select>
           </div>
 
+          {/* Branch Filter */}
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+              Branch
+            </label>
+            <Select
+              value={branch}
+              onValueChange={(v) => {
+                setBranch(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Branch" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Branches</SelectItem>
+                {(branchesList ?? []).map((b) => (
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Reset Filters CTA */}
           <div className="flex items-end">
             <Button
@@ -530,6 +569,7 @@ export default function PaymentLedgerPage() {
                 setStatus("all");
                 setMethod("all");
                 setCity("all");
+                setBranch("all");
                 setDatePreset("all");
                 setStartDate("");
                 setEndDate("");
@@ -652,8 +692,15 @@ export default function PaymentLedgerPage() {
                     </td>
 
                     {/* Service */}
-                    <td className="px-3.5 py-3 max-w-[160px] truncate" title={row.serviceDescription}>
-                      {row.serviceDescription}
+                    <td className="px-3.5 py-3 max-w-[170px]">
+                      <div className="truncate font-medium text-foreground" title={row.serviceDescription}>
+                        {row.serviceDescription}
+                      </div>
+                      {row.subscriptionId && (
+                        <Badge variant="outline" className="mt-0.5 text-[10px] font-mono px-1.5 py-0 bg-primary/10 text-primary border-primary/20">
+                          DCMS #{row.subscriptionId}
+                        </Badge>
+                      )}
                     </td>
 
                     {/* Amount Paid */}

@@ -8,6 +8,9 @@ import {
   vehiclesTable,
   staffTable,
   customersTable,
+  customerContractsTable,
+  serviceAssignmentsTable,
+  serviceExecutionsTable,
   type DcmsVisit,
 } from "@workspace/db";
 import { eq, and, desc, sql, gte, lte, inArray } from "drizzle-orm";
@@ -140,16 +143,97 @@ export async function completeVisit(
     traceVisitFailure(log, "subscription_loaded", new Error("Subscription is paused — visits not allowed"));
   }
 
-  const [assignment] = await db.select().from(dcmsStaffAssignmentsTable)
-    .where(and(
-      eq(dcmsStaffAssignmentsTable.subscriptionId, input.subscriptionId),
-      eq(dcmsStaffAssignmentsTable.staffId, input.staffId),
-      eq(dcmsStaffAssignmentsTable.isActive, true),
-    )).limit(1);
-  if (!input.walkIn && !assignment) {
-    traceVisitFailure(log, "assignment_verified", new Error("Staff not assigned to this subscription"));
+  let isAuthorized = false;
+
+  if (input.walkIn) {
+    isAuthorized = true;
+  } else if (input.visitType === "wash") {
+    // 1. Check if assigned in dcmsStaffAssignmentsTable (monthly cleaner doing wash)
+    const [cleanerAssign] = await db.select({ id: dcmsStaffAssignmentsTable.id })
+      .from(dcmsStaffAssignmentsTable)
+      .where(and(
+        eq(dcmsStaffAssignmentsTable.subscriptionId, input.subscriptionId),
+        eq(dcmsStaffAssignmentsTable.staffId, input.staffId),
+        eq(dcmsStaffAssignmentsTable.isActive, true),
+      )).limit(1);
+    if (cleanerAssign) {
+      isAuthorized = true;
+    } else {
+      // 2. Check if assigned as wash staff in serviceExecutionsTable or serviceAssignmentsTable
+      const [contract] = await db.select({ id: customerContractsTable.id })
+        .from(customerContractsTable)
+        .where(and(
+          eq(customerContractsTable.sourceSystem, "dcms"),
+          eq(customerContractsTable.sourceId, input.subscriptionId),
+        )).limit(1);
+      if (contract) {
+        const [washExec] = await db.select({ id: serviceExecutionsTable.id })
+          .from(serviceExecutionsTable)
+          .where(and(
+            eq(serviceExecutionsTable.contractId, contract.id),
+            eq(serviceExecutionsTable.taskType, "car_wash"),
+            eq(serviceExecutionsTable.assignedStaffId, input.staffId),
+            sql`${serviceExecutionsTable.status} NOT IN ('cancelled', 'missed')`,
+          )).limit(1);
+        if (washExec) {
+          isAuthorized = true;
+        } else {
+          const [washAssign] = await db.select({ id: serviceAssignmentsTable.id })
+            .from(serviceAssignmentsTable)
+            .where(and(
+              eq(serviceAssignmentsTable.contractId, contract.id),
+              eq(serviceAssignmentsTable.taskType, "car_wash"),
+              eq(serviceAssignmentsTable.assignedStaffId, input.staffId),
+              sql`${serviceAssignmentsTable.status} IN ('assigned', 'ready_for_execution')`,
+            )).limit(1);
+          if (washAssign) {
+            isAuthorized = true;
+          }
+        }
+      }
+    }
+    if (!isAuthorized) {
+      traceVisitFailure(log, "assignment_verified", new Error("Staff not assigned to perform wash for this subscription"));
+    }
+  } else {
+    // Regular daily cleaning visit
+    const [cleanerAssign] = await db.select({ id: dcmsStaffAssignmentsTable.id })
+      .from(dcmsStaffAssignmentsTable)
+      .where(and(
+        eq(dcmsStaffAssignmentsTable.subscriptionId, input.subscriptionId),
+        eq(dcmsStaffAssignmentsTable.staffId, input.staffId),
+        eq(dcmsStaffAssignmentsTable.isActive, true),
+      )).limit(1);
+    if (cleanerAssign) {
+      isAuthorized = true;
+    } else {
+      // Check if substitute cleaner was assigned for today
+      const [contract] = await db.select({ id: customerContractsTable.id })
+        .from(customerContractsTable)
+        .where(and(
+          eq(customerContractsTable.sourceSystem, "dcms"),
+          eq(customerContractsTable.sourceId, input.subscriptionId),
+        )).limit(1);
+      if (contract) {
+        const [subExec] = await db.select({ id: serviceExecutionsTable.id })
+          .from(serviceExecutionsTable)
+          .where(and(
+            eq(serviceExecutionsTable.contractId, contract.id),
+            eq(serviceExecutionsTable.taskType, "daily_cleaning"),
+            eq(serviceExecutionsTable.assignedStaffId, input.staffId),
+            eq(serviceExecutionsTable.scheduledDate, today),
+            sql`${serviceExecutionsTable.status} IN ('scheduled', 'started')`,
+          )).limit(1);
+        if (subExec) {
+          isAuthorized = true;
+        }
+      }
+    }
+    if (!isAuthorized) {
+      traceVisitFailure(log, "assignment_verified", new Error("Staff not assigned to this subscription"));
+    }
   }
-  traceVisitStep(log, "assignment_verified", { walkIn: Boolean(input.walkIn) });
+  traceVisitStep(log, "assignment_verified", { walkIn: Boolean(input.walkIn), visitType: input.visitType });
 
   const [vehicle] = await db.select().from(vehiclesTable)
     .where(eq(vehiclesTable.id, sub.vehicleId)).limit(1);
@@ -370,6 +454,28 @@ export async function completeVisit(
         throw new Error("Visit already completed today");
       }
 
+      if (input.visitType === "wash") {
+        const [contract] = await tx.select({ id: customerContractsTable.id })
+          .from(customerContractsTable)
+          .where(and(
+            eq(customerContractsTable.sourceSystem, "dcms"),
+            eq(customerContractsTable.sourceId, input.subscriptionId),
+          )).limit(1);
+        if (contract) {
+          await tx.update(serviceExecutionsTable)
+            .set({
+              status: "completed",
+              completedAt: now,
+              updatedAt: now,
+            })
+            .where(and(
+              eq(serviceExecutionsTable.contractId, contract.id),
+              eq(serviceExecutionsTable.taskType, "car_wash"),
+              sql`${serviceExecutionsTable.status} IN ('scheduled', 'started')`,
+            ));
+        }
+      }
+
       const updatedRemainingCleanings = updates.remainingCleanings ?? sub.remainingCleanings;
       const updatedRemainingWashes = updates.remainingWashes ?? sub.remainingWashes;
 
@@ -546,16 +652,97 @@ export async function recordCarNotAvailable(
     traceVisitFailure(log, "subscription_loaded", new Error("Subscription is paused — visits not allowed"));
   }
 
-  const [assignment] = await db.select().from(dcmsStaffAssignmentsTable)
-    .where(and(
-      eq(dcmsStaffAssignmentsTable.subscriptionId, input.subscriptionId),
-      eq(dcmsStaffAssignmentsTable.staffId, input.staffId),
-      eq(dcmsStaffAssignmentsTable.isActive, true),
-    )).limit(1);
-  if (!input.walkIn && !assignment) {
-    traceVisitFailure(log, "assignment_verified", new Error("Staff not assigned to this subscription"));
+  let isAuthorized = false;
+
+  if (input.walkIn) {
+    isAuthorized = true;
+  } else if (input.visitType === "wash") {
+    // 1. Check if assigned in dcmsStaffAssignmentsTable (monthly cleaner doing wash)
+    const [cleanerAssign] = await db.select({ id: dcmsStaffAssignmentsTable.id })
+      .from(dcmsStaffAssignmentsTable)
+      .where(and(
+        eq(dcmsStaffAssignmentsTable.subscriptionId, input.subscriptionId),
+        eq(dcmsStaffAssignmentsTable.staffId, input.staffId),
+        eq(dcmsStaffAssignmentsTable.isActive, true),
+      )).limit(1);
+    if (cleanerAssign) {
+      isAuthorized = true;
+    } else {
+      // 2. Check if assigned as wash staff in serviceExecutionsTable or serviceAssignmentsTable
+      const [contract] = await db.select({ id: customerContractsTable.id })
+        .from(customerContractsTable)
+        .where(and(
+          eq(customerContractsTable.sourceSystem, "dcms"),
+          eq(customerContractsTable.sourceId, input.subscriptionId),
+        )).limit(1);
+      if (contract) {
+        const [washExec] = await db.select({ id: serviceExecutionsTable.id })
+          .from(serviceExecutionsTable)
+          .where(and(
+            eq(serviceExecutionsTable.contractId, contract.id),
+            eq(serviceExecutionsTable.taskType, "car_wash"),
+            eq(serviceExecutionsTable.assignedStaffId, input.staffId),
+            sql`${serviceExecutionsTable.status} NOT IN ('cancelled', 'missed')`,
+          )).limit(1);
+        if (washExec) {
+          isAuthorized = true;
+        } else {
+          const [washAssign] = await db.select({ id: serviceAssignmentsTable.id })
+            .from(serviceAssignmentsTable)
+            .where(and(
+              eq(serviceAssignmentsTable.contractId, contract.id),
+              eq(serviceAssignmentsTable.taskType, "car_wash"),
+              eq(serviceAssignmentsTable.assignedStaffId, input.staffId),
+              sql`${serviceAssignmentsTable.status} IN ('assigned', 'ready_for_execution')`,
+            )).limit(1);
+          if (washAssign) {
+            isAuthorized = true;
+          }
+        }
+      }
+    }
+    if (!isAuthorized) {
+      traceVisitFailure(log, "assignment_verified", new Error("Staff not assigned to perform wash for this subscription"));
+    }
+  } else {
+    // Regular daily cleaning visit
+    const [cleanerAssign] = await db.select({ id: dcmsStaffAssignmentsTable.id })
+      .from(dcmsStaffAssignmentsTable)
+      .where(and(
+        eq(dcmsStaffAssignmentsTable.subscriptionId, input.subscriptionId),
+        eq(dcmsStaffAssignmentsTable.staffId, input.staffId),
+        eq(dcmsStaffAssignmentsTable.isActive, true),
+      )).limit(1);
+    if (cleanerAssign) {
+      isAuthorized = true;
+    } else {
+      // Check if substitute cleaner was assigned for today
+      const [contract] = await db.select({ id: customerContractsTable.id })
+        .from(customerContractsTable)
+        .where(and(
+          eq(customerContractsTable.sourceSystem, "dcms"),
+          eq(customerContractsTable.sourceId, input.subscriptionId),
+        )).limit(1);
+      if (contract) {
+        const [subExec] = await db.select({ id: serviceExecutionsTable.id })
+          .from(serviceExecutionsTable)
+          .where(and(
+            eq(serviceExecutionsTable.contractId, contract.id),
+            eq(serviceExecutionsTable.taskType, "daily_cleaning"),
+            eq(serviceExecutionsTable.assignedStaffId, input.staffId),
+            eq(serviceExecutionsTable.scheduledDate, today),
+            sql`${serviceExecutionsTable.status} IN ('scheduled', 'started')`,
+          )).limit(1);
+        if (subExec) {
+          isAuthorized = true;
+        }
+      }
+    }
+    if (!isAuthorized) {
+      traceVisitFailure(log, "assignment_verified", new Error("Staff not assigned to this subscription"));
+    }
   }
-  traceVisitStep(log, "assignment_verified", { walkIn: Boolean(input.walkIn) });
+  traceVisitStep(log, "assignment_verified", { walkIn: Boolean(input.walkIn), visitType: input.visitType });
 
   const existing = await todaysCleaningVisits(input.subscriptionId, today);
   const plan = planCarNotAvailable(existing);

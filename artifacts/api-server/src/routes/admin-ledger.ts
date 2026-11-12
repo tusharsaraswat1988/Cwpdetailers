@@ -5,6 +5,7 @@ import {
   paymentAttemptsTable,
   customersTable,
   invoicesTable,
+  branchesTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, gte, lte, or, inArray, ilike } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
@@ -35,6 +36,9 @@ export interface AdminLedgerRow {
   internalReference: string;
   status: "success" | "pending" | "failed" | "abandoned" | "reversed";
   notes: string | null;
+  subscriptionId?: number | null;
+  branchId?: number | null;
+  branchName?: string | null;
   rawWebhookPayload?: Record<string, unknown> | null;
   rawVerificationPayload?: Record<string, unknown> | null;
 }
@@ -163,6 +167,7 @@ async function fetchUnifiedLedger(options: {
   status?: string;
   method?: string;
   city?: string;
+  branchId?: number;
   startDate?: string;
   endDate?: string;
   invoiceId?: number;
@@ -175,6 +180,7 @@ async function fetchUnifiedLedger(options: {
     status = "all",
     method = "all",
     city,
+    branchId,
     startDate,
     endDate,
     invoiceId,
@@ -202,11 +208,13 @@ async function fetchUnifiedLedger(options: {
       customer: customersTable,
       invoice: invoicesTable,
       attempt: paymentAttemptsTable,
+      branch: branchesTable,
     })
     .from(paymentsTable)
     .leftJoin(customersTable, eq(paymentsTable.customerId, customersTable.id))
     .leftJoin(invoicesTable, eq(paymentsTable.invoiceId, invoicesTable.id))
     .leftJoin(paymentAttemptsTable, eq(paymentsTable.transactionId, paymentAttemptsTable.cfOrderId))
+    .leftJoin(branchesTable, eq(invoicesTable.branchId, branchesTable.id))
     .where(paymentConditions.length > 0 ? and(...paymentConditions) : undefined)
     .orderBy(desc(paymentsTable.createdAt));
 
@@ -225,6 +233,7 @@ async function fetchUnifiedLedger(options: {
     attempt: typeof paymentAttemptsTable.$inferSelect;
     customer: typeof customersTable.$inferSelect | null;
     invoice: typeof invoicesTable.$inferSelect | null;
+    branch: typeof branchesTable.$inferSelect | null;
   }> = [];
 
   if (method === "all" || method.toLowerCase() === "cashfree") {
@@ -233,10 +242,15 @@ async function fetchUnifiedLedger(options: {
         attempt: paymentAttemptsTable,
         customer: customersTable,
         invoice: invoicesTable,
+        branch: branchesTable,
       })
       .from(paymentAttemptsTable)
       .leftJoin(customersTable, eq(paymentAttemptsTable.customerId, customersTable.id))
       .leftJoin(invoicesTable, eq(paymentAttemptsTable.invoiceId, invoicesTable.id))
+      .leftJoin(branchesTable, or(
+        eq(paymentAttemptsTable.branchId, branchesTable.id),
+        eq(invoicesTable.branchId, branchesTable.id),
+      ))
       .where(and(...attemptConditions))
       .orderBy(desc(paymentAttemptsTable.createdAt));
 
@@ -246,12 +260,13 @@ async function fetchUnifiedLedger(options: {
   // 3. Transform paymentRecords to AdminLedgerRow
   const rows: AdminLedgerRow[] = [];
 
-  for (const { payment, customer, invoice, attempt } of paymentRecords) {
+  for (const { payment, customer, invoice, attempt, branch } of paymentRecords) {
     const rowStatus = payment.status === "reversed" ? "reversed" : "success";
     const paymentDateObj = payment.receivedAt || payment.createdAt;
     const effectiveCity = customer?.city?.trim() || "Varanasi";
     const invoiceBal = invoice ? parseFloat(invoice.balanceDue ?? invoice.dueAmount ?? "0") : 0;
     const invTotal = invoice ? parseFloat(invoice.totalAmount ?? "0") : null;
+    const effectiveBranchId = invoice?.branchId ?? attempt?.branchId ?? null;
 
     rows.push({
       id: `pay_${payment.id}`,
@@ -276,18 +291,22 @@ async function fetchUnifiedLedger(options: {
       internalReference: attempt?.attemptId || payment.transactionId || `PAY-${payment.id}`,
       status: rowStatus,
       notes: payment.notes ?? null,
+      subscriptionId: attempt?.subscriptionId ?? null,
+      branchId: effectiveBranchId,
+      branchName: branch?.name ?? null,
       rawWebhookPayload: attempt?.rawWebhookPayload ?? null,
       rawVerificationPayload: attempt?.rawVerificationPayload ?? null,
     });
   }
 
   // 4. Transform attemptRecords to AdminLedgerRow
-  for (const { attempt, customer, invoice } of attemptRecords) {
+  for (const { attempt, customer, invoice, branch } of attemptRecords) {
     const mappedStatus = mapAttemptStatus(attempt.status);
     const attemptDateObj = attempt.updatedAt || attempt.createdAt;
     const effectiveCity = customer?.city?.trim() || "Varanasi";
     const invoiceBal = invoice ? parseFloat(invoice.balanceDue ?? invoice.dueAmount ?? "0") : null;
     const invTotal = invoice ? parseFloat(invoice.totalAmount ?? "0") : null;
+    const effectiveBranchId = attempt.branchId ?? invoice?.branchId ?? null;
 
     rows.push({
       id: `att_${attempt.id}`,
@@ -312,6 +331,9 @@ async function fetchUnifiedLedger(options: {
       internalReference: attempt.attemptId,
       status: mappedStatus,
       notes: `Cashfree gateway attempt (${attempt.status})`,
+      subscriptionId: attempt.subscriptionId ?? null,
+      branchId: effectiveBranchId,
+      branchName: branch?.name ?? null,
       rawWebhookPayload: attempt.rawWebhookPayload ?? null,
       rawVerificationPayload: attempt.rawVerificationPayload ?? null,
     });
@@ -327,6 +349,10 @@ async function fetchUnifiedLedger(options: {
   if (city && city.trim() && city.toLowerCase() !== "all") {
     const cTarget = city.trim().toLowerCase();
     filtered = filtered.filter((r) => r.city.toLowerCase() === cTarget);
+  }
+
+  if (branchId) {
+    filtered = filtered.filter((r) => r.branchId === branchId);
   }
 
   if (search && search.trim()) {
@@ -462,6 +488,7 @@ router.get("/admin/payments/ledger", requireAuth, requireAdminRole, async (req: 
       status,
       method,
       city,
+      branchId: branchIdParam,
       startDate,
       endDate,
       invoiceId,
@@ -477,6 +504,7 @@ router.get("/admin/payments/ledger", requireAuth, requireAdminRole, async (req: 
       status,
       method,
       city,
+      branchId: branchIdParam ? parseInt(branchIdParam, 10) : undefined,
       startDate,
       endDate,
       invoiceId: invoiceId ? parseInt(invoiceId, 10) : undefined,

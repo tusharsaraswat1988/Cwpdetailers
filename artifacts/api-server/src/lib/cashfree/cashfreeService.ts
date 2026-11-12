@@ -5,6 +5,7 @@ import {
   invoicesTable,
   paymentsTable,
   paymentAttemptsTable,
+  dcmsSubscriptionsTable,
 } from "@workspace/db";
 import { normalizeIndianMobile } from "@workspace/validation";
 import { eq, and, sql, desc, isNull, inArray, gt, like } from "drizzle-orm";
@@ -17,6 +18,10 @@ import { logger } from "../logger";
 export interface CreateOrderParams {
   customerId: number;
   invoiceId?: number;
+  subscriptionId?: number;
+  cityId?: number;
+  branchId?: number;
+  legalEntityId?: number;
   returnUrl?: string;
   baseUrl?: string;
   idempotencyKey?: string;
@@ -275,6 +280,10 @@ export async function createCashfreePaymentOrder(
           cfOrderId,
           customerId,
           invoiceId: targetInvoiceId,
+          subscriptionId: params.subscriptionId ?? null,
+          cityId: params.cityId ?? null,
+          branchId: params.branchId ?? null,
+          legalEntityId: params.legalEntityId ?? null,
           amount: formattedAmount,
           currency: "INR",
           status: "initiated",
@@ -747,6 +756,79 @@ export async function reconcileCashfreePayment(params: ReconcilePaymentParams) {
     }
 
     const receipt = await buildReceiptObject(paymentRecord, effectiveCustomerId, tx);
+
+    // 4. Activate pending subscription post authoritative payment
+    const targetSubId = attempt?.subscriptionId;
+    if (targetSubId) {
+      const [sub] = await tx
+        .select()
+        .from(dcmsSubscriptionsTable)
+        .where(eq(dcmsSubscriptionsTable.id, targetSubId))
+        .limit(1);
+
+      if (sub && sub.status === "pending_payment") {
+        await tx
+          .update(dcmsSubscriptionsTable)
+          .set({
+            status: "active",
+            version: (sub.version || 1) + 1,
+            updatedAt: new Date(),
+          })
+          .where(eq(dcmsSubscriptionsTable.id, sub.id));
+
+        try {
+          const { enqueuePendingFromDcmsSubscription } = await import("../assignments/enqueueAdapters");
+          await enqueuePendingFromDcmsSubscription(sub.id);
+        } catch (enqueueErr) {
+          logger.warn({ err: enqueueErr, subscriptionId: sub.id }, "[CASHFREE_SERVICE] Failed to enqueue cleaner assignments post payment");
+        }
+
+        try {
+          const { logDcmsActivity } = await import("../dcms/auditLog");
+          await logDcmsActivity({
+            subscriptionId: sub.id,
+            action: "subscription_activated_post_payment",
+            entityType: "subscription",
+            entityId: sub.id,
+            performedBy: effectiveCustomerId,
+            metadata: { orderId, amount: effectiveAmount, paymentId: paymentRecord?.id },
+          });
+        } catch {
+          // non-fatal audit log
+        }
+      }
+    } else if (effectiveInvoiceId) {
+      // Fallback: check if invoice was generated for a pending DCMS subscription
+      const [pendingSub] = await tx
+        .select()
+        .from(dcmsSubscriptionsTable)
+        .where(
+          and(
+            eq(dcmsSubscriptionsTable.customerId, effectiveCustomerId),
+            eq(dcmsSubscriptionsTable.status, "pending_payment"),
+          )
+        )
+        .orderBy(desc(dcmsSubscriptionsTable.id))
+        .limit(1);
+
+      if (pendingSub) {
+        await tx
+          .update(dcmsSubscriptionsTable)
+          .set({
+            status: "active",
+            version: (pendingSub.version || 1) + 1,
+            updatedAt: new Date(),
+          })
+          .where(eq(dcmsSubscriptionsTable.id, pendingSub.id));
+
+        try {
+          const { enqueuePendingFromDcmsSubscription } = await import("../assignments/enqueueAdapters");
+          await enqueuePendingFromDcmsSubscription(pendingSub.id);
+        } catch (enqueueErr) {
+          logger.warn({ err: enqueueErr, subscriptionId: pendingSub.id }, "[CASHFREE_SERVICE] Failed to enqueue cleaner assignments post payment");
+        }
+      }
+    }
 
     logger.info(
       { orderId, customerId: effectiveCustomerId, amount: effectiveAmount, paymentId: paymentRecord?.id },
