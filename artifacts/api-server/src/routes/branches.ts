@@ -9,7 +9,9 @@ import {
   createBranch,
   suspendBranch,
   activateBranch,
+  validateBranchReadiness,
 } from "../lib/franchise/branchManagementService";
+import { getBranchOperationsDashboard } from "../lib/franchise/branchOperationsService";
 
 const router = Router();
 
@@ -127,14 +129,37 @@ router.post("/branches/:id/suspend", async (req, res) => {
   }
 });
 
+router.get("/branches/:id/readiness", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const report = await validateBranchReadiness(id);
+    return res.json(report);
+  } catch (err) {
+    req.log.error({ err }, "Validate branch readiness error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+router.get("/branches/:id/operations-hub", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const dashboard = await getBranchOperationsDashboard(id);
+    return res.json(dashboard);
+  } catch (err) {
+    req.log.error({ err }, "Get branch operations hub error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
 router.post("/branches/:id/activate", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const activated = await activateBranch(id, req.user?.id ?? 0);
+    const force = req.body?.force === true;
+    const activated = await activateBranch(id, req.user?.id ?? 0, force);
     return res.json(activated);
   } catch (err) {
     req.log.error({ err }, "Activate branch error");
-    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Internal server error" });
   }
 });
 

@@ -26,6 +26,49 @@ export class CashfreeConfigError extends Error {
 }
 
 /**
+ * Strips whitespace and accidental surrounding quotes (common in Railway/Docker env setups).
+ */
+export function cleanEnvVar(val?: string): string {
+  if (!val) return "";
+  let trimmed = val.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+/**
+ * Resolves Cashfree environment (sandbox vs production) with auto-guard against credential mismatch.
+ * Cashfree sandbox credentials strictly start with "TEST" or "cfsk_ma_test_".
+ * If test credentials are provided on a server with CASHFREE_ENV=production, Cashfree production API
+ * unconditionally fails with HTTP 401 "authentication Failed". We auto-fallback to sandbox to ensure continuity.
+ */
+export function resolveCashfreeEnvironment(
+  appId: string,
+  secretKey: string,
+  rawEnv?: string,
+): CashfreeEnvironment {
+  const configured = rawEnv?.trim().toLowerCase();
+  const isExplicitTestKey =
+    appId.startsWith("TEST") ||
+    secretKey.startsWith("cfsk_ma_test_");
+
+  if (isExplicitTestKey) {
+    return "sandbox";
+  }
+
+  const isExplicitProdKey = secretKey.startsWith("cfsk_ma_prod_");
+  if (isExplicitProdKey) {
+    return "production";
+  }
+
+  return configured === "production" ? "production" : "sandbox";
+}
+
+/**
  * Resolves Cashfree Gateway Base URL.
  * Priority:
  * 1. CASHFREE_BASE_URL environment variable (used by mock test harness)
@@ -33,7 +76,7 @@ export class CashfreeConfigError extends Error {
  * 3. Sandbox URL: https://sandbox.cashfree.com/pg
  */
 export function getCashfreeBaseUrl(env: CashfreeEnvironment = "sandbox"): string {
-  const override = process.env.CASHFREE_BASE_URL?.trim();
+  const override = cleanEnvVar(process.env.CASHFREE_BASE_URL);
   if (override) {
     return override.replace(/\/+$/, "");
   }
@@ -47,12 +90,11 @@ export function getCashfreeBaseUrl(env: CashfreeEnvironment = "sandbox"): string
  * Throws CashfreeConfigError if required credentials are missing.
  */
 export function getCashfreeConfig(): CashfreeServerConfig {
-  const appId = process.env.CASHFREE_APP_ID?.trim();
-  const secretKey = process.env.CASHFREE_SECRET_KEY?.trim();
-  const rawEnv = (process.env.CASHFREE_ENV?.trim().toLowerCase() || "sandbox");
-  const env: CashfreeEnvironment = rawEnv === "production" ? "production" : "sandbox";
-  const apiVersion = process.env.CASHFREE_API_VERSION?.trim() || "2023-08-01";
-  const rawTimeout = process.env.CASHFREE_TIMEOUT_MS?.trim();
+  const appId = cleanEnvVar(process.env.CASHFREE_APP_ID);
+  const secretKey = cleanEnvVar(process.env.CASHFREE_SECRET_KEY);
+  const rawEnv = cleanEnvVar(process.env.CASHFREE_ENV);
+  const apiVersion = cleanEnvVar(process.env.CASHFREE_API_VERSION) || "2023-08-01";
+  const rawTimeout = cleanEnvVar(process.env.CASHFREE_TIMEOUT_MS);
   const timeoutMs = rawTimeout ? parseInt(rawTimeout, 10) : 15_000;
 
   if (!appId) {
@@ -69,6 +111,7 @@ export function getCashfreeConfig(): CashfreeServerConfig {
     );
   }
 
+  const env: CashfreeEnvironment = resolveCashfreeEnvironment(appId, secretKey, rawEnv);
   const baseUrl = getCashfreeBaseUrl(env);
 
   return {
@@ -86,12 +129,15 @@ export function getCashfreeConfig(): CashfreeServerConfig {
  * Strictly excludes private secretKey to prevent exposure.
  */
 export function getClientSafeConfig(): CashfreeClientSafeConfig {
-  const rawEnv = (process.env.CASHFREE_ENV?.trim().toLowerCase() || "sandbox");
-  const env: CashfreeEnvironment = rawEnv === "production" ? "production" : "sandbox";
+  const appId = cleanEnvVar(process.env.CASHFREE_APP_ID);
+  const secretKey = cleanEnvVar(process.env.CASHFREE_SECRET_KEY);
+  const rawEnv = cleanEnvVar(process.env.CASHFREE_ENV);
+  const env: CashfreeEnvironment = resolveCashfreeEnvironment(appId, secretKey, rawEnv);
+
   return {
-    appId: process.env.CASHFREE_APP_ID?.trim() || "",
+    appId,
     env,
-    apiVersion: process.env.CASHFREE_API_VERSION?.trim() || "2023-08-01",
+    apiVersion: cleanEnvVar(process.env.CASHFREE_API_VERSION) || "2023-08-01",
   };
 }
 
@@ -99,5 +145,5 @@ export function getClientSafeConfig(): CashfreeClientSafeConfig {
  * Checks whether Cashfree credentials are configured.
  */
 export function isCashfreeConfigured(): boolean {
-  return Boolean(process.env.CASHFREE_APP_ID?.trim() && process.env.CASHFREE_SECRET_KEY?.trim());
+  return Boolean(cleanEnvVar(process.env.CASHFREE_APP_ID) && cleanEnvVar(process.env.CASHFREE_SECRET_KEY));
 }

@@ -6,11 +6,13 @@ import {
   citiesTable,
   usersTable,
   sessionsTable,
+  staffTable,
   type Branch,
   type Franchisee,
 } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logger } from "../logger";
+import { logAdminAudit } from "../audit/adminAuditService";
 
 export type BranchWithDetails = {
   id: number;
@@ -155,6 +157,179 @@ export async function createBranch(
   return created!;
 }
 
+export type BranchReadinessItem = {
+  key: string;
+  label: string;
+  passed: boolean;
+  message: string;
+  critical: boolean;
+};
+
+export type BranchReadinessReport = {
+  branchId: number;
+  branchName: string;
+  isReady: boolean;
+  score: number;
+  status: string;
+  isCompanyOperated: boolean;
+  checklist: BranchReadinessItem[];
+  missingPrerequisites: string[];
+};
+
+export async function validateBranchReadiness(branchId: number): Promise<BranchReadinessReport> {
+  const [branch] = await db
+    .select()
+    .from(branchesTable)
+    .where(eq(branchesTable.id, branchId))
+    .limit(1);
+
+  if (!branch) throw new Error("Branch not found");
+
+  const checklist: BranchReadinessItem[] = [];
+
+  // 1. Basic profile & code
+  const hasBasicInfo = Boolean(branch.name?.trim() && branch.code?.trim() && branch.city?.trim());
+  checklist.push({
+    key: "basic_profile",
+    label: "Branch Identity & Code",
+    passed: hasBasicInfo,
+    message: hasBasicInfo ? `Code: ${branch.code}` : "Missing name or branch code",
+    critical: true,
+  });
+
+  // 2. City assignment & active status
+  let cityActive = false;
+  let cityName = branch.city;
+  if (branch.cityId) {
+    const [city] = await db.select().from(citiesTable).where(eq(citiesTable.id, branch.cityId)).limit(1);
+    cityActive = Boolean(city && city.isActive);
+    if (city) cityName = city.name;
+  }
+  checklist.push({
+    key: "city_assignment",
+    label: "Active City Assignment",
+    passed: Boolean(branch.cityId && cityActive),
+    message: branch.cityId && cityActive ? `Mapped to active city: ${cityName}` : "City missing or inactive",
+    critical: true,
+  });
+
+  // 3. Issuing Legal Entity
+  let legalEntityAssigned = false;
+  if (branch.legalEntityId) {
+    const [le] = await db.select().from(legalEntitiesTable).where(eq(legalEntitiesTable.id, branch.legalEntityId)).limit(1);
+    legalEntityAssigned = Boolean(le && le.isActive);
+  }
+  checklist.push({
+    key: "legal_entity",
+    label: "Issuing Legal Entity & GST",
+    passed: legalEntityAssigned,
+    message: legalEntityAssigned ? "Legal entity configured for invoicing" : "No legal entity assigned for billing",
+    critical: true,
+  });
+
+  // 4. Operating Model Configured (COCO vs FOFO)
+  checklist.push({
+    key: "operating_model",
+    label: "Operating Model Configuration",
+    passed: true,
+    message: branch.isCompanyOperated ? "Company-Operated (COCO)" : "Franchise-Operated (FOFO)",
+    critical: true,
+  });
+
+  // 5. Franchise Partner Linkage (for FOFO)
+  if (!branch.isCompanyOperated) {
+    let franchiseValid = false;
+    let franMsg = "No franchise partner linked";
+    if (branch.franchiseeId) {
+      const [fr] = await db.select().from(franchiseesTable).where(eq(franchiseesTable.id, branch.franchiseeId)).limit(1);
+      if (fr) {
+        franchiseValid = fr.status === "active" || fr.status === "onboarding";
+        franMsg = franchiseValid ? `Partner: ${fr.name} (${fr.status})` : `Partner ${fr.name} is ${fr.status}`;
+      }
+    }
+    checklist.push({
+      key: "franchise_partner",
+      label: "Franchise Partner Agreement",
+      passed: franchiseValid,
+      message: franMsg,
+      critical: true,
+    });
+  } else {
+    checklist.push({
+      key: "franchise_partner",
+      label: "Franchise Partner Agreement",
+      passed: true,
+      message: "Not required for COCO model",
+      critical: false,
+    });
+  }
+
+  // 6. Service Availability configured
+  const services = branch.serviceAvailability ?? [];
+  const hasServices = Array.isArray(services) && services.length > 0;
+  checklist.push({
+    key: "services_configured",
+    label: "Service Catalog Availability",
+    passed: hasServices,
+    message: hasServices ? `${services.length} services enabled (${services.join(", ")})` : "No services enabled for branch",
+    critical: true,
+  });
+
+  // 7. Staff & Resource Allocation
+  const [staffCountRes] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(staffTable)
+    .where(and(eq(staffTable.branchId, branchId), eq(staffTable.isActive, true)));
+  const staffCount = staffCountRes?.count ?? 0;
+  checklist.push({
+    key: "staff_allocated",
+    label: "Operational Staff Allocation",
+    passed: staffCount > 0,
+    message: staffCount > 0 ? `${staffCount} active staff members allocated` : "No active staff allocated to branch",
+    critical: true,
+  });
+
+  // 8. Contact & Manager Information
+  const hasContact = Boolean(branch.phone?.trim() || branch.managerName?.trim());
+  checklist.push({
+    key: "operational_contact",
+    label: "Branch Manager & Contact Details",
+    passed: hasContact,
+    message: hasContact ? `Manager: ${branch.managerName || "Assigned"} (${branch.phone || "Phone on file"})` : "Missing contact phone or manager name",
+    critical: false,
+  });
+
+  // 9. Operational Notes & Territorial Policy
+  checklist.push({
+    key: "operational_notes",
+    label: "Territorial & Operational Guidelines",
+    passed: Boolean(branch.operationalNotes?.trim()),
+    message: branch.operationalNotes ? "Operational instructions recorded" : "No operational notes provided (recommended)",
+    critical: false,
+  });
+
+  // Calculate score and completeness
+  const criticalItems = checklist.filter((item) => item.critical);
+  const criticalPassed = criticalItems.every((item) => item.passed);
+  const totalPassed = checklist.filter((item) => item.passed).length;
+  const score = Math.round((totalPassed / checklist.length) * 100);
+
+  const missingPrerequisites = checklist
+    .filter((item) => !item.passed)
+    .map((item) => `${item.label} (${item.message})`);
+
+  return {
+    branchId: branch.id,
+    branchName: branch.name,
+    isReady: criticalPassed,
+    score,
+    status: branch.status,
+    isCompanyOperated: branch.isCompanyOperated,
+    checklist,
+    missingPrerequisites,
+  };
+}
+
 export async function suspendBranch(
   branchId: number,
   reason: string,
@@ -187,6 +362,16 @@ export async function suspendBranch(
       sql`${sessionsTable.userId} IN (SELECT id FROM users WHERE branch_id = ${branchId} AND role <> 'admin' AND role <> 'superadmin')`,
     );
 
+  await logAdminAudit({
+    action: "branch_suspended",
+    entityType: "branch",
+    entityId: branchId,
+    cityId: updated!.cityId,
+    branchId,
+    performedBy,
+    reason,
+  });
+
   logger.warn(
     { action: "branch_suspended", branchId, reason, performedBy },
     `Branch ${branchId} suspended: ${reason}`,
@@ -198,7 +383,15 @@ export async function suspendBranch(
 export async function activateBranch(
   branchId: number,
   performedBy: number,
+  force = false,
 ): Promise<Branch> {
+  const readiness = await validateBranchReadiness(branchId);
+  if (!readiness.isReady && !force) {
+    throw new Error(
+      `Branch is not ready for activation. Missing critical prerequisites: ${readiness.missingPrerequisites.join("; ")}`,
+    );
+  }
+
   const [updated] = await db
     .update(branchesTable)
     .set({
@@ -210,6 +403,17 @@ export async function activateBranch(
     .returning();
 
   if (!updated) throw new Error("Branch not found");
+
+  await logAdminAudit({
+    action: "branch_activated",
+    entityType: "branch",
+    entityId: branchId,
+    cityId: updated.cityId,
+    branchId,
+    performedBy,
+    reason: force ? "Forced activation by admin" : "Setup readiness checklist verified",
+    details: { score: readiness.score },
+  });
 
   logger.info({ action: "branch_activated", branchId, performedBy }, `Branch ${branchId} activated`);
   return updated;
@@ -339,6 +543,16 @@ export async function suspendFranchisee(
       .where(eq(branchesTable.id, existing.branchId));
   }
 
+  await logAdminAudit({
+    action: "franchisee_suspended",
+    entityType: "franchisee",
+    entityId: franchiseeId,
+    cityId: existing.cityId,
+    branchId: existing.branchId,
+    performedBy,
+    reason,
+  });
+
   logger.warn(
     { action: "franchisee_suspended", franchiseeId, reason, performedBy },
     `Franchisee ${franchiseeId} (${existing.name}) suspended: ${reason}`,
@@ -376,6 +590,15 @@ export async function activateFranchisee(
       })
       .where(eq(branchesTable.id, updated.branchId));
   }
+
+  await logAdminAudit({
+    action: "franchisee_activated",
+    entityType: "franchisee",
+    entityId: franchiseeId,
+    cityId: updated.cityId,
+    branchId: updated.branchId,
+    performedBy,
+  });
 
   logger.info({ action: "franchisee_activated", franchiseeId, performedBy }, `Franchisee ${franchiseeId} activated`);
   return updated;

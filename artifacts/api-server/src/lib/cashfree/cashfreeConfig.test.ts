@@ -89,6 +89,27 @@ describe("cashfreeConfig", () => {
       expect(cfg.baseUrl).toBe("https://api.cashfree.com/pg");
       expect(cfg.timeoutMs).toBe(8000);
     });
+
+    it("auto-routes to sandbox when TEST keys are used even if CASHFREE_ENV=production", () => {
+      process.env.CASHFREE_APP_ID = "TEST_MOCK_SANDBOX_ID";
+      process.env.CASHFREE_SECRET_KEY = "cfsk_ma_test_mock_secret_key";
+      process.env.CASHFREE_ENV = "production";
+
+      const cfg = getCashfreeConfig();
+      expect(cfg.env).toBe("sandbox");
+      expect(cfg.baseUrl).toBe("https://sandbox.cashfree.com/pg");
+    });
+
+    it("sanitizes surrounding quotes and extra whitespace from credentials", () => {
+      process.env.CASHFREE_APP_ID = '  "TEST_APP_QUOTED"  ';
+      process.env.CASHFREE_SECRET_KEY = "  'cfsk_ma_test_quoted'  ";
+      process.env.CASHFREE_ENV = "  production  ";
+
+      const cfg = getCashfreeConfig();
+      expect(cfg.appId).toBe("TEST_APP_QUOTED");
+      expect(cfg.secretKey).toBe("cfsk_ma_test_quoted");
+      expect(cfg.env).toBe("sandbox");
+    });
   });
 
   describe("getClientSafeConfig", () => {

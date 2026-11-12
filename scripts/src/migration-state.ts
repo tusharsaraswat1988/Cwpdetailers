@@ -64,6 +64,7 @@ export const PENDING_MIGRATIONS = [
   "066_promotions_and_banners.sql",
   "067_operational_exceptions_and_media_retention.sql",
   "068_franchise_branches_and_media_purge_audit.sql",
+  "069_admin_audit_logs_and_branch_readiness.sql",
 ] as const;
 
 export type Queryable = {
@@ -175,6 +176,8 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
     case "068_franchise_branches_and_media_purge_audit.sql":
       return (await hasColumn(db, "branches", "is_company_operated"))
         && (await hasColumn(db, "dcms_visits", "cloudinary_deletion_status"));
+    case "069_admin_audit_logs_and_branch_readiness.sql":
+      return hasTable(db, "admin_audit_logs");
     default:
       return false;
   }

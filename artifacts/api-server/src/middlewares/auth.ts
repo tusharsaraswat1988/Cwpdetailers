@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import { db, usersTable, sessionsTable, permissionsTable, permissionOverridesTable, franchiseesTable, customersTable } from "@workspace/db";
+import { db, usersTable, sessionsTable, permissionsTable, permissionOverridesTable, franchiseesTable, customersTable, branchesTable } from "@workspace/db";
 import { eq, and, or, isNull, gt } from "drizzle-orm";
 import { listSessionTokens } from "../lib/sessionCookie";
 
@@ -44,8 +44,8 @@ export function generateToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-function isSuperAdminRole(role: string) {
-  return role === "admin" || role === "superadmin";
+function isSuperAdminRole(role: string, branchId?: number | null) {
+  return role === "superadmin" || (role === "admin" && (branchId == null || branchId === 0));
 }
 
 /** Logged-in staff may read/update their own profile and attendance without RBAC seed rows. */
@@ -139,6 +139,29 @@ export async function loadUserFromToken(token: string): Promise<AuthUser | null>
     }
   }
 
+  // Branch & Franchise suspension enforcement: reject session if assigned entity is suspended (unless central superadmin/admin)
+  const isCentral = isSuperAdminRole(u.role, u.branchId);
+  if (u.branchId && !isCentral) {
+    const [branch] = await db
+      .select({ id: branchesTable.id, status: branchesTable.status, isActive: branchesTable.isActive })
+      .from(branchesTable)
+      .where(eq(branchesTable.id, u.branchId))
+      .limit(1);
+    if (branch && (branch.status === "suspended" || !branch.isActive)) {
+      return null;
+    }
+  }
+  if (u.franchiseeId && !isCentral) {
+    const [fr] = await db
+      .select({ id: franchiseesTable.id, status: franchiseesTable.status })
+      .from(franchiseesTable)
+      .where(eq(franchiseesTable.id, u.franchiseeId))
+      .limit(1);
+    if (fr && fr.status === "suspended") {
+      return null;
+    }
+  }
+
   return {
     id: u.id,
     name: u.name,
@@ -154,12 +177,23 @@ export async function loadUserFromToken(token: string): Promise<AuthUser | null>
 }
 
 export async function computeScope(user: AuthUser): Promise<TenantScope> {
-  const isSuper = isSuperAdminRole(user.role);
+  const isSuper = isSuperAdminRole(user.role, user.branchId);
   if (isSuper) {
     return {
       isSuperAdmin: true,
       companyId: user.companyId,
       branchIds: null,
+      franchiseeId: null,
+      customerId: null,
+      staffId: null,
+    };
+  }
+  if (user.role === "admin" && user.branchId != null) {
+    // Company Branch Admin
+    return {
+      isSuperAdmin: false,
+      companyId: user.companyId,
+      branchIds: [user.branchId],
       franchiseeId: null,
       customerId: null,
       staffId: null,
@@ -273,8 +307,8 @@ export function requirePermission(resource: string, action: string) {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    // Align with client auth: admin/superadmin are not blocked by missing seed rows.
-    if (isSuperAdminRole(req.user.role)) return next();
+    // Align with client auth: central superadmin/admin are not blocked by missing seed rows.
+    if (isSuperAdminRole(req.user.role, req.user.branchId)) return next();
     if (isStaffSelfService(req)) return next();
     if (isCustomerSelfService(req)) return next();
     const overrides = await db

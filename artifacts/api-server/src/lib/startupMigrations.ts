@@ -267,6 +267,27 @@ export async function ensureStartupMigrations(): Promise<void> {
       ALTER TABLE dcms_visits ADD COLUMN IF NOT EXISTS media_purged_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
     `);
 
+    // 7. Admin Audit Logs (Migration 069)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_audit_logs (
+        id SERIAL PRIMARY KEY,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        city_id INTEGER,
+        branch_id INTEGER,
+        performed_by INTEGER NOT NULL,
+        reason TEXT,
+        details JSONB,
+        ip_address TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_entity ON admin_audit_logs(entity_type, entity_id);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_action ON admin_audit_logs(action);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_branch ON admin_audit_logs(branch_id);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_logs(created_at DESC);
+    `);
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

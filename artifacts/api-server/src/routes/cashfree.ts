@@ -118,10 +118,16 @@ router.post("/payments/cashfree/create-order", requireAuth, async (req: Request,
       "[CASHFREE_ROUTE] Create order request rejected or failed",
     );
 
+    let clientMessage = err.message || "Unable to initiate payment session. Please try again.";
+    if (clientMessage && /authentication\s*failed/i.test(clientMessage)) {
+      clientMessage =
+        "Cashfree Payment Gateway authentication failed. Please verify that your CASHFREE_APP_ID and CASHFREE_SECRET_KEY match your Cashfree account mode (Sandbox vs Live) in Railway environment settings.";
+    }
+
     return res.status(status).json({
       error: errorCode,
       code: errorCode,
-      message: err.message,
+      message: clientMessage,
     });
   }
 });
@@ -169,10 +175,16 @@ router.get("/payments/cashfree/verify/:orderId", requireAuth, async (req: Reques
       "[CASHFREE_ROUTE] Return verification rejected or failed",
     );
 
+    let clientMessage = err.message || "Unable to initiate payment session. Please try again.";
+    if (clientMessage && /authentication\s*failed/i.test(clientMessage)) {
+      clientMessage =
+        "Cashfree Payment Gateway authentication failed. Please verify that your CASHFREE_APP_ID and CASHFREE_SECRET_KEY match your Cashfree account mode (Sandbox vs Live) in Railway environment settings.";
+    }
+
     return res.status(status).json({
       error: errorCode,
       code: errorCode,
-      message: err.message,
+      message: clientMessage,
     });
   }
 });
