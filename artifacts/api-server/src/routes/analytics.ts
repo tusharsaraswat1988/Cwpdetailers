@@ -203,18 +203,28 @@ router.get("/analytics/staff-leaderboard", async (req, res) => {
     const monthFilter = month || new Date().toISOString().slice(0, 7);
     const t = sqlTenant;
 
-    // Phase 5.2: staff/amount/rating removed from bookings — use service_executions
+    // Phase 12 (FIN-004, FIN-005): Exclude cancelled/draft invoices and attribute DCMS subscription revenue
     const results = await db.execute(sql`
       SELECT
         s.id as staff_id, s.name as staff_name,
         COUNT(e.id) FILTER (WHERE e.status = 'completed') as jobs_completed,
         COALESCE((
-          SELECT SUM(COALESCE(inv.total::numeric, 0))
+          SELECT SUM(COALESCE(inv.total_amount::numeric, 0))
           FROM invoices inv
           INNER JOIN service_executions se ON inv.execution_id = se.id
           WHERE se.assigned_staff_id = s.id
             AND se.status = 'completed'
+            AND inv.status IN ('paid', 'sent', 'overdue')
             AND TO_CHAR(se.scheduled_date::date, 'YYYY-MM') = ${monthFilter}
+        ), 0) + COALESCE((
+          SELECT SUM(COALESCE(sub_inv.total_amount::numeric, 0))
+          FROM invoices sub_inv
+          INNER JOIN dcms_staff_assignments dsa ON sub_inv.subscription_id = dsa.subscription_id
+          WHERE dsa.staff_id = s.id
+            AND dsa.is_active = true
+            AND sub_inv.execution_id IS NULL
+            AND sub_inv.status IN ('paid', 'sent', 'overdue')
+            AND TO_CHAR(sub_inv.created_at::date, 'YYYY-MM') = ${monthFilter}
         ), 0) as revenue_generated,
         COALESCE((
           SELECT ROUND(AVG(COALESCE(fb.rating_score, CASE WHEN fb.rating = 'yes' THEN 5 ELSE 1 END))::numeric, 1)

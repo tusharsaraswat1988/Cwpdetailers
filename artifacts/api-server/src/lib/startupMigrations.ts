@@ -1,14 +1,21 @@
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
 
+export const STARTUP_MIGRATION_LOCK_ID = 884729104;
+
 /**
  * Ensures critical schema migrations are applied on server startup.
  * 100% idempotent and non-destructive.
+ * PRD v4.2 (DB-001): Serialized using PostgreSQL session-level advisory lock to eliminate multi-pod startup race conditions.
  */
 export async function ensureStartupMigrations(): Promise<void> {
   const client = await pool.connect();
+  let lockAcquired = false;
   try {
-    logger.info("Verifying and ensuring database schema migrations...");
+    logger.info("Acquiring startup migration advisory lock...");
+    await client.query("SELECT pg_advisory_lock($1)", [STARTUP_MIGRATION_LOCK_ID]);
+    lockAcquired = true;
+    logger.info("Startup migration advisory lock acquired. Verifying and ensuring database schema migrations...");
 
     // 1. Payment method enum & payment_attempts (Migration 063)
     await client.query(`
@@ -577,6 +584,14 @@ export async function ensureStartupMigrations(): Promise<void> {
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");
   } finally {
+    if (lockAcquired) {
+      try {
+        await client.query("SELECT pg_advisory_unlock($1)", [STARTUP_MIGRATION_LOCK_ID]);
+        logger.info("Startup migration advisory lock released successfully.");
+      } catch (unlockErr) {
+        logger.error({ err: unlockErr }, "Failed to release startup migration advisory lock");
+      }
+    }
     client.release();
   }
 }

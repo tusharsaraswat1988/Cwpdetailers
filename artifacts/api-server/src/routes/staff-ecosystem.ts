@@ -50,7 +50,7 @@ import {
   applyOptionalEmailField,
 } from "../lib/contactFields";
 import { assertContactIdentityAvailable } from "../lib/contactIdentity";
-import { projectStaffRecord, projectStaffDocuments } from "../lib/projections/staffProjection";
+import { projectStaffRecord, projectStaffDocuments, projectStaffDocument } from "../lib/projections/staffProjection";
 
 function applyPermanentAddress(body: Record<string, unknown>) {
   if (!body.permanentSameAsCurrent) return body;
@@ -349,7 +349,7 @@ router.post("/staff/me/documents", async (req, res) => {
     }).returning();
 
     await recalculateStaffProfile(staffId);
-    return res.status(201).json(doc);
+    return res.status(201).json(projectStaffDocument(doc, req.user, staffId));
   } catch (err) {
     req.log.error({ err }, "Staff self-service document upload error");
     return res.status(500).json({ error: "Internal server error" });
@@ -391,7 +391,7 @@ router.post("/staff/me/documents/:docId/replace", async (req, res) => {
     }).returning();
 
     await recalculateStaffProfile(staffId);
-    return res.json(doc);
+    return res.json(projectStaffDocument(doc, req.user, staffId));
   } catch (err) {
     req.log.error({ err }, "Staff self-service replace document error");
     return res.status(500).json({ error: "Internal server error" });
@@ -709,7 +709,7 @@ router.post("/staff/:id/documents", async (req, res) => {
     }).returning();
 
     await recalculateStaffProfile(id);
-    return res.status(201).json(doc);
+    return res.status(201).json(projectStaffDocument(doc, req.user, id));
   } catch (err) {
     req.log.error({ err }, "Create staff document error");
     return res.status(500).json({ error: "Internal server error" });
@@ -748,7 +748,7 @@ router.post("/staff/:id/documents/:docId/replace", async (req, res) => {
     }).returning();
 
     await recalculateStaffProfile(id);
-    return res.json(doc);
+    return res.json(projectStaffDocument(doc, req.user, id));
   } catch (err) {
     req.log.error({ err }, "Replace staff document error");
     return res.status(500).json({ error: "Internal server error" });

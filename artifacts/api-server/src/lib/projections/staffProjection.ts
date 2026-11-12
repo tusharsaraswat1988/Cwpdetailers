@@ -1,4 +1,5 @@
 import type { AuthUser } from "../../middlewares/auth";
+import { generateSignedDocumentUrl } from "../cloudinaryStorage";
 
 export type RawStaffRecord = Record<string, any>;
 
@@ -176,12 +177,21 @@ export function projectStaffDocument<T extends Record<string, any>>(
     callerObj?.role === "central_admin" ||
     (callerObj?.role === "admin" && !callerObj?.branchId);
 
-  if (isCentral) return doc;
-
   const targetStaffId = staffId ?? doc.staffId;
   const isOwnRecord = callerObj?.role === "staff" && callerObj?.staffId === targetStaffId;
-  if (isOwnRecord) return doc;
 
+  // PRD v4.2 (SEC-030): For authorized viewers, generate short-lived signed URLs for sensitive docs
+  if (isCentral || isOwnRecord) {
+    if (SENSITIVE_DOC_TYPES.has(doc.documentType) && doc.fileUrl) {
+      return {
+        ...doc,
+        fileUrl: generateSignedDocumentUrl(doc.fileUrl),
+      };
+    }
+    return doc;
+  }
+
+  // Non-authorized roles (supervisors, branch managers, peer staff): completely shield sensitive documents
   if (SENSITIVE_DOC_TYPES.has(doc.documentType)) {
     return {
       ...doc,

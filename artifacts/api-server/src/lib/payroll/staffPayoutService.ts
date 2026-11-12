@@ -14,7 +14,90 @@ export type CalculatePayoutOptions = {
   incentives?: number;
   notes?: string;
   forceRecalculate?: boolean;
+  proRataPolicy?: ProRataPolicy;
 };
+
+export type ProRataPolicy = "calendar_days" | "fixed_30_days" | "working_days";
+
+export function getDaysInMonth(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
+
+/**
+ * Computes mid-month pro-rata salary for salaried/hybrid staff.
+ * PRD v4.2 (PAY-005): Accurately pro-rates base pay based on staff joiningDate.
+ */
+export function computeProRataSalary(
+  baseSalary: number,
+  periodMonth: string, // "YYYY-MM"
+  joiningDateStr?: string | Date | null,
+  policy: ProRataPolicy = "calendar_days",
+): {
+  effectiveBaseSalary: number;
+  proRataFactor: number;
+  daysActive: number;
+  totalDaysInPeriod: number;
+  isProRated: boolean;
+} {
+  const [yearStr, monthStr] = periodMonth.split("-");
+  const year = parseInt(yearStr!, 10);
+  const month = parseInt(monthStr!, 10);
+  const totalDaysInPeriod = policy === "fixed_30_days" ? 30 : getDaysInMonth(year, month - 1);
+
+  if (!joiningDateStr || baseSalary <= 0) {
+    return {
+      effectiveBaseSalary: baseSalary,
+      proRataFactor: 1.0,
+      daysActive: totalDaysInPeriod,
+      totalDaysInPeriod,
+      isProRated: false,
+    };
+  }
+
+  const joinDateIso = typeof joiningDateStr === "string"
+    ? joiningDateStr.slice(0, 10)
+    : joiningDateStr.toISOString().slice(0, 10);
+
+  const startOfMonth = `${yearStr}-${String(month).padStart(2, "0")}-01`;
+  const endOfMonthDay = getDaysInMonth(year, month - 1);
+  const endOfMonth = `${yearStr}-${String(month).padStart(2, "0")}-${String(endOfMonthDay).padStart(2, "0")}`;
+
+  // If joined before or on the 1st of this month: full month
+  if (joinDateIso <= startOfMonth) {
+    return {
+      effectiveBaseSalary: baseSalary,
+      proRataFactor: 1.0,
+      daysActive: totalDaysInPeriod,
+      totalDaysInPeriod,
+      isProRated: false,
+    };
+  }
+
+  // If joined after this month: 0 days active
+  if (joinDateIso > endOfMonth) {
+    return {
+      effectiveBaseSalary: 0,
+      proRataFactor: 0,
+      daysActive: 0,
+      totalDaysInPeriod,
+      isProRated: true,
+    };
+  }
+
+  // Mid-month joiner: calculate days active from joining date to end of month inclusive
+  const joinDay = parseInt(joinDateIso.split("-")[2]!, 10);
+  const daysActive = endOfMonthDay - joinDay + 1;
+  const proRataFactor = Math.max(0, Math.min(1, daysActive / totalDaysInPeriod));
+  const effectiveBaseSalary = Math.round(baseSalary * proRataFactor * 100) / 100;
+
+  return {
+    effectiveBaseSalary,
+    proRataFactor,
+    daysActive,
+    totalDaysInPeriod,
+    isProRated: daysActive < totalDaysInPeriod,
+  };
+}
 
 /**
  * Universal Multi-City Staff Compensation & Payout Engine
@@ -121,19 +204,34 @@ export async function calculateStaffPayout(
   const deductions = opts.deductions ?? (existing ? Number(existing.deductions) : 0);
   const incentives = opts.incentives ?? (existing ? Number(existing.incentives) : 0);
 
+  // Pro-rata base salary calculation for salaried/hybrid models (PAY-005)
+  const proRata = computeProRataSalary(
+    baseSalary,
+    periodMonth,
+    staff.joiningDate,
+    opts.proRataPolicy ?? "calendar_days",
+  );
+  const effectiveBaseSalary = proRata.effectiveBaseSalary;
+
   let grossPayout = 0;
   const employmentType = staff.employmentType || "salaried";
 
   if (employmentType === "salaried") {
-    grossPayout = baseSalary;
+    grossPayout = effectiveBaseSalary;
   } else if (employmentType === "per_job") {
     grossPayout = washEarnings + dailyCleaningEarnings + solarEarnings + distanceAllowance;
   } else {
-    // Hybrid: base salary plus performance piece rates
-    grossPayout = baseSalary + washEarnings + dailyCleaningEarnings + solarEarnings + distanceAllowance;
+    // Hybrid: pro-rated base salary plus performance piece rates
+    grossPayout = effectiveBaseSalary + washEarnings + dailyCleaningEarnings + solarEarnings + distanceAllowance;
   }
 
   const netPayoutDue = Math.max(0, grossPayout + incentives - deductions);
+
+  let payoutNotes = opts.notes ?? existing?.notes ?? undefined;
+  if (proRata.isProRated) {
+    const proRataNote = `Pro-rated for ${proRata.daysActive}/${proRata.totalDaysInPeriod} days active (joined ${staff.joiningDate})`;
+    payoutNotes = payoutNotes ? `${payoutNotes} | ${proRataNote}` : proRataNote;
+  }
 
   const values = {
     staffId,
@@ -141,7 +239,7 @@ export async function calculateStaffPayout(
     branchId: staff.branchId,
     periodMonth,
     employmentType,
-    baseSalary: baseSalary.toFixed(2),
+    baseSalary: effectiveBaseSalary.toFixed(2),
     perWashRate: perWashRate.toFixed(2),
     perDailyCleaningRate: perDailyCleaningRate.toFixed(2),
     perSolarRate: perSolarRate.toFixed(2),
@@ -158,7 +256,7 @@ export async function calculateStaffPayout(
     deductions: deductions.toFixed(2),
     incentives: incentives.toFixed(2),
     netPayoutDue: netPayoutDue.toFixed(2),
-    notes: opts.notes ?? existing?.notes ?? undefined,
+    notes: payoutNotes,
     updatedAt: new Date(),
   };
 

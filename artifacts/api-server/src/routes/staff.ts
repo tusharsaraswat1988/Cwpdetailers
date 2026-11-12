@@ -38,6 +38,7 @@ import {
   approveStaffPayout,
   disburseStaffPayout,
 } from "../lib/payroll/staffPayoutService";
+import { calculateStaffRevenue } from "../lib/payroll/staffRevenueService";
 
 const router = Router();
 
@@ -490,32 +491,36 @@ router.get("/staff/:id/performance", async (req, res) => {
         )),
     ]);
 
-    const [revResult] = await db
-      .select({
-        totalRevenue: sql<string>`COALESCE(SUM(${invoicesTable.total}::numeric), 0)`,
-      })
-      .from(invoicesTable)
-      .innerJoin(serviceExecutionsTable, eq(invoicesTable.executionId, serviceExecutionsTable.id))
-      .where(and(
-        eq(serviceExecutionsTable.assignedStaffId, id),
-        eq(serviceExecutionsTable.status, "completed"),
-        sql`TO_CHAR(${serviceExecutionsTable.scheduledDate}::date, 'YYYY-MM') = ${monthFilter}`,
-      ));
-
-    const [ratingResult] = await db
-      .select({
+    const [revBreakdown, ratingResult] = await Promise.all([
+      calculateStaffRevenue(id, monthFilter),
+      db.select({
         avgRating: sql<string>`COALESCE(ROUND(AVG(COALESCE(${dcmsVisitFeedbackTable.ratingScore}, CASE WHEN ${dcmsVisitFeedbackTable.rating} = 'yes' THEN 5 ELSE 1 END))::numeric, 1), 0)`,
       })
       .from(dcmsVisitFeedbackTable)
-      .where(eq(dcmsVisitFeedbackTable.staffId, id));
+      .where(eq(dcmsVisitFeedbackTable.staffId, id)),
+    ]);
 
     const jobsCompleted = Number(jobsResult[0]?.count ?? 0);
-    const averageRating = Number(ratingResult?.avgRating ?? 0);
+    const averageRating = Number(ratingResult[0]?.avgRating ?? 0);
     const attendanceDays = Number(attendanceResult[0]?.count ?? 0);
-    const revenueGenerated = Number(revResult?.totalRevenue ?? 0);
+    const revenueGenerated = revBreakdown.totalRevenue;
     const efficiencyScore = Math.round((jobsCompleted * 0.4 + averageRating * 10 * 0.4 + attendanceDays * 0.2) * 10) / 10;
 
-    return res.json({ staffId: id, staffName: staff.name, jobsCompleted, revenueGenerated, averageRating, attendanceDays, efficiencyScore, month: monthFilter });
+    return res.json({
+      staffId: id,
+      staffName: staff.name,
+      jobsCompleted,
+      revenueGenerated,
+      averageRating,
+      attendanceDays,
+      efficiencyScore,
+      month: monthFilter,
+      revenueBreakdown: {
+        executionRevenue: revBreakdown.executionRevenue,
+        subscriptionRevenue: revBreakdown.subscriptionRevenue,
+        activeSubscriptionsCount: revBreakdown.activeSubscriptionsCount,
+      },
+    });
   } catch (err) {
     req.log.error({ err }, "Staff performance error");
     return res.status(500).json({ error: "Internal server error" });
@@ -543,6 +548,22 @@ router.post("/staff/:id/attendance", async (req, res) => {
     const staffId = parseInt(req.params.id);
     const staff = await loadStaffInScope(req, staffId);
     if (!staff) return res.status(404).json({ error: "Staff not found" });
+
+    // PRD v4.2 (OPS-001): Attendance Verification Gating
+    // Inactive, pending, rejected, or suspended staff cannot record shift attendance
+    if (!staff.isActive) {
+      return res.status(403).json({
+        error: "Inactive staff members cannot record attendance",
+        code: "STAFF_INACTIVE",
+      });
+    }
+
+    if (staff.verificationStatus !== "verified") {
+      return res.status(403).json({
+        error: `Staff member must be verified by an administrator before recording attendance (current status: ${staff.verificationStatus})`,
+        code: "STAFF_NOT_VERIFIED",
+      });
+    }
     const { date, status, checkInTime, checkOutTime, notes, imageBase64, exif, capturedAt } = req.body as {
       date?: string;
       status?: string;

@@ -20,7 +20,12 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
   }
 
   try {
-    const payload = createCloudinaryUploadSignature(parsed.data, req.scope);
+    const accessType = req.body?.accessType === "authenticated" ? "authenticated" : "public";
+    const payload = createCloudinaryUploadSignature({
+      ...parsed.data,
+      accessType,
+      folder: typeof req.body?.folder === "string" ? req.body.folder : undefined,
+    }, req.scope);
     res.json({
       uploadURL: payload.uploadURL,
       objectPath: payload.objectPath,
