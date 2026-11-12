@@ -22,7 +22,11 @@ export function optimizeBrandLogoUrl(url: string | null | undefined): string {
 
 export function resolveMediaUrl(stored: string | null | undefined): string {
   if (!stored) return "";
-  if (stored.startsWith("http://") || stored.startsWith("https://")) return stored;
+  if (stored.startsWith("http://")) {
+    // Automatically upgrade any legacy or insecure HTTP media links to HTTPS to prevent mixed-content warnings
+    return stored.replace(/^http:\/\//i, "https://");
+  }
+  if (stored.startsWith("https://")) return stored;
   // Legacy local object paths from pre-Phase-1 uploads are no longer served.
   if (stored.startsWith("/objects/") || stored.startsWith("/api/storage")) {
     return stored.startsWith("/api") ? stored : `/api/storage${stored}`;

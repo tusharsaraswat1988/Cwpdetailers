@@ -50,9 +50,12 @@ export type UnifiedPlatformAnalytics = {
     cityName: string;
     isCompanyOperated: boolean;
     franchiseeName: string | null;
+    commissionPercentage: number;
     activeSubscriptions: number;
     staffCount: number;
     collectedRevenue: number;
+    franchiseeCommission: number;
+    companyShare: number;
     completionRate: number;
   }>;
   retention: {
@@ -202,13 +205,25 @@ export async function getUnifiedPlatformAnalytics(
       .from(customersTable)
       .where(eq(customersTable.cityId, c.cityId));
 
+    const [invC] = await db
+      .select({ total: sql<number>`COALESCE(SUM(i.total_amount::numeric), 0)::float` })
+      .from(invoicesTable)
+      .innerJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+      .where(and(eq(customersTable.cityId, c.cityId), sql`${invoicesTable.status} <> 'cancelled'`));
+
+    const [payC] = await db
+      .select({ total: sql<number>`COALESCE(SUM(p.amount::numeric), 0)::float` })
+      .from(paymentsTable)
+      .innerJoin(customersTable, eq(paymentsTable.customerId, customersTable.id))
+      .where(and(eq(customersTable.cityId, c.cityId), eq(paymentsTable.status, "completed")));
+
     cityBreakdown.push({
       cityId: c.cityId,
       cityName: c.cityName,
       activeCustomers: custC?.count ?? 0,
       activeSubscriptions: subC?.count ?? 0,
-      invoicedRevenue: 0,
-      collectedRevenue: 0,
+      invoicedRevenue: Math.round((invC?.total ?? 0) * 100) / 100,
+      collectedRevenue: Math.round((payC?.total ?? 0) * 100) / 100,
     });
   }
 
@@ -221,6 +236,7 @@ export async function getUnifiedPlatformAnalytics(
       cityName: citiesTable.name,
       isCompanyOperated: branchesTable.isCompanyOperated,
       franchiseeName: franchiseesTable.name,
+      commissionPercentage: franchiseesTable.commissionPercentage,
       staffCount: sql<number>`(SELECT COUNT(*)::int FROM staff s WHERE s.branch_id = ${branchesTable.id})`,
       activeSubscriptions: sql<number>`(SELECT COUNT(*)::int FROM dcms_subscriptions sub WHERE sub.branch_id = ${branchesTable.id} AND sub.status = 'active')`,
       collectedRevenue: sql<number>`COALESCE((SELECT SUM(p.amount::numeric) FROM payments p WHERE p.branch_id = ${branchesTable.id} AND p.status = 'completed'), 0)::float`,
@@ -230,18 +246,30 @@ export async function getUnifiedPlatformAnalytics(
     .leftJoin(franchiseesTable, eq(branchesTable.franchiseeId, franchiseesTable.id))
     .where(eq(branchesTable.isActive, true));
 
-  const branchBreakdown = branches.map((b) => ({
-    branchId: b.branchId,
-    branchName: b.branchName,
-    cityId: b.cityId,
-    cityName: b.cityName ?? "Unknown",
-    isCompanyOperated: b.isCompanyOperated,
-    franchiseeName: b.franchiseeName,
-    activeSubscriptions: b.activeSubscriptions,
-    staffCount: b.staffCount,
-    collectedRevenue: Math.round(b.collectedRevenue * 100) / 100,
-    completionRate: 100,
-  }));
+  const branchBreakdown = branches.map((b) => {
+    const collected = Math.round(b.collectedRevenue * 100) / 100;
+    const commPct = Number(b.commissionPercentage ?? "15.00");
+    const franchiseeComm = !b.isCompanyOperated
+      ? Math.round((collected * (commPct / 100)) * 100) / 100
+      : 0;
+    const companyShare = Math.round((collected - franchiseeComm) * 100) / 100;
+
+    return {
+      branchId: b.branchId,
+      branchName: b.branchName,
+      cityId: b.cityId,
+      cityName: b.cityName ?? "Unknown",
+      isCompanyOperated: b.isCompanyOperated,
+      franchiseeName: b.franchiseeName,
+      commissionPercentage: commPct,
+      activeSubscriptions: b.activeSubscriptions,
+      staffCount: b.staffCount,
+      collectedRevenue: collected,
+      franchiseeCommission: franchiseeComm,
+      companyShare,
+      completionRate: 100,
+    };
+  });
 
   // 8. Retention & Lifecycle Metrics
   const [newCust] = await db

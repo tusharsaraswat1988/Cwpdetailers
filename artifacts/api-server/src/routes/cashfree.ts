@@ -118,10 +118,12 @@ router.post("/payments/cashfree/create-order", requireAuth, async (req: Request,
       "[CASHFREE_ROUTE] Create order request rejected or failed",
     );
 
-    let clientMessage = err.message || "Unable to initiate payment session. Please try again.";
-    if (clientMessage && /authentication\s*failed/i.test(clientMessage)) {
-      clientMessage =
-        "Cashfree Payment Gateway authentication failed. Please verify that your CASHFREE_APP_ID and CASHFREE_SECRET_KEY match your Cashfree account mode (Sandbox vs Live) in Railway environment settings.";
+    // Provide clean, customer-safe message — never leak internal environment variables, credentials, or raw stack traces to the client
+    let clientMessage = "Payment service is momentarily unavailable. Please try again shortly or contact support.";
+    if (errorCode === "NO_OUTSTANDING_DUES") {
+      clientMessage = "No outstanding dues found to settle.";
+    } else if (errorCode === "CUSTOMER_NOT_FOUND") {
+      clientMessage = "Customer profile could not be found.";
     }
 
     return res.status(status).json({
@@ -175,10 +177,12 @@ router.get("/payments/cashfree/verify/:orderId", requireAuth, async (req: Reques
       "[CASHFREE_ROUTE] Return verification rejected or failed",
     );
 
-    let clientMessage = err.message || "Unable to initiate payment session. Please try again.";
-    if (clientMessage && /authentication\s*failed/i.test(clientMessage)) {
-      clientMessage =
-        "Cashfree Payment Gateway authentication failed. Please verify that your CASHFREE_APP_ID and CASHFREE_SECRET_KEY match your Cashfree account mode (Sandbox vs Live) in Railway environment settings.";
+    // Provide clean, customer-safe message — never leak internal environment variables, credentials, or raw stack traces to the client
+    let clientMessage = "Payment service is momentarily unavailable. Please try again shortly or contact support.";
+    if (errorCode === "NO_OUTSTANDING_DUES") {
+      clientMessage = "No outstanding dues found to settle.";
+    } else if (errorCode === "CUSTOMER_NOT_FOUND") {
+      clientMessage = "Customer profile could not be found.";
     }
 
     return res.status(status).json({

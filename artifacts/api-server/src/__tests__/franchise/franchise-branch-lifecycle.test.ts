@@ -157,6 +157,7 @@ vi.mock("@workspace/db", async (importOriginal) => {
             return builder;
           }),
           leftJoin: vi.fn(() => builder),
+          innerJoin: vi.fn(() => builder),
           where: vi.fn((cond: any) => {
             queryState.conditions.push(cond);
             return builder;
@@ -362,7 +363,7 @@ describe("CWP Multi-City — Franchise, Branch & Media Retention Architecture", 
     });
 
     it("reactivates a suspended branch restoring operational readiness", async () => {
-      const activated = await activateBranch(1, 99);
+      const activated = await activateBranch(1, 99, true);
 
       expect(activated.status).toBe("active");
       expect(activated.isActive).toBe(true);

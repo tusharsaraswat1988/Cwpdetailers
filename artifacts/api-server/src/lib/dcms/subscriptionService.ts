@@ -47,6 +47,23 @@ export async function createSubscription(
   }
   assertPlanMatchesVehicle(plan, vehicleCtx, plan.seatCount);
 
+  // Idempotency guard: prevent duplicate active subscriptions on double-submission/webhook replay
+  const [existingActive] = await db
+    .select()
+    .from(dcmsSubscriptionsTable)
+    .where(
+      and(
+        eq(dcmsSubscriptionsTable.vehicleId, data.vehicleId),
+        eq(dcmsSubscriptionsTable.planId, data.planId),
+        eq(dcmsSubscriptionsTable.status, "active"),
+      ),
+    )
+    .limit(1);
+
+  if (existingActive) {
+    return existingActive;
+  }
+
   const [sub] = await db.insert(dcmsSubscriptionsTable).values({
     customerId: data.customerId,
     serviceLocationId: data.serviceLocationId ?? null,
@@ -435,6 +452,98 @@ export async function cancelSubscription(
     entityId: subscriptionId,
     performedBy,
     metadata: { reason: reason || "User or admin requested cancellation" },
+  });
+
+  return updated!;
+}
+
+export async function pauseSubscription(
+  subscriptionId: number,
+  options: {
+    pauseStartDate: string;
+    pauseEndDate?: string;
+    pauseReason?: string;
+  },
+  performedBy: number,
+): Promise<DcmsSubscription> {
+  const [sub] = await db
+    .select()
+    .from(dcmsSubscriptionsTable)
+    .where(eq(dcmsSubscriptionsTable.id, subscriptionId))
+    .limit(1);
+
+  if (!sub) throw new Error("Subscription not found");
+  if (sub.status === "paused") throw new Error("Subscription is already paused");
+  if (sub.status !== "active") throw new Error("Only active subscriptions can be paused");
+
+  const now = new Date();
+  const [updated] = await db
+    .update(dcmsSubscriptionsTable)
+    .set({
+      status: "paused",
+      pauseStartDate: options.pauseStartDate,
+      pauseEndDate: options.pauseEndDate ?? null,
+      pauseReason: options.pauseReason ?? "Customer vacation / pause requested",
+      updatedAt: now,
+    })
+    .where(eq(dcmsSubscriptionsTable.id, subscriptionId))
+    .returning();
+
+  // Deactivate active cleaner assignments so daily route skips this vehicle
+  await db
+    .update(dcmsStaffAssignmentsTable)
+    .set({ isActive: false })
+    .where(eq(dcmsStaffAssignmentsTable.subscriptionId, subscriptionId));
+
+  await logDcmsActivity({
+    subscriptionId,
+    action: "subscription_paused",
+    entityType: "subscription",
+    entityId: subscriptionId,
+    performedBy,
+    metadata: options,
+  });
+
+  return updated!;
+}
+
+export async function resumeSubscription(
+  subscriptionId: number,
+  performedBy: number,
+): Promise<DcmsSubscription> {
+  const [sub] = await db
+    .select()
+    .from(dcmsSubscriptionsTable)
+    .where(eq(dcmsSubscriptionsTable.id, subscriptionId))
+    .limit(1);
+
+  if (!sub) throw new Error("Subscription not found");
+  if (sub.status === "active") throw new Error("Subscription is already active");
+  if (sub.status !== "paused") throw new Error("Only paused subscriptions can be resumed");
+
+  const now = new Date();
+  const [updated] = await db
+    .update(dcmsSubscriptionsTable)
+    .set({
+      status: "active",
+      pauseStartDate: null,
+      pauseEndDate: null,
+      pauseReason: null,
+      updatedAt: now,
+    })
+    .where(eq(dcmsSubscriptionsTable.id, subscriptionId))
+    .returning();
+
+  // Restore daily cleaning route assignment
+  const { enqueuePendingFromDcmsSubscription } = await import("../assignments/enqueueAdapters");
+  await enqueuePendingFromDcmsSubscription(subscriptionId);
+
+  await logDcmsActivity({
+    subscriptionId,
+    action: "subscription_resumed",
+    entityType: "subscription",
+    entityId: subscriptionId,
+    performedBy,
   });
 
   return updated!;

@@ -49,7 +49,6 @@ export function CustomerPaymentReviewDialog({
 
     try {
       // 1. Server-side payment order creation
-      const origin = typeof window !== "undefined" ? window.location.origin : "https://cwpdetailers-production.up.railway.app";
       const res = await fetch("/api/payments/cashfree/create-order", {
         method: "POST",
         headers: {
@@ -65,7 +64,14 @@ export function CustomerPaymentReviewDialog({
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || data.error || "Unable to initiate payment session. Please try again.");
+        console.warn("[CustomerPaymentReviewDialog] Gateway order creation failure:", data);
+        let safeMsg = "Payment checkout is temporarily unavailable. Please try again shortly or contact support.";
+        if (data.code === "NO_OUTSTANDING_DUES") {
+          safeMsg = "All outstanding dues have already been settled for this account.";
+        }
+        setErrorMessage(safeMsg);
+        setIsProcessing(false);
+        return;
       }
 
       onPaymentInitiated?.();
@@ -77,7 +83,8 @@ export function CustomerPaymentReviewDialog({
         redirectTarget: "_self",
       });
     } catch (err: any) {
-      setErrorMessage(err.message || "An unexpected error occurred while contacting the payment gateway.");
+      console.warn("[CustomerPaymentReviewDialog] Checkout exception:", err);
+      setErrorMessage("Payment checkout is temporarily unavailable. Please try again in a few moments, or reach out to our team.");
       setIsProcessing(false);
     }
   };
@@ -156,11 +163,14 @@ export function CustomerPaymentReviewDialog({
             </div>
           </div>
 
-          {/* Error Banner */}
+          {/* Friendly Customer Notice (Shields Technical Details) */}
           {errorMessage && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-700 animate-in fade-in duration-200">
-              <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-600" />
-              <span>{errorMessage}</span>
+            <div className="p-3.5 bg-blue-50/90 border border-blue-200/80 rounded-xl flex items-start gap-2.5 text-xs text-blue-900 animate-in fade-in duration-200">
+              <AlertCircle size={16} className="shrink-0 mt-0.5 text-blue-600" />
+              <div className="space-y-0.5">
+                <p className="font-semibold text-blue-950">Payment Temporarily Unavailable</p>
+                <p className="text-blue-800/90 leading-relaxed text-[11px]">{errorMessage}</p>
+              </div>
             </div>
           )}
 

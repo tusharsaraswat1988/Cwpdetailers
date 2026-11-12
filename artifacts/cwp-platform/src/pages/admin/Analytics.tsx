@@ -275,19 +275,23 @@ export default function AdminAnalytics() {
               ) : (
                 <div className="divide-y divide-border">
                   <div className="grid grid-cols-12 text-[11px] font-semibold text-muted-foreground uppercase pb-2">
-                    <span className="col-span-5">City</span>
-                    <span className="col-span-3 text-right">Customers</span>
-                    <span className="col-span-4 text-right">Active Subscriptions</span>
+                    <span className="col-span-4">City</span>
+                    <span className="col-span-2 text-right">Cust</span>
+                    <span className="col-span-2 text-right">Subs</span>
+                    <span className="col-span-4 text-right">Collected</span>
                   </div>
                   {(multiCity?.cityBreakdown ?? []).map((c: any) => (
                     <div key={c.cityId} className="grid grid-cols-12 items-center py-2.5 text-xs">
-                      <div className="col-span-5 font-medium flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-primary" />
-                        {c.cityName}
+                      <div className="col-span-4 font-medium flex items-center gap-1.5 truncate">
+                        <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                        <span className="truncate">{c.cityName}</span>
                       </div>
-                      <div className="col-span-3 text-right text-muted-foreground">{c.activeCustomers}</div>
-                      <div className="col-span-4 text-right font-semibold text-foreground">
+                      <div className="col-span-2 text-right text-muted-foreground">{c.activeCustomers}</div>
+                      <div className="col-span-2 text-right font-semibold text-foreground">
                         {c.activeSubscriptions}
+                      </div>
+                      <div className="col-span-4 text-right font-semibold text-primary">
+                        ₹{(c.collectedRevenue ?? 0).toLocaleString("en-IN")}
                       </div>
                     </div>
                   ))}
@@ -315,18 +319,19 @@ export default function AdminAnalytics() {
               ) : (
                 <div className="divide-y divide-border">
                   <div className="grid grid-cols-12 text-[11px] font-semibold text-muted-foreground uppercase pb-2">
-                    <span className="col-span-5">Branch</span>
-                    <span className="col-span-3 text-center">Model</span>
-                    <span className="col-span-2 text-right">Staff</span>
+                    <span className="col-span-4">Branch</span>
+                    <span className="col-span-2 text-center">Model</span>
                     <span className="col-span-2 text-right">Subs</span>
+                    <span className="col-span-2 text-right">Collected</span>
+                    <span className="col-span-2 text-right">Royalty</span>
                   </div>
                   {(multiCity?.branchBreakdown ?? []).map((b: any) => (
                     <div key={b.branchId} className="grid grid-cols-12 items-center py-2.5 text-xs">
-                      <div className="col-span-5">
+                      <div className="col-span-4 pr-1">
                         <p className="font-medium truncate">{b.branchName}</p>
-                        <p className="text-[10px] text-muted-foreground">{b.cityName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{b.cityName}</p>
                       </div>
-                      <div className="col-span-3 text-center">
+                      <div className="col-span-2 text-center">
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
                             b.isCompanyOperated
@@ -337,9 +342,20 @@ export default function AdminAnalytics() {
                           {b.isCompanyOperated ? "COCO" : "FOFO"}
                         </span>
                       </div>
-                      <div className="col-span-2 text-right text-muted-foreground">{b.staffCount}</div>
                       <div className="col-span-2 text-right font-semibold text-foreground">
                         {b.activeSubscriptions}
+                      </div>
+                      <div className="col-span-2 text-right font-semibold text-primary">
+                        ₹{(b.collectedRevenue ?? 0).toLocaleString("en-IN")}
+                      </div>
+                      <div className="col-span-2 text-right text-[11px] text-muted-foreground">
+                        {!b.isCompanyOperated ? (
+                          <span title={`${b.commissionPercentage}% partner commission`}>
+                            ₹{(b.franchiseeCommission ?? 0).toLocaleString("en-IN")}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        )}
                       </div>
                     </div>
                   ))}

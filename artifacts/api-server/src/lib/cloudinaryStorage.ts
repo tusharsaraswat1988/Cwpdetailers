@@ -107,10 +107,16 @@ export function createCloudinaryUploadSignature(
   };
 }
 
-/** Resolve stored media references for API consumers. */
+/** Resolve stored media references for API consumers. Automatically upgrades HTTP to HTTPS for remote assets. */
 export function resolveStoredMediaUrl(stored: string): string {
   if (!stored) return stored;
-  if (stored.startsWith("http://") || stored.startsWith("https://")) return stored;
+  if (stored.startsWith("http://")) {
+    if (!stored.includes("localhost") && !stored.includes("127.0.0.1")) {
+      return stored.replace(/^http:\/\//i, "https://");
+    }
+    return stored;
+  }
+  if (stored.startsWith("https://")) return stored;
   // Legacy Replit object paths are no longer served locally.
   return stored;
 }

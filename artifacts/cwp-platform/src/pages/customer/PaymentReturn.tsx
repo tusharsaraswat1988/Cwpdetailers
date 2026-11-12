@@ -46,7 +46,7 @@ export default function CustomerPaymentReturn() {
   const verifyPayment = async () => {
     if (!orderId) {
       setStatus("FAILED");
-      setErrorMessage("No order reference provided in the return URL.");
+      setErrorMessage("No order reference was found. Please return to your dashboard.");
       return;
     }
 
@@ -62,7 +62,7 @@ export default function CustomerPaymentReturn() {
 
       if (!res.ok) {
         setStatus("FAILED");
-        setErrorMessage(data.message || "Failed to verify transaction status with server.");
+        setErrorMessage("We could not confirm payment status at this moment. If any amount was debited, it will be automatically reconciled shortly.");
         return;
       }
 
@@ -73,7 +73,7 @@ export default function CustomerPaymentReturn() {
       }
     } catch (err: any) {
       setStatus("FAILED");
-      setErrorMessage(err.message || "Network error while connecting to payment verification service.");
+      setErrorMessage("We could not confirm payment status at this moment. Please check your dashboard or bank statement.");
     } finally {
       setRefreshing(false);
     }

@@ -10,9 +10,14 @@ export const SESSION_COOKIE_PREFIX = "cwp_session_";
 export const LEGACY_SESSION_COOKIE_NAME = "cwp_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-const cookieOptions = {
+export const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
+  get secure(): boolean {
+    return (
+      (process.env.NODE_ENV ?? "").toLowerCase() === "production" ||
+      process.env.COOKIE_SECURE === "true"
+    );
+  },
   sameSite: "lax" as const,
   path: "/",
 };

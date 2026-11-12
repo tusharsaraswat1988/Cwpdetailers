@@ -10,6 +10,73 @@ import { optionalAuth } from "./middlewares/auth";
 
 const app: Express = express();
 
+/**
+ * Trust reverse proxy hops (Railway, Render, Cloudflare, AWS ALB).
+ * Enables req.secure and req.protocol to accurately reflect HTTPS termination at the edge.
+ */
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+/**
+ * Enforce canonical domain (www -> apex) and 301 HTTPS redirection in production.
+ */
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const isProd =
+    (process.env.NODE_ENV ?? "").toLowerCase() === "production" ||
+    process.env.ENFORCE_HTTPS === "true";
+  if (isProd) {
+    const rawHost =
+      (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() ||
+      req.get("host") ||
+      "";
+    const host = rawHost.split(":")[0];
+    const proto =
+      (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() ||
+      req.protocol;
+
+    // 1. Canonical domain redirect: normalize www.cwpdetailers.in to cwpdetailers.in
+    if (host.toLowerCase().startsWith("www.cwpdetailers.in")) {
+      const canonicalHost = host.replace(/^www\./i, "");
+      return res.redirect(301, `https://${canonicalHost}${req.originalUrl}`);
+    }
+
+    // 2. Enforce HTTPS: permanently redirect any HTTP request to HTTPS (skip localhost/127.0.0.1)
+    const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+    if (proto === "http" && !isLocalhost) {
+      return res.redirect(301, `https://${rawHost}${req.originalUrl}`);
+    }
+  }
+  next();
+});
+
+/**
+ * Enforce strict security headers, HSTS, and CSP upgrade-insecure-requests.
+ */
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  const isProd = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
+
+  // Strict-Transport-Security (HSTS): Enforce HTTPS for 1 year, include subdomains, preload
+  if (isProd) {
+    res.setHeader(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains; preload",
+    );
+  }
+
+  // Content-Security-Policy: upgrade all insecure HTTP requests to HTTPS, allow trusted CDNs & Cashfree SDK
+  res.setHeader(
+    "Content-Security-Policy",
+    "upgrade-insecure-requests; default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: wss:; font-src 'self' https: data:; img-src 'self' https: data: blob:; script-src 'self' https: 'unsafe-inline' 'unsafe-eval'; style-src 'self' https: 'unsafe-inline'; frame-src 'self' https:;",
+  );
+
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+
+  next();
+});
+
+
 app.use(
   pinoHttp({
     logger,
