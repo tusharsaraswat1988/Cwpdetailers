@@ -62,6 +62,7 @@ export const PENDING_MIGRATIONS = [
   "064_multi_city_foundation_and_societies.sql",
   "065_legal_entities_and_invoice_sequences.sql",
   "066_promotions_and_banners.sql",
+  "067_operational_exceptions_and_media_retention.sql",
 ] as const;
 
 export type Queryable = {

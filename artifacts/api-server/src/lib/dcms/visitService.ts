@@ -12,7 +12,7 @@ import {
 } from "@workspace/db";
 import { eq, and, desc, sql, gte, lte, inArray } from "drizzle-orm";
 import { logDcmsActivity } from "./auditLog";
-import { isWithinRadius } from "./geoFence";
+import { isWithinRadius, validateBasementGpsFallback } from "./geoFence";
 import { uploadWatermarkedVisitPhoto } from "./watermark";
 import { validateCameraPhoto, sanitizeExifForStorage, ImageValidationError, type ExifPayload } from "./imageValidation";
 import { emitNotificationEvent } from "./notificationEvents";
@@ -46,6 +46,8 @@ export type CompleteVisitInput = {
   confirmedRegistration?: string | null;
   /** Walk-in entry without prior route assignment */
   walkIn?: boolean;
+  gpsUnavailable?: boolean;
+  gpsUnavailableReason?: string;
 };
 
 export type RecordCarNotAvailableInput = {
@@ -60,6 +62,8 @@ export type RecordCarNotAvailableInput = {
   imageBase64: string;
   exif?: ExifPayload | null;
   capturedAt?: string;
+  gpsUnavailable?: boolean;
+  gpsUnavailableReason?: string;
 };
 
 async function todaysCleaningVisits(subscriptionId: number, dateStr: string): Promise<DcmsVisit[]> {
@@ -174,11 +178,37 @@ export async function completeVisit(
     .where(eq(dcmsSubscriptionLocationsTable.subscriptionId, input.subscriptionId)).limit(1);
 
   const isBasement = Boolean(sub.societyId || sub.parkingBay);
+  const basementCheck = validateBasementGpsFallback({
+    staffLat: input.latitude,
+    staffLng: input.longitude,
+    isBasement,
+    gpsUnavailable: input.gpsUnavailable,
+    gpsUnavailableReason: input.gpsUnavailableReason,
+    hasPhoto: Boolean(input.imageBase64),
+  });
+
+  if (!basementCheck.allowed) {
+    traceVisitFailure(log, "geofence_passed", new Error(basementCheck.error || "GPS coordinates required"));
+  }
+
+  if (basementCheck.requiresAudit) {
+    exifData = {
+      ...exifData,
+      requiresAudit: true,
+      auditReason: input.gpsUnavailableReason ?? "underground_basement_no_signal",
+    };
+  }
+
   if (location && !isWithinRadius(
     input.latitude, input.longitude,
     location.latitude, location.longitude,
     location.radiusMeters,
-    { isBasement, accuracy: input.accuracy },
+    {
+      isBasement,
+      accuracy: input.accuracy,
+      gpsUnavailable: input.gpsUnavailable,
+      gpsUnavailableReason: input.gpsUnavailableReason,
+    },
   )) {
     traceVisitStep(log, "geofence_passed", { withinRadius: false });
     const [rejected] = await db.insert(dcmsVisitsTable).values({
@@ -430,6 +460,24 @@ export async function completeVisit(
       companyId: sub.companyId,
     }).catch(err => log.error({ err }, "Failed to dispatch visit completed notification"));
 
+    if (basementCheck.requiresAudit && result.visit) {
+      const { createOperationalException } = await import("./exceptionService");
+      createOperationalException({
+        subscriptionId: input.subscriptionId,
+        visitId: result.visit.id,
+        societyId: sub.societyId,
+        cityId: sub.cityId,
+        staffId: input.staffId,
+        exceptionType: "basement_gps_audit",
+        reason: `Basement GPS fallback: ${input.gpsUnavailableReason ?? "underground_basement_no_signal"}`,
+        notes: `Latitude: ${input.latitude}, Longitude: ${input.longitude}`,
+        evidencePhotoUrl: photoUrl,
+        reportedBy: input.performedBy,
+        companyId: sub.companyId,
+        branchId: sub.branchId,
+      }).catch(err => log.warn({ err }, "Failed to create basement GPS audit exception"));
+    }
+
     return result;
   } catch (e) {
     if (isUniqueViolation(e) && input.visitType === "cleaning") {
@@ -530,11 +578,37 @@ export async function recordCarNotAvailable(
     .where(eq(dcmsSubscriptionLocationsTable.subscriptionId, input.subscriptionId)).limit(1);
 
   const isBasement = Boolean(sub.societyId || sub.parkingBay);
+  const basementCheck = validateBasementGpsFallback({
+    staffLat: input.latitude,
+    staffLng: input.longitude,
+    isBasement,
+    gpsUnavailable: input.gpsUnavailable,
+    gpsUnavailableReason: input.gpsUnavailableReason,
+    hasPhoto: Boolean(input.imageBase64),
+  });
+
+  if (!basementCheck.allowed) {
+    traceVisitFailure(log, "geofence_passed", new Error(basementCheck.error || "GPS coordinates required"));
+  }
+
+  if (basementCheck.requiresAudit) {
+    exifData = {
+      ...exifData,
+      requiresAudit: true,
+      auditReason: input.gpsUnavailableReason ?? "underground_basement_no_signal",
+    };
+  }
+
   if (location && !isWithinRadius(
     input.latitude, input.longitude,
     location.latitude, location.longitude,
     location.radiusMeters,
-    { isBasement, accuracy: input.accuracy },
+    {
+      isBasement,
+      accuracy: input.accuracy,
+      gpsUnavailable: input.gpsUnavailable,
+      gpsUnavailableReason: input.gpsUnavailableReason,
+    },
   )) {
     traceVisitStep(log, "geofence_passed", { withinRadius: false });
     const [rejected] = await db.insert(dcmsVisitsTable).values({
@@ -660,6 +734,23 @@ export async function recordCarNotAvailable(
       visitId: result.visit.id,
       companyId: sub.companyId,
     }).catch(err => log.error({ err }, "Failed to dispatch car not available notification"));
+
+    if (result.visit) {
+      const { createOperationalException } = await import("./exceptionService");
+      createOperationalException({
+        subscriptionId: input.subscriptionId,
+        visitId: result.visit.id,
+        societyId: sub.societyId,
+        cityId: sub.cityId,
+        staffId: input.staffId,
+        exceptionType: "car_not_available",
+        reason: "Vehicle not available in designated parking bay",
+        evidencePhotoUrl: photoUrl,
+        reportedBy: input.performedBy,
+        companyId: sub.companyId,
+        branchId: sub.branchId,
+      }).catch(err => log.warn({ err }, "Failed to create car_not_available operational exception"));
+    }
 
     return result;
   } catch (e) {

@@ -12,7 +12,7 @@ import {
 } from "@workspace/db";
 import type { Request } from "express";
 import { tenantFilters } from "../../middlewares/tenantScope";
-import { eq, and, desc, sql, or, asc } from "drizzle-orm";
+import { eq, and, desc, sql, or, asc, lte } from "drizzle-orm";
 import { logDcmsActivity } from "./auditLog";
 import { DEFAULT_RADIUS_METERS } from "./geoFence";
 import { getPlanById } from "./planService";
@@ -389,4 +389,133 @@ export async function getCustomerActiveSubscription(customerId: number, vehicleI
     .innerJoin(vehiclesTable, eq(dcmsSubscriptionsTable.vehicleId, vehiclesTable.id))
     .where(and(...conditions))
     .orderBy(desc(dcmsSubscriptionsTable.createdAt));
+}
+
+export async function cancelSubscription(
+  subscriptionId: number,
+  performedBy: number,
+  reason?: string,
+): Promise<DcmsSubscription> {
+  const [sub] = await db
+    .select()
+    .from(dcmsSubscriptionsTable)
+    .where(eq(dcmsSubscriptionsTable.id, subscriptionId))
+    .limit(1);
+
+  if (!sub) {
+    throw new Error("Subscription not found");
+  }
+
+  if (sub.status === "cancelled") {
+    throw new Error("Subscription is already cancelled");
+  }
+
+  const now = new Date();
+  const [updated] = await db
+    .update(dcmsSubscriptionsTable)
+    .set({
+      status: "cancelled",
+      updatedAt: now,
+    })
+    .where(eq(dcmsSubscriptionsTable.id, subscriptionId))
+    .returning();
+
+  // Deactivate active staff assignments
+  await db
+    .update(dcmsStaffAssignmentsTable)
+    .set({
+      isActive: false,
+    })
+    .where(eq(dcmsStaffAssignmentsTable.subscriptionId, subscriptionId));
+
+  await logDcmsActivity({
+    subscriptionId,
+    action: "subscription_cancelled",
+    entityType: "subscription",
+    entityId: subscriptionId,
+    performedBy,
+    metadata: { reason: reason || "User or admin requested cancellation" },
+  });
+
+  return updated!;
+}
+
+export type ExpiringSubscriptionsFilter = {
+  cityId?: number;
+  societyId?: number;
+  status?: string;
+  thresholdCleanings?: number;
+  limit?: number;
+  offset?: number;
+};
+
+export async function listExpiringOrInactiveSubscriptions(filters?: ExpiringSubscriptionsFilter) {
+  const threshold = filters?.thresholdCleanings ?? 3;
+  const lim = Math.min(filters?.limit ?? 50, 100);
+  const off = filters?.offset ?? 0;
+
+  const conditions = [];
+  if (filters?.cityId) conditions.push(eq(dcmsSubscriptionsTable.cityId, filters.cityId));
+  if (filters?.societyId) conditions.push(eq(dcmsSubscriptionsTable.societyId, filters.societyId));
+
+  if (filters?.status) {
+    conditions.push(eq(dcmsSubscriptionsTable.status, filters.status as any));
+  } else {
+    // Default to active with <= threshold remaining cleanings, or paused, or completed
+    conditions.push(
+      or(
+        and(
+          eq(dcmsSubscriptionsTable.status, "active"),
+          lte(dcmsSubscriptionsTable.remainingCleanings, threshold),
+        ),
+        eq(dcmsSubscriptionsTable.status, "paused"),
+        eq(dcmsSubscriptionsTable.status, "completed"),
+      ),
+    );
+  }
+
+  const where = conditions.length ? and(...conditions) : undefined;
+
+  const rows = await db
+    .select({
+      id: dcmsSubscriptionsTable.id,
+      customerId: dcmsSubscriptionsTable.customerId,
+      customerName: customersTable.name,
+      customerPhone: customersTable.phone,
+      vehicleId: dcmsSubscriptionsTable.vehicleId,
+      vehicleNumber: vehiclesTable.registrationNumber,
+      planId: dcmsSubscriptionsTable.planId,
+      planName: dcmsPlansTable.name,
+      societyId: dcmsSubscriptionsTable.societyId,
+      societyName: residentialSocietiesTable.name,
+      parkingBay: dcmsSubscriptionsTable.parkingBay,
+      status: dcmsSubscriptionsTable.status,
+      startDate: dcmsSubscriptionsTable.startDate,
+      allocatedCleanings: dcmsSubscriptionsTable.allocatedCleanings,
+      usedCleanings: dcmsSubscriptionsTable.usedCleanings,
+      remainingCleanings: dcmsSubscriptionsTable.remainingCleanings,
+      remainingWashes: dcmsSubscriptionsTable.remainingWashes,
+      createdAt: dcmsSubscriptionsTable.createdAt,
+    })
+    .from(dcmsSubscriptionsTable)
+    .innerJoin(customersTable, eq(dcmsSubscriptionsTable.customerId, customersTable.id))
+    .innerJoin(vehiclesTable, eq(dcmsSubscriptionsTable.vehicleId, vehiclesTable.id))
+    .innerJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
+    .leftJoin(residentialSocietiesTable, eq(dcmsSubscriptionsTable.societyId, residentialSocietiesTable.id))
+    .where(where)
+    .orderBy(asc(dcmsSubscriptionsTable.remainingCleanings), desc(dcmsSubscriptionsTable.updatedAt))
+    .limit(lim)
+    .offset(off);
+
+  const [countRes] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(dcmsSubscriptionsTable)
+    .where(where);
+
+  return {
+    data: rows,
+    total: Number(countRes?.count ?? 0),
+    limit: lim,
+    offset: off,
+  };
 }

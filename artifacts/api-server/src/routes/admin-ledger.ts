@@ -444,6 +444,7 @@ router.get("/admin/payments/ledger/summary", requireAuth, requireAdminRole, asyn
     return res.status(500).json({
       error: "INTERNAL_ERROR",
       message: "Failed to compute ledger summary metrics",
+      detail: err?.message,
     });
   }
 });
@@ -496,6 +497,7 @@ router.get("/admin/payments/ledger", requireAuth, requireAdminRole, async (req: 
     return res.status(500).json({
       error: "INTERNAL_ERROR",
       message: "Failed to fetch payment ledger entries",
+      detail: err?.message,
     });
   }
 });

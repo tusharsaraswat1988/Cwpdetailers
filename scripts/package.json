@@ -45,10 +45,10 @@
     "argon2": "^0.43.0",
     "cloudinary": "^2.6.1",
     "drizzle-orm": "catalog:",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "tsx": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
-    "tsx": "catalog:"
+    "@types/node": "catalog:"
   }
 }

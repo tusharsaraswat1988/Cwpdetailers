@@ -43,9 +43,25 @@ export const dcmsPauseActionEnum = pgEnum("dcms_pause_action", [
 
 
 export const dcmsPauseApprovalStatusEnum = pgEnum("dcms_pause_approval_status", [
-
   "pending", "approved", "rejected",
+]);
 
+export const dcmsExceptionTypeEnum = pgEnum("dcms_exception_type", [
+  "car_not_available",
+  "vehicle_moved_bay",
+  "gate_access_denied",
+  "staff_unavailable",
+  "missed_cleaning",
+  "customer_complaint",
+  "reclean_requested",
+  "basement_gps_audit",
+]);
+
+export const dcmsExceptionStatusEnum = pgEnum("dcms_exception_status", [
+  "open",
+  "investigating",
+  "resolved",
+  "dismissed",
 ]);
 
 
@@ -274,6 +290,10 @@ export const dcmsVisitsTable = pgTable("dcms_visits", {
 
   confirmedRegistration: text("confirmed_registration"),
 
+  mediaPurgedAt: timestamp("media_purged_at"),
+
+  retentionHold: boolean("retention_hold").default(false),
+
   createdAt: timestamp("created_at").notNull().defaultNow(),
 
 }, t => ({
@@ -430,6 +450,40 @@ export const insertDcmsVisitSchema = createInsertSchema(dcmsVisitsTable).omit({ 
 
 
 
+export const dcmsOperationalExceptionsTable = pgTable("dcms_operational_exceptions", {
+  id: serial("id").primaryKey(),
+  subscriptionId: integer("subscription_id").notNull(),
+  visitId: integer("visit_id"),
+  societyId: integer("society_id"),
+  cityId: integer("city_id"),
+  staffId: integer("staff_id"),
+  exceptionType: dcmsExceptionTypeEnum("exception_type").notNull(),
+  status: dcmsExceptionStatusEnum("status").notNull().default("open"),
+  reason: text("reason").notNull(),
+  notes: text("notes"),
+  evidencePhotoUrl: text("evidence_photo_url"),
+  reportedAt: timestamp("reported_at").notNull().defaultNow(),
+  reportedBy: integer("reported_by"),
+  resolutionAction: text("resolution_action"),
+  resolutionNotes: text("resolution_notes"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: integer("resolved_by"),
+  companyId: integer("company_id"),
+  branchId: integer("branch_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, t => ({
+  subIdx: index("idx_dcms_exceptions_sub").on(t.subscriptionId),
+  societyIdx: index("idx_dcms_exceptions_society").on(t.societyId),
+  statusIdx: index("idx_dcms_exceptions_status").on(t.status),
+}));
+
+export const insertDcmsOperationalExceptionSchema = createInsertSchema(dcmsOperationalExceptionsTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export type DcmsPlan = typeof dcmsPlansTable.$inferSelect;
 
 export type DcmsPlanAddon = typeof dcmsPlanAddonsTable.$inferSelect;
@@ -451,5 +505,9 @@ export type DcmsPauseHistory = typeof dcmsPauseHistoryTable.$inferSelect;
 export type DcmsVisitFeedback = typeof dcmsVisitFeedbackTable.$inferSelect;
 
 export type NotificationEvent = typeof notificationEventsTable.$inferSelect;
+
+export type DcmsOperationalException = typeof dcmsOperationalExceptionsTable.$inferSelect;
+
+export type InsertDcmsOperationalException = z.infer<typeof insertDcmsOperationalExceptionSchema>;
 
 

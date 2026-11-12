@@ -50,53 +50,50 @@ router.post("/payments/cashfree/create-order", requireAuth, async (req: Request,
     parsedInvoiceId = num;
   }
 
-  let validatedReturnUrl: string | undefined = undefined;
+  let validatedReturnUrl: string = "/customer/payment/return?order_id={order_id}";
   if (returnUrl != null && returnUrl !== "") {
-    if (typeof returnUrl !== "string") {
-      return res.status(400).json({
-        error: "INVALID_RETURN_URL",
-        code: "INVALID_RETURN_URL",
-        message: "returnUrl must be a string",
-      });
-    }
-    const trimmed = returnUrl.trim();
-    let isReturnValid = false;
-    if (
-      trimmed.startsWith("/customer/payment/return") &&
-      !trimmed.startsWith("//") &&
-      trimmed.includes("{order_id}")
-    ) {
-      isReturnValid = true;
-    } else {
-      try {
-        const parsed = new URL(trimmed);
-        if (
-          parsed.pathname === "/customer/payment/return" &&
-          trimmed.includes("{order_id}")
-        ) {
-          isReturnValid = true;
+    if (typeof returnUrl === "string") {
+      const trimmed = returnUrl.trim();
+      let isReturnValid = false;
+      if (
+        trimmed.startsWith("/customer/payment/return") &&
+        !trimmed.startsWith("//") &&
+        trimmed.includes("{order_id}")
+      ) {
+        isReturnValid = true;
+      } else {
+        try {
+          const parsed = new URL(trimmed);
+          if (
+            (parsed.pathname === "/customer/payment/return" || parsed.pathname === "/customer/payment/return/") &&
+            trimmed.includes("{order_id}")
+          ) {
+            isReturnValid = true;
+          }
+        } catch {
+          isReturnValid = false;
         }
-      } catch {
-        isReturnValid = false;
+      }
+
+      if (isReturnValid) {
+        validatedReturnUrl = trimmed;
+      } else {
+        logger.warn(
+          { returnUrl, customerId },
+          "[CASHFREE_ROUTE] Client passed non-canonical returnUrl; falling back safely to canonical /customer/payment/return?order_id={order_id}",
+        );
       }
     }
-
-    if (!isReturnValid) {
-      return res.status(400).json({
-        error: "INVALID_RETURN_URL",
-        code: "INVALID_RETURN_URL",
-        message:
-          "returnUrl must be a relative URI or trusted URL with path /customer/payment/return and contain {order_id}",
-      });
-    }
-    validatedReturnUrl = trimmed;
   }
 
   try {
     const host = req.get("host");
     const proto = req.get("x-forwarded-proto") || req.protocol || "https";
     const origin = req.get("origin");
-    const inferredBaseUrl = origin || (host ? `${proto}://${host}` : undefined);
+    let inferredBaseUrl = origin || (host ? `${proto}://${host}` : undefined);
+    if (inferredBaseUrl && inferredBaseUrl.startsWith("http://") && !inferredBaseUrl.includes("localhost") && !inferredBaseUrl.includes("127.0.0.1")) {
+      inferredBaseUrl = inferredBaseUrl.replace("http://", "https://");
+    }
 
     const result = await createCashfreePaymentOrder({
       customerId,
