@@ -173,10 +173,12 @@ export async function completeVisit(
   const [location] = await db.select().from(dcmsSubscriptionLocationsTable)
     .where(eq(dcmsSubscriptionLocationsTable.subscriptionId, input.subscriptionId)).limit(1);
 
+  const isBasement = Boolean(sub.societyId || sub.parkingBay);
   if (location && !isWithinRadius(
     input.latitude, input.longitude,
     location.latitude, location.longitude,
     location.radiusMeters,
+    { isBasement, accuracy: input.accuracy },
   )) {
     traceVisitStep(log, "geofence_passed", { withinRadius: false });
     const [rejected] = await db.insert(dcmsVisitsTable).values({
@@ -417,6 +419,17 @@ export async function completeVisit(
     });
     traceVisitStep(log, "db_insert_passed", { visitId: result.visit.id, recovered: recoverVisitId != null });
     traceVisitStep(log, "response_ready", { visitId: result.visit.id });
+
+    // Non-blocking dispatch to customer notification channel
+    const { notifyVisitCompleted } = await import("../notifications/dispatcher");
+    notifyVisitCompleted({
+      customerId: sub.customerId,
+      vehicleNumber: vehicle?.registrationNumber ?? "UNKNOWN",
+      visitType: input.visitType,
+      visitId: result.visit.id,
+      companyId: sub.companyId,
+    }).catch(err => log.error({ err }, "Failed to dispatch visit completed notification"));
+
     return result;
   } catch (e) {
     if (isUniqueViolation(e) && input.visitType === "cleaning") {
@@ -516,10 +529,12 @@ export async function recordCarNotAvailable(
   const [location] = await db.select().from(dcmsSubscriptionLocationsTable)
     .where(eq(dcmsSubscriptionLocationsTable.subscriptionId, input.subscriptionId)).limit(1);
 
+  const isBasement = Boolean(sub.societyId || sub.parkingBay);
   if (location && !isWithinRadius(
     input.latitude, input.longitude,
     location.latitude, location.longitude,
     location.radiusMeters,
+    { isBasement, accuracy: input.accuracy },
   )) {
     traceVisitStep(log, "geofence_passed", { withinRadius: false });
     const [rejected] = await db.insert(dcmsVisitsTable).values({
@@ -634,6 +649,18 @@ export async function recordCarNotAvailable(
     });
     traceVisitStep(log, "db_insert_passed", { visitId: result.visit.id, outcome: "car_not_available" });
     traceVisitStep(log, "response_ready", { visitId: result.visit.id });
+
+    // Non-blocking dispatch to customer & admin notification channels
+    const { notifyCarNotAvailable } = await import("../notifications/dispatcher");
+    notifyCarNotAvailable({
+      customerId: sub.customerId,
+      staffName: input.staffName,
+      vehicleNumber: vehicle?.registrationNumber ?? "UNKNOWN",
+      subscriptionId: input.subscriptionId,
+      visitId: result.visit.id,
+      companyId: sub.companyId,
+    }).catch(err => log.error({ err }, "Failed to dispatch car not available notification"));
+
     return result;
   } catch (e) {
     if (isUniqueViolation(e)) {

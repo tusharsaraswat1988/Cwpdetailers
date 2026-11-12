@@ -299,11 +299,13 @@ export default function AdminBookings() {
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("all");
+    setCityFilter("all");
+    setSocietyFilter("all");
     setDateValue(undefined);
     setPage(1);
   };
 
-  const hasActiveFilters = search !== "" || statusFilter !== "all" || !!dateValue;
+  const hasActiveFilters = search !== "" || statusFilter !== "all" || cityFilter !== "all" || societyFilter !== "all" || !!dateValue;
 
   const runBulkTransition = async (toStatus: "confirmed" | "cancelled") => {
     const ids = selectedKeys as number[];
@@ -321,18 +323,57 @@ export default function AdminBookings() {
       filters={
         <FilterBar
           search={search}
-          onSearchChange={v => setSearch(v)}
-          searchPlaceholder="Search by customer, phone, service, ID…"
+          onSearchChange={v => { setSearch(v); setPage(1); }}
+          searchPlaceholder="Search customer, phone, society, address, ID…"
           statusOptions={STATUS_FILTERS.map(s => ({ value: s, label: s === "all" ? "All Statuses" : s.replace(/_/g, " ").replace(/^\w/, (c: string) => c.toUpperCase()) }))}
           statusValue={statusFilter}
           onStatusChange={v => { setStatusFilter(v); setPage(1); }}
           onClearAll={hasActiveFilters ? clearFilters : undefined}
         >
+          <Select
+            value={cityFilter}
+            onValueChange={v => {
+              setCityFilter(v);
+              setSocietyFilter("all");
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-36 h-9 text-xs" aria-label="Filter by City">
+              <MapPin size={12} className="mr-1 text-muted-foreground" />
+              <SelectValue placeholder="All Cities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Cities</SelectItem>
+              {cities.map((c: { id: number; name: string }) => (
+                <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={societyFilter}
+            onValueChange={v => {
+              setSocietyFilter(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-40 h-9 text-xs" aria-label="Filter by Society">
+              <Building2 size={12} className="mr-1 text-muted-foreground" />
+              <SelectValue placeholder="All Societies" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Societies</SelectItem>
+              {societies.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Input
             type="date"
             value={dateValue ?? ""}
             onChange={e => { setDateValue(e.target.value || undefined); setPage(1); }}
-            className="w-40"
+            className="w-36 h-9 text-xs"
             aria-label="Filter by scheduled date"
             data-testid="filter-booking-date"
           />
@@ -414,17 +455,47 @@ export default function AdminBookings() {
           {
             id: "overview",
             label: "Overview",
-            content: drawerBooking && (
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><p className="text-muted-foreground">Service</p><p className="font-medium">{drawerBooking.serviceName ?? drawerBooking.serviceType?.replace(/_/g, " ")}</p></div>
-                <div><p className="text-muted-foreground">Date</p><p className="font-medium">{drawerBooking.scheduledDate}</p></div>
-                <div><p className="text-muted-foreground">Time</p><p className="font-medium">{drawerBooking.scheduledTime ?? "—"}</p></div>
-                <div><p className="text-muted-foreground">Assignment</p><p className="font-medium">{drawerBooking.staffName ?? (drawerBooking.status === "waiting_assignment" ? "Waiting for Assignment platform" : "—")}</p></div>
-                {drawerBooking.amount != null && <div><p className="text-muted-foreground">Amount</p><p className="font-medium">₹{drawerBooking.amount.toLocaleString("en-IN")}</p></div>}
-                {drawerBooking.address && <div className="col-span-2"><p className="text-muted-foreground">Address</p><p className="font-medium">{drawerBooking.address}</p></div>}
-                {drawerBooking.area && <div className="col-span-2"><p className="text-muted-foreground">Area</p><p className="font-medium">{drawerBooking.area}</p></div>}
-              </div>
-            ),
+            content: drawerBooking && (() => {
+              const b = drawerBooking as typeof drawerBooking & {
+                cityName?: string | null;
+                societyName?: string | null;
+                towerName?: string | null;
+                flatNumber?: string | null;
+                parkingLevel?: string | null;
+                parkingBay?: string | null;
+                parkingNotes?: string | null;
+              };
+              return (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><p className="text-muted-foreground">Service</p><p className="font-medium">{b.serviceName ?? b.serviceType?.replace(/_/g, " ")}</p></div>
+                  <div><p className="text-muted-foreground">Date</p><p className="font-medium">{b.scheduledDate}</p></div>
+                  <div><p className="text-muted-foreground">Time</p><p className="font-medium">{b.scheduledTime ?? "—"}</p></div>
+                  <div><p className="text-muted-foreground">Assignment</p><p className="font-medium">{b.staffName ?? (b.status === "waiting_assignment" ? "Waiting for Assignment platform" : "—")}</p></div>
+                  {b.amount != null && <div><p className="text-muted-foreground">Amount</p><p className="font-medium">₹{b.amount.toLocaleString("en-IN")}</p></div>}
+                  {b.cityName && <div><p className="text-muted-foreground">City</p><p className="font-medium">{b.cityName}</p></div>}
+                  {b.societyName && <div><p className="text-muted-foreground">Society</p><p className="font-medium">{b.societyName}</p></div>}
+                  {(b.towerName || b.flatNumber) && (
+                    <div>
+                      <p className="text-muted-foreground">Tower / Flat</p>
+                      <p className="font-medium">
+                        {[b.towerName ? `Tower ${b.towerName}` : null, b.flatNumber ? `Flat ${b.flatNumber}` : null].filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {b.address && <div className="col-span-2"><p className="text-muted-foreground">Address</p><p className="font-medium">{b.address}</p></div>}
+                  {b.area && <div className="col-span-2"><p className="text-muted-foreground">Area</p><p className="font-medium">{b.area}</p></div>}
+                  {(b.parkingLevel || b.parkingBay || b.parkingNotes) && (
+                    <div className="col-span-2 rounded border border-primary/20 bg-primary/5 p-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-primary">Parking Details</p>
+                      <p className="text-sm font-medium mt-0.5">
+                        {[b.parkingLevel ? `Level ${b.parkingLevel}` : null, b.parkingBay ? `Bay ${b.parkingBay}` : null].filter(Boolean).join(" • ") || "Assigned Spot"}
+                      </p>
+                      {b.parkingNotes && <p className="text-xs text-muted-foreground mt-1">Notes: {b.parkingNotes}</p>}
+                    </div>
+                  )}
+                </div>
+              );
+            })(),
           },
           {
             id: "customer",

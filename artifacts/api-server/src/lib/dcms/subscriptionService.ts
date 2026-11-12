@@ -5,6 +5,7 @@ import {
   dcmsSubscriptionLocationsTable,
   dcmsStaffAssignmentsTable,
   customersTable,
+  residentialSocietiesTable,
   vehiclesTable,
   staffTable,
   type DcmsSubscription,
@@ -255,6 +256,44 @@ export async function assignStaff(
     performedBy: assignedBy,
     metadata: { staffId },
   });
+
+  const [sub] = await db.select({
+    customerId: dcmsSubscriptionsTable.customerId,
+    companyId: dcmsSubscriptionsTable.companyId,
+    societyId: dcmsSubscriptionsTable.societyId,
+    parkingBay: dcmsSubscriptionsTable.parkingBay,
+  }).from(dcmsSubscriptionsTable).where(eq(dcmsSubscriptionsTable.id, subscriptionId)).limit(1);
+
+  if (sub) {
+    try {
+      const [custRow] = await db.select({ name: customersTable.name })
+        .from(customersTable).where(eq(customersTable.id, sub.customerId)).limit(1);
+
+      let societyName: string | undefined;
+      if (sub.societyId) {
+        const [soc] = await db.select({ name: residentialSocietiesTable.name })
+          .from(residentialSocietiesTable).where(eq(residentialSocietiesTable.id, sub.societyId)).limit(1);
+        societyName = soc?.name;
+      }
+
+      const { notifyStaffAssigned } = await import("../notifications/dispatcher");
+      const { getTodayIST } = await import("../../subscriptions/service");
+      void notifyStaffAssigned({
+        staffId,
+        staffName: staff.name,
+        customerId: sub.customerId,
+        customerName: custRow?.name,
+        serviceName: "Daily Car Cleaning",
+        scheduledDate: getTodayIST(),
+        societyName,
+        parkingBay: sub.parkingBay,
+        subscriptionId,
+        companyId: sub.companyId,
+      });
+    } catch {
+      // Best-effort notification
+    }
+  }
 
   return assignment!;
 }

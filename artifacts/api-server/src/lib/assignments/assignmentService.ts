@@ -16,6 +16,7 @@ import {
   customerContractsTable,
   customersTable,
   serviceLocationsTable,
+  residentialSocietiesTable,
   assetsTable,
   servicesTable,
   staffTable,
@@ -681,6 +682,10 @@ export async function assignPendingServiceTasks(
         label: serviceLocationsTable.label,
         locationType: serviceLocationsTable.locationType,
         city: serviceLocationsTable.city,
+        societyId: serviceLocationsTable.societyId,
+        towerId: serviceLocationsTable.towerId,
+        parkingBay: serviceLocationsTable.parkingBay,
+        parkingLevel: serviceLocationsTable.parkingLevel,
       })
         .from(serviceLocationsTable)
         .where(eq(serviceLocationsTable.id, pending.serviceLocationId))
@@ -702,6 +707,31 @@ export async function assignPendingServiceTasks(
       scheduledDate: getTodayIST(),
       executionId,
     });
+
+    try {
+      let societyName: string | undefined;
+      if (location?.societyId) {
+        const [soc] = await db.select({ name: residentialSocietiesTable.name })
+          .from(residentialSocietiesTable).where(eq(residentialSocietiesTable.id, location.societyId)).limit(1);
+        societyName = soc?.name;
+      }
+      const { notifyStaffAssigned } = await import("../notifications/dispatcher");
+      void notifyStaffAssigned({
+        staffId,
+        staffName: staff.name,
+        customerId: pending.customerId,
+        customerName: customer?.name,
+        serviceName: `${serviceName} — ${taskTypeLabel(taskType)}`,
+        scheduledDate: targetScheduledDate,
+        societyName,
+        parkingBay: [location?.parkingLevel, location?.parkingBay].filter(Boolean).join(" / ") || undefined,
+        bookingId: bookingId ?? null,
+        companyId: tenant.companyId,
+        branchId: tenant.branchId,
+      });
+    } catch {
+      // Best-effort notification
+    }
 
     results.push({
       id: assignment.id,
