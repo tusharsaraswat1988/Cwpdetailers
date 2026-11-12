@@ -234,21 +234,41 @@ vi.mock("@workspace/db", async (importOriginal) => {
             return {
               where: vi.fn((clause: any) => {
                 if (table === actual.branchesTable) {
-                  for (const b of memoryStore.branches) {
-                    Object.assign(b, updateValues);
+                  let targetBranch = memoryStore.branches[0];
+                  if (clause && typeof clause === "object" && clause.right?.value != null) {
+                    const targetId = Number(clause.right.value);
+                    const found = memoryStore.branches.find((b) => b.id === targetId);
+                    if (found) {
+                      Object.assign(found, updateValues);
+                      targetBranch = found;
+                    }
+                  } else {
+                    for (const b of memoryStore.branches) {
+                      Object.assign(b, updateValues);
+                    }
                   }
                   return {
-                    returning: vi.fn(() => Promise.resolve([memoryStore.branches[0]])),
-                    then: (resolve: any) => Promise.resolve([memoryStore.branches[0]]).then(resolve),
+                    returning: vi.fn(() => Promise.resolve([targetBranch])),
+                    then: (resolve: any) => Promise.resolve([targetBranch]).then(resolve),
                   };
                 }
                 if (table === actual.franchiseesTable) {
-                  for (const f of memoryStore.franchisees) {
-                    Object.assign(f, updateValues);
+                  let targetF = memoryStore.franchisees[0];
+                  if (clause && typeof clause === "object" && clause.right?.value != null) {
+                    const targetId = Number(clause.right.value);
+                    const found = memoryStore.franchisees.find((f) => f.id === targetId);
+                    if (found) {
+                      Object.assign(found, updateValues);
+                      targetF = found;
+                    }
+                  } else {
+                    for (const f of memoryStore.franchisees) {
+                      Object.assign(f, updateValues);
+                    }
                   }
                   return {
-                    returning: vi.fn(() => Promise.resolve([memoryStore.franchisees[0]])),
-                    then: (resolve: any) => Promise.resolve([memoryStore.franchisees[0]]).then(resolve),
+                    returning: vi.fn(() => Promise.resolve([targetF])),
+                    then: (resolve: any) => Promise.resolve([targetF]).then(resolve),
                   };
                 }
                 if (table === actual.sessionsTable) {
