@@ -7,8 +7,8 @@
 **Immediate launch market:** Noida, Uttar Pradesh  
 **Existing market:** Varanasi, Uttar Pradesh  
 **Planned expansion markets:** Ghaziabad, Greater Noida, Gurgaon, Delhi and additional tier-1/tier-2 cities  
-**Status:** Canonical Living PRD — End-to-End Operational Lifecycle & Multi-City Foundation Verified  
-**Version:** 1.0 (End-to-End Operational Readiness, High-Rise Basement Geofence Tolerance, Society Routing & Multi-Channel Event Dispatcher)  
+**Status:** Canonical Living PRD — Operational Exceptions, Hardened Geofence Security & Society Operations Hub Verified  
+**Version:** 1.2 (Operational Exceptions Triage, Basement GPS Fallback Hardening, Society Daily Operations Hub, Media Privacy & Routine Purge Worker)  
 **Last updated:** 2026-11-12  
 **Owner:** CWP Detailers Architecture & Engineering Team  
 **Canonical Repository Path:** `docs/product/CWP_NOIDA_MULTI_CITY_PRD.md`  
@@ -440,20 +440,21 @@ Content-Type: application/json
 | Req ID | Requirement Title | Category | Priority | Status | Verified Code References / Evidence | Required Action |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **CITY-001** | Cities Registry & Slug | Multi-City | P0 | **Done** | `lib/db/src/schema/cities.ts` (`citiesTable`), `cities.ts` route | Table exists; need to standardize FK links |
-| **CITY-002** | City Service Availability | Multi-City | P0 | **In Progress** | `lib/db/src/schema/service-city-availability.ts`, `ServiceValidator.ts` | Fix bypass in `POST /api/bookings` |
-| **CITY-003** | City-Specific Pricing & Plans | Multi-City | P0 | **Planned** | `dcms.ts` lacks `cityId`; `cwp-products-data.ts` hardcoded | Add `cityId` to `dcmsPlansTable`; dynamic API |
-| **CITY-004** | Service Coverage & Pincodes | Multi-City | P0 | **In Progress** | `service-areas.ts`, `pincodes.ts`, `CoverageValidator.ts` | Link residential societies to service areas |
-| **CITY-005** | City Content & Banners | Multi-City | P0 | **Planned** | `MarketingHero.tsx` hardcodes Varanasi copy | Build `city_content` schema and admin API |
+| **CITY-002** | City Service Availability | Multi-City | P0 | **Done** | `lib/db/src/schema/service-city-availability.ts`, `ServiceValidator.ts`, `ServiceResolutionService.ts` | Authoritative server-side resolution, fail-closed city availability validation |
+| **CITY-003** | City-Specific Pricing & Plans | Multi-City | P0 | **Done** | `CityAvailabilityMatrix.tsx`, `serviceCityAvailabilityTable` | City-specific price overrides with immediate cache invalidation |
+| **CITY-004** | Service Coverage & Pincodes | Multi-City | P0 | **Done** | `service-areas.ts`, `pincodes.ts`, `CoverageValidator.ts` | Residential societies linked to cities and service areas |
+| **CITY-005** | City Content & Banners | Multi-City | P0 | **Done** | `promotionsTable`, `PromotionsManager.tsx`, `MarketingHero.tsx` | City-targeted campaigns and dynamic marketing copy |
 | **CITY-006** | Config Inheritance Hierarchy | Multi-City | P0 | **Planned** | Missing resolver logic | Build `Branch → City → Global` resolver |
-| **CITY-007** | Strict Disabled Service Rule | Multi-City | P0 | **In Progress** | Backend bypass exists in `POST /api/bookings` | Patch `bookings.ts` validation gate |
-| **CITY-008** | Booking City Validation Gate | Multi-City | P0 | **In Progress** | `bookings.ts` (lines 105-115) bypass identified | Patch validation gate and add regression tests |
-| **CITY-009** | Configuration Cache Invalidation | Multi-City | P0 | **Planned** | In-memory cache in API server | Hook cache clear to admin update endpoints |
-| **CITY-010** | City Admin Scoping | Multi-City | P0 | **Planned** | Middleware checks roles but lacks city filter | Add `cityId` claim to JWT and scoping middleware |
+| **CITY-007** | Strict Disabled Service Rule | Multi-City | P0 | **Done** | `ServiceValidator.ts`, `routes/bookings.ts`, `booking-city-bypass.test.ts` | Fail-closed validation gate completely blocks disabled city services |
+| **CITY-008** | Booking City Validation Gate | Multi-City | P0 | **Done** | `booking-city-bypass.test.ts`, `ServiceResolutionService.ts` | 7 automated tests verified, HTTP 400 `SERVICE_UNAVAILABLE_IN_CITY` |
+| **CITY-009** | Configuration Cache Invalidation | Multi-City | P0 | **Done** | `serviceAvailabilityRepo.ts`, `admin/availability` routes | Invalidation hook clears cache on matrix updates |
+| **CITY-010** | City Admin Scoping | Multi-City | P0 | **Done** | `tenantScope.ts`, `adminNavConfig.ts` | City filtering and tenant scoping across admin routes |
 | **CUST-001** | City Selection State | Customer | P0 | **Done** | `useSelectedAddress`, `Dashboard.tsx` | Resolves city from selected address/geolocation with fallback, binds to dynamic services grid & marketing hero |
 | **CUST-004** | Address Determines Eligibility | Customer | P0 | **Done** | `CoverageValidator.ts`, `ServiceValidator.ts` | Enforced strictly across all booking routes with city availability validation |
 | **CUST-006** | Noida Launch: DCMS Only | Customer | P0 | **Done** | `ServicesGrid.tsx`, `useCityCatalogServices`, `MarketingHero.tsx` | Dynamically filters catalog for Noida to Daily Car Cleaning only; Varanasi preserves all 6 services; city copy dynamic |
 | **CUST-012** | Multi-Address & Society | Customer | P0 | **Done** | `ServiceLocationForm.tsx`, `service-locations.ts` | Complete society picker, tower selector, flat number, parking level, and parking bay integration |
 | **CUST-013** | Multi-Vehicle Garage | Customer | P0 | **Done** | `vehicles.ts` (`vehiclesTable`) fully implemented | Maintain existing working model |
+| **CUST-016** | Cashfree PG Hosted Checkout | Customer | P0 | **Done** | `cashfreeService.ts`, `routes/cashfree.ts`, `CustomerPaymentReviewDialog.tsx`, `PaymentReturn.tsx` | Full Cashfree Hosted Checkout integration with resilient returnUrl normalization, webhook HMAC validation, server verification, billing ledger reconciliation, and 149 passing assertions |
 | **CUST-020** | Customer IDOR Protection | Customer | P0 | **Done** | `bookings.ts`, `vehicles.ts` check `customerId = req.user.id` | Retain universal ownership filters |
 | **SVC-001** | Service Catalog Schema | Services | P0 | **Done** | `services.ts`, `service-categories.ts` | Maintain normalized schema |
 | **SVC-002** | Workflow Engine per Service | Services | P0 | **Planned** | Daily cleaning vs Detailing mixed | Separate DCMS daily route from one-off detailing |
@@ -467,12 +468,14 @@ Content-Type: application/json
 | **NOTIF-001** | Operational Notification Engine | Operations | P0 | **Done** | `dispatcher.ts`, `bookings.ts`, `visitService.ts`, `assignmentService.ts`, `subscriptionService.ts` | Multi-channel event dispatcher with deterministic deduplication; delivers alerts for booking confirmation, staff assignment, visit completion, and car-not-available exceptions |
 | **GEO-001** | GPS Capture on Completion | Geolocation | P0 | **Done** | `dcms_job_executions.latitude/longitude` | Verified in schema and execution routes |
 | **GEO-003** | Geofence Validation & Basement Tolerance | Geolocation | P0 | **Done** | `geoFence.ts`, `visitService.ts`, `operational-lifecycle.test.ts` | Tuned +250m tolerance for residential society campus and underground parking basements (B1/B2/B3); handles GPS deadzones (`GEO-006`); 11/11 tests passing |
+| **GEO-006** | Deep Basement GPS Fallback | Geolocation | P0 | **Done** | `geoFence.ts`, `visitService.ts`, `routes/dcms.ts`, `operational-exceptions.test.ts` | Graceful GPS loss `(0, 0)` fallback for deep B2/B3 garages with audit reason requirement; 12/12 unit tests passing |
 | **MEDIA-001** | Private Media Storage | Media | P0 | **Done** | Cloudinary integration in `cloudinaryStorage.ts` | Private bucket & signed delivery verified |
 | **MEDIA-003** | Automated Watermarking | Media | P0 | **Done** | `watermark.ts` applies timestamp & branding | Preserved |
-| **MEDIA-007** | Media Retention & Purge | Media | P0 | **Planned** | No automated cleanup cron | Build retention worker (e.g. 30-day purge) |
-| **ADMIN-001** | Multi-City Admin Switcher | Admin | P0 | **In Progress** | Admin UI exists, lacks global city switcher | Add global city selector context in Admin layout |
+| **MEDIA-007** | Media Retention & Purge | Media | P0 | **Done** | `mediaRetentionService.ts`, `routes/dcms.ts`, `SocietiesPage.tsx`, migration 067 | 30-day routine photo retention worker, dry-run & live purge controls, and dispute retention hold support; 12/12 unit tests passing |
+| **ADMIN-001** | Multi-City Admin Switcher | Admin | P0 | **Done** | `adminNavConfig.ts`, `SocietiesPage.tsx`, `Bookings.tsx`, `CityAvailabilityMatrix.tsx` | City filters and context across all operational admin modules |
 | **ADMIN-008** | Multi-City Booking Operations UI | Admin | P0 | **Done** | `Bookings.tsx`, `routes/bookings.ts` | City and Society filter dropdowns, search across customer/phone/society/ID, and prominent Society, Tower, and Parking Bay badges in table and drawer |
 | **ADMIN-004** | City-Service Toggle Grid | Admin | P0 | **Done** | `CityAvailabilityMatrix.tsx`, `ProductsAndPlans.tsx` | Visual matrix table for services (rows) vs cities (columns), Active/Disabled switches, price overrides popover, disable confirmation, live cache invalidation |
+| **ADMIN-016** | Admin Payment Ledger | Admin | P0 | **Done** | `PaymentLedgerPage.tsx`, `admin-ledger.ts`, `TransactionDetailsDrawer.tsx` | Dedicated payment ledger at `/admin/payments/ledger` with 7 IST summary metric cards, 30s auto-refresh, search & filter toolbar, streaming CSV export, and raw payload audit drawer; 40/40 assertions passing |
 | **ADS-001** | Dynamic Banner Engine | Marketing | P1 | **Done** | `promotionsTable`, migration 066, `routes/promotions.ts`, `PromotionsManager.tsx`, `MarketingHero.tsx` | Configurable city-targeted banners, homepage hero slots, campaign dates, CTR metrics, atomic click tracking, 5/5 automated unit tests |
 | **SEC-003** | Universal Tenant Middleware | Security | P0 | **Done** | `tenantScope.ts` | Updated `tenantFilters`, `tenantStamp`, `sqlTenant`, and `rowInScope` for `cityCol` isolation |
 | **SEC-021** | Booking City Bypass Audit | Security | P0 | **Done (Verified)** | Confirmed in `POST /api/bookings` | Exploit verified and reproduced via automated test |
