@@ -243,29 +243,19 @@ export async function generateInvoiceNumber(tx?: Transaction): Promise<string> {
 
 
 export async function getCustomerOutstandingDues(customerId: number, tx?: Transaction): Promise<number> {
-
   const ctx = tx ?? db;
-
   const [row] = await ctx
-
-    .select({ total: sql<string>`coalesce(sum(${invoicesTable.balanceDue}), 0)` })
-
+    .select({
+      total: sql<string>`coalesce(sum(case when coalesce(${invoicesTable.balanceDue}, 0) > 0 then ${invoicesTable.balanceDue} else coalesce(${invoicesTable.dueAmount}, 0) end), 0)`
+    })
     .from(invoicesTable)
-
     .where(and(
-
       eq(invoicesTable.customerId, customerId),
-
-      eq(invoicesTable.documentType, "tax_invoice"),
-
-      sql`${invoicesTable.balanceDue} > 0`,
-
+      sql`coalesce(${invoicesTable.documentType}, 'tax_invoice') = 'tax_invoice'`,
+      sql`(coalesce(${invoicesTable.balanceDue}, 0) > 0 or coalesce(${invoicesTable.dueAmount}, 0) > 0)`,
       sql`${invoicesTable.status} not in ('paid', 'cancelled')`,
-
     ));
-
   return parseFloat(row?.total ?? "0");
-
 }
 
 

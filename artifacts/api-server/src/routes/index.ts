@@ -63,6 +63,7 @@ router.use(communicationsWebhooksRouter);
 router.use(authRouter);
 router.use(contactRouter);
 router.use(cashfreeRouter);
+router.use(adminLedgerRouter);
 
 // Resource-guarded routers. Each guard maps HTTP method → permission action
 // (GET=view, POST=create, PUT/PATCH=edit, DELETE=delete) for that resource.

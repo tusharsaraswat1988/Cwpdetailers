@@ -1,6 +1,7 @@
 import app from "./app";
 import { bootstrapAdminFromEnv } from "./lib/bootstrapAdmin";
 import { bootstrapMasterDataIfEmpty, bootstrapDcmsPlansIfEmpty } from "./lib/bootstrapMasterData";
+import { ensureStartupMigrations } from "./lib/startupMigrations";
 import { logger } from "./lib/logger";
 import { runDailyTick } from "./subscriptions/service";
 import { runMissedVisitScheduler } from "./lib/dcms/missedVisitScheduler";
@@ -24,6 +25,9 @@ app.listen(port, "0.0.0.0", (err) => {
   }
 
   logger.info({ port, dbHost }, "Server listening");
+  ensureStartupMigrations().catch(err => {
+    logger.error({ err }, "Startup migrations failed");
+  });
   if (!ensureWebPushConfigured()) {
     logger.warn("Web push not configured — set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT");
   }

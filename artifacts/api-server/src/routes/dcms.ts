@@ -883,4 +883,215 @@ router.get(
   },
 );
 
+// ─── Operational Exceptions ─────────────────────────────────────────────────
+
+router.get(
+  "/daily-cleaning/exceptions",
+  requireAuth,
+  requirePermission("daily_cleaning", "view"),
+  async (req, res) => {
+    try {
+      const societyId = req.query.societyId ? Number(req.query.societyId) : undefined;
+      const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
+      const staffId = req.query.staffId ? Number(req.query.staffId) : undefined;
+      const subscriptionId = req.query.subscriptionId ? Number(req.query.subscriptionId) : undefined;
+      const status = req.query.status as any;
+      const exceptionType = req.query.exceptionType as any;
+      const limit = req.query.limit ? Number(req.query.limit) : 50;
+      const offset = req.query.offset ? Number(req.query.offset) : 0;
+
+      const result = await listOperationalExceptions({
+        societyId,
+        cityId,
+        staffId,
+        subscriptionId,
+        status,
+        exceptionType,
+        limit,
+        offset,
+      });
+      return res.json(result);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.post(
+  "/daily-cleaning/exceptions",
+  requireAuth,
+  requirePermission("daily_cleaning", "manage_subscriptions"),
+  async (req, res) => {
+    try {
+      const {
+        subscriptionId, visitId, societyId, cityId, staffId, exceptionType,
+        reason, notes, evidencePhotoUrl,
+      } = req.body ?? {};
+
+      if (!subscriptionId || !exceptionType || !reason) {
+        return res.status(400).json({ error: "subscriptionId, exceptionType, and reason are required" });
+      }
+
+      const created = await createOperationalException({
+        subscriptionId: Number(subscriptionId),
+        visitId: visitId ? Number(visitId) : null,
+        societyId: societyId ? Number(societyId) : null,
+        cityId: cityId ? Number(cityId) : null,
+        staffId: staffId ? Number(staffId) : null,
+        exceptionType,
+        reason,
+        notes,
+        evidencePhotoUrl,
+        reportedBy: req.user!.id,
+        companyId: req.user!.companyId,
+      });
+      return res.status(201).json(created);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.post(
+  "/daily-cleaning/exceptions/:id/resolve",
+  requireAuth,
+  requirePermission("daily_cleaning", "manage_subscriptions"),
+  async (req, res) => {
+    try {
+      const exceptionId = Number(req.params.id);
+      const { action, resolutionNotes, newStaffId } = req.body ?? {};
+      if (!action || !resolutionNotes) {
+        return res.status(400).json({ error: "action and resolutionNotes are required" });
+      }
+
+      const updated = await resolveOperationalException({
+        exceptionId,
+        action,
+        resolutionNotes,
+        resolvedBy: req.user!.id,
+        newStaffId: newStaffId ? Number(newStaffId) : undefined,
+      });
+      return res.json(updated);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+// ─── Society Operations Dashboard ───────────────────────────────────────────
+
+router.get(
+  "/daily-cleaning/societies/daily-operations",
+  requireAuth,
+  requirePermission("daily_cleaning", "view_reports"),
+  async (req, res) => {
+    try {
+      const date = req.query.date as string | undefined;
+      const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
+      const data = await getSocietyDailyOperations(date, cityId);
+      return res.json(data);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+// ─── Subscription Lifecycle: Cancel & Expiring ──────────────────────────────
+
+router.post(
+  "/daily-cleaning/subscriptions/:id/cancel",
+  requireAuth,
+  requirePermission("daily_cleaning", "manage_subscriptions"),
+  async (req, res) => {
+    try {
+      const subscriptionId = Number(req.params.id);
+      const { reason } = req.body ?? {};
+      const updated = await cancelSubscription(subscriptionId, req.user!.id, reason);
+      return res.json(updated);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.get(
+  "/daily-cleaning/subscriptions/expiring",
+  requireAuth,
+  requirePermission("daily_cleaning", "view"),
+  async (req, res) => {
+    try {
+      const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
+      const societyId = req.query.societyId ? Number(req.query.societyId) : undefined;
+      const status = req.query.status as string | undefined;
+      const thresholdCleanings = req.query.thresholdCleanings ? Number(req.query.thresholdCleanings) : undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : 50;
+      const offset = req.query.offset ? Number(req.query.offset) : 0;
+
+      const result = await listExpiringOrInactiveSubscriptions({
+        cityId,
+        societyId,
+        status,
+        thresholdCleanings,
+        limit,
+        offset,
+      });
+      return res.json(result);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+// ─── Media Retention & Privacy ──────────────────────────────────────────────
+
+router.get(
+  "/daily-cleaning/media/retention/policy",
+  requireAuth,
+  async (req, res) => {
+    try {
+      return res.json(getMediaRetentionPolicy());
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.post(
+  "/daily-cleaning/media/retention/run-purge",
+  requireAuth,
+  requirePermission("daily_cleaning", "manage_subscriptions"),
+  async (req, res) => {
+    try {
+      const { days, dryRun } = req.body ?? {};
+      const result = await purgeExpiredVisitMedia({
+        days: days ? Number(days) : undefined,
+        dryRun: Boolean(dryRun),
+        performedBy: req.user!.id,
+      });
+      return res.json(result);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.post(
+  "/daily-cleaning/media/retention/visits/:id/hold",
+  requireAuth,
+  requirePermission("daily_cleaning", "manage_subscriptions"),
+  async (req, res) => {
+    try {
+      const visitId = Number(req.params.id);
+      const { hold, reason } = req.body ?? {};
+      if (hold == null) {
+        return res.status(400).json({ error: "hold boolean is required" });
+      }
+      const updated = await setVisitRetentionHold(visitId, Boolean(hold), reason, req.user!.id);
+      return res.json(updated);
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
 export default router;

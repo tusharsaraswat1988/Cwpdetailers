@@ -672,37 +672,101 @@ router.get("/customers/:id/summary", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    const [recentBookings, recentPayments, totalSpendResult, activeContracts] = await Promise.all([
-      db.select().from(bookingsTable).where(eq(bookingsTable.customerId, id))
-        .orderBy(desc(bookingsTable.createdAt)).limit(5),
-      db.select().from(paymentsTable).where(eq(paymentsTable.customerId, id))
-        .orderBy(desc(paymentsTable.createdAt)).limit(5),
-      db.select({ total: sql<number>`sum(amount)` }).from(paymentsTable)
-        .where(eq(paymentsTable.customerId, id)),
-      import("../lib/customers/customerServicesHub").then(m => m.countActiveCustomerContracts(id)),
-    ]);
+    let recentBookings: any[] = [];
+    try {
+      recentBookings = await db.select().from(bookingsTable).where(eq(bookingsTable.customerId, id))
+        .orderBy(desc(bookingsTable.createdAt)).limit(5);
+    } catch (err) {
+      req.log.warn({ err }, "Customer summary: failed to load recent bookings");
+    }
 
-    const upcomingBookings = await db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
-      .where(and(eq(bookingsTable.customerId, id), eq(bookingsTable.status, "confirmed")));
+    let recentPayments: any[] = [];
+    try {
+      recentPayments = await db.select().from(paymentsTable).where(eq(paymentsTable.customerId, id))
+        .orderBy(desc(paymentsTable.createdAt)).limit(5);
+    } catch (err) {
+      req.log.warn({ err }, "Customer summary: failed to load recent payments");
+    }
 
-    // Phase 5.2: completed is execution-owned — count this month's non-cancelled bookings
-    const thisMonthBookings = await db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
-      .where(and(
-        eq(bookingsTable.customerId, id),
-        sql`${bookingsTable.status} <> 'cancelled'`,
-        sql`DATE_TRUNC('month', ${bookingsTable.scheduledDate}::date) = DATE_TRUNC('month', NOW())`,
-      ));
+    let totalSpend = 0;
+    try {
+      const [totalSpendResult] = await db.select({ total: sql<number>`sum(amount)` }).from(paymentsTable)
+        .where(eq(paymentsTable.customerId, id));
+      totalSpend = Number(totalSpendResult?.total ?? 0);
+    } catch (err) {
+      req.log.warn({ err }, "Customer summary: failed to load total spend");
+    }
 
-    const pendingDues = await getCustomerOutstandingDues(id);
+    let activeContracts = 0;
+    try {
+      const hub = await import("../lib/customers/customerServicesHub");
+      activeContracts = await hub.countActiveCustomerContracts(id);
+    } catch (err) {
+      req.log.warn({ err }, "Customer summary: failed to count active contracts");
+    }
+
+    let upcomingCount = 0;
+    try {
+      const upcomingBookings = await db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
+        .where(and(eq(bookingsTable.customerId, id), eq(bookingsTable.status, "confirmed")));
+      upcomingCount = Number(upcomingBookings[0]?.count ?? 0);
+    } catch (err) {
+      req.log.warn({ err }, "Customer summary: failed to count upcoming bookings");
+    }
+
+    let thisMonthCount = 0;
+    try {
+      const thisMonthBookings = await db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
+        .where(and(
+          eq(bookingsTable.customerId, id),
+          sql`${bookingsTable.status} <> 'cancelled'`,
+          sql`NULLIF(${bookingsTable.scheduledDate}, '')::date >= DATE_TRUNC('month', NOW()) AND NULLIF(${bookingsTable.scheduledDate}, '')::date < (DATE_TRUNC('month', NOW()) + INTERVAL '1 month')`,
+        ));
+      thisMonthCount = Number(thisMonthBookings[0]?.count ?? 0);
+    } catch (err) {
+      req.log.warn({ err }, "Customer summary: failed to count this month bookings");
+    }
+
+    let walletBalance = 0;
+    try {
+      walletBalance = await getLedgerBalance(id);
+    } catch (err) {
+      walletBalance = Number(customer.walletBalance ?? 0);
+    }
+
+    // Authoritative calculation of pending dues
+    let pendingDues = 0;
+    try {
+      pendingDues = await getCustomerOutstandingDues(id);
+    } catch (err) {
+      req.log.warn({ err }, "getCustomerOutstandingDues threw, falling back to customer.totalDues");
+      pendingDues = Number(customer.totalDues ?? 0);
+    }
+
+    // If getCustomerOutstandingDues returned 0 but customer record has positive totalDues, double check open invoices
+    if (pendingDues <= 0 && Number(customer.totalDues ?? 0) > 0) {
+      try {
+        const [openInv] = await db.select({
+          total: sql<string>`coalesce(sum(case when coalesce(${invoicesTable.balanceDue}, 0) > 0 then ${invoicesTable.balanceDue} else ${invoicesTable.dueAmount} end), 0)`
+        }).from(invoicesTable).where(and(
+          eq(invoicesTable.customerId, id),
+          sql`${invoicesTable.status} not in ('paid', 'cancelled')`,
+        ));
+        const openTotal = Number(openInv?.total ?? 0);
+        pendingDues = openTotal > 0 ? openTotal : Number(customer.totalDues);
+      } catch {
+        pendingDues = Number(customer.totalDues);
+      }
+    }
 
     return res.json({
       activeSubscriptions: activeContracts,
       activeContracts,
-      upcomingServices: Number(upcomingBookings[0]?.count ?? 0),
-      walletBalance: await getLedgerBalance(id),
+      upcomingServices: upcomingCount,
+      walletBalance,
       pendingDues,
-      totalServicesThisMonth: Number(thisMonthBookings[0]?.count ?? 0),
-      totalSpend: Number(totalSpendResult[0]?.total ?? 0),
+      totalServicesThisMonth: thisMonthCount,
+      totalSpend,
       recentBookings,
       recentPayments,
     });
