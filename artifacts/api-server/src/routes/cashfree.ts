@@ -60,17 +60,33 @@ router.post("/payments/cashfree/create-order", requireAuth, async (req: Request,
       });
     }
     const trimmed = returnUrl.trim();
-    const isRelativeReturn =
+    let isReturnValid = false;
+    if (
       trimmed.startsWith("/customer/payment/return") &&
       !trimmed.startsWith("//") &&
-      trimmed.includes("{order_id}");
+      trimmed.includes("{order_id}")
+    ) {
+      isReturnValid = true;
+    } else {
+      try {
+        const parsed = new URL(trimmed);
+        if (
+          parsed.pathname === "/customer/payment/return" &&
+          trimmed.includes("{order_id}")
+        ) {
+          isReturnValid = true;
+        }
+      } catch {
+        isReturnValid = false;
+      }
+    }
 
-    if (!isRelativeReturn) {
+    if (!isReturnValid) {
       return res.status(400).json({
         error: "INVALID_RETURN_URL",
         code: "INVALID_RETURN_URL",
         message:
-          "returnUrl must be a relative URI starting with /customer/payment/return and contain {order_id}",
+          "returnUrl must be a relative URI or trusted URL with path /customer/payment/return and contain {order_id}",
       });
     }
     validatedReturnUrl = trimmed;

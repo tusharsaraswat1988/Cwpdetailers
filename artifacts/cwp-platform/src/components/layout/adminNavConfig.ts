@@ -171,6 +171,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         perm: { resource: "invoices", action: "view" },
       },
       {
+        id: "payment-ledger",
+        href: "/admin/payments/ledger",
+        label: "Payment Ledger",
+        icon: Receipt,
+        perm: { resource: "invoices", action: "view" },
+      },
+      {
         id: "services",
         href: "/admin/services",
         label: "Service Catalog",
@@ -208,6 +215,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { id: "credentials", href: "/admin/credentials", label: "Credentials", icon: Key, perm: { resource: "staff", action: "approve" } },
       { id: "franchisees", href: "/admin/franchisees", label: "Franchisees", icon: Building2, perm: { resource: "franchisees", action: "view" } },
       { id: "branches", href: "/admin/branches", label: "Branches", icon: GitBranch, perm: { resource: "branches", action: "view" } },
+      { id: "societies", href: "/admin/societies", label: "Societies & Towers", icon: Building2, perm: { resource: "branches", action: "view" } },
     ],
   },
   {

@@ -48,6 +48,10 @@ import serviceExecutionsRouter from "./service-executions";
 import jobsRouter from "./jobs";
 import bookingPlatformRouter from "./booking-platform";
 import cashfreeRouter from "./cashfree";
+import adminLedgerRouter from "./admin-ledger";
+import societiesRouter from "./societies";
+import legalEntitiesRouter from "./legal-entities";
+import promotionsRouter from "./promotions";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -208,6 +212,7 @@ router.use(
   ]),
   paymentsRouter,
 );
+router.use(guardResource("invoices"), adminLedgerRouter);
 router.use(guardResource("branches"), branchesRouter);
 router.use(guardResource("analytics"), analyticsRouter);
 router.use(guardResource("bookings", [], [], "/operations"), operationsRouter);
@@ -281,6 +286,9 @@ router.use(brandingRouter);
 router.use(legalRouter);
 router.use(pushRouter);
 router.use(dcmsRouter);
+router.use(societiesRouter);
+router.use(legalEntitiesRouter);
+router.use(promotionsRouter);
 router.use(guardMasterDataRoutes(), masterDataRouter);
 router.use(guardCatalogRoutes(), serviceCatalogRouter);
 

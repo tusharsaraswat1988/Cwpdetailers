@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Clock,
   Sparkles,
+  Building2,
 } from "lucide-react";
 import { staffVisitLabel } from "../lib/visitLabels";
 import { buildNavigateUrl, openExternalNavigation } from "@/lib/maps";
@@ -43,6 +44,12 @@ export type RouteStop = {
   location?: { latitude: number; longitude: number; radiusMeters?: number } | null;
   address?: string | null;
   locationLabel?: string | null;
+  societyName?: string | null;
+  towerName?: string | null;
+  flatNumber?: string | null;
+  parkingLevel?: string | null;
+  parkingBay?: string | null;
+  parkingNotes?: string | null;
   destinationType?: "coordinates" | "address" | "missing";
 };
 
@@ -252,6 +259,27 @@ export function StaffDailyRouteSimplified() {
                   {badge.label}
                 </Badge>
               </div>
+
+              {/* SOCIETY / TOWER / PARKING BAY DETAILS */}
+              {(stop.societyName || stop.towerName || stop.parkingBay || stop.flatNumber) && (
+                <div className="flex items-center gap-1.5 flex-wrap p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-950 dark:text-blue-200">
+                  <Building2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                  <span className="font-bold">{stop.societyName || "Apartment"}</span>
+                  {stop.towerName && <span className="font-medium">• {stop.towerName}</span>}
+                  {stop.flatNumber && <span>• Flat {stop.flatNumber}</span>}
+                  {stop.parkingLevel && <span>• {stop.parkingLevel}</span>}
+                  {stop.parkingBay && (
+                    <Badge variant="outline" className="bg-primary text-white font-mono text-[11px] px-2 py-0.5 border-0">
+                      Bay: {stop.parkingBay}
+                    </Badge>
+                  )}
+                  {stop.parkingNotes && (
+                    <p className="w-full text-[11px] text-muted-foreground mt-0.5 italic">
+                      Note: {stop.parkingNotes}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* LOCATION / DIRECTIONS ACTION */}
               <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">

@@ -32,6 +32,7 @@ import { activePlans, type RawSubscription } from "@/lib/customer-plans";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { useBranding } from "@/lib/branding";
 import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
+import { guessCityFromAddress } from "@workspace/address-model";
 
 import { ServiceAddressSelector } from "@/components/home/ServiceAddressSelector";
 import { HomeGreeting } from "@/components/home/HomeGreeting";
@@ -202,6 +203,14 @@ export default function CustomerDashboard() {
   const pendingDues = Number(summaryQuery.data?.pendingDues ?? 0);
   const loading = summaryQuery.isLoading || subsQuery.isLoading || !addressSourcesReady || !initialized;
 
+  const currentCityName = useMemo(() => {
+    return selected?.cityName || (selected?.address ? guessCityFromAddress(selected.address) : null) || "Varanasi";
+  }, [selected?.cityName, selected?.address]);
+
+  const currentCitySlug = useMemo(() => {
+    return currentCityName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
+  }, [currentCityName]);
+
   if (scopeLoading) {
     return (
       <CustomerLayout>
@@ -356,7 +365,7 @@ export default function CustomerDashboard() {
             )}
 
             {/* Core Product Marketing Hero */}
-            <MarketingHero />
+            <MarketingHero cityName={currentCityName} />
 
             {/* Today's Service Card (Shown when service is active / scheduled today) */}
             {(dashboard.hero || dashboard.primaryPlan?.isDailyCleaning) && (
@@ -372,6 +381,8 @@ export default function CustomerDashboard() {
             {/* CWP Signature Services Showcase: Each card links to dedicated product detail page */}
             <ServicesGrid
               hasDailyCleaningPlan={Boolean(dashboard.primaryPlan?.isDailyCleaning)}
+              citySlug={currentCitySlug}
+              cityName={currentCityName}
             />
 
             {/* Customer Testimonials & Verified Reviews */}

@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { servicesTable, serviceCategoriesTable, serviceAddonLinksTable } from "@workspace/db";
+import {
+  servicesTable,
+  serviceCategoriesTable,
+  serviceAddonLinksTable,
+  serviceCityAvailabilityTable,
+  citiesTable,
+} from "@workspace/db";
 import { eq, and, asc, sql } from "drizzle-orm";
 
 const router = Router();
@@ -43,45 +49,83 @@ function pickServiceFields(body: Record<string, unknown>) {
 
 router.get("/services", async (req, res) => {
   try {
-    const { category, isActive, includeInactive } = req.query as Record<string, string>;
+    const { category, isActive, includeInactive, cityId, citySlug } = req.query as Record<string, string>;
     const conditions = [];
     if (category) conditions.push(eq(servicesTable.category, category as (typeof servicesTable.category)["_"]["data"]));
     if (isActive !== undefined) conditions.push(eq(servicesTable.isActive, isActive === "true"));
     else if (includeInactive !== "true") conditions.push(eq(servicesTable.isActive, true));
 
-    const data = await db
-      .select({
-        id: servicesTable.id,
-        name: servicesTable.name,
-        slug: servicesTable.slug,
-        description: servicesTable.description,
-        shortDescription: servicesTable.shortDescription,
-        longDescription: servicesTable.longDescription,
-        serviceCategoryId: servicesTable.serviceCategoryId,
-        category: servicesTable.category,
-        basePrice: servicesTable.basePrice,
-        gstRate: servicesTable.gstRate,
-        pricingType: servicesTable.pricingType,
-        pricingModel: servicesTable.pricingModel,
-        durationMinutes: servicesTable.durationMinutes,
-        isActive: servicesTable.isActive,
-        status: servicesTable.status,
-        imageUrl: servicesTable.imageUrl,
-        features: servicesTable.features,
-        benefits: servicesTable.benefits,
-        process: servicesTable.process,
-        assignmentStrategy: servicesTable.assignmentStrategy,
-        seoTitle: servicesTable.seoTitle,
-        seoDescription: servicesTable.seoDescription,
-        createdAt: servicesTable.createdAt,
-        updatedAt: servicesTable.updatedAt,
-        categoryName: serviceCategoriesTable.name,
-        categorySlug: serviceCategoriesTable.slug,
-      })
-      .from(servicesTable)
-      .leftJoin(serviceCategoriesTable, eq(servicesTable.serviceCategoryId, serviceCategoriesTable.id))
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(asc(serviceCategoriesTable.sortOrder), asc(servicesTable.name));
+    let resolvedCityId = cityId ? parseInt(cityId, 10) : undefined;
+    if (!resolvedCityId && citySlug) {
+      const [cityRow] = await db
+        .select({ id: citiesTable.id })
+        .from(citiesTable)
+        .where(eq(citiesTable.slug, citySlug.toLowerCase().trim()))
+        .limit(1);
+      if (cityRow) {
+        resolvedCityId = cityRow.id;
+      }
+    }
+
+    if (resolvedCityId && !Number.isNaN(resolvedCityId)) {
+      conditions.push(
+        and(
+          eq(serviceCityAvailabilityTable.cityId, resolvedCityId),
+          eq(serviceCityAvailabilityTable.isActive, true),
+        ),
+      );
+    }
+
+    const selectFields = {
+      id: servicesTable.id,
+      name: servicesTable.name,
+      slug: servicesTable.slug,
+      description: servicesTable.description,
+      shortDescription: servicesTable.shortDescription,
+      longDescription: servicesTable.longDescription,
+      serviceCategoryId: servicesTable.serviceCategoryId,
+      category: servicesTable.category,
+      basePrice: servicesTable.basePrice,
+      gstRate: servicesTable.gstRate,
+      pricingType: servicesTable.pricingType,
+      pricingModel: servicesTable.pricingModel,
+      durationMinutes: servicesTable.durationMinutes,
+      isActive: servicesTable.isActive,
+      status: servicesTable.status,
+      imageUrl: servicesTable.imageUrl,
+      features: servicesTable.features,
+      benefits: servicesTable.benefits,
+      process: servicesTable.process,
+      assignmentStrategy: servicesTable.assignmentStrategy,
+      seoTitle: servicesTable.seoTitle,
+      seoDescription: servicesTable.seoDescription,
+      createdAt: servicesTable.createdAt,
+      updatedAt: servicesTable.updatedAt,
+      categoryName: serviceCategoriesTable.name,
+      categorySlug: serviceCategoriesTable.slug,
+      basePriceOverride: resolvedCityId ? serviceCityAvailabilityTable.basePriceOverride : sql<string | null>`null`,
+    };
+
+    const data = resolvedCityId && !Number.isNaN(resolvedCityId)
+      ? await db
+          .select(selectFields)
+          .from(servicesTable)
+          .leftJoin(serviceCategoriesTable, eq(servicesTable.serviceCategoryId, serviceCategoriesTable.id))
+          .innerJoin(
+            serviceCityAvailabilityTable,
+            and(
+              eq(serviceCityAvailabilityTable.serviceId, servicesTable.id),
+              eq(serviceCityAvailabilityTable.cityId, resolvedCityId),
+            ),
+          )
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(asc(serviceCategoriesTable.sortOrder), asc(servicesTable.name))
+      : await db
+          .select(selectFields)
+          .from(servicesTable)
+          .leftJoin(serviceCategoriesTable, eq(servicesTable.serviceCategoryId, serviceCategoriesTable.id))
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(asc(serviceCategoriesTable.sortOrder), asc(servicesTable.name));
 
     const linkCounts = await db
       .select({
@@ -95,7 +139,13 @@ router.get("/services", async (req, res) => {
       linkCounts.filter(r => r.serviceId != null).map(r => [r.serviceId!, r.count]),
     );
 
-    return res.json(data.map(s => ({ ...s, addonCount: countMap[s.id] ?? 0 })));
+    return res.json(
+      data.map(s => ({
+        ...s,
+        basePrice: s.basePriceOverride || s.basePrice,
+        addonCount: countMap[s.id] ?? 0,
+      })),
+    );
   } catch (err) {
     req.log.error({ err }, "List services error");
     return res.status(500).json({ error: "Internal server error" });

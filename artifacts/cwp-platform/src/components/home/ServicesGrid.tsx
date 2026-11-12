@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "wouter";
 import {
   Sparkles,
@@ -10,11 +11,14 @@ import {
   Eye,
 } from "lucide-react";
 import { CWP_PRODUCT_LIST } from "@/lib/cwp-products-data";
+import { useCityCatalogServices } from "@/features/master-data/api";
 import { cn } from "@/lib/utils";
 
 interface ServicesGridProps {
   hasDailyCleaningPlan?: boolean;
   className?: string;
+  citySlug?: string;
+  cityName?: string;
 }
 
 const serviceIcons: Record<string, any> = {
@@ -35,22 +39,44 @@ const serviceAccents: Record<string, { bg: string; text: string; border: string 
   "glass-repellent": { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-100" },
 };
 
-export function ServicesGrid({ className }: ServicesGridProps) {
+export function ServicesGrid({ className, citySlug, cityName }: ServicesGridProps) {
+  const cityCatalogQuery = useCityCatalogServices(citySlug);
+
+  const availableServices = useMemo(() => {
+    if (!citySlug || !cityCatalogQuery.data || cityCatalogQuery.data.length === 0) {
+      return CWP_PRODUCT_LIST;
+    }
+    const catalogData = cityCatalogQuery.data;
+    const activeCategories = new Set(catalogData.map(s => s.category?.toLowerCase()).filter(Boolean));
+    const activeSlugs = new Set(catalogData.map(s => s.slug?.toLowerCase()).filter(Boolean));
+
+    return CWP_PRODUCT_LIST.filter(prod => {
+      if (activeSlugs.has(prod.slug.toLowerCase())) return true;
+      if (prod.serviceType === "daily_cleaning" && (activeCategories.has("subscription") || activeCategories.has("daily_cleaning"))) return true;
+      if (prod.serviceType === "car_wash" && activeCategories.has("car_wash")) return true;
+      if (prod.serviceType === "detailing" && activeCategories.has("detailing")) return true;
+      if (prod.serviceType === "solar_cleaning" && (activeCategories.has("solar_cleaning") || activeCategories.has("amc"))) return true;
+      return false;
+    });
+  }, [citySlug, cityCatalogQuery.data]);
+
   return (
     <section className={cn("space-y-4", className)} aria-labelledby="cwp-services-heading">
       <div className="flex items-center justify-between">
         <div>
           <h2 id="cwp-services-heading" className="font-display font-bold text-lg text-foreground">
-            CWP Signature Services
+            {cityName ? `Services in ${cityName}` : "CWP Signature Services"}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Doorstep vehicle detailing & rooftop solar care with guaranteed results
+            {cityName?.toLowerCase().includes("noida")
+              ? "Doorstep daily car cleaning and society care in Noida"
+              : "Doorstep vehicle detailing & rooftop solar care with guaranteed results"}
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-        {CWP_PRODUCT_LIST.map((prod) => {
+        {availableServices.map((prod) => {
           const Icon = serviceIcons[prod.slug] || Sparkles;
           const accent = serviceAccents[prod.slug] || {
             bg: "bg-blue-50",

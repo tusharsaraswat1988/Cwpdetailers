@@ -16,12 +16,14 @@ import { AddonsTab } from "@/features/service-catalog/components/AddonsTab";
 import { PackagesTab } from "@/features/products/components/PackagesTab";
 import { SolarCatalogPanel } from "@/features/service-catalog/components/SolarCatalogPanel";
 import { DcmsPlansPanel } from "@/features/products/components/DcmsPlansPanel";
+import { CityAvailabilityMatrix } from "@/features/service-catalog/components/CityAvailabilityMatrix";
+import { PromotionsManager } from "@/features/promotions/components/PromotionsManager";
 import { useToast } from "@/hooks/use-toast";
-import { Wrench, Sun, Home, Sparkles, Layers } from "lucide-react";
+import { Wrench, Sun, Home, Sparkles, Layers, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TAB_VALUES = [
-  "wash-services", "wash-packages", "daily-cleaning", "solar", "addons", "homepage", "advanced",
+  "wash-services", "wash-packages", "daily-cleaning", "solar", "addons", "city-matrix", "homepage", "advanced",
 ] as const;
 
 type TabValue = typeof TAB_VALUES[number];
@@ -34,6 +36,9 @@ const LEGACY_TAB_MAP: Record<string, TabValue> = {
   solar: "solar",
   categories: "wash-services",
   settings: "advanced",
+  "city-matrix": "city-matrix",
+  "city-availability": "city-matrix",
+  matrix: "city-matrix",
 };
 
 function tabFromSearch(search: string): TabValue {
@@ -158,6 +163,7 @@ export default function ProductsAndPlansPage() {
                     { target: "daily-cleaning" as TabValue, active: tab === "daily-cleaning", icon: Sparkles, label: "Daily Cleaning" },
                     { target: "solar" as TabValue, active: tab === "solar", icon: Sun, label: "Solar Cleaning" },
                     { target: "addons" as TabValue, active: tab === "addons", icon: Layers, label: "Add-ons" },
+                    { target: "city-matrix" as TabValue, active: tab === "city-matrix", icon: MapPin, label: "City Matrix" },
                   ]
                 ).map(({ target, active, icon: Icon, label }) => (
                   <button
@@ -252,25 +258,38 @@ export default function ProductsAndPlansPage() {
               </p>
               <AddonsTab />
             </TabsContent>
+
+            <TabsContent value="city-matrix">
+              <CityAvailabilityMatrix />
+            </TabsContent>
           </Tabs>
         ) : null}
 
         {isHomepage && (
-          <div className="grid gap-4">
-            {(homepage ?? []).map(section => (
-              <Card key={section.sectionKey}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base capitalize flex items-center gap-2">
-                    <Home size={16} className="text-primary" />
-                    {section.sectionKey.replace(/-/g, " ")}
-                  </CardTitle>
-                  <CardDescription>{section.title}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-32">{JSON.stringify(section.content, null, 2)}</pre>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="space-y-6">
+            <PromotionsManager />
+
+            <div className="pt-6 border-t border-border">
+              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                <Home size={16} className="text-primary" />
+                Raw Website Section Configuration
+              </h3>
+              <div className="grid gap-4">
+                {(homepage ?? []).map(section => (
+                  <Card key={section.sectionKey}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm capitalize flex items-center gap-2">
+                        {section.sectionKey.replace(/-/g, " ")}
+                      </CardTitle>
+                      <CardDescription className="text-xs">{section.title}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-32">{JSON.stringify(section.content, null, 2)}</pre>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

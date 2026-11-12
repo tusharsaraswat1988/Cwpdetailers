@@ -24,7 +24,6 @@ import {
   fetchCommercialInvoices,
   fetchReadyForBilling,
   generateJobInvoice,
-  invoicePdfUrl,
   issueCommercialInvoice,
   markCommercialInvoicePaid,
   paymentStageIndex,
@@ -673,13 +672,13 @@ export function CommercialOperationsCenter() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>{formatMoney(invoice.discount)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">GST</span><span>{formatMoney(invoice.gstAmount)}</span></div>
                 <div className="flex justify-between font-medium border-t border-border pt-2"><span>Total</span><span>{formatMoney(invoice.totalAmount)}</span></div>
-                <a
-                  href={invoicePdfUrl(invoice.id)}
-                  target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-primary hover:underline text-sm"
+                <InvoicePdfButton
+                  invoiceId={invoice.id}
+                  invoiceNumber={invoice.invoiceNumber}
+                  className="inline-flex items-center gap-1.5 text-primary hover:underline text-sm font-medium"
                 >
                   <FileText size={14} /> View full invoice PDF
-                </a>
+                </InvoicePdfButton>
               </div>
             ),
           },

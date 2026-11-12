@@ -1,5 +1,8 @@
 import { useListPayments, getListPaymentsQueryKey } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "wouter";
+import { ArrowRight, Receipt } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type Props = {
   customerId?: string;
@@ -12,8 +15,23 @@ export function PaymentsTab({ customerId }: Props) {
   });
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800/40 text-xs">
+        <div className="flex items-center gap-2 text-blue-950 dark:text-blue-100">
+          <Receipt size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />
+          <span>
+            Looking for real-time gateway reconciliations, summary cards, and search? Visit the dedicated <strong>Payment Ledger</strong>.
+          </span>
+        </div>
+        <Link href="/admin/payments/ledger">
+          <Button variant="outline" size="sm" className="h-7 text-xs bg-white text-blue-700 border-blue-300 hover:bg-blue-50">
+            Open Ledger <ArrowRight size={12} className="ml-1" />
+          </Button>
+        </Link>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
         <thead className="border-b border-border bg-muted/30">
           <tr>
             {["Customer", "Amount", "Method", "Invoice", "Transaction ID", "Date"].map(h => (
@@ -49,6 +67,7 @@ export function PaymentsTab({ customerId }: Props) {
       {!isLoading && (payments?.data ?? []).length === 0 && (
         <div className="text-center py-12 text-muted-foreground">No payments found</div>
       )}
+      </div>
     </div>
   );
 }

@@ -8,6 +8,8 @@ import {
   vehiclesTable,
   dcmsSubscriptionLocationsTable,
   serviceLocationsTable,
+  residentialSocietiesTable,
+  societyTowersTable,
 } from "@workspace/db";
 import { eq, and, sql, asc, gte, lte } from "drizzle-orm";
 import {
@@ -47,6 +49,12 @@ export type DailyRouteStop = {
   address: string | null;
   locationLabel: string | null;
   destinationType: "coordinates" | "address" | "missing";
+  societyName?: string | null;
+  towerName?: string | null;
+  flatNumber?: string | null;
+  parkingLevel?: string | null;
+  parkingBay?: string | null;
+  parkingNotes?: string | null;
   todayStatus: RouteStopStatus;
   todayVisitId?: number;
   rejectionReason?: string | null;
@@ -89,6 +97,12 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
       refPhotoRightUrl: vehiclesTable.refPhotoRightUrl,
       subLocation: dcmsSubscriptionLocationsTable,
       serviceLocation: serviceLocationsTable,
+      societyName: residentialSocietiesTable.name,
+      towerName: societyTowersTable.name,
+      flatNumber: serviceLocationsTable.flatNumber,
+      parkingLevel: serviceLocationsTable.parkingLevel,
+      parkingBay: sql<string | null>`COALESCE(${serviceLocationsTable.parkingBay}, ${dcmsSubscriptionsTable.parkingBay})`,
+      parkingNotes: serviceLocationsTable.parkingNotes,
     })
     .from(dcmsStaffAssignmentsTable)
     .innerJoin(dcmsSubscriptionsTable, eq(dcmsStaffAssignmentsTable.subscriptionId, dcmsSubscriptionsTable.id))
@@ -97,6 +111,8 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
     .innerJoin(vehiclesTable, eq(dcmsSubscriptionsTable.vehicleId, vehiclesTable.id))
     .leftJoin(dcmsSubscriptionLocationsTable, eq(dcmsSubscriptionLocationsTable.subscriptionId, dcmsSubscriptionsTable.id))
     .leftJoin(serviceLocationsTable, eq(dcmsSubscriptionsTable.serviceLocationId, serviceLocationsTable.id))
+    .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+    .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
     .where(and(
       eq(dcmsStaffAssignmentsTable.staffId, staffId),
       eq(dcmsStaffAssignmentsTable.isActive, true),
@@ -160,6 +176,12 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
       address: dest.address,
       locationLabel: dest.locationLabel,
       destinationType: dest.destinationType,
+      societyName: row.societyName,
+      towerName: row.towerName,
+      flatNumber: row.flatNumber,
+      parkingLevel: row.parkingLevel,
+      parkingBay: row.parkingBay,
+      parkingNotes: row.parkingNotes,
       todayStatus,
       todayVisitId: visit?.id,
       rejectionReason: visit?.rejectionReason,

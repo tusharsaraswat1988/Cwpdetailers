@@ -12,6 +12,7 @@ export const customersTable = pgTable("customers", {
   email: text("email"),
   address: text("address"),
   city: text("city"),
+  cityId: integer("city_id"),
   status: customerStatusEnum("status").notNull().default("active"),
   walletBalance: numeric("wallet_balance", { precision: 10, scale: 2 }).notNull().default("0"),
   totalDues: numeric("total_dues", { precision: 10, scale: 2 }).notNull().default("0"),

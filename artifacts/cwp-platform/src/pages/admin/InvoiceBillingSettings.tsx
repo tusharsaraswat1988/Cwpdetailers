@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { uploadFileToCloudinary } from "@/lib/media-url";
@@ -16,6 +17,7 @@ import {
   saveInvoiceBillingSettings,
   INVOICE_BILLING_QUERY_KEY,
 } from "@/features/billing/api";
+import { LegalEntitiesManager } from "@/features/billing/components/LegalEntitiesManager";
 import { Loader2, Save, Upload, FileText, Building2, Landmark, QrCode, PenLine, ArrowLeft } from "lucide-react";
 
 function SignatureUploader({
@@ -159,7 +161,7 @@ export default function InvoiceBillingSettingsPage() {
 
   return (
     <AdminLayout>
-      <div className="max-w-3xl mx-auto space-y-6 pb-12">
+      <div className="max-w-4xl mx-auto space-y-6 pb-12">
         <div className="flex items-start justify-between gap-4">
           <div>
             <Link href="/admin/billing" className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1 mb-2">
@@ -170,139 +172,162 @@ export default function InvoiceBillingSettingsPage() {
               Invoice & GST Settings
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Tax invoice PDF layout, bank/UPI, signature, SAC code, and terms for GST/CA audit compliance.
+              Multi-entity billing configuration, responsible company & franchise entities, GSTIN, branch mapping, and default PDF layout.
             </p>
           </div>
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : <Save size={14} className="mr-1" />}
-            Save settings
-          </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Building2 size={16} /> Company on invoice</CardTitle>
-            <CardDescription>Overrides Business Info / Brand for PDF header only.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2">
-              <Label>Company name</Label>
-              <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} className="mt-1" />
-            </div>
-            <div className="sm:col-span-2">
-              <Label>Address</Label>
-              <Textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="mt-1 min-h-[60px]" />
-            </div>
-            <div>
-              <Label>GSTIN</Label>
-              <Input value={form.gstNumber} onChange={e => setForm(f => ({ ...f, gstNumber: e.target.value.toUpperCase() }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>PAN</Label>
-              <Input value={form.panNumber} onChange={e => setForm(f => ({ ...f, panNumber: e.target.value.toUpperCase() }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>Mobile</Label>
-              <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>Website</Label>
-              <Input value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>Default place of supply</Label>
-              <Input value={form.placeOfSupply} onChange={e => setForm(f => ({ ...f, placeOfSupply: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>Default SAC (services)</Label>
-              <Input value={form.defaultSac} onChange={e => setForm(f => ({ ...f, defaultSac: e.target.value }))} placeholder="998533" className="mt-1" />
-              <p className="text-xs text-muted-foreground mt-1">998533 = car wash / maintenance services</p>
-            </div>
-          </CardContent>
-        </Card>
+        <Tabs defaultValue="entities" className="space-y-6">
+          <TabsList className="grid grid-cols-2 w-full max-w-md">
+            <TabsTrigger value="entities" className="flex items-center gap-1.5" data-testid="tab-legal-entities">
+              <Building2 size={15} /> Legal Entities & Branches
+            </TabsTrigger>
+            <TabsTrigger value="template" className="flex items-center gap-1.5" data-testid="tab-template-defaults">
+              <FileText size={15} /> Fallback Template & Signature
+            </TabsTrigger>
+          </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Landmark size={16} /> Bank details</CardTitle>
-          </CardHeader>
-          <CardContent className="grid sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2">
-              <Label>Account name</Label>
-              <Input value={form.bankAccountName} onChange={e => setForm(f => ({ ...f, bankAccountName: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>Bank & branch</Label>
-              <Input value={form.bankName} onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>Account number</Label>
-              <Input value={form.bankAccountNumber} onChange={e => setForm(f => ({ ...f, bankAccountNumber: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <Label>IFSC</Label>
-              <Input value={form.bankIfsc} onChange={e => setForm(f => ({ ...f, bankIfsc: e.target.value.toUpperCase() }))} className="mt-1" />
-            </div>
-          </CardContent>
-        </Card>
+          <TabsContent value="entities" className="space-y-6">
+            <LegalEntitiesManager />
+          </TabsContent>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><QrCode size={16} /> UPI payment</CardTitle>
-            <CardDescription>Used for QR code on invoice PDF.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Label>UPI ID</Label>
-            <Input value={form.upiId} onChange={e => setForm(f => ({ ...f, upiId: e.target.value }))} placeholder="merchant@upi" className="mt-1 max-w-md" />
-          </CardContent>
-        </Card>
+          <TabsContent value="template" className="space-y-6">
+            <div className="flex justify-between items-center bg-muted/30 p-3 rounded-lg border border-border">
+              <p className="text-xs text-muted-foreground">
+                These settings provide system-wide fallback details and authorized signature for legacy invoices without an assigned legal entity.
+              </p>
+              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} size="sm">
+                {saveMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : <Save size={14} className="mr-1" />}
+                Save template
+              </Button>
+            </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><PenLine size={16} /> Authorised signature</CardTitle>
-            <CardDescription>Appears on bottom-right of tax invoice PDF.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SignatureUploader
-              currentUrl={form.signatureUrl}
-              onUploaded={url => setForm(f => ({ ...f, signatureUrl: url }))}
-            />
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><Building2 size={16} /> Company on invoice</CardTitle>
+                <CardDescription>Overrides Business Info / Brand for PDF header only.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <Label>Company name</Label>
+                  <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} className="mt-1" />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Address</Label>
+                  <Textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="mt-1 min-h-[60px]" />
+                </div>
+                <div>
+                  <Label>GSTIN</Label>
+                  <Input value={form.gstNumber} onChange={e => setForm(f => ({ ...f, gstNumber: e.target.value.toUpperCase() }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>PAN</Label>
+                  <Input value={form.panNumber} onChange={e => setForm(f => ({ ...f, panNumber: e.target.value.toUpperCase() }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Mobile</Label>
+                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Website</Label>
+                  <Input value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Default place of supply</Label>
+                  <Input value={form.placeOfSupply} onChange={e => setForm(f => ({ ...f, placeOfSupply: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Default SAC (services)</Label>
+                  <Input value={form.defaultSac} onChange={e => setForm(f => ({ ...f, defaultSac: e.target.value }))} placeholder="998533" className="mt-1" />
+                  <p className="text-xs text-muted-foreground mt-1">998533 = car wash / maintenance services</p>
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Terms & conditions</CardTitle>
-            <CardDescription>One term per line. Service-specific terms (daily cleaning, package, solar) are added automatically on invoices.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Textarea
-              value={form.termsText}
-              onChange={e => setForm(f => ({ ...f, termsText: e.target.value }))}
-              className="min-h-[160px] font-mono text-xs"
-            />
-            {data?.serviceCategoryTerms && (
-              <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-2">
-                <p className="font-semibold">Auto-added by service type:</p>
-                {Object.entries(data.serviceCategoryTerms).filter(([, v]) => v.length).map(([cat, terms]) => (
-                  <div key={cat}>
-                    <span className="font-medium capitalize">{cat}:</span>{" "}
-                    <span className="text-muted-foreground">{terms[0]}{terms.length > 1 ? ` (+${terms.length - 1} more)` : ""}</span>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><Landmark size={16} /> Bank details</CardTitle>
+              </CardHeader>
+              <CardContent className="grid sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <Label>Account name</Label>
+                  <Input value={form.bankAccountName} onChange={e => setForm(f => ({ ...f, bankAccountName: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Bank & branch</Label>
+                  <Input value={form.bankName} onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Account number</Label>
+                  <Input value={form.bankAccountNumber} onChange={e => setForm(f => ({ ...f, bankAccountNumber: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label>IFSC</Label>
+                  <Input value={form.bankIfsc} onChange={e => setForm(f => ({ ...f, bankIfsc: e.target.value.toUpperCase() }))} className="mt-1" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><QrCode size={16} /> UPI payment</CardTitle>
+                <CardDescription>Used for QR code on invoice PDF.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Label>UPI ID</Label>
+                <Input value={form.upiId} onChange={e => setForm(f => ({ ...f, upiId: e.target.value }))} placeholder="merchant@upi" className="mt-1 max-w-md" />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><PenLine size={16} /> Authorised signature</CardTitle>
+                <CardDescription>Appears on bottom-right of tax invoice PDF.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SignatureUploader
+                  currentUrl={form.signatureUrl}
+                  onUploaded={url => setForm(f => ({ ...f, signatureUrl: url }))}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Terms & conditions</CardTitle>
+                <CardDescription>One term per line. Service-specific terms (daily cleaning, package, solar) are added automatically on invoices.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Textarea
+                  value={form.termsText}
+                  onChange={e => setForm(f => ({ ...f, termsText: e.target.value }))}
+                  className="min-h-[160px] font-mono text-xs"
+                />
+                {data?.serviceCategoryTerms && (
+                  <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-2">
+                    <p className="font-semibold">Auto-added by service type:</p>
+                    {Object.entries(data.serviceCategoryTerms).filter(([, v]) => v.length).map(([cat, terms]) => (
+                      <div key={cat}>
+                        <span className="font-medium capitalize">{cat}:</span>{" "}
+                        <span className="text-muted-foreground">{terms[0]}{terms.length > 1 ? ` (+${terms.length - 1} more)` : ""}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                )}
+              </CardContent>
+            </Card>
 
-        <div className="flex justify-end">
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} size="lg">
-            {saveMutation.isPending ? "Saving…" : "Save all settings"}
-          </Button>
-        </div>
+            <div className="flex justify-end">
+              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} size="lg">
+                {saveMutation.isPending ? "Saving…" : "Save all settings"}
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </AdminLayout>
   );

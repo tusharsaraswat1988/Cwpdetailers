@@ -71,7 +71,8 @@ router.get(
       const activeOnly = req.query.active === "true";
       const vehicleId = req.query.vehicleId ? Number(req.query.vehicleId) : undefined;
       const linkedOnly = req.query.linked === "true";
-      const plans = await listPlans(activeOnly, vehicleId, linkedOnly);
+      const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
+      const plans = await listPlans(activeOnly, vehicleId, linkedOnly, false, cityId);
       const planIds = plans.map(p => p.id);
       const usageRows = planIds.length
         ? await db

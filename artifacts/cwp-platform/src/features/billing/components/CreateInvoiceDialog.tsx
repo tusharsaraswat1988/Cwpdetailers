@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetCustomer,
   useListBookings,
@@ -119,6 +120,7 @@ export function CreateInvoiceDialog({
   const [productId, setProductId] = useState("");
   const [bookingId, setBookingId] = useState("");
   const [subscriptionId, setSubscriptionId] = useState("");
+  const [legalEntityId, setLegalEntityId] = useState("auto");
   const [discount, setDiscount] = useState("0");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -136,6 +138,24 @@ export function CreateInvoiceDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gstPreview, setGstPreview] = useState({ subtotal: 0, gst: 0, total: 0 });
+
+  const { data: legalEntitiesData } = useQuery<{
+    legalEntities?: Array<{
+      id: number;
+      name: string;
+      code: string;
+      invoicePrefix?: string;
+      isDefault: boolean;
+    }>;
+  }>({
+    queryKey: ["legal-entities"],
+    queryFn: async () => {
+      const res = await fetch("/api/legal-entities", { credentials: "include" });
+      if (!res.ok) return { legalEntities: [] };
+      return res.json();
+    },
+    enabled: open,
+  });
 
   const customerId = customer?.id ?? 0;
 
@@ -301,6 +321,7 @@ export function CreateInvoiceDialog({
 
       await createInvoiceRequest({
         customerId: customer.id,
+        legalEntityId: legalEntityId !== "auto" ? parseInt(legalEntityId, 10) : undefined,
         documentType: "tax_invoice",
         subscriptionId: subscriptionId ? parseInt(subscriptionId, 10) : undefined,
         bookingId: bookingId ? parseInt(bookingId, 10) : undefined,
@@ -403,6 +424,24 @@ export function CreateInvoiceDialog({
               </div>
             </div>
           )}
+
+          <div>
+            <Label>Issuing Legal Entity</Label>
+            <Select value={legalEntityId} onValueChange={setLegalEntityId}>
+              <SelectTrigger className="mt-1"><SelectValue placeholder="Auto-resolve" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto-resolve (Branch / Corporate Default)</SelectItem>
+                {(legalEntitiesData?.legalEntities ?? []).map(e => (
+                  <SelectItem key={e.id} value={String(e.id)}>
+                    {e.name} ({e.code}) · Prefix: {e.invoicePrefix || "CWP"} {e.isDefault ? "(Default)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Select which registered company or franchise entity will be printed as the seller/biller on this tax invoice.
+            </p>
+          </div>
 
           {(
             <div>

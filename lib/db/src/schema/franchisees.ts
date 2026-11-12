@@ -9,6 +9,8 @@ export const franchiseesTable = pgTable("franchisees", {
   userId: integer("user_id"),
   branchId: integer("branch_id"),
   companyId: integer("company_id"),
+  cityId: integer("city_id"),
+  legalEntityId: integer("legal_entity_id"),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   email: text("email"),

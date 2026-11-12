@@ -16,7 +16,7 @@ import {
 
 } from "@workspace/db";
 
-import { eq, and, sql, inArray, isNotNull } from "drizzle-orm";
+import { eq, and, or, sql, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import { logDcmsActivity } from "./auditLog";
 
@@ -169,6 +169,7 @@ export async function listPlans(
   vehicleId?: number,
   linkedOnly = false,
   homepageOnly = false,
+  cityId?: number,
 ): Promise<DcmsPlanRow[]> {
   const conditions = [];
   if (activeOnly) conditions.push(eq(dcmsPlansTable.isActive, true));
@@ -176,6 +177,10 @@ export async function listPlans(
 
   if (linkedOnly) {
     conditions.push(isNotNull(dcmsPlansTable.seatCategoryId));
+  }
+
+  if (cityId != null && !Number.isNaN(cityId)) {
+    conditions.push(or(eq(dcmsPlansTable.cityId, cityId), isNull(dcmsPlansTable.cityId)));
   }
 
 

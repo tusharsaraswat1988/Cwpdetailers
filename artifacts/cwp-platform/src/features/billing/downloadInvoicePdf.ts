@@ -1,5 +1,5 @@
 export async function downloadInvoicePdf(invoiceId: number, invoiceNumber?: string | null): Promise<void> {
-  const res = await fetch(`/api/invoices/${invoiceId}/pdf`);
+  const res = await fetch(`/api/invoices/${invoiceId}/pdf`, { credentials: "include" });
   if (!res.ok) {
     let message = "Failed to download PDF";
     try {

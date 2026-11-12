@@ -204,6 +204,14 @@ export function useCatalogServices() {
   });
 }
 
+export function useCityCatalogServices(citySlug?: string) {
+  return useQuery({
+    queryKey: ["catalog", "services", citySlug],
+    queryFn: () => masterFetch<CatalogService[]>(citySlug ? `/catalog/services/${encodeURIComponent(citySlug)}` : "/catalog/services"),
+    staleTime: 60_000,
+  });
+}
+
 export function useCatalogPlans(serviceId?: number) {
   return useQuery({
     queryKey: ["catalog", "plans", serviceId],

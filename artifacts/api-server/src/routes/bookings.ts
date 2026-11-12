@@ -13,9 +13,12 @@ import {
   vehiclesTable,
   solarSitesTable,
   serviceLocationsTable,
+  residentialSocietiesTable,
+  societyTowersTable,
+  citiesTable,
   type BookingStatus,
 } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { getTodayIST } from "../subscriptions/service";
 import { isDailyCleanCatalogServiceName } from "../lib/dcms/dailyCleanCatalogGuard";
@@ -41,6 +44,7 @@ const SCOPE_COLS = {
   branchCol: bookingsTable.branchId,
   franchiseeCol: bookingsTable.franchiseeId,
   customerCol: bookingsTable.customerId,
+  cityCol: bookingsTable.cityId,
 };
 
 const bookingSelect = {
@@ -59,6 +63,14 @@ const bookingSelect = {
   companyId: bookingsTable.companyId,
   franchiseeId: bookingsTable.franchiseeId,
   cityId: bookingsTable.cityId,
+  cityName: citiesTable.name,
+  societyId: serviceLocationsTable.societyId,
+  societyName: residentialSocietiesTable.name,
+  towerName: societyTowersTable.name,
+  flatNumber: serviceLocationsTable.flatNumber,
+  parkingLevel: serviceLocationsTable.parkingLevel,
+  parkingBay: serviceLocationsTable.parkingBay,
+  parkingNotes: serviceLocationsTable.parkingNotes,
   scheduledDate: bookingsTable.scheduledDate,
   scheduledTime: bookingsTable.scheduledTime,
   status: bookingsTable.status,
@@ -104,6 +116,10 @@ async function getBookingWithScope(req: Parameters<typeof rowInScope>[0], id: nu
   const [booking] = await db.select(bookingSelect).from(bookingsTable)
     .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
     .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
+    .leftJoin(citiesTable, eq(bookingsTable.cityId, citiesTable.id))
+    .leftJoin(serviceLocationsTable, eq(bookingsTable.serviceLocationId, serviceLocationsTable.id))
+    .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+    .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
     .where(eq(bookingsTable.id, id));
   if (!booking || !rowInScope(req, booking)) return null;
   return booking;
@@ -142,6 +158,10 @@ router.get("/bookings/today", async (req, res) => {
     const data = await db.select(bookingSelect).from(bookingsTable)
       .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
       .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
+      .leftJoin(citiesTable, eq(bookingsTable.cityId, citiesTable.id))
+      .leftJoin(serviceLocationsTable, eq(bookingsTable.serviceLocationId, serviceLocationsTable.id))
+      .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+      .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
       .where(and(...conditions))
       .orderBy(bookingsTable.scheduledTime);
 
@@ -155,7 +175,8 @@ router.get("/bookings/today", async (req, res) => {
 router.get("/bookings", async (req, res) => {
   try {
     const {
-      customerId, date, status, serviceType, limit = "50", offset = "0",
+      customerId, date, status, serviceType, cityId, societyId, serviceId, branchId, search, q,
+      limit = "50", offset = "0",
     } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit, 10), 100);
     const off = parseInt(offset, 10);
@@ -165,6 +186,26 @@ router.get("/bookings", async (req, res) => {
     if (date) conditions.push(sql`${bookingsTable.scheduledDate}::text = ${date}`);
     if (status) conditions.push(eq(bookingsTable.status, status as BookingStatus));
     if (serviceType) conditions.push(eq(bookingsTable.serviceType, serviceType as never));
+    if (cityId) conditions.push(eq(bookingsTable.cityId, parseInt(cityId, 10)));
+    if (branchId) conditions.push(eq(bookingsTable.branchId, parseInt(branchId, 10)));
+    if (serviceId) conditions.push(eq(bookingsTable.serviceId, parseInt(serviceId, 10)));
+    if (societyId) conditions.push(eq(serviceLocationsTable.societyId, parseInt(societyId, 10)));
+
+    const searchTerm = (search || q) as string | undefined;
+    if (searchTerm && searchTerm.trim()) {
+      const term = `%${searchTerm.trim()}%`;
+      const numVal = parseInt(searchTerm.trim(), 10);
+      const searchOrs = [
+        ilike(customersTable.name, term),
+        ilike(customersTable.phone, term),
+        ilike(bookingsTable.address, term),
+        ilike(residentialSocietiesTable.name, term),
+      ];
+      if (!isNaN(numVal)) {
+        searchOrs.push(eq(bookingsTable.id, numVal));
+      }
+      conditions.push(or(...searchOrs)!);
+    }
 
     const includeLegacyDaily = req.query.includeLegacyDaily === "true";
     if (!includeLegacyDaily) {
@@ -177,8 +218,16 @@ router.get("/bookings", async (req, res) => {
       db.select(bookingSelect).from(bookingsTable)
         .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
         .leftJoin(servicesTable, eq(bookingsTable.serviceId, servicesTable.id))
+        .leftJoin(citiesTable, eq(bookingsTable.cityId, citiesTable.id))
+        .leftJoin(serviceLocationsTable, eq(bookingsTable.serviceLocationId, serviceLocationsTable.id))
+        .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+        .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
         .where(where).orderBy(desc(bookingsTable.createdAt)).limit(lim).offset(off),
-      db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(where),
+      db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
+        .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
+        .leftJoin(serviceLocationsTable, eq(bookingsTable.serviceLocationId, serviceLocationsTable.id))
+        .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+        .where(where),
     ]);
 
     return res.json({ data, total: Number(countResult[0]?.count ?? 0), limit: lim, offset: off });
@@ -381,6 +430,18 @@ router.post("/bookings", async (req, res) => {
           logger: req.log,
           actorId: req.user?.id,
         });
+
+        const { notifyBookingConfirmed } = await import("../lib/notifications/dispatcher");
+        notifyBookingConfirmed({
+          id: booking.id,
+          customerId: booking.customerId,
+          customerName: customer.name,
+          serviceName: authoritativeService.name,
+          serviceType: booking.serviceType,
+          scheduledDate: booking.scheduledDate,
+          companyId: booking.companyId,
+          branchId: booking.branchId,
+        }).catch((err) => req.log?.error?.({ err }, "Failed to send booking confirmed notification"));
       }
 
       const fresh = await getBookingWithScope(req, booking.id);

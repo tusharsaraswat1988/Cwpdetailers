@@ -1,6 +1,7 @@
 import { pgTable, serial, integer, text, numeric, date, timestamp, pgEnum, json, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import type { InvoiceLegalEntitySnapshot } from "./legal-entities";
 
 export const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "sent", "paid", "overdue", "cancelled"]);
 export const invoiceDocumentTypeEnum = pgEnum("invoice_document_type", ["tax_invoice", "credit_note", "debit_note"]);
@@ -91,6 +92,8 @@ export const invoicesTable = pgTable("invoices", {
   referenceInvoiceDate: date("reference_invoice_date"),
   customerId: integer("customer_id").notNull(),
   customerSnapshot: json("customer_snapshot").$type<InvoiceCustomerSnapshot | null>(),
+  legalEntityId: integer("legal_entity_id"),
+  legalEntitySnapshot: json("legal_entity_snapshot").$type<InvoiceLegalEntitySnapshot | null>(),
   subscriptionId: integer("subscription_id"),
   bookingId: integer("booking_id"),
   quotationId: integer("quotation_id"),

@@ -226,6 +226,21 @@ export async function renderInvoicePdf(
   const headerY = MARGIN + 10;
   const textX = MARGIN + LOGO_SIZE + 8;
 
+  const issuer = (invoice as { legalEntitySnapshot?: import("@workspace/db").InvoiceLegalEntitySnapshot | null }).legalEntitySnapshot ?? {
+    name: settings.companyName,
+    address: settings.address,
+    gstin: settings.gstNumber,
+    phone: settings.phone,
+    email: settings.email,
+    panNumber: settings.panNumber,
+    website: settings.website,
+    bankAccountName: settings.bankAccountName,
+    bankName: settings.bankName,
+    bankAccountNumber: settings.bankAccountNumber,
+    bankIfsc: settings.bankIfsc,
+    upiId: settings.upiId,
+  };
+
   if (settings.pdfLogoUrl) {
     const logoBuf = await fetchImageBuffer(settings.pdfLogoUrl);
     if (logoBuf) {
@@ -234,19 +249,19 @@ export async function renderInvoicePdf(
   }
 
   doc.fontSize(10.5).font("Helvetica-Bold").fillColor("#000")
-    .text(settings.companyName.toUpperCase(), textX, headerY + 2, { width: 250 });
+    .text(issuer.name.toUpperCase(), textX, headerY + 2, { width: 250 });
 
   let leftY = headerY + 16;
   doc.fontSize(7.5).font("Helvetica");
-  if (settings.address) {
-    doc.text(settings.address, textX, leftY, { width: 270 });
-    leftY += doc.heightOfString(settings.address, { width: 270 }) + 3;
+  if (issuer.address) {
+    doc.text(issuer.address, textX, leftY, { width: 270 });
+    leftY += doc.heightOfString(issuer.address, { width: 270 }) + 3;
   }
-  if (settings.gstNumber) { doc.text(`GSTIN: ${settings.gstNumber}`, textX, leftY); leftY += 10; }
-  if (settings.phone) { doc.text(`Mobile: ${settings.phone}`, textX, leftY); leftY += 10; }
-  if (settings.email) { doc.text(`Email: ${settings.email}`, textX, leftY); leftY += 10; }
-  if (settings.panNumber) { doc.text(`PAN Number: ${settings.panNumber}`, textX, leftY); leftY += 10; }
-  if (settings.website) { doc.text(`Website: ${settings.website}`, textX, leftY); leftY += 10; }
+  if (issuer.gstin) { doc.text(`GSTIN: ${issuer.gstin}`, textX, leftY); leftY += 10; }
+  if (issuer.phone) { doc.text(`Mobile: ${issuer.phone}`, textX, leftY); leftY += 10; }
+  if (issuer.email) { doc.text(`Email: ${issuer.email}`, textX, leftY); leftY += 10; }
+  if (issuer.panNumber) { doc.text(`PAN Number: ${issuer.panNumber}`, textX, leftY); leftY += 10; }
+  if (issuer.website) { doc.text(`Website: ${issuer.website}`, textX, leftY); leftY += 10; }
 
   doc.fontSize(17).font("Helvetica-Bold").text(docTitle, RIGHT_X, headerY, { width: RIGHT_W, align: "right" });
 
@@ -389,18 +404,19 @@ export async function renderInvoicePdf(
   doc.fontSize(8).font("Helvetica-Bold").text("BANK DETAILS:", MARGIN + 4, y);
   y += 11;
   doc.fontSize(7).font("Helvetica");
-  doc.text(`Name: ${settings.bankAccountName}`, MARGIN + 4, y, { width: leftW }); y += 9;
-  doc.text(`IFSC Code: ${settings.bankIfsc}`, MARGIN + 4, y, { width: leftW }); y += 9;
-  doc.text(`Account No: ${settings.bankAccountNumber}`, MARGIN + 4, y, { width: leftW }); y += 9;
-  doc.text(`Bank: ${settings.bankName}`, MARGIN + 4, y, { width: leftW }); y += 12;
+  doc.text(`Name: ${issuer.bankAccountName || settings.bankAccountName}`, MARGIN + 4, y, { width: leftW }); y += 9;
+  doc.text(`IFSC Code: ${issuer.bankIfsc || settings.bankIfsc}`, MARGIN + 4, y, { width: leftW }); y += 9;
+  doc.text(`Account No: ${issuer.bankAccountNumber || settings.bankAccountNumber}`, MARGIN + 4, y, { width: leftW }); y += 9;
+  doc.text(`Bank: ${issuer.bankName || settings.bankName}`, MARGIN + 4, y, { width: leftW }); y += 12;
 
+  const upiId = issuer.upiId || settings.upiId;
   doc.fontSize(8).font("Helvetica-Bold").text("PAYMENT QR CODE:", MARGIN + 4, y);
   y += 10;
-  const qrBuf = await fetchQrBuffer(settings.upiId, totalAmount);
+  const qrBuf = await fetchQrBuffer(upiId, totalAmount);
   if (qrBuf) {
     doc.image(qrBuf, MARGIN + 4, y, { width: 78, height: 78 });
   }
-  doc.fontSize(7).font("Helvetica").text(settings.upiId, MARGIN + 4, y + 82, { width: leftW });
+  doc.fontSize(7).font("Helvetica").text(upiId, MARGIN + 4, y + 82, { width: leftW });
   doc.fontSize(6).fillColor("#444").text("PhonePe   GPay   Paytm   BHIM UPI", MARGIN + 4, y + 92, { width: leftW });
 
   let summaryY = bottomStartY;

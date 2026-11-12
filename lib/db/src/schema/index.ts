@@ -55,3 +55,6 @@ export * from "./dcms";
 export * from "./extra-service-requests";
 export * from "./push-notifications";
 export * from "./staff-location";
+export * from "./societies";
+export * from "./legal-entities";
+export * from "./promotions";

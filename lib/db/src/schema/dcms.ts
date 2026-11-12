@@ -86,6 +86,8 @@ export const dcmsPlansTable = pgTable("dcms_plans", {
 
   seatCategoryId: integer("seat_category_id"),
 
+  cityId: integer("city_id"),
+
   isActive: boolean("is_active").notNull().default(true),
 
   showOnHomepage: boolean("show_on_homepage").notNull().default(false),
@@ -132,7 +134,15 @@ export const dcmsSubscriptionsTable = pgTable("dcms_subscriptions", {
 
   customerId: integer("customer_id").notNull(),
 
+  cityId: integer("city_id"),
+
   serviceLocationId: integer("service_location_id"),
+
+  societyId: integer("society_id"),
+
+  towerId: integer("tower_id"),
+
+  parkingBay: text("parking_bay"),
 
   assetId: integer("asset_id"),
 

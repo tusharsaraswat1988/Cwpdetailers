@@ -32,9 +32,11 @@ import AdminStaffDetail from "@/pages/admin/StaffDetail";
 import AdminBookings from "@/pages/admin/Bookings";
 import AdminSubscriptions from "@/pages/admin/Subscriptions";
 import BillingFinancePage from "@/pages/admin/BillingFinancePage";
+import PaymentLedgerPage from "@/pages/admin/PaymentLedgerPage";
 import InvoiceBillingSettingsPage from "@/pages/admin/InvoiceBillingSettings";
 import AdminComplaints from "@/pages/admin/Complaints";
 import AdminBranches from "@/pages/admin/Branches";
+import SocietiesPage from "@/pages/admin/SocietiesPage";
 import ServiceLocationsPage from "@/pages/admin/ServiceLocationsPage";
 import ServiceLocationDetail from "@/pages/admin/ServiceLocationDetail";
 import AssetsPage from "@/pages/admin/AssetsPage";
@@ -204,6 +206,8 @@ function Router() {
       <Route path="/admin/daily-cleaning" component={() => <ProtectedRoute component={DcmsDashboardPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "daily_cleaning", action: "view_reports" }} loginPath="/admin/login" />} />
       <Route path="/admin/subscriptions" component={() => <ProtectedRoute component={AdminSubscriptions} roles={["admin", "superadmin", "manager"]} permission={{ resource: "subscriptions", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/billing" component={() => <ProtectedRoute component={BillingFinancePage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/payments/ledger" component={() => <ProtectedRoute component={PaymentLedgerPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/payments" component={() => <Redirect to="/admin/payments/ledger" />} />
       <Route path="/admin/invoices" component={() => <RedirectPreserveSearch to="/admin/billing" />} />
       <Route path="/admin/quotations" component={() => <Redirect to="/admin/billing?tab=quotations" />} />
       <Route path="/admin/expenses" component={() => <Redirect to="/admin/billing?tab=expenses" />} />
@@ -217,6 +221,7 @@ function Router() {
       <Route path="/admin/service-locations/:id" component={() => <ProtectedRoute component={ServiceLocationDetail} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/service-locations" component={() => <ProtectedRoute component={ServiceLocationsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/branches" component={() => <ProtectedRoute component={AdminBranches} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/societies" component={() => <ProtectedRoute component={SocietiesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/masters" component={() => <ProtectedRoute component={AdminMasterData} roles={["admin", "superadmin", "manager"]} permission={{ resource: "masters", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/services" component={() => <ProtectedRoute component={ProductsAndPlans} roles={["admin", "superadmin", "manager"]} permission={{ resource: "services", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/products" component={() => <RedirectPreserveSearch to="/admin/services" />} />

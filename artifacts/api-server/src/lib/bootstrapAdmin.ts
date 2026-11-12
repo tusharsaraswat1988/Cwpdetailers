@@ -100,34 +100,69 @@ export async function bootstrapAdminFromEnv(): Promise<void> {
         { phone: config.phone, existingRole: existing.role },
         "ADMIN_PHONE matches a non-admin account — skipping super admin bootstrap",
       );
-      return;
+    } else {
+      await db
+        .update(usersTable)
+        .set({
+          name: config.name,
+          phone: config.phone,
+          email: target.email,
+          passwordHash,
+          authProvider: "local",
+          role: "superadmin",
+          isActive: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(usersTable.id, target.existingId));
+      logger.info({ phone: config.phone }, "Super admin synced from env");
     }
+  } else {
+    await db.insert(usersTable).values({
+      name: config.name,
+      phone: config.phone,
+      email: target.email,
+      passwordHash,
+      authProvider: "local",
+      role: "superadmin",
+      isActive: true,
+    });
+    logger.info({ phone: config.phone }, "Super admin created from env");
+  }
 
-    await db
-      .update(usersTable)
-      .set({
-        name: config.name,
-        phone: config.phone,
-        email: target.email,
-        passwordHash,
+  // Also guarantee standard developer / demo admin account (9999999999 / admin123)
+  try {
+    const demoPhone = "+919999999999";
+    const demoPassHash = await hashPassword("admin123");
+    const [existingDemo] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.phone, demoPhone))
+      .limit(1);
+
+    if (existingDemo) {
+      await db
+        .update(usersTable)
+        .set({
+          passwordHash: demoPassHash,
+          role: "superadmin",
+          isActive: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(usersTable.id, existingDemo.id));
+      logger.info({ phone: demoPhone }, "Demo super admin credentials synced");
+    } else {
+      await db.insert(usersTable).values({
+        name: "Admin User",
+        phone: demoPhone,
+        email: "admin@cwpdetailers.com",
+        passwordHash: demoPassHash,
         authProvider: "local",
         role: "superadmin",
         isActive: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(usersTable.id, target.existingId));
-    logger.info({ phone: config.phone }, "Super admin synced from env");
-    return;
+      });
+      logger.info({ phone: demoPhone }, "Demo super admin account created");
+    }
+  } catch (err: any) {
+    logger.warn({ err: err.message }, "Notice: could not bootstrap demo admin account");
   }
-
-  await db.insert(usersTable).values({
-    name: config.name,
-    phone: config.phone,
-    email: target.email,
-    passwordHash,
-    authProvider: "local",
-    role: "superadmin",
-    isActive: true,
-  });
-  logger.info({ phone: config.phone }, "Super admin created from env");
 }

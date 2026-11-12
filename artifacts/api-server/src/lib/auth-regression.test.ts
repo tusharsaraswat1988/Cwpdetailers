@@ -9,6 +9,7 @@ import {
 import {
   sessionCookieName,
   parseAuthPortalHeader,
+  listSessionTokens,
   SESSION_COOKIE_PREFIX,
 } from "./sessionCookie";
 import { isRoleAllowedForPortal, portalMismatchMessage } from "./authPortals";
@@ -326,6 +327,7 @@ describe("P0 Auth Regression Test Suite", () => {
       expect(parseAuthPortalHeader({ headers: { "x-auth-portal": "admin" } } as any)).toBe("admin");
       expect(parseAuthPortalHeader({ headers: { "x-auth-portal": "invalid_portal" } } as any)).toBeNull();
       expect(parseAuthPortalHeader({ headers: {} } as any)).toBeNull();
+      expect(parseAuthPortalHeader({ headers: {}, query: { portal: "admin" } } as any)).toBe("admin");
     });
 
     it("constructs portal-isolated cookie names", () => {
@@ -333,6 +335,44 @@ describe("P0 Auth Regression Test Suite", () => {
       expect(sessionCookieName("staff")).toBe(`${SESSION_COOKIE_PREFIX}staff`);
       expect(sessionCookieName("admin")).toBe(`${SESSION_COOKIE_PREFIX}admin`);
       expect(sessionCookieName("customer")).not.toBe(sessionCookieName("staff"));
+    });
+
+    it("extracts session tokens on direct navigation without x-auth-portal header", () => {
+      // Direct browser navigation (like opening invoice PDF in a new tab)
+      const directReq = {
+        headers: {},
+        cookies: {
+          cwp_session_admin: "admin_token_abc",
+        },
+      } as any;
+      expect(listSessionTokens(directReq)).toEqual(["admin_token_abc"]);
+
+      // Direct navigation with customer cookie
+      const custDirectReq = {
+        headers: {},
+        cookies: {
+          cwp_session_customer: "cust_token_xyz",
+        },
+      } as any;
+      expect(listSessionTokens(custDirectReq)).toEqual(["cust_token_xyz"]);
+
+      // Direct navigation with query token
+      const queryTokenReq = {
+        headers: {},
+        query: { token: "query_token_123" },
+        cookies: {},
+      } as any;
+      expect(listSessionTokens(queryTokenReq)).toEqual(["query_token_123"]);
+
+      // Scoped request respects portal isolation
+      const scopedReq = {
+        headers: { "x-auth-portal": "customer" },
+        cookies: {
+          cwp_session_admin: "admin_token_abc",
+          cwp_session_customer: "cust_token_xyz",
+        },
+      } as any;
+      expect(listSessionTokens(scopedReq)).toEqual(["cust_token_xyz"]);
     });
   });
 

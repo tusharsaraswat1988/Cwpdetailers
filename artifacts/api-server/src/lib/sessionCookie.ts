@@ -22,7 +22,8 @@ export function sessionCookieName(portal: AuthPortal): string {
 }
 
 export function parseAuthPortalHeader(req: Request): AuthPortal | null {
-  const raw = req.headers[AUTH_PORTAL_HEADER];
+  const queryPortal = typeof req.query?.portal === "string" ? req.query.portal : undefined;
+  const raw = req.headers[AUTH_PORTAL_HEADER] ?? queryPortal;
   if (typeof raw === "string" && isAuthPortal(raw)) return raw;
   if (Array.isArray(raw)) {
     for (const item of raw) {
@@ -52,7 +53,7 @@ export function clearAllSessionCookies(res: Response): void {
   res.clearCookie(LEGACY_SESSION_COOKIE_NAME, cookieOptions);
 }
 
-/** Session tokens for the requested portal only (cookie scoped by X-Auth-Portal, then bearer). */
+/** Session tokens for the requested portal only (cookie scoped by X-Auth-Portal/query portal, then bearer). Fallback to all portal cookies when unauthenticated direct navigation occurs. */
 export function listSessionTokens(req: Request): string[] {
   const tokens: string[] = [];
   const portal = parseAuthPortalHeader(req);
@@ -64,10 +65,20 @@ export function listSessionTokens(req: Request): string[] {
       if (trimmed) tokens.push(trimmed);
     }
   } else {
+    // When no portal header/param is present (e.g. direct browser navigation
+    // to view/download PDF invoices, exports, or media files), inspect all
+    // portal session cookies.
+    for (const p of AUTH_PORTALS) {
+      const cookieToken = req.cookies?.[sessionCookieName(p)];
+      if (typeof cookieToken === "string") {
+        const trimmed = cookieToken.trim();
+        if (trimmed && !tokens.includes(trimmed)) tokens.push(trimmed);
+      }
+    }
     const legacy = req.cookies?.[LEGACY_SESSION_COOKIE_NAME];
     if (typeof legacy === "string") {
       const trimmed = legacy.trim();
-      if (trimmed) tokens.push(trimmed);
+      if (trimmed && !tokens.includes(trimmed)) tokens.push(trimmed);
     }
   }
 
@@ -75,6 +86,11 @@ export function listSessionTokens(req: Request): string[] {
   if (header?.startsWith("Bearer ")) {
     const bearer = header.slice(7).trim();
     if (bearer && !tokens.includes(bearer)) tokens.push(bearer);
+  }
+
+  const queryToken = typeof req.query?.token === "string" ? req.query.token.trim() : null;
+  if (queryToken && !tokens.includes(queryToken)) {
+    tokens.push(queryToken);
   }
 
   return tokens;

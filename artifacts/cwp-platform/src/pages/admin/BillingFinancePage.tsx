@@ -4,7 +4,7 @@ import { getListInvoicesQueryKey } from "@workspace/api-client-react";
 import { PageTemplate } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Settings2 } from "lucide-react";
+import { FileText, Settings2, Receipt } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { CreateInvoiceDialog } from "@/features/billing/components/CreateInvoiceDialog";
 import { RecordPaymentDialog } from "@/features/billing/components/RecordPaymentDialog";
@@ -83,6 +83,11 @@ export default function BillingFinancePage() {
       }}
       secondaryActions={
         <>
+          <Link href="/admin/payments/ledger">
+            <Button variant="outline" size="sm" data-testid="btn-payment-ledger">
+              <Receipt size={15} className="mr-1.5" />Payment Ledger
+            </Button>
+          </Link>
           <Link href="/admin/settings/invoice-billing">
             <Button variant="outline" size="sm">
               <Settings2 size={15} className="mr-1.5" />Invoice & GST Settings

@@ -28,6 +28,7 @@ export type TenantOpts = {
   franchiseeCol?: AnyColumn;
   customerCol?: AnyColumn;
   staffCol?: AnyColumn;
+  cityCol?: AnyColumn;
 };
 
 export function tenantFilters(req: Request, opts: TenantOpts): SQL[] {
@@ -57,6 +58,7 @@ export function tenantFilters(req: Request, opts: TenantOpts): SQL[] {
     if (s.branchIds.length === 0) out.push(sql`false`);
     else out.push(inArray(opts.branchCol, s.branchIds));
   }
+  if (s.cityId && opts.cityCol) out.push(eq(opts.cityCol, s.cityId));
   if (s.franchiseeId && opts.franchiseeCol) out.push(eq(opts.franchiseeCol, s.franchiseeId));
   if (s.customerId && opts.customerCol) out.push(eq(opts.customerCol, s.customerId));
   if (s.staffId && opts.staffCol) out.push(eq(opts.staffCol, s.staffId));
@@ -67,6 +69,7 @@ type TenantStampFields = {
   companyId?: number | null;
   branchId?: number | null;
   franchiseeId?: number | null;
+  cityId?: number | null;
 };
 
 export function tenantStamp<T extends Record<string, unknown>>(req: Request, data: T): T & TenantStampFields {
@@ -85,6 +88,9 @@ export function tenantStamp<T extends Record<string, unknown>>(req: Request, dat
   }
   if (!s.isSuperAdmin || data["franchiseeId"] == null) {
     if (s.franchiseeId != null) out.franchiseeId = s.franchiseeId;
+  }
+  if (!s.isSuperAdmin || data["cityId"] == null) {
+    if (s.cityId != null) out.cityId = s.cityId;
   }
   return out;
 }
@@ -111,7 +117,7 @@ export async function loadIfInScope<R extends Record<string, unknown>>(
  * The function returns a SQL fragment that ANDs the active predicates.
  * Use it as:  sql`SELECT ... FROM ... WHERE ... AND ${sqlTenant(req, {c: 'c.company_id', b: 'b.branch_id'})}`
  */
-export function sqlTenant(req: Request, cols: { c?: string; b?: string; f?: string; cu?: string; s?: string }): SQL {
+export function sqlTenant(req: Request, cols: { c?: string; b?: string; f?: string; cu?: string; s?: string; ci?: string }): SQL {
   const s = req.scope;
   if (!s) return sql`false`;
   const preds: string[] = [];
@@ -123,6 +129,7 @@ export function sqlTenant(req: Request, cols: { c?: string; b?: string; f?: stri
       if (s.branchIds.length === 0) return sql`false`;
       preds.push(`${cols.b} IN (${s.branchIds.join(", ")})`);
     }
+    if (s.cityId && cols.ci) preds.push(`${cols.ci} = ${s.cityId}`);
     if (s.franchiseeId && cols.f) preds.push(`${cols.f} = ${s.franchiseeId}`);
     if (s.customerId && cols.cu) preds.push(`${cols.cu} = ${s.customerId}`);
     if (s.staffId && cols.s) preds.push(`${cols.s} = ${s.staffId}`);
@@ -137,6 +144,7 @@ export function rowInScope(req: Request, row: {
   franchiseeId?: number | null;
   customerId?: number | null;
   staffId?: number | null;
+  cityId?: number | null;
 }): boolean {
   const s = req.scope;
   if (!s) return false;
@@ -148,6 +156,7 @@ export function rowInScope(req: Request, row: {
   if (s.branchIds !== null) {
     if (row.branchId == null || !s.branchIds.includes(row.branchId)) return false;
   }
+  if (s.cityId && row.cityId != null && row.cityId !== s.cityId) return false;
   if (s.franchiseeId && row.franchiseeId != null && row.franchiseeId !== s.franchiseeId) return false;
   if (s.customerId && row.customerId != null && row.customerId !== s.customerId) return false;
   if (s.staffId && row.staffId != null && row.staffId !== s.staffId) return false;

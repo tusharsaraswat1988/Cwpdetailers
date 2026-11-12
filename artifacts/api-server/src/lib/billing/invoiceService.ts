@@ -47,6 +47,11 @@ import { getTermsForCategories } from "./invoiceBillingSettings";
 import { getDefaultGstRate } from "../catalog/pricingEngine";
 
 import { creditWallet, debitWallet, getLedgerBalance } from "../wallet/service";
+import {
+  resolveLegalEntity,
+  buildLegalEntitySnapshot,
+  generateLegalEntityDocumentNumber,
+} from "./legalEntityService";
 
 
 
@@ -119,6 +124,8 @@ export type CreateInvoiceInput = {
   customerSnapshot?: Partial<InvoiceCustomerSnapshot>;
 
   placeOfSupply?: string | null;
+
+  legalEntityId?: number | null;
 
 } & TenantFields;
 
@@ -215,49 +222,12 @@ export async function buildCustomerSnapshot(
 
 
 export async function generateDocumentNumber(
-
   documentType: InvoiceDocumentType = "tax_invoice",
-
   tx?: Transaction,
-
+  legalEntityInput?: { legalEntityId?: number | null; branchId?: number | null; franchiseeId?: number | null },
 ): Promise<string> {
-
-  const ctx = tx ?? db;
-
-  const fy = financialYearLabel();
-
-  const prefix = documentType === "credit_note"
-
-    ? `CWP/CN/${fy}/`
-
-    : documentType === "debit_note"
-
-      ? `CWP/DN/${fy}/`
-
-      : `CWP/${fy}/`;
-
-
-
-  const [row] = await ctx
-
-    .select({
-
-      maxNum: sql<string>`max(cast(substring(${invoicesTable.invoiceNumber} from '[0-9]+$') as integer))`,
-
-    })
-
-    .from(invoicesTable)
-
-    .where(sql`${invoicesTable.invoiceNumber} like ${prefix + "%"}`);
-
-
-
-  const next = Math.max(invoiceCounter, parseInt(row?.maxNum ?? "0", 10) + 1);
-
-  invoiceCounter = next;
-
-  return `${prefix}${next}`;
-
+  const entity = await resolveLegalEntity(legalEntityInput ?? {}, tx);
+  return generateLegalEntityDocumentNumber({ legalEntity: entity, documentType, tx });
 }
 
 
@@ -499,11 +469,21 @@ export async function createInvoice(input: CreateInvoiceInput, tx?: Transaction)
 
   const gstin = input.gstin !== undefined ? input.gstin : snapshot.gstin ?? null;
 
-
+  const legalEntity = await resolveLegalEntity({
+    legalEntityId: input.legalEntityId,
+    branchId: input.branchId,
+    franchiseeId: input.franchiseeId,
+  }, tx);
+  const legalEntitySnapshot = buildLegalEntitySnapshot(legalEntity);
+  const invoiceNumber = await generateLegalEntityDocumentNumber({
+    legalEntity,
+    documentType,
+    tx,
+  });
 
   const [invoice] = await ctx.insert(invoicesTable).values({
 
-    invoiceNumber: await generateDocumentNumber(documentType, tx),
+    invoiceNumber,
 
     documentType,
 
@@ -516,6 +496,10 @@ export async function createInvoice(input: CreateInvoiceInput, tx?: Transaction)
     customerId: input.customerId,
 
     customerSnapshot: snapshot,
+
+    legalEntityId: legalEntity.id,
+
+    legalEntitySnapshot,
 
     subscriptionId: input.subscriptionId ?? null,
 

@@ -4,6 +4,8 @@ import {
   serviceLocationsTable,
   customerLocationLinksTable,
   customersTable,
+  residentialSocietiesTable,
+  societyTowersTable,
 } from "@workspace/db";
 import { eq, and, or, ilike, sql, desc, inArray } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
@@ -72,6 +74,15 @@ router.get("/service-locations", async (req, res) => {
           label: serviceLocationsTable.label,
           address: serviceLocationsTable.address,
           city: serviceLocationsTable.city,
+          cityId: serviceLocationsTable.cityId,
+          societyId: serviceLocationsTable.societyId,
+          societyName: residentialSocietiesTable.name,
+          towerId: serviceLocationsTable.towerId,
+          towerName: societyTowersTable.name,
+          flatNumber: serviceLocationsTable.flatNumber,
+          parkingLevel: serviceLocationsTable.parkingLevel,
+          parkingBay: serviceLocationsTable.parkingBay,
+          parkingNotes: serviceLocationsTable.parkingNotes,
           latitude: serviceLocationsTable.latitude,
           longitude: serviceLocationsTable.longitude,
           placeId: serviceLocationsTable.placeId,
@@ -90,6 +101,8 @@ router.get("/service-locations", async (req, res) => {
         })
         .from(customerLocationLinksTable)
         .innerJoin(serviceLocationsTable, eq(customerLocationLinksTable.serviceLocationId, serviceLocationsTable.id))
+        .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+        .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
         .where(and(...conditions))
         .orderBy(desc(customerLocationLinksTable.isDefault), desc(serviceLocationsTable.updatedAt))
         .limit(lim)
@@ -182,7 +195,38 @@ router.get("/service-locations", async (req, res) => {
 router.get("/service-locations/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const [location] = await db.select().from(serviceLocationsTable).where(eq(serviceLocationsTable.id, id)).limit(1);
+    const [location] = await db
+      .select({
+        id: serviceLocationsTable.id,
+        label: serviceLocationsTable.label,
+        address: serviceLocationsTable.address,
+        city: serviceLocationsTable.city,
+        cityId: serviceLocationsTable.cityId,
+        societyId: serviceLocationsTable.societyId,
+        societyName: residentialSocietiesTable.name,
+        towerId: serviceLocationsTable.towerId,
+        towerName: societyTowersTable.name,
+        flatNumber: serviceLocationsTable.flatNumber,
+        parkingLevel: serviceLocationsTable.parkingLevel,
+        parkingBay: serviceLocationsTable.parkingBay,
+        parkingNotes: serviceLocationsTable.parkingNotes,
+        latitude: serviceLocationsTable.latitude,
+        longitude: serviceLocationsTable.longitude,
+        placeId: serviceLocationsTable.placeId,
+        locationType: serviceLocationsTable.locationType,
+        status: serviceLocationsTable.status,
+        isAutoCreated: serviceLocationsTable.isAutoCreated,
+        companyId: serviceLocationsTable.companyId,
+        franchiseeId: serviceLocationsTable.franchiseeId,
+        branchId: serviceLocationsTable.branchId,
+        createdAt: serviceLocationsTable.createdAt,
+        updatedAt: serviceLocationsTable.updatedAt,
+      })
+      .from(serviceLocationsTable)
+      .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+      .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
+      .where(eq(serviceLocationsTable.id, id))
+      .limit(1);
     if (!location || !rowInScope(req, location)) {
       return res.status(404).json({ error: "Service location not found" });
     }
@@ -222,12 +266,17 @@ router.get("/service-locations/:id", async (req, res) => {
 });
 
 const LOCATION_WRITABLE_FIELDS = [
-  "label", "address", "city", "latitude", "longitude", "placeId", "locationType", "status",
+  "label", "address", "city", "cityId", "latitude", "longitude", "placeId", "locationType", "status",
+  "societyId", "towerId", "flatNumber", "parkingLevel", "parkingBay", "parkingNotes",
 ] as const;
 
 router.post("/service-locations", async (req, res) => {
   try {
-    const { label, address, city, latitude, longitude, placeId, locationType, status, customerId, isDefault, effectiveFrom, effectiveUntil } = req.body;
+    const {
+      label, address, city, cityId, latitude, longitude, placeId, locationType, status,
+      customerId, isDefault, effectiveFrom, effectiveUntil,
+      societyId, towerId, flatNumber, parkingLevel, parkingBay, parkingNotes,
+    } = req.body;
     if (!label || !String(label).trim()) {
       return res.status(400).json({ error: "label is required" });
     }
@@ -242,6 +291,13 @@ router.post("/service-locations", async (req, res) => {
       label: String(label).trim(),
       address: address ?? null,
       city: city ?? null,
+      cityId: cityId ? Number(cityId) : null,
+      societyId: societyId ? Number(societyId) : null,
+      towerId: towerId ? Number(towerId) : null,
+      flatNumber: flatNumber ? String(flatNumber).trim() : null,
+      parkingLevel: parkingLevel ? String(parkingLevel).trim() : null,
+      parkingBay: parkingBay ? String(parkingBay).trim() : null,
+      parkingNotes: parkingNotes ? String(parkingNotes).trim() : null,
       latitude: latitude ?? null,
       longitude: longitude ?? null,
       placeId: placeId ?? null,
@@ -323,7 +379,38 @@ router.patch("/service-locations/:id", async (req, res) => {
 router.get("/service-locations/:id/customer-links", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const [location] = await db.select().from(serviceLocationsTable).where(eq(serviceLocationsTable.id, id)).limit(1);
+    const [location] = await db
+      .select({
+        id: serviceLocationsTable.id,
+        label: serviceLocationsTable.label,
+        address: serviceLocationsTable.address,
+        city: serviceLocationsTable.city,
+        cityId: serviceLocationsTable.cityId,
+        societyId: serviceLocationsTable.societyId,
+        societyName: residentialSocietiesTable.name,
+        towerId: serviceLocationsTable.towerId,
+        towerName: societyTowersTable.name,
+        flatNumber: serviceLocationsTable.flatNumber,
+        parkingLevel: serviceLocationsTable.parkingLevel,
+        parkingBay: serviceLocationsTable.parkingBay,
+        parkingNotes: serviceLocationsTable.parkingNotes,
+        latitude: serviceLocationsTable.latitude,
+        longitude: serviceLocationsTable.longitude,
+        placeId: serviceLocationsTable.placeId,
+        locationType: serviceLocationsTable.locationType,
+        status: serviceLocationsTable.status,
+        isAutoCreated: serviceLocationsTable.isAutoCreated,
+        companyId: serviceLocationsTable.companyId,
+        franchiseeId: serviceLocationsTable.franchiseeId,
+        branchId: serviceLocationsTable.branchId,
+        createdAt: serviceLocationsTable.createdAt,
+        updatedAt: serviceLocationsTable.updatedAt,
+      })
+      .from(serviceLocationsTable)
+      .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+      .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
+      .where(eq(serviceLocationsTable.id, id))
+      .limit(1);
     if (!location || !rowInScope(req, location)) {
       return res.status(404).json({ error: "Service location not found" });
     }
@@ -368,7 +455,38 @@ router.post("/service-locations/:id/customer-links", async (req, res) => {
     const { customerId, isDefault, effectiveFrom, effectiveUntil } = req.body;
     if (!customerId) return res.status(400).json({ error: "customerId is required" });
 
-    const [location] = await db.select().from(serviceLocationsTable).where(eq(serviceLocationsTable.id, id)).limit(1);
+    const [location] = await db
+      .select({
+        id: serviceLocationsTable.id,
+        label: serviceLocationsTable.label,
+        address: serviceLocationsTable.address,
+        city: serviceLocationsTable.city,
+        cityId: serviceLocationsTable.cityId,
+        societyId: serviceLocationsTable.societyId,
+        societyName: residentialSocietiesTable.name,
+        towerId: serviceLocationsTable.towerId,
+        towerName: societyTowersTable.name,
+        flatNumber: serviceLocationsTable.flatNumber,
+        parkingLevel: serviceLocationsTable.parkingLevel,
+        parkingBay: serviceLocationsTable.parkingBay,
+        parkingNotes: serviceLocationsTable.parkingNotes,
+        latitude: serviceLocationsTable.latitude,
+        longitude: serviceLocationsTable.longitude,
+        placeId: serviceLocationsTable.placeId,
+        locationType: serviceLocationsTable.locationType,
+        status: serviceLocationsTable.status,
+        isAutoCreated: serviceLocationsTable.isAutoCreated,
+        companyId: serviceLocationsTable.companyId,
+        franchiseeId: serviceLocationsTable.franchiseeId,
+        branchId: serviceLocationsTable.branchId,
+        createdAt: serviceLocationsTable.createdAt,
+        updatedAt: serviceLocationsTable.updatedAt,
+      })
+      .from(serviceLocationsTable)
+      .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+      .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
+      .where(eq(serviceLocationsTable.id, id))
+      .limit(1);
     if (!location || !rowInScope(req, location)) {
       return res.status(404).json({ error: "Service location not found" });
     }
@@ -425,7 +543,38 @@ router.delete("/service-locations/:id/customer-links", async (req, res) => {
     const customerId = parseInt(String(req.query.customerId ?? req.body?.customerId), 10);
     if (!customerId) return res.status(400).json({ error: "customerId is required" });
 
-    const [location] = await db.select().from(serviceLocationsTable).where(eq(serviceLocationsTable.id, id)).limit(1);
+    const [location] = await db
+      .select({
+        id: serviceLocationsTable.id,
+        label: serviceLocationsTable.label,
+        address: serviceLocationsTable.address,
+        city: serviceLocationsTable.city,
+        cityId: serviceLocationsTable.cityId,
+        societyId: serviceLocationsTable.societyId,
+        societyName: residentialSocietiesTable.name,
+        towerId: serviceLocationsTable.towerId,
+        towerName: societyTowersTable.name,
+        flatNumber: serviceLocationsTable.flatNumber,
+        parkingLevel: serviceLocationsTable.parkingLevel,
+        parkingBay: serviceLocationsTable.parkingBay,
+        parkingNotes: serviceLocationsTable.parkingNotes,
+        latitude: serviceLocationsTable.latitude,
+        longitude: serviceLocationsTable.longitude,
+        placeId: serviceLocationsTable.placeId,
+        locationType: serviceLocationsTable.locationType,
+        status: serviceLocationsTable.status,
+        isAutoCreated: serviceLocationsTable.isAutoCreated,
+        companyId: serviceLocationsTable.companyId,
+        franchiseeId: serviceLocationsTable.franchiseeId,
+        branchId: serviceLocationsTable.branchId,
+        createdAt: serviceLocationsTable.createdAt,
+        updatedAt: serviceLocationsTable.updatedAt,
+      })
+      .from(serviceLocationsTable)
+      .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
+      .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
+      .where(eq(serviceLocationsTable.id, id))
+      .limit(1);
     if (!location || !rowInScope(req, location)) {
       return res.status(404).json({ error: "Service location not found" });
     }

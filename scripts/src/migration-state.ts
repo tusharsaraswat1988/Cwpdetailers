@@ -59,6 +59,9 @@ export const PENDING_MIGRATIONS = [
   "061_attendance_selfie.sql",
   "062_saved_locations_structured.sql",
   "063_cashfree_payment_gateway.sql",
+  "064_multi_city_foundation_and_societies.sql",
+  "065_legal_entities_and_invoice_sequences.sql",
+  "066_promotions_and_banners.sql",
 ] as const;
 
 export type Queryable = {
@@ -155,6 +158,15 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
     case "063_cashfree_payment_gateway.sql":
       return (await hasTable(db, "payment_attempts"))
         && (await hasEnumLabel(db, "payment_method", "cashfree"));
+    case "064_multi_city_foundation_and_societies.sql":
+      return (await hasTable(db, "residential_societies"))
+        && (await hasColumn(db, "branches", "city_id"));
+    case "065_legal_entities_and_invoice_sequences.sql":
+      return (await hasTable(db, "legal_entities"))
+        && (await hasTable(db, "invoice_number_sequences"))
+        && (await hasColumn(db, "invoices", "legal_entity_id"));
+    case "066_promotions_and_banners.sql":
+      return hasTable(db, "promotions");
     default:
       return false;
   }
