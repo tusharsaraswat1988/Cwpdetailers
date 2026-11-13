@@ -937,6 +937,109 @@ export async function ensureStartupMigrations(): Promise<void> {
       logger.warn({ err: mig80Err }, "Phase 20 marketing CMS DDL check failed (non-fatal, continuing)");
     }
 
+    // 20. Phase 21: Customer Referral, Loyalty Rewards & Retention Automation Engine (Migration 081)
+    try {
+      await client.query(`
+        ALTER TABLE customers ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE;
+        ALTER TABLE customers ADD COLUMN IF NOT EXISTS loyalty_points_balance INTEGER NOT NULL DEFAULT 0;
+
+        CREATE TABLE IF NOT EXISTS customer_referrals (
+          id SERIAL PRIMARY KEY,
+          referrer_customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+          referee_customer_id INTEGER NOT NULL UNIQUE REFERENCES customers(id) ON DELETE RESTRICT,
+          referral_code TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          attributed_booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+          booking_completed_at TIMESTAMP,
+          referrer_reward_points INTEGER NOT NULL DEFAULT 0,
+          referee_reward_points INTEGER NOT NULL DEFAULT 0,
+          reward_status TEXT NOT NULL DEFAULT 'pending',
+          reward_issued_at TIMESTAMP,
+          fraud_flag_reason TEXT,
+          idempotency_key TEXT UNIQUE,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS loyalty_programs_config (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          city_id INTEGER REFERENCES cities(id) ON DELETE CASCADE,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE,
+          points_per_100_spent INTEGER NOT NULL DEFAULT 5,
+          first_booking_bonus_points INTEGER NOT NULL DEFAULT 50,
+          referrer_reward_points INTEGER NOT NULL DEFAULT 200,
+          referee_reward_points INTEGER NOT NULL DEFAULT 100,
+          redemption_rupees_per_point NUMERIC(10, 2) NOT NULL DEFAULT '1.00',
+          min_redemption_points INTEGER NOT NULL DEFAULT 50,
+          max_redemption_points_per_order INTEGER NOT NULL DEFAULT 500,
+          max_redemption_percentage_order INTEGER NOT NULL DEFAULT 50,
+          points_validity_days INTEGER NOT NULL DEFAULT 180,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          metadata JSONB,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS loyalty_ledger (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+          city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+          transaction_type TEXT NOT NULL,
+          points INTEGER NOT NULL,
+          rupee_equivalent NUMERIC(10, 2) NOT NULL DEFAULT '0.00',
+          balance_after INTEGER NOT NULL,
+          source_reference TEXT NOT NULL,
+          booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+          referral_id INTEGER REFERENCES customer_referrals(id) ON DELETE SET NULL,
+          reversal_of_id INTEGER REFERENCES loyalty_ledger(id) ON DELETE SET NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          idempotency_key TEXT UNIQUE,
+          expires_at TIMESTAMP,
+          notes TEXT,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS retention_automations (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          trigger_type TEXT NOT NULL,
+          delay_days INTEGER NOT NULL DEFAULT 7,
+          city_id INTEGER REFERENCES cities(id) ON DELETE CASCADE,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE,
+          service_id INTEGER REFERENCES services(id) ON DELETE SET NULL,
+          coupon_code TEXT,
+          reward_points INTEGER NOT NULL DEFAULT 0,
+          title_template TEXT NOT NULL,
+          message_template TEXT NOT NULL,
+          frequency_cap_days INTEGER NOT NULL DEFAULT 30,
+          channel TEXT NOT NULL DEFAULT 'in_app',
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          total_evaluated_count INTEGER NOT NULL DEFAULT 0,
+          total_triggered_count INTEGER NOT NULL DEFAULT 0,
+          last_run_at TIMESTAMP,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS retention_execution_logs (
+          id SERIAL PRIMARY KEY,
+          automation_id INTEGER NOT NULL REFERENCES retention_automations(id) ON DELETE CASCADE,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+          channel TEXT NOT NULL,
+          notification_id INTEGER REFERENCES notifications(id) ON DELETE SET NULL,
+          status TEXT NOT NULL,
+          message_payload JSONB,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+      `);
+    } catch (mig81Err) {
+      logger.warn({ err: mig81Err }, "Phase 21 loyalty & retention DDL check failed (non-fatal, continuing)");
+    }
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

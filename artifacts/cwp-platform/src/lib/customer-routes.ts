@@ -22,6 +22,8 @@ export const CUSTOMER_ROUTES = {
   invoices: "/customer/invoices",
   paymentReturn: "/customer/payment/return",
   support: "/customer/support",
+  loyalty: "/customer/loyalty",
+  rewards: "/customer/rewards",
 } as const;
 
 /** Legacy paths that redirect to canonical routes (see CustomerRouteRedirects). */

@@ -29,6 +29,8 @@ const pageTitles: Record<string, string> = {
   [CUSTOMER_ROUTES.assets]: "My Vehicles & Solar Sites",
   [CUSTOMER_ROUTES.account]: "Account",
   "/customer/wallet": "My Plans",
+  [CUSTOMER_ROUTES.loyalty]: "Rewards & Referrals",
+  [CUSTOMER_ROUTES.rewards]: "Rewards & Referrals",
   "/customer/services": "My Plans",
   "/customer/bookings": "Schedule",
   "/customer/book": "Schedule",

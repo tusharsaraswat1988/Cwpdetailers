@@ -38,6 +38,7 @@ import { ServiceAddressSelector } from "@/components/home/ServiceAddressSelector
 import { HomeGreeting } from "@/components/home/HomeGreeting";
 import { MarketingHero } from "@/components/home/MarketingHero";
 import { PromotionalOffersSection } from "@/components/home/PromotionalOffersSection";
+import { LoyaltyRewardsCard } from "@/components/home/LoyaltyRewardsCard";
 import { ServicesGrid } from "@/components/home/ServicesGrid";
 import { CustomerReviewsSection } from "@/components/home/CustomerReviewsSection";
 import { TodayServiceCard } from "@/components/home/TodayServiceCard";
@@ -379,6 +380,9 @@ export default function CustomerDashboard() {
 
             {/* Core Product Marketing Hero */}
             <MarketingHero cityName={currentCityName} />
+
+            {/* Loyalty Rewards & Referral Strip */}
+            <LoyaltyRewardsCard />
 
             {/* City/Branch-Specific Promotional Offers & Coupon Rewards */}
             <PromotionalOffersSection citySlug={currentCitySlug} cityName={currentCityName} />

@@ -39,6 +39,7 @@ import {
   CreditCard,
   Star,
   Megaphone,
+  Gift,
 } from "lucide-react";
 
 export type AdminNavPermission = { resource: string; action: string };
@@ -175,6 +176,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         href: "/admin/customers",
         label: "Customer Directory",
         icon: Users,
+        perm: { resource: "customers", action: "view" },
+      },
+      {
+        id: "loyalty-rewards",
+        href: "/admin/loyalty",
+        label: "Loyalty & Referrals",
+        icon: Gift,
         perm: { resource: "customers", action: "view" },
       },
       {

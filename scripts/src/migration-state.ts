@@ -76,6 +76,7 @@ export const PENDING_MIGRATIONS = [
   "078_makeup_approval_requests_and_gps_retention.sql",
   "079_universal_service_catalog_pricing_matrix.sql",
   "080_city_branch_marketing_cms_campaigns.sql",
+  "081_customer_referral_loyalty_retention.sql",
 ] as const;
 
 export type Queryable = {
@@ -216,6 +217,8 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
       return hasTable(db, "service_availability_matrix");
     case "080_city_branch_marketing_cms_campaigns.sql":
       return hasTable(db, "homepage_sections");
+    case "081_customer_referral_loyalty_retention.sql":
+      return hasTable(db, "loyalty_ledger");
     default:
       return false;
   }

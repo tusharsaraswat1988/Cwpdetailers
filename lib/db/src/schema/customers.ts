@@ -28,6 +28,8 @@ export const customersTable = pgTable("customers", {
   gstin: text("gstin"),
   billingName: text("billing_name"),
   referredByCustomerId: integer("referred_by_customer_id"),
+  referralCode: text("referral_code").unique(),
+  loyaltyPointsBalance: integer("loyalty_points_balance").notNull().default(0),
   legacySegment: text("legacy_segment"),
   reactivatedAt: timestamp("reactivated_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

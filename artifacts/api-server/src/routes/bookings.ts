@@ -307,6 +307,7 @@ router.post("/bookings", async (req, res) => {
       scheduledDate, scheduledTime, serviceType, address, area, locationLat, locationLng,
       placeId, savedLocationId, notes, cityId, citySlug, assetId, serviceLocationId,
       contractRegistryId, addressId, postalCode, addressComponents,
+      redeemLoyaltyPoints,
     } = req.body;
     let cityName = typeof req.body.cityName === "string" ? req.body.cityName : undefined;
 
@@ -477,6 +478,25 @@ router.post("/bookings", async (req, res) => {
       });
 
       const booking = createResult.booking;
+
+      // Handle loyalty points debit on booking creation if requested
+      if (redeemLoyaltyPoints && Number(redeemLoyaltyPoints) > 0) {
+        try {
+          const { debitLoyaltyPoints } = await import("../lib/loyalty/loyaltyLedgerService");
+          await debitLoyaltyPoints({
+            customerId: booking.customerId,
+            points: Number(redeemLoyaltyPoints),
+            sourceReference: "checkout_redemption",
+            bookingId: booking.id,
+            cityId: booking.cityId,
+            branchId: booking.branchId,
+            notes: `Redeemed ${redeemLoyaltyPoints} points on booking #${booking.id}`,
+            idempotencyKey: `booking_redeem_${booking.id}_${redeemLoyaltyPoints}`,
+          });
+        } catch (debitErr) {
+          req.log.warn({ err: debitErr, bookingId: booking.id }, "Failed to debit loyalty points on booking creation");
+        }
+      }
 
       const { tryReactivateLegacyCustomer } = await import("../lib/customerReactivation");
       const reactivation = await tryReactivateLegacyCustomer(customerId, "booking", {

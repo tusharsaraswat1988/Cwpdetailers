@@ -369,6 +369,35 @@ export class BookingService {
         opts?.logger,
       );
     }
+    if (input.toStatus === "completed") {
+      try {
+        const { processReferralRewardOnBookingCompletion } = await import("../loyalty/referralService");
+        const { calculatePointsEarned, creditLoyaltyPoints } = await import("../loyalty/loyaltyLedgerService");
+
+        // 1. Process referral reward if eligible
+        await processReferralRewardOnBookingCompletion(booking.id);
+
+        // 2. Accrue loyalty points on booking completion
+        const amount = booking.amount ? parseFloat(booking.amount) : 0;
+        if (amount > 0) {
+          const pointsEarned = await calculatePointsEarned(amount, booking.customerId, booking.cityId, booking.branchId);
+          if (pointsEarned.totalPoints > 0) {
+            await creditLoyaltyPoints({
+              customerId: booking.customerId,
+              points: pointsEarned.totalPoints,
+              sourceReference: "booking_completion",
+              bookingId: booking.id,
+              cityId: booking.cityId,
+              branchId: booking.branchId,
+              notes: `Earned ${pointsEarned.basePoints} base pts${pointsEarned.bonusPoints ? ` + ${pointsEarned.bonusPoints} bonus pts` : ""} for booking #${booking.id}`,
+              idempotencyKey: `booking_earn_${booking.id}`,
+            });
+          }
+        }
+      } catch (loyaltyErr) {
+        opts?.logger?.warn?.({ err: loyaltyErr, bookingId: booking.id }, "Loyalty/referral processing on completion failed non-fatal");
+      }
+    }
 
     emitBookingMetrics(opts?.logger, buildBookingMetrics("transition", trace, {
       success: true,

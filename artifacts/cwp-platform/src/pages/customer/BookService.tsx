@@ -124,6 +124,7 @@ export default function BookService() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [successId, setSuccessId] = useState<number | null>(null);
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCouponInfo | null>(null);
+  const [appliedLoyaltyPoints, setAppliedLoyaltyPoints] = useState<{ points: number; discountAmount: number } | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [callbackLeadId, setCallbackLeadId] = useState<number | null>(null);
   const [callbackPending, setCallbackPending] = useState(false);
@@ -487,9 +488,12 @@ export default function BookService() {
         serviceType: serviceType as "car_wash" | "detailing" | "solar_cleaning" | "pickup_drop",
         scheduledDate,
         scheduledTime,
-        notes: appliedCoupon
-          ? `${notes ? `${notes}\n` : ""}Promo Applied: ${appliedCoupon.code} (-₹${appliedCoupon.discountAmount})`
-          : (notes || undefined),
+        notes: [
+          notes ? notes : "",
+          appliedCoupon ? `Promo Applied: ${appliedCoupon.code} (-₹${appliedCoupon.discountAmount})` : "",
+          appliedLoyaltyPoints ? `Loyalty Points Redeemed: ${appliedLoyaltyPoints.points} pts (-₹${appliedLoyaltyPoints.discountAmount})` : "",
+        ].filter(Boolean).join("\n") || undefined,
+        redeemLoyaltyPoints: appliedLoyaltyPoints?.points ?? undefined,
         address: bookingLocation.address,
         locationLat: bookingLocation.latitude,
         locationLng: bookingLocation.longitude,
@@ -669,6 +673,8 @@ export default function BookService() {
             serviceId={serviceId}
             appliedCoupon={appliedCoupon}
             onApplyCoupon={setAppliedCoupon}
+            appliedLoyaltyPoints={appliedLoyaltyPoints}
+            onApplyLoyaltyPoints={setAppliedLoyaltyPoints}
           />
         )}
 

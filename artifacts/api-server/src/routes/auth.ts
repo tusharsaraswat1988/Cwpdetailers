@@ -915,7 +915,7 @@ router.post("/auth/register", async (req, res) => {
   const requestId = getRequestId(req);
   res.setHeader("X-Correlation-Id", requestId);
   try {
-    const { name, phone, email, password, address, city, branchId } = req.body;
+    const { name, phone, email, password, address, city, branchId, referralCode } = req.body;
     if (!name || !password) {
       return res.status(400).json({ error: "Name and password are required", code: "ACCOUNT_NOT_ELIGIBLE", requestId });
     }
@@ -970,6 +970,17 @@ router.post("/auth/register", async (req, res) => {
     if (customer) {
       const [updated] = await db.update(usersTable).set({ customerId: customer.id }).where(eq(usersTable.id, user.id)).returning();
       if (updated) linkedUser = updated;
+
+      // Ensure unique referral code for new customer and attribute referral if provided
+      try {
+        const { ensureCustomerReferralCode, attributeReferral } = await import("../lib/loyalty/referralService");
+        await ensureCustomerReferralCode(customer.id);
+        if (referralCode && typeof referralCode === "string" && referralCode.trim()) {
+          await attributeReferral(customer.id, referralCode.trim());
+        }
+      } catch (refErr) {
+        req.log?.warn?.({ refErr }, "Referral assignment during registration non-fatal error");
+      }
     }
 
     const token = await issueSession(linkedUser.id, req);

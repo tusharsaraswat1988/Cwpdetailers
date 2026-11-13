@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Link } from "wouter";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
-import { CheckCircle2, AlertCircle, ArrowRight, Receipt } from "lucide-react";
+import { CheckCircle2, AlertCircle, ArrowRight, Receipt, Gift } from "lucide-react";
 import { AccountSection } from "./AccountSection";
 
 type Props = {
@@ -64,12 +64,18 @@ export const BillingSection = memo(function BillingSection({ totalDues }: Props)
           </div>
         )}
 
-        <div className="pt-1 flex items-center justify-between">
+        <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <Link
             href={CUSTOMER_ROUTES.invoices}
             className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
           >
-            <Receipt size={14} /> View All Invoices & Receipts
+            <Receipt size={14} /> View Invoices
+          </Link>
+          <Link
+            href={CUSTOMER_ROUTES.loyalty}
+            className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+          >
+            <Gift size={14} /> Rewards & Referrals
           </Link>
         </div>
       </div>

@@ -67,6 +67,8 @@ const CUSTOMER_LIST_SELECT = {
   operationalNotes: customersTable.operationalNotes,
   gstin: customersTable.gstin, billingName: customersTable.billingName,
   referredByCustomerId: customersTable.referredByCustomerId,
+  referralCode: customersTable.referralCode,
+  loyaltyPointsBalance: customersTable.loyaltyPointsBalance,
   legacySegment: customersTable.legacySegment,
   reactivatedAt: customersTable.reactivatedAt,
   branchName: branchesTable.name, createdAt: customersTable.createdAt,
@@ -332,6 +334,14 @@ router.get("/customers/me", async (req, res) => {
       .limit(1);
 
     if (!customer) return res.status(404).json({ error: "Customer not found" });
+    if (!customer.referralCode) {
+      try {
+        const { ensureCustomerReferralCode } = await import("../lib/loyalty/referralService");
+        customer.referralCode = await ensureCustomerReferralCode(customerId);
+      } catch (refErr) {
+        req.log.warn({ refErr }, "Failed to generate referral code for customer");
+      }
+    }
     return res.json(customer);
   } catch (err) {
     req.log.error({ err }, "Get customer profile error");
