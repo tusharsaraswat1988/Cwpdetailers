@@ -603,6 +603,31 @@ export async function ensureStartupMigrations(): Promise<void> {
       await client.query("CREATE INDEX IF NOT EXISTS idx_users_city_id ON users(city_id)");
     }
 
+    // 15. Core Service Operations & Booking-to-Execution Consistency (Migration 076 / Phase 16)
+    try {
+      await client.query(`
+        DO $$
+        BEGIN
+          ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'assigned';
+          ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'in_progress';
+          ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'completed';
+          ALTER TYPE booking_status ADD VALUE IF NOT EXISTS 'missed';
+        EXCEPTION
+          WHEN duplicate_object THEN NULL;
+        END $$;
+
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS assigned_staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+
+        CREATE INDEX IF NOT EXISTS bookings_assigned_staff_idx ON bookings(assigned_staff_id);
+        CREATE INDEX IF NOT EXISTS idx_pending_service_assignments_contract_pending ON pending_service_assignments (contract_registry_id) WHERE status = 'pending';
+        CREATE INDEX IF NOT EXISTS idx_service_executions_active_task ON service_executions (service_assignment_id, task_type) WHERE status NOT IN ('completed', 'cancelled', 'missed', 'rescheduled');
+      `);
+    } catch (mig76Err) {
+      logger.warn({ err: mig76Err }, "Phase 16 migration DDL check failed (non-fatal, continuing)");
+    }
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

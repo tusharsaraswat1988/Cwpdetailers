@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { db, bookingsTable, type BookingStatus } from "@workspace/db";
 import { SLOT_OCCUPYING_STATUSES } from "../domain/stateMachine";
 import { resolveTimeWindow, windowsOverlap, DOMAIN_DEFAULT_DURATION_MINUTES } from "./TimeWindow";
@@ -7,6 +7,7 @@ import { BookingValidationError } from "../types";
 export type DuplicateCheckInput = {
   customerId: number;
   assetId?: number | null;
+  vehicleId?: number | null;
   scheduledDate: string;
   scheduledTime?: string | null;
   scheduledStartAt?: Date | string | null;
@@ -28,8 +29,12 @@ export async function assertNoDuplicateBooking(input: DuplicateCheckInput): Prom
     inArray(bookingsTable.status, occupying),
   ];
 
-  if (input.assetId != null) {
+  if (input.assetId != null && input.vehicleId != null) {
+    conditions.push(or(eq(bookingsTable.assetId, input.assetId), eq(bookingsTable.vehicleId, input.vehicleId))!);
+  } else if (input.assetId != null) {
     conditions.push(eq(bookingsTable.assetId, input.assetId));
+  } else if (input.vehicleId != null) {
+    conditions.push(eq(bookingsTable.vehicleId, input.vehicleId));
   }
   if (input.excludeBookingId != null) {
     conditions.push(ne(bookingsTable.id, input.excludeBookingId));

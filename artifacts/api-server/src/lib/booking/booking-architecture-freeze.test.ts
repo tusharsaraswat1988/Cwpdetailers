@@ -68,11 +68,15 @@ describe("BookingContext", () => {
 });
 
 describe("Booking State Machine", () => {
-  it("exposes schedule-only statuses", () => {
+  it("exposes full booking-to-execution statuses", () => {
     expect(BOOKING_STATUSES).toContain("draft");
     expect(BOOKING_STATUSES).toContain("waiting_assignment");
-    expect(BOOKING_STATUSES).not.toContain("in_progress");
+    expect(BOOKING_STATUSES).toContain("assigned");
+    expect(BOOKING_STATUSES).toContain("in_progress");
+    expect(BOOKING_STATUSES).toContain("completed");
     expect(SLOT_OCCUPYING_STATUSES).toContain("confirmed");
+    expect(SLOT_OCCUPYING_STATUSES).toContain("assigned");
+    expect(SLOT_OCCUPYING_STATUSES).toContain("in_progress");
   });
 
   it("allows valid schedule transitions", () => {

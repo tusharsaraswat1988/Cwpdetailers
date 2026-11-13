@@ -8,29 +8,38 @@ import {
 } from "./stateMachine";
 import { checkSlotCapacity } from "../scheduling/CapacityPolicy";
 
-describe("Phase 5.2 booking state machine", () => {
-  it("allows draft → scheduled → confirmed → waiting_assignment", () => {
+describe("Phase 16 booking state machine", () => {
+  it("allows draft → scheduled → confirmed → waiting_assignment → assigned → in_progress → completed", () => {
     expect(canTransition("draft", "scheduled")).toBe(true);
     expect(canTransition("scheduled", "confirmed")).toBe(true);
     expect(canTransition("confirmed", "waiting_assignment")).toBe(true);
+    expect(canTransition("waiting_assignment", "assigned")).toBe(true);
+    expect(canTransition("assigned", "in_progress")).toBe(true);
+    expect(canTransition("in_progress", "completed")).toBe(true);
   });
 
   it("allows scheduled → waiting_assignment directly", () => {
     expect(canTransition("scheduled", "waiting_assignment")).toBe(true);
   });
 
-  it("rejects execution statuses (not in machine)", () => {
-    expect(BOOKING_TRANSITIONS.confirmed).not.toContain("en_route" as never);
-    expect(BOOKING_TRANSITIONS.waiting_assignment).toEqual(["rescheduled", "cancelled"]);
+  it("allows execution missed handling", () => {
+    expect(canTransition("assigned", "missed")).toBe(true);
+    expect(canTransition("in_progress", "missed")).toBe(true);
+    expect(canTransition("missed", "rescheduled")).toBe(true);
+    expect(canTransition("missed", "waiting_assignment")).toBe(true);
   });
 
-  it("throws on invalid transition", () => {
+  it("rejects invalid transitions", () => {
     expect(() => validateTransition("cancelled", "confirmed")).toThrow(BookingStateMachineError);
+    expect(() => validateTransition("completed", "scheduled")).toThrow(BookingStateMachineError);
+    expect(() => validateTransition("draft", "completed")).toThrow(BookingStateMachineError);
   });
 
-  it("treats cancelled as terminal", () => {
+  it("treats cancelled and completed as terminal", () => {
     expect(isTerminalStatus("cancelled")).toBe(true);
+    expect(isTerminalStatus("completed")).toBe(true);
     expect(isTerminalStatus("waiting_assignment")).toBe(false);
+    expect(isTerminalStatus("in_progress")).toBe(false);
   });
 });
 

@@ -83,6 +83,20 @@ async function todaysCleaningVisits(subscriptionId: number, dateStr: string): Pr
     .orderBy(desc(dcmsVisitsTable.visitTime));
 }
 
+async function todaysWashVisits(subscriptionId: number, dateStr: string): Promise<DcmsVisit[]> {
+  const { start, end } = dayBoundsIST(dateStr);
+  return db
+    .select()
+    .from(dcmsVisitsTable)
+    .where(and(
+      eq(dcmsVisitsTable.subscriptionId, subscriptionId),
+      eq(dcmsVisitsTable.visitType, "wash"),
+      gte(dcmsVisitsTable.visitTime, start),
+      lte(dcmsVisitsTable.visitTime, end),
+    ))
+    .orderBy(desc(dcmsVisitsTable.visitTime));
+}
+
 function isUniqueViolation(err: unknown): boolean {
   let current: unknown = err;
   for (let i = 0; i < 5 && current; i++) {
@@ -253,6 +267,15 @@ export async function completeVisit(
   }
   if (completePlan?.action === "reject") {
     traceVisitFailure(log, "assignment_verified", new Error(completePlan.error));
+  }
+
+  if (input.visitType === "wash") {
+    const existingWashes = await todaysWashVisits(input.subscriptionId, today);
+    const completedWash = existingWashes.find(w => w.status === "completed");
+    if (completedWash) {
+      traceVisitStep(log, "response_ready", { visitId: completedWash.id, idempotent: true });
+      return { visit: completedWash, consumed: false, idempotent: true };
+    }
   }
 
   const now = new Date();

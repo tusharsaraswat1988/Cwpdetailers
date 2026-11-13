@@ -53,6 +53,7 @@ export type TransitionBookingInput = {
   reason?: string;
   actorId?: number;
   actorName?: string;
+  assignedStaffId?: number;
 };
 
 export type RescheduleBookingInput = {

@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    fileParallelism: false,
     include: ["src/**/*.test.ts", "../../lib/address-model/src/**/*.test.ts"],
     testTimeout: 15000,
     env: {

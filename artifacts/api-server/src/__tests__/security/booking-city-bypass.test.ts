@@ -235,6 +235,7 @@ vi.mock("@workspace/db", () => {
     bookingTimelineTable: bookingTimelineTableMock,
     residentialSocietiesTable: { _name: "residential_societies" },
     societyTowersTable: { _name: "society_towers" },
+    staffTable: { _name: "staff" },
   };
 });
 

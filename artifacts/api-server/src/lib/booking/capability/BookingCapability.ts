@@ -71,6 +71,42 @@ export class BookingCapability {
     return { booking: bookingToPublicResponse(booking) };
   }
 
+  async markAssigned(
+    bookingId: number,
+    opts: { staffId: number; staffName?: string; actorId?: number; actorName?: string; reason?: string },
+    options?: BookingCapabilityOptions,
+  ) {
+    const booking = await bookingService.markAssigned(bookingId, opts, options);
+    return { booking: bookingToPublicResponse(booking) };
+  }
+
+  async markStarted(
+    bookingId: number,
+    opts?: { executionId?: number; actorId?: number; actorName?: string },
+    options?: BookingCapabilityOptions,
+  ) {
+    const booking = await bookingService.markStarted(bookingId, opts, options);
+    return { booking: bookingToPublicResponse(booking) };
+  }
+
+  async markCompleted(
+    bookingId: number,
+    opts?: { executionId?: number; actorId?: number; actorName?: string },
+    options?: BookingCapabilityOptions,
+  ) {
+    const booking = await bookingService.markCompleted(bookingId, opts, options);
+    return { booking: bookingToPublicResponse(booking) };
+  }
+
+  async markMissed(
+    bookingId: number,
+    opts?: { executionId?: number; reason?: string; actorId?: number; actorName?: string },
+    options?: BookingCapabilityOptions,
+  ) {
+    const booking = await bookingService.markMissed(bookingId, opts, options);
+    return { booking: bookingToPublicResponse(booking) };
+  }
+
   async rescheduleBooking(input: RescheduleBookingInput, opts?: BookingCapabilityOptions) {
     const booking = await bookingService.reschedule(input, opts);
     return { booking: bookingToPublicResponse(booking) };

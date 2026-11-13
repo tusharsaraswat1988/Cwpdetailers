@@ -10,6 +10,10 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "scheduled",
   "confirmed",
   "waiting_assignment",
+  "assigned",
+  "in_progress",
+  "completed",
+  "missed",
   "rescheduled",
   "cancelled",
 ]);
@@ -76,6 +80,9 @@ export const bookingsTable = pgTable("bookings", {
   notes: text("notes"),
   cancellationReason: text("cancellation_reason"),
   customerConfirmedAt: timestamp("customer_confirmed_at"),
+  assignedStaffId: integer("assigned_staff_id"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [
@@ -84,6 +91,7 @@ export const bookingsTable = pgTable("bookings", {
   index("bookings_customer_date_idx").on(table.customerId, table.scheduledDate),
   index("bookings_asset_date_idx").on(table.assetId, table.scheduledDate),
   index("bookings_status_idx").on(table.status),
+  index("bookings_assigned_staff_idx").on(table.assignedStaffId),
   index("bookings_contract_registry_idx").on(table.contractRegistryId),
   index("bookings_start_at_idx").on(table.scheduledStartAt),
   index("bookings_type_idx").on(table.bookingType),

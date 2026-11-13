@@ -64,6 +64,7 @@ export class BookingService {
       durationMinutes: input.durationMinutes,
       customerId: input.customerId,
       assetId: input.assetId,
+      vehicleId: input.vehicleId,
       serviceLocationId: input.serviceLocationId,
       branchId: input.branchId,
       cityId: input.cityId,
@@ -313,6 +314,21 @@ export class BookingService {
     if (input.toStatus === "confirmed") {
       updateData.customerConfirmedAt = new Date();
     }
+    if (input.toStatus === "waiting_assignment") {
+      updateData.assignedStaffId = null;
+    }
+    if (input.toStatus === "assigned" && input.assignedStaffId != null) {
+      updateData.assignedStaffId = input.assignedStaffId;
+    }
+    if (input.toStatus === "in_progress") {
+      updateData.startedAt = new Date();
+    }
+    if (input.toStatus === "completed") {
+      updateData.completedAt = new Date();
+    }
+    if (input.toStatus === "missed" && input.reason) {
+      updateData.cancellationReason = input.reason;
+    }
     if (input.toStatus === "cancelled" && input.reason) {
       updateData.cancellationReason = input.reason;
     }
@@ -396,6 +412,75 @@ export class BookingService {
     }, opts);
   }
 
+  async markAssigned(
+    bookingId: number,
+    opts: { staffId: number; staffName?: string; actorId?: number; actorName?: string; reason?: string },
+    options?: BookingServiceOptions,
+  ) {
+    const existing = await bookingRepository.findById(bookingId);
+    if (!existing) throw new BookingValidationError("Booking not found");
+    if (existing.status === "assigned" && existing.assignedStaffId === opts.staffId) return existing;
+    return this.transition({
+      bookingId,
+      toStatus: "assigned",
+      assignedStaffId: opts.staffId,
+      actorId: opts.actorId,
+      actorName: opts.actorName,
+      reason: opts.reason ?? (opts.staffName ? `Assigned to ${opts.staffName}` : `Staff assigned (#${opts.staffId})`),
+    }, options);
+  }
+
+  async markStarted(
+    bookingId: number,
+    opts?: { executionId?: number; actorId?: number; actorName?: string },
+    options?: BookingServiceOptions,
+  ) {
+    const existing = await bookingRepository.findById(bookingId);
+    if (!existing) throw new BookingValidationError("Booking not found");
+    if (existing.status === "in_progress") return existing;
+    return this.transition({
+      bookingId,
+      toStatus: "in_progress",
+      actorId: opts?.actorId,
+      actorName: opts?.actorName,
+      reason: "Service execution started",
+    }, options);
+  }
+
+  async markCompleted(
+    bookingId: number,
+    opts?: { executionId?: number; actorId?: number; actorName?: string },
+    options?: BookingServiceOptions,
+  ) {
+    const existing = await bookingRepository.findById(bookingId);
+    if (!existing) throw new BookingValidationError("Booking not found");
+    if (existing.status === "completed") return existing;
+    return this.transition({
+      bookingId,
+      toStatus: "completed",
+      actorId: opts?.actorId,
+      actorName: opts?.actorName,
+      reason: "Service execution completed",
+    }, options);
+  }
+
+  async markMissed(
+    bookingId: number,
+    opts?: { executionId?: number; reason?: string; actorId?: number; actorName?: string },
+    options?: BookingServiceOptions,
+  ) {
+    const existing = await bookingRepository.findById(bookingId);
+    if (!existing) throw new BookingValidationError("Booking not found");
+    if (existing.status === "missed") return existing;
+    return this.transition({
+      bookingId,
+      toStatus: "missed",
+      reason: opts?.reason ?? "Service marked missed",
+      actorId: opts?.actorId,
+      actorName: opts?.actorName,
+    }, options);
+  }
+
   async reschedule(input: RescheduleBookingInput, opts?: BookingServiceOptions): Promise<Booking> {
     const existing = await bookingRepository.findById(input.bookingId);
     if (!existing) throw new BookingValidationError("Booking not found");
@@ -411,6 +496,7 @@ export class BookingService {
       durationMinutes: input.durationMinutes ?? existing.durationMinutes,
       customerId: existing.customerId,
       assetId: existing.assetId,
+      vehicleId: existing.vehicleId,
       serviceLocationId: existing.serviceLocationId,
       branchId: existing.branchId,
       cityId: existing.cityId,

@@ -31,7 +31,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCities } from "@/features/master-data/api";
 import { useSocieties } from "@/features/societies/api";
 
-const STATUS_FILTERS = ["all", "draft", "scheduled", "confirmed", "waiting_assignment", "rescheduled", "cancelled"] as const;
+const STATUS_FILTERS = [
+  "all",
+  "draft",
+  "scheduled",
+  "confirmed",
+  "waiting_assignment",
+  "assigned",
+  "in_progress",
+  "completed",
+  "missed",
+  "rescheduled",
+  "cancelled",
+] as const;
 
 const EVENT_ICON: Partial<Record<BookingEvent["type"], TimelineEvent["icon"]>> = {
   status_change: ArrowRight,
@@ -470,7 +482,13 @@ export default function AdminBookings() {
                   <div><p className="text-muted-foreground">Service</p><p className="font-medium">{b.serviceName ?? b.serviceType?.replace(/_/g, " ")}</p></div>
                   <div><p className="text-muted-foreground">Date</p><p className="font-medium">{b.scheduledDate}</p></div>
                   <div><p className="text-muted-foreground">Time</p><p className="font-medium">{b.scheduledTime ?? "—"}</p></div>
-                  <div><p className="text-muted-foreground">Assignment</p><p className="font-medium">{b.staffName ?? (b.status === "waiting_assignment" ? "Waiting for Assignment platform" : "—")}</p></div>
+                  <div>
+                    <p className="text-muted-foreground">Assignment</p>
+                    <p className="font-medium">{b.staffName ?? (b.status === "waiting_assignment" ? "Waiting for Assignment platform" : "—")}</p>
+                    {b.staffPhone && <p className="text-xs text-muted-foreground">{b.staffPhone}</p>}
+                  </div>
+                  {b.startedAt && <div><p className="text-muted-foreground">Started</p><p className="font-medium">{formatDate(b.startedAt)}</p></div>}
+                  {b.completedAt && <div><p className="text-muted-foreground">Completed</p><p className="font-medium">{formatDate(b.completedAt)}</p></div>}
                   {b.amount != null && <div><p className="text-muted-foreground">Amount</p><p className="font-medium">₹{b.amount.toLocaleString("en-IN")}</p></div>}
                   {b.cityName && <div><p className="text-muted-foreground">City</p><p className="font-medium">{b.cityName}</p></div>}
                   {b.societyName && <div><p className="text-muted-foreground">Society</p><p className="font-medium">{b.societyName}</p></div>}

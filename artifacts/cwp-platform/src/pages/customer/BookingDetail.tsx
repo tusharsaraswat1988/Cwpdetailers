@@ -20,7 +20,7 @@ import { moduleError } from "@/lib/moduleErrors";
 import {
   ArrowLeft, Calendar, Clock, MapPin, User, Star, ExternalLink,
   CheckCircle2, XCircle, CalendarClock, Image as ImageIcon, Loader2,
-  Car, MessageCircle,
+  Car, MessageCircle, Phone,
 } from "lucide-react";
 import {
   CustomerPage,
@@ -174,8 +174,22 @@ export default function BookingDetail() {
               eyebrow={`Request #${booking.id}`}
               title={booking.serviceName ?? booking.serviceType.replace(/_/g, " ")}
               status={booking.status}
-              pulse={booking.status === "confirmed" || booking.status === "waiting_assignment"}
-              subtitle={booking.status === "draft" ? "Awaiting CWP confirmation" : undefined}
+              pulse={booking.status === "confirmed" || booking.status === "waiting_assignment" || booking.status === "in_progress"}
+              subtitle={
+                booking.status === "draft"
+                  ? "Awaiting CWP confirmation"
+                  : booking.status === "waiting_assignment"
+                  ? "Confirmed — assigning technician"
+                  : booking.status === "assigned"
+                  ? `Technician ${booking.staffName ? booking.staffName : "assigned"} on schedule`
+                  : booking.status === "in_progress"
+                  ? "Service currently in progress"
+                  : booking.status === "completed"
+                  ? "Service completed successfully"
+                  : booking.status === "missed"
+                  ? "Service could not be completed"
+                  : undefined
+              }
             />
 
             <CustomerCard>
@@ -216,9 +230,22 @@ export default function BookingDetail() {
                   </div>
                 )}
                 {booking.staffName && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <User size={15} className="text-primary shrink-0" />
-                    <span>{booking.staffName}</span>
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-3">
+                      <User size={15} className="text-primary shrink-0" />
+                      <div>
+                        <p className="font-medium">{booking.staffName}</p>
+                        <p className="text-xs text-muted-foreground">Assigned Technician</p>
+                      </div>
+                    </div>
+                    {booking.staffPhone && (
+                      <a
+                        href={`tel:${booking.staffPhone}`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-primary/10 text-primary hover:bg-primary/20"
+                      >
+                        <Phone size={12} /> Call
+                      </a>
+                    )}
                   </div>
                 )}
                 {booking.amount != null && (

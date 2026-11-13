@@ -121,3 +121,6 @@ export function isSubscriptionVisitMode(sourceSystem: CustomerContract["sourceSy
 export function isOneTimeMode(sourceSystem: CustomerContract["sourceSystem"]): boolean {
   return sourceSystem === "booking";
 }
+
+/** Recognized revenue statuses for platform & staff attribution (FIN-004). */
+export const RECOGNIZED_INVOICE_STATUSES = ["paid", "sent", "overdue"] as const;

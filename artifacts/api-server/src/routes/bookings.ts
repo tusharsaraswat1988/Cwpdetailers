@@ -16,6 +16,7 @@ import {
   residentialSocietiesTable,
   societyTowersTable,
   citiesTable,
+  staffTable,
   type BookingStatus,
 } from "@workspace/db";
 import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
@@ -71,6 +72,11 @@ const bookingSelect = {
   parkingLevel: serviceLocationsTable.parkingLevel,
   parkingBay: serviceLocationsTable.parkingBay,
   parkingNotes: serviceLocationsTable.parkingNotes,
+  assignedStaffId: bookingsTable.assignedStaffId,
+  staffName: staffTable.name,
+  staffPhone: staffTable.phone,
+  startedAt: bookingsTable.startedAt,
+  completedAt: bookingsTable.completedAt,
   scheduledDate: bookingsTable.scheduledDate,
   scheduledTime: bookingsTable.scheduledTime,
   status: bookingsTable.status,
@@ -120,9 +126,54 @@ async function getBookingWithScope(req: Parameters<typeof rowInScope>[0], id: nu
     .leftJoin(serviceLocationsTable, eq(bookingsTable.serviceLocationId, serviceLocationsTable.id))
     .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
     .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
+    .leftJoin(staffTable, eq(bookingsTable.assignedStaffId, staffTable.id))
     .where(eq(bookingsTable.id, id));
   if (!booking || !rowInScope(req, booking)) return null;
-  return booking;
+
+  try {
+    const { serviceExecutionsTable, serviceExecutionPhotosTable, invoicesTable } = await import("@workspace/db");
+    const photos = await db.select({
+      kind: serviceExecutionPhotosTable.kind,
+      url: serviceExecutionPhotosTable.url,
+    })
+      .from(serviceExecutionPhotosTable)
+      .innerJoin(serviceExecutionsTable, eq(serviceExecutionPhotosTable.executionId, serviceExecutionsTable.id))
+      .where(or(
+        eq(serviceExecutionsTable.legacyBookingId, id),
+        sql`${serviceExecutionsTable.serviceAssignmentId} IN (
+          SELECT id FROM service_assignments WHERE booking_id = ${id}
+        )`,
+      ));
+
+    const beforePhoto = photos.find(p => p.kind === "before")?.url ?? null;
+    const afterPhoto = photos.find(p => p.kind === "after")?.url ?? null;
+    const proofUrls = photos.map(p => p.url);
+
+    const [invoice] = await db.select({
+      id: invoicesTable.id,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      status: invoicesTable.status,
+      totalAmount: invoicesTable.totalAmount,
+      paidAmount: invoicesTable.paidAmount,
+      balanceDue: invoicesTable.balanceDue,
+    })
+      .from(invoicesTable)
+      .where(or(
+        eq(invoicesTable.bookingId, id),
+        booking.contractRegistryId ? eq(invoicesTable.contractRegistryId, booking.contractRegistryId) : sql`false`,
+      ))
+      .limit(1);
+
+    return {
+      ...booking,
+      beforePhotoUrl: beforePhoto,
+      afterPhotoUrl: afterPhoto,
+      proofPhotoUrls: proofUrls,
+      invoice: invoice ?? null,
+    };
+  } catch {
+    return booking;
+  }
 }
 
 router.get("/bookings/slots", async (req, res) => {
@@ -162,6 +213,7 @@ router.get("/bookings/today", async (req, res) => {
       .leftJoin(serviceLocationsTable, eq(bookingsTable.serviceLocationId, serviceLocationsTable.id))
       .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
       .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
+      .leftJoin(staffTable, eq(bookingsTable.assignedStaffId, staffTable.id))
       .where(and(...conditions))
       .orderBy(bookingsTable.scheduledTime);
 
@@ -222,6 +274,7 @@ router.get("/bookings", async (req, res) => {
         .leftJoin(serviceLocationsTable, eq(bookingsTable.serviceLocationId, serviceLocationsTable.id))
         .leftJoin(residentialSocietiesTable, eq(serviceLocationsTable.societyId, residentialSocietiesTable.id))
         .leftJoin(societyTowersTable, eq(serviceLocationsTable.towerId, societyTowersTable.id))
+        .leftJoin(staffTable, eq(bookingsTable.assignedStaffId, staffTable.id))
         .where(where).orderBy(desc(bookingsTable.createdAt)).limit(lim).offset(off),
       db.select({ count: sql<number>`count(*)` }).from(bookingsTable)
         .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
@@ -696,6 +749,21 @@ router.post("/bookings/:id/reschedule", async (req, res) => {
       body: reason ?? `Rescheduled to ${scheduledDate} ${scheduledTime ?? ""}`,
       actorId: req.user?.id,
     });
+
+    // Synchronize linked active field executions with the rescheduled date/time
+    const { serviceExecutionsTable } = await import("@workspace/db");
+    await db.update(serviceExecutionsTable)
+      .set({
+        scheduledDate,
+        scheduledTime: scheduledTime ?? null,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        sql`(${serviceExecutionsTable.legacyBookingId} = ${id} OR ${serviceExecutionsTable.serviceAssignmentId} IN (
+          SELECT id FROM service_assignments WHERE booking_id = ${id}
+        ))`,
+        sql`${serviceExecutionsTable.status} NOT IN ('completed', 'cancelled', 'missed')`,
+      ));
 
     return res.json(booking);
   } catch (err) {

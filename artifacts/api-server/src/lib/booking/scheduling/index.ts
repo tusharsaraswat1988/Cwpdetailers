@@ -24,6 +24,7 @@ import { SLOT_OCCUPYING_STATUSES } from "../domain/stateMachine";
 export type ValidateScheduleInput = TimeWindowInput & {
   customerId: number;
   assetId?: number | null;
+  vehicleId?: number | null;
   serviceLocationId?: number | null;
   branchId?: number | null;
   cityId?: number | null;
@@ -71,6 +72,7 @@ export class SchedulingDomainService {
       await assertNoDuplicateBooking({
         customerId: input.customerId,
         assetId: input.assetId,
+        vehicleId: input.vehicleId,
         scheduledDate: window.scheduledDate,
         scheduledTime: window.scheduledTime,
         scheduledStartAt: window.scheduledStartAt,

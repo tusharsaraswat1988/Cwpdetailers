@@ -238,10 +238,24 @@ export type CreateScheduledExecutionInput = {
   scheduledTime?: string | null;
   isSubstitute?: boolean;
   substituteForStaffId?: number | null;
+  bookingId?: number | null;
   companyId?: number | null;
   franchiseeId?: number | null;
   branchId?: number | null;
 };
+
+async function resolveBookingIdForExecution(execution: {
+  serviceAssignmentId: number | null;
+  legacyBookingId?: number | null;
+}): Promise<number | null> {
+  if (execution.legacyBookingId) return execution.legacyBookingId;
+  if (!execution.serviceAssignmentId) return null;
+  const [a] = await db.select({ bookingId: serviceAssignmentsTable.bookingId })
+    .from(serviceAssignmentsTable)
+    .where(eq(serviceAssignmentsTable.id, execution.serviceAssignmentId))
+    .limit(1);
+  return a?.bookingId ?? null;
+}
 
 /**
  * Handoff from Assignment: creates execution at ready_for_execution.
@@ -276,6 +290,7 @@ export async function createScheduledExecutionForAssignment(
     substituteForStaffId: input.substituteForStaffId ?? null,
     scheduledDate: input.scheduledDate,
     scheduledTime: input.scheduledTime ?? null,
+    legacyBookingId: input.bookingId ?? null,
     status: "ready_for_execution",
     companyId: input.companyId ?? null,
     franchiseeId: input.franchiseeId ?? null,
@@ -465,6 +480,20 @@ export async function startExecution(req: Request, executionId: number, gps?: {
     ...eventBase(execution, actor.actorId),
     type: "ExecutionStarted",
   });
+
+  const bookingId = await resolveBookingIdForExecution(execution);
+  if (bookingId) {
+    try {
+      const { bookingCapability } = await import("../booking");
+      await bookingCapability.markStarted(bookingId, {
+        executionId,
+        actorId: actor.actorId ?? undefined,
+        actorName: actor.actorName ?? undefined,
+      });
+    } catch (err) {
+      console.warn(`[Execution] Failed to sync booking ${bookingId} to in_progress:`, err);
+    }
+  }
 
   const row = await loadExecutionRow(executionId);
   return mapExecutionRow(row!);
@@ -876,6 +905,20 @@ export async function completeExecution(
     type: "ExecutionCompleted",
   });
 
+  const bookingId = await resolveBookingIdForExecution(execution);
+  if (bookingId) {
+    try {
+      const { bookingCapability } = await import("../booking");
+      await bookingCapability.markCompleted(bookingId, {
+        executionId,
+        actorId: actor.actorId ?? undefined,
+        actorName: actor.actorName ?? undefined,
+      });
+    } catch (err) {
+      console.warn(`[Execution] Failed to sync booking ${bookingId} to completed:`, err);
+    }
+  }
+
   const row = await loadExecutionRow(executionId);
   return mapExecutionRow(row!);
 }
@@ -885,6 +928,7 @@ export async function missExecution(req: Request, executionId: number, reason?: 
   if (isTerminal(execution.status)) {
     throw new Error("Execution cannot be marked missed from current status");
   }
+  const actor = actorFromReq(req);
   const now = new Date();
   await db.update(serviceExecutionsTable)
     .set({
@@ -893,6 +937,22 @@ export async function missExecution(req: Request, executionId: number, reason?: 
       updatedAt: now,
     })
     .where(eq(serviceExecutionsTable.id, executionId));
+
+  const bookingId = await resolveBookingIdForExecution(execution);
+  if (bookingId) {
+    try {
+      const { bookingCapability } = await import("../booking");
+      await bookingCapability.markMissed(bookingId, {
+        executionId,
+        reason: reason ?? "Service marked missed",
+        actorId: actor.actorId ?? undefined,
+        actorName: actor.actorName ?? undefined,
+      });
+    } catch (err) {
+      console.warn(`[Execution] Failed to sync booking ${bookingId} to missed:`, err);
+    }
+  }
+
   const row = await loadExecutionRow(executionId);
   return mapExecutionRow(row!);
 }
@@ -924,6 +984,21 @@ export async function cancelExecution(req: Request, executionId: number, reason?
     type: "ExecutionCancelled",
     metadata: { reason },
   });
+
+  const bookingId = await resolveBookingIdForExecution(execution);
+  if (bookingId) {
+    try {
+      const { bookingCapability } = await import("../booking");
+      await bookingCapability.cancelBooking({
+        bookingId,
+        reason: reason ?? "Execution cancelled",
+        actorId: actor.actorId ?? undefined,
+        actorName: actor.actorName ?? undefined,
+      });
+    } catch (err) {
+      console.warn(`[Execution] Failed to sync booking ${bookingId} to cancelled:`, err);
+    }
+  }
 
   const row = await loadExecutionRow(executionId);
   return mapExecutionRow(row!);
@@ -962,6 +1037,7 @@ export async function rescheduleExecution(
     taskType: execution.taskType,
     scheduledDate: input.scheduledDate,
     scheduledTime: input.scheduledTime ?? null,
+    legacyBookingId: input.bookingId ?? null,
     status: "ready_for_execution",
     rescheduledFromId: executionId,
     companyId: execution.companyId,

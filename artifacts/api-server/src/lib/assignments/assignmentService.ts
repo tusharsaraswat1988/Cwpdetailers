@@ -442,7 +442,7 @@ async function assertBookingAllowsAssignment(pending: {
   if (booking.status === "cancelled") {
     throw new Error("Cannot assign staff — booking is cancelled");
   }
-  if (booking.status !== "waiting_assignment" && booking.status !== "confirmed" && booking.status !== "scheduled") {
+  if (booking.status !== "waiting_assignment" && booking.status !== "confirmed" && booking.status !== "scheduled" && booking.status !== "assigned") {
     throw new Error(`Booking status "${booking.status}" does not allow assignment`);
   }
   return booking.id;
@@ -629,10 +629,25 @@ export async function assignPendingServiceTasks(
       taskType,
       scheduledDate: targetScheduledDate,
       scheduledTime: targetScheduledTime,
+      bookingId,
       companyId: tenant.companyId,
       franchiseeId: tenant.franchiseeId,
       branchId: tenant.branchId,
     });
+
+    if (bookingId) {
+      try {
+        const { bookingCapability } = await import("../booking");
+        await bookingCapability.markAssigned(bookingId, {
+          staffId,
+          staffName: staff.name,
+          actorId: actor.actorId ?? undefined,
+          actorName: actor.actorName ?? undefined,
+        });
+      } catch (err) {
+        console.warn(`[Assignment] Failed to sync booking ${bookingId} to assigned:`, err);
+      }
+    }
 
     if (pending.sourceSystem === "dcms" && taskType === "daily_cleaning" && performedBy > 0) {
       try {
@@ -1091,6 +1106,22 @@ export async function reassignAssignment(
       sql`${serviceExecutionsTable.status} NOT IN ('completed', 'cancelled', 'missed')`,
     ));
 
+  // Synchronize linked booking if present
+  if (assignment.bookingId) {
+    try {
+      const { bookingCapability } = await import("../booking");
+      await bookingCapability.markAssigned(assignment.bookingId, {
+        staffId: newStaffId,
+        staffName: staff.name,
+        actorId: actor.actorId ?? undefined,
+        actorName: actor.actorName ?? undefined,
+        reason: notes ? `Reassigned to ${staff.name}: ${notes}` : `Reassigned to ${staff.name}`,
+      });
+    } catch (err) {
+      console.warn(`[Assignment] Failed to sync booking ${assignment.bookingId} reassignment:`, err);
+    }
+  }
+
   // If this assignment is linked to a DCMS daily cleaning subscription, synchronize the persistent cleaner route table
   if (assignment.pendingAssignmentId && taskType === "daily_cleaning") {
     const [pendingRow] = await db.select({
@@ -1224,6 +1255,22 @@ export async function removeAssignment(
   await db.update(pendingServiceAssignmentsTable)
     .set({ status: "pending", updatedAt: now })
     .where(eq(pendingServiceAssignmentsTable.id, assignment.pendingAssignmentId));
+
+  // Synchronize linked booking back to waiting_assignment
+  if (assignment.bookingId) {
+    try {
+      const { bookingCapability } = await import("../booking");
+      await bookingCapability.transitionBooking({
+        bookingId: assignment.bookingId,
+        toStatus: "waiting_assignment",
+        reason: notes ? `Assignment removed: ${notes}` : "Assignment removed",
+        actorId: actor.actorId ?? undefined,
+        actorName: actor.actorName ?? undefined,
+      });
+    } catch (err) {
+      console.warn(`[Assignment] Failed to sync booking ${assignment.bookingId} removal:`, err);
+    }
+  }
 
   // Deactivate DCMS persistent cleaner route if daily_cleaning
   if (assignment.pendingAssignmentId && assignment.taskType === "daily_cleaning") {
