@@ -490,6 +490,18 @@ export async function startExecution(req: Request, executionId: number, gps?: {
         actorId: actor.actorId ?? undefined,
         actorName: actor.actorName ?? undefined,
       });
+
+      const { notifyServiceStarted } = await import("../notifications/dispatcher");
+      const [staffRow] = await db.select({ name: staffTable.name }).from(staffTable).where(eq(staffTable.id, execution.assignedStaffId)).limit(1);
+      const [custRow] = await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, execution.customerId)).limit(1);
+      await notifyServiceStarted({
+        bookingId,
+        customerId: execution.customerId,
+        customerName: custRow?.name,
+        staffName: staffRow?.name ?? "Technician",
+        serviceName: taskTypeLabelFor(execution.taskType),
+        branchId: execution.branchId,
+      }).catch(err => console.warn("[Execution] notifyServiceStarted error:", err));
     } catch (err) {
       console.warn(`[Execution] Failed to sync booking ${bookingId} to in_progress:`, err);
     }
@@ -948,6 +960,27 @@ export async function missExecution(req: Request, executionId: number, reason?: 
         actorId: actor.actorId ?? undefined,
         actorName: actor.actorName ?? undefined,
       });
+
+      const { notifyServiceMissed, notifyAdminServiceMissed } = await import("../notifications/dispatcher");
+      const [staffRow] = await db.select({ name: staffTable.name }).from(staffTable).where(eq(staffTable.id, execution.assignedStaffId)).limit(1);
+      const [custRow] = await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, execution.customerId)).limit(1);
+      await notifyServiceMissed({
+        bookingId,
+        customerId: execution.customerId,
+        customerName: custRow?.name,
+        serviceName: taskTypeLabelFor(execution.taskType),
+        scheduledDate: execution.scheduledDate,
+        reason: reason ?? "Technician unable to complete service",
+        branchId: execution.branchId,
+      }).catch(err => console.warn("[Execution] notifyServiceMissed error:", err));
+
+      await notifyAdminServiceMissed({
+        bookingId,
+        customerName: custRow?.name,
+        staffName: staffRow?.name ?? "Technician",
+        reason: reason ?? "Service marked missed",
+        branchId: execution.branchId,
+      }).catch(err => console.warn("[Execution] notifyAdminServiceMissed error:", err));
     } catch (err) {
       console.warn(`[Execution] Failed to sync booking ${bookingId} to missed:`, err);
     }

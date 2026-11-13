@@ -144,6 +144,7 @@ export function executionToStaffJob(e: {
   scheduledDate: string;
   scheduledTime?: string | null;
   status: string;
+  enRouteAt?: string | null;
   taskType?: string | null;
   taskTypeLabel?: string | null;
   isSubstitute?: boolean;
@@ -169,7 +170,9 @@ export function executionToStaffJob(e: {
     serviceType: taskLabel ?? e.serviceLabel ?? "assigned service",
     scheduledDate: e.scheduledDate.slice(0, 10),
     scheduledTime: e.scheduledTime,
-    status: EXECUTION_STATUS_MAP[e.status] ?? e.status,
+    status: e.enRouteAt && (e.status === "scheduled" || e.status === "ready_for_execution")
+      ? "en_route"
+      : (EXECUTION_STATUS_MAP[e.status] ?? e.status),
     address: addressText,
     area: null,
     locationLat: e.locationLatitude,

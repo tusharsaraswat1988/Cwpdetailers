@@ -97,6 +97,7 @@ const config = {
     "@capacitor/app",
     "@capacitor/camera",
     "@capacitor/geolocation",
+    "@capacitor-community/background-geolocation",
     "@capacitor/status-bar",
     "@capacitor/splash-screen",
   ],

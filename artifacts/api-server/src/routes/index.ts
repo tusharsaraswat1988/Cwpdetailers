@@ -55,6 +55,7 @@ import promotionsRouter from "./promotions";
 import supportRouter from "./support";
 import qualityRouter from "./quality";
 import citiesRouter from "./cities";
+import adminApprovalsRouter from "./admin-approvals";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -173,6 +174,14 @@ router.use(
     { match: /\/booking-platform\//, method: "POST", action: "view" },
   ]),
   bookingPlatformRouter,
+);
+router.use(
+  guardResource("bookings", [
+    { match: /\/admin\/makeup-approvals\/\d+\/approve$/, method: "POST", action: "edit" },
+    { match: /\/admin\/makeup-approvals\/\d+\/reject$/, method: "POST", action: "edit" },
+    { match: /\/admin\/tracking\/run-purge$/, method: "POST", action: "edit" },
+  ]),
+  adminApprovalsRouter,
 );
 // Walk-in / extra-service must be registered before staff CRUD guards.
 router.use(guardWalkInRoutes(), staffWalkInRouter);

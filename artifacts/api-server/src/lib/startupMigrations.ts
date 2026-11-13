@@ -628,6 +628,90 @@ export async function ensureStartupMigrations(): Promise<void> {
       logger.warn({ err: mig76Err }, "Phase 16 migration DDL check failed (non-fatal, continuing)");
     }
 
+    // 16. Customer Rescheduling, Dispatch Notifications & Technician ETA Foundation (Migration 077 / Phase 17)
+    try {
+      await client.query(`
+        DO $$
+        BEGIN
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'technician_en_route';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'service_started';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'staff_reassigned';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'schedule_changed';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'assignment_cancelled';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'makeup_booking_confirmed';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'assignment_failure';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'repeated_execution_failure';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'reschedule_approval_required';
+          ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'general';
+        EXCEPTION
+          WHEN duplicate_object THEN NULL;
+        END $$;
+
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS rescheduled_from_booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS rescheduled_to_booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS is_makeup_booking BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS makeup_eligibility_status TEXT;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS technician_en_route_at TIMESTAMPTZ;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS estimated_arrival_at TIMESTAMPTZ;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS eta_minutes INTEGER;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS last_location_update_at TIMESTAMPTZ;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS last_known_latitude DOUBLE PRECISION;
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS last_known_longitude DOUBLE PRECISION;
+
+        CREATE INDEX IF NOT EXISTS bookings_rescheduled_from_idx ON bookings(rescheduled_from_booking_id);
+        CREATE INDEX IF NOT EXISTS bookings_rescheduled_to_idx ON bookings(rescheduled_to_booking_id);
+
+        ALTER TABLE service_executions ADD COLUMN IF NOT EXISTS en_route_at TIMESTAMPTZ;
+        ALTER TABLE service_executions ADD COLUMN IF NOT EXISTS estimated_arrival_at TIMESTAMPTZ;
+        ALTER TABLE service_executions ADD COLUMN IF NOT EXISTS eta_minutes INTEGER;
+        ALTER TABLE service_executions ADD COLUMN IF NOT EXISTS last_location_update_at TIMESTAMPTZ;
+      `);
+    } catch (mig77Err) {
+      logger.warn({ err: mig77Err }, "Phase 17 migration DDL check failed (non-fatal, continuing)");
+    }
+
+    // 17. Supervisor Makeup Approval Queue & GPS Retention Indexes (Migration 078, Phase 18)
+    try {
+      await execStep("078_makeup_approval_requests_and_gps_retention", `
+        DO $$ BEGIN
+          CREATE TYPE makeup_approval_status AS ENUM ('pending', 'approved', 'rejected', 'expired');
+        EXCEPTION
+          WHEN duplicate_object THEN NULL;
+        END $$;
+
+        CREATE TABLE IF NOT EXISTS makeup_approval_requests (
+          id SERIAL PRIMARY KEY,
+          booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+          contract_registry_id INTEGER REFERENCES customer_contracts(id) ON DELETE SET NULL,
+          requested_date DATE NOT NULL,
+          requested_time VARCHAR(32) NOT NULL,
+          requested_notes TEXT,
+          reason TEXT NOT NULL,
+          status makeup_approval_status NOT NULL DEFAULT 'pending',
+          decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          decided_at TIMESTAMPTZ,
+          decision_reason TEXT,
+          created_booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+          previous_makeups_count INTEGER NOT NULL DEFAULT 0,
+          applicable_quota INTEGER NOT NULL DEFAULT 1,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS makeup_approvals_status_idx ON makeup_approval_requests(status);
+        CREATE INDEX IF NOT EXISTS makeup_approvals_city_branch_idx ON makeup_approval_requests(city_id, branch_id);
+        CREATE INDEX IF NOT EXISTS makeup_approvals_booking_idx ON makeup_approval_requests(booking_id);
+        CREATE INDEX IF NOT EXISTS makeup_approvals_customer_idx ON makeup_approval_requests(customer_id);
+
+        CREATE INDEX IF NOT EXISTS service_execution_location_logs_recorded_at_idx ON service_execution_location_logs(recorded_at);
+      `);
+    } catch (mig78Err) {
+      logger.warn({ err: mig78Err }, "Phase 18 migration DDL check failed (non-fatal, continuing)");
+    }
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

@@ -132,6 +132,17 @@ export async function addExecutionPhotos(
   });
 }
 
+export async function markExecutionEnRoute(
+  id: number,
+  gps?: { latitude?: number; longitude?: number },
+): Promise<ServiceExecution | { queued: true }> {
+  return staffExecutionMutate(
+    `/service-executions/${id}/en-route`,
+    gps?.latitude != null ? { latitude: gps.latitude, longitude: gps.longitude } : {},
+    "On my way",
+  );
+}
+
 export async function startExecution(
   id: number,
   gps?: { latitude: number; longitude: number; accuracy?: number },

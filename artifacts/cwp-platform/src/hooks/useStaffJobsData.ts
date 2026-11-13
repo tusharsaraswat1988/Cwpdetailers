@@ -33,12 +33,14 @@ import {
   fetchStaffExecutions,
   fetchExecutionDetail,
   startExecution,
+  markExecutionEnRoute,
   pauseExecution,
   resumeExecution,
   completeExecution,
   addExecutionPhotos,
   SERVICE_EXECUTIONS_QUERY_KEY,
 } from "@/features/service-executions/api";
+import { staffBackgroundLocation } from "@/lib/location/staffBackgroundLocation";
 
 function enrichBookingJob(job: StaffJob): StaffJob {
   const proof = job.proofPhotoUrls ?? [];
@@ -187,11 +189,28 @@ export function useStaffJobsData() {
       if (toStatus === "resumed" || toStatus === "resume") {
         return resumeExecution(executionId);
       }
+      if (toStatus === "en_route") {
+        const gps = await getStaffLocation("action").catch(() => undefined);
+        const res = await markExecutionEnRoute(
+          executionId,
+          gps ? { latitude: gps.latitude, longitude: gps.longitude } : undefined,
+        );
+        void staffBackgroundLocation.startTracking({
+          id: job.id,
+          executionId,
+          bookingId: job.bookingId,
+          customerName: job.customerName,
+          destinationAddress: job.address,
+        });
+        return res;
+      }
       const gps = await getStaffLocation("action");
       if (toStatus === "in_progress") {
+        void staffBackgroundLocation.stopTracking();
         return startExecution(executionId, gps);
       }
       if (toStatus === "completed") {
+        void staffBackgroundLocation.stopTracking();
         return completeExecution(executionId, { gps, notes });
       }
       throw new Error("Unsupported action for this job");
@@ -265,6 +284,16 @@ export function useStaffJobsData() {
       if (job?.source === "execution") {
         await executionMutation.mutateAsync({ job, toStatus, notes });
         return;
+      }
+      if (toStatus === "en_route") {
+        void staffBackgroundLocation.startTracking({
+          id: jobId,
+          bookingId: jobId,
+          customerName: job?.customerName,
+          destinationAddress: job?.address,
+        });
+      } else if (toStatus === "in_progress" || toStatus === "completed" || toStatus === "cancelled") {
+        void staffBackgroundLocation.stopTracking();
       }
       await transitionMutation.mutateAsync({ id: jobId, data: { toStatus } });
     } finally {

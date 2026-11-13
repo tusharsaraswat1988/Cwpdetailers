@@ -13,6 +13,7 @@ import { ensureWebPushConfigured } from "./lib/push/webPushService";
 import { todayStrInIST, getNext2359IST } from "./lib/dcms/dateUtils";
 import { bootstrapJobOrchestration } from "./lib/job-orchestration/bootstrap";
 import { validateStartupEnvironment } from "./lib/startupEnv";
+import { startGpsRetentionScheduler } from "./lib/tracking/gpsRetentionWorker";
 
 const envSummary = validateStartupEnvironment();
 const port = envSummary.port;
@@ -44,6 +45,7 @@ app.listen(port, "0.0.0.0", (err) => {
   bootstrapMorningRouteNotify();
   bootstrapPushEventProcessor();
   bootstrapJobOrchestration();
+  startGpsRetentionScheduler();
 });
 
 function getNextMidnightIST(now: Date): Date {

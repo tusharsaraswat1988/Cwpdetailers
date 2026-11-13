@@ -11,6 +11,7 @@
     "bundled": "node ../../scripts/android-live.mjs staff --bundled"
   },
   "dependencies": {
+    "@capacitor-community/background-geolocation": "^1.3.1",
     "@capacitor/app": "^7.1.0",
     "@capacitor/camera": "^7.0.2",
     "@capacitor/core": "^7.4.3",

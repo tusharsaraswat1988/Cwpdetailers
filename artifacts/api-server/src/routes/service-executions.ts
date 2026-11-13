@@ -258,4 +258,47 @@ router.post("/service-executions/:id/reschedule", async (req, res) => {
   }
 });
 
+router.post("/service-executions/:id/en-route", async (req, res) => {
+  if (!isServiceExecutionsEnabled()) return disabled(req, res);
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid execution id" });
+    const { latitude, longitude, accuracy } = req.body ?? {};
+    const { markTechnicianEnRoute } = await import("../lib/booking/services/trackingService");
+    const result = await markTechnicianEnRoute(req, {
+      executionId: id,
+      latitude: latitude != null ? Number(latitude) : undefined,
+      longitude: longitude != null ? Number(longitude) : undefined,
+      accuracy: accuracy != null ? Number(accuracy) : undefined,
+    });
+    return res.json(result);
+  } catch (e) {
+    const msg = (e as Error).message;
+    return res.status(errorStatus(msg)).json({ error: msg });
+  }
+});
+
+router.post("/service-executions/:id/location-ping", async (req, res) => {
+  if (!isServiceExecutionsEnabled()) return disabled(req, res);
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid execution id" });
+    const { latitude, longitude, accuracy } = req.body ?? {};
+    if (latitude == null || longitude == null) {
+      return res.status(400).json({ error: "latitude and longitude required" });
+    }
+    const { markTechnicianEnRoute } = await import("../lib/booking/services/trackingService");
+    const result = await markTechnicianEnRoute(req, {
+      executionId: id,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      accuracy: accuracy != null ? Number(accuracy) : undefined,
+    });
+    return res.json(result);
+  } catch (e) {
+    const msg = (e as Error).message;
+    return res.status(errorStatus(msg)).json({ error: msg });
+  }
+});
+
 export default router;

@@ -6,12 +6,13 @@ import {
   getListBookingsQueryKey,
   useRescheduleBooking,
 } from "@workspace/api-client-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { mapsViewUrl } from "@/lib/maps";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +21,7 @@ import { moduleError } from "@/lib/moduleErrors";
 import {
   ArrowLeft, Calendar, Clock, MapPin, User, Star, ExternalLink,
   CheckCircle2, XCircle, CalendarClock, Image as ImageIcon, Loader2,
-  Car, MessageCircle, Phone,
+  Car, MessageCircle, Phone, Navigation, AlertTriangle, ShieldCheck,
 } from "lucide-react";
 import {
   CustomerPage,
@@ -31,6 +32,7 @@ import {
   CustomerButton,
   CustomerPhotoReport,
 } from "@/features/customer-ds";
+import { CustomerLiveTrackingMap } from "@/components/customer/CustomerLiveTrackingMap";
 
 const CANCELLABLE_STATUSES = new Set(["draft", "confirmed", "scheduled", "waiting_assignment", "rescheduled"]);
 
@@ -70,6 +72,10 @@ export default function BookingDetail() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
+  const [makeupOpen, setMakeupOpen] = useState(false);
+  const [makeupDate, setMakeupDate] = useState("");
+  const [makeupTime, setMakeupTime] = useState("09:00 AM - 11:00 AM");
+  const [makeupNotes, setMakeupNotes] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const { data: booking, isLoading, isError, refetch } = useGetBooking(bookingId, {
@@ -80,10 +86,56 @@ export default function BookingDetail() {
     query: { queryKey: getGetBookingEventsQueryKey(bookingId), enabled: Number.isFinite(bookingId) },
   });
 
+  const isEnRouteCandidate = Boolean(
+    booking &&
+    (booking.status === "assigned" || booking.status === "in_progress" || (booking as any).technicianEnRouteAt),
+  );
+
+  const { data: tracking } = useQuery({
+    queryKey: ["booking-tracking", bookingId],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/${bookingId}/tracking`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json() as Promise<{
+        trackingActive: boolean;
+        isEnRoute: boolean;
+        technicianName: string | null;
+        technicianPhone: string | null;
+        enRouteAt: string | null;
+        etaMinutes: number | null;
+        estimatedArrivalAt: string | null;
+        lastLocationUpdateAt: string | null;
+        fallbackMessage: string | null;
+      }>;
+    },
+    enabled: Number.isFinite(bookingId) && isEnRouteCandidate,
+    refetchInterval: 30_000,
+  });
+
+  const isMissedCandidate = Boolean(booking && booking.status === "missed" && !(booking as any).rescheduledToBookingId);
+
+  const { data: eligibility, isLoading: checkingEligibility } = useQuery({
+    queryKey: ["makeup-eligibility", bookingId],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/${bookingId}/makeup-eligibility`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json() as Promise<{
+        eligible: boolean;
+        code?: string;
+        reason?: string;
+        serviceName?: string;
+        rescheduledToBookingId?: number | null;
+      }>;
+    },
+    enabled: Number.isFinite(bookingId) && isMissedCandidate,
+  });
+
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: getGetBookingQueryKey(bookingId) });
     qc.invalidateQueries({ queryKey: getGetBookingEventsQueryKey(bookingId) });
     qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
+    qc.invalidateQueries({ queryKey: ["booking-tracking", bookingId] });
+    qc.invalidateQueries({ queryKey: ["makeup-eligibility", bookingId] });
   };
 
   const cancelMutation = useMutation({
@@ -118,6 +170,36 @@ export default function BookingDetail() {
       onError: (err: { response?: { data?: { error?: string } } }) =>
         toast({ title: err?.response?.data?.error ?? moduleError("bookings", "save"), variant: "destructive" }),
     },
+  });
+
+  const makeupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/bookings/${bookingId}/reschedule-missed`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduledDate: makeupDate,
+          scheduledTime: makeupTime,
+          notes: makeupNotes || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Failed to schedule makeup service");
+      }
+      return res.json() as Promise<{ success: boolean; makeupBooking: { id: number } }>;
+    },
+    onSuccess: (data) => {
+      invalidateAll();
+      setMakeupOpen(false);
+      toast({
+        title: "Free makeup visit confirmed!",
+        description: `Your replacement service has been confirmed as Request #${data.makeupBooking.id}.`,
+      });
+      navigate(`/customer/bookings/${data.makeupBooking.id}`);
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
   const proofPhotos = useMemo(() => {
@@ -174,9 +256,13 @@ export default function BookingDetail() {
               eyebrow={`Request #${booking.id}`}
               title={booking.serviceName ?? booking.serviceType.replace(/_/g, " ")}
               status={booking.status}
-              pulse={booking.status === "confirmed" || booking.status === "waiting_assignment" || booking.status === "in_progress"}
+              pulse={booking.status === "confirmed" || booking.status === "waiting_assignment" || booking.status === "in_progress" || tracking?.isEnRoute}
               subtitle={
-                booking.status === "draft"
+                tracking?.isEnRoute
+                  ? tracking.etaMinutes
+                    ? `Technician ${booking.staffName ? booking.staffName : "assigned"} is en route · Arriving in ~${tracking.etaMinutes} mins`
+                    : `Technician ${booking.staffName ? booking.staffName : "assigned"} is en route to your location`
+                  : booking.status === "draft"
                   ? "Awaiting CWP confirmation"
                   : booking.status === "waiting_assignment"
                   ? "Confirmed — assigning technician"
@@ -187,10 +273,104 @@ export default function BookingDetail() {
                   : booking.status === "completed"
                   ? "Service completed successfully"
                   : booking.status === "missed"
-                  ? "Service could not be completed"
+                  ? (booking as any).rescheduledToBookingId
+                    ? `Service missed · Makeup Request #${(booking as any).rescheduledToBookingId} confirmed`
+                    : "Service missed · Free makeup visit available below"
                   : undefined
               }
             />
+
+            {(booking as any).isMakeupBooking && (booking as any).rescheduledFromBookingId && (
+              <CustomerCard className="border-primary/30 bg-primary/5 py-2.5 px-3.5">
+                <p className="text-xs text-foreground flex items-center gap-1.5 font-medium">
+                  <ShieldCheck size={14} className="text-primary shrink-0" />
+                  Complimentary Makeup Service (Linked to missed Request #{(booking as any).rescheduledFromBookingId})
+                </p>
+              </CustomerCard>
+            )}
+
+            {(tracking?.isEnRoute || (booking as any).technicianEnRouteAt) && tracking && (
+              <CustomerLiveTrackingMap
+                tracking={tracking as any}
+                onRefresh={() => qc.invalidateQueries({ queryKey: ["booking-tracking", bookingId] })}
+              />
+            )}
+
+            {booking.status === "missed" && (
+              <CustomerCard className="border-amber-500/30 bg-amber-500/5">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm text-foreground">Service Missed</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        We missed your scheduled service on {booking.scheduledDate}. We sincerely apologize for the inconvenience.
+                      </p>
+                      {booking.cancellationReason && (
+                        <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mt-1">
+                          Reason: {booking.cancellationReason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {(booking as any).rescheduledToBookingId ? (
+                    <div className="rounded-md bg-background p-3 border border-border flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground flex items-center gap-1">
+                          <CheckCircle2 size={13} className="text-emerald-500" /> Free Makeup Service Scheduled
+                        </p>
+                        <p className="text-xs text-muted-foreground">Replacement Request #{(booking as any).rescheduledToBookingId}</p>
+                      </div>
+                      <CustomerButton
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/customer/bookings/${(booking as any).rescheduledToBookingId}`)}
+                        data-testid="btn-view-makeup-booking"
+                      >
+                        View Details
+                      </CustomerButton>
+                    </div>
+                  ) : eligibility?.eligible ? (
+                    <div className="pt-1 space-y-1.5">
+                      <CustomerButton
+                        className="w-full gap-2 shadow-sm font-semibold"
+                        onClick={() => {
+                          const nextDay = new Date();
+                          nextDay.setDate(nextDay.getDate() + 1);
+                          setMakeupDate(nextDay.toISOString().split("T")[0]);
+                          setMakeupTime("09:00 AM - 11:00 AM");
+                          setMakeupOpen(true);
+                        }}
+                        data-testid="btn-schedule-makeup"
+                      >
+                        <CalendarClock size={16} /> Schedule Free Makeup Service
+                      </CustomerButton>
+                      <p className="text-[11px] text-muted-foreground text-center flex items-center justify-center gap-1">
+                        <ShieldCheck size={12} className="text-emerald-500" /> Complimentary replacement · No duplicate charges
+                      </p>
+                    </div>
+                  ) : checkingEligibility ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                      <Loader2 size={13} className="animate-spin text-primary" /> Checking replacement options...
+                    </div>
+                  ) : (
+                    <div className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground space-y-2">
+                      <p>{eligibility?.reason ?? "This booking is not eligible for automatic rescheduling."}</p>
+                      <CustomerButton
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => navigate(CUSTOMER_ROUTES.support)}
+                        data-testid="btn-missed-contact-support"
+                      >
+                        Contact Support
+                      </CustomerButton>
+                    </div>
+                  )}
+                </div>
+              </CustomerCard>
+            )}
 
             <CustomerCard>
               <h2 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-3">Service details</h2>
@@ -366,7 +546,7 @@ export default function BookingDetail() {
               <MessageCircle size={16} /> Support
             </CustomerButton>
 
-            {!canCancel && !canReschedule && booking.status !== "completed" && booking.status !== "cancelled" && (
+            {!canCancel && !canReschedule && booking.status !== "completed" && booking.status !== "cancelled" && booking.status !== "missed" && (
               <p className="text-xs text-muted-foreground text-center">
                 This scheduled service is already in progress and can no longer be changed here.
               </p>
@@ -374,6 +554,73 @@ export default function BookingDetail() {
           </>
         )}
       </CustomerPage>
+
+      <Dialog open={makeupOpen} onOpenChange={setMakeupOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule Replacement Visit</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+              <p className="font-semibold mb-0.5">₹0 Complimentary Reschedule</p>
+              <p>As per our service guarantee, this replacement visit will be fulfilled at zero extra cost under your active subscription.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="makeup-date">Preferred Date</Label>
+                <Input
+                  id="makeup-date"
+                  type="date"
+                  min={today}
+                  value={makeupDate}
+                  onChange={e => setMakeupDate(e.target.value)}
+                  className="mt-1"
+                  data-testid="input-makeup-date"
+                />
+              </div>
+              <div>
+                <Label htmlFor="makeup-time">Preferred Slot</Label>
+                <Select value={makeupTime} onValueChange={setMakeupTime}>
+                  <SelectTrigger id="makeup-time" className="mt-1" data-testid="select-makeup-time">
+                    <SelectValue placeholder="Select slot" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="08:00 AM - 10:00 AM">08:00 AM - 10:00 AM</SelectItem>
+                    <SelectItem value="09:00 AM - 11:00 AM">09:00 AM - 11:00 AM</SelectItem>
+                    <SelectItem value="11:00 AM - 01:00 PM">11:00 AM - 01:00 PM</SelectItem>
+                    <SelectItem value="02:00 PM - 04:00 PM">02:00 PM - 04:00 PM</SelectItem>
+                    <SelectItem value="04:00 PM - 06:00 PM">04:00 PM - 06:00 PM</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="makeup-notes">Special Instructions (optional)</Label>
+              <Textarea
+                id="makeup-notes"
+                value={makeupNotes}
+                onChange={e => setMakeupNotes(e.target.value)}
+                placeholder="Gate entry instructions, car parking bay, or contact notes"
+                className="mt-1"
+                data-testid="input-makeup-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <CustomerButton variant="outline" onClick={() => setMakeupOpen(false)}>Cancel</CustomerButton>
+            <CustomerButton
+              disabled={!makeupDate || !makeupTime || makeupMutation.isPending}
+              data-testid="btn-confirm-makeup-dialog"
+              onClick={() => makeupMutation.mutate()}
+            >
+              {makeupMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
+              Confirm Makeup Visit
+            </CustomerButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <DialogContent>

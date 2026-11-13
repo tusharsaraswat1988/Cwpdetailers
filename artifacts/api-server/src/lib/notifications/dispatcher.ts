@@ -29,7 +29,19 @@ export type NotificationTemplate =
   | "exception_resolved"
   | "ticket_created"
   | "ticket_updated"
-  | "ticket_resolved";
+  | "ticket_resolved"
+  | "technician_en_route"
+  | "service_started"
+  | "staff_reassigned_customer"
+  | "staff_reassigned_staff"
+  | "schedule_changed_staff"
+  | "assignment_cancelled_staff"
+  | "dispatch_update_staff"
+  | "makeup_booking_confirmed"
+  | "admin_assignment_failure"
+  | "admin_service_missed"
+  | "admin_repeated_failure"
+  | "admin_reschedule_approval_required";
 
 function buildTemplates(brandName: string): Record<NotificationTemplate, (vars: Record<string, string>) => { title: string; message: string; sms: string }> {
   return {
@@ -143,6 +155,66 @@ function buildTemplates(brandName: string): Record<NotificationTemplate, (vars: 
       message: `Hi ${v.customerName}, ticket #${v.ticketNumber} has been resolved: ${v.resolution}. Thank you for your feedback!`,
       sms: `Hi ${v.customerName}, ticket #${v.ticketNumber} resolved: ${v.resolution}. — ${brandName}`,
     }),
+    technician_en_route: (v) => ({
+      title: "Technician En Route",
+      message: `Hi ${v.customerName}, your technician ${v.staffName} is en route to your location${v.etaText ? ` (${v.etaText})` : ""}. — ${brandName}`,
+      sms: `Hi ${v.customerName}, technician ${v.staffName} is on the way${v.etaText ? ` (${v.etaText})` : ""}. — ${brandName}`,
+    }),
+    service_started: (v) => ({
+      title: "Service Started",
+      message: `Hi ${v.customerName}, technician ${v.staffName} has arrived and started your ${v.serviceName}. — ${brandName}`,
+      sms: `Hi ${v.customerName}, ${v.staffName} has started your ${v.serviceName}. — ${brandName}`,
+    }),
+    staff_reassigned_customer: (v) => ({
+      title: "Technician Updated",
+      message: `Hi ${v.customerName}, your technician for ${v.serviceName} on ${v.scheduledDate} has been updated to ${v.staffName}. — ${brandName}`,
+      sms: `Hi ${v.customerName}, your technician for ${v.serviceName} on ${v.scheduledDate} is now ${v.staffName}. — ${brandName}`,
+    }),
+    staff_reassigned_staff: (v) => ({
+      title: "Assignment Reassigned",
+      message: `Hi ${v.staffName}, your assignment for ${v.customerName} on ${v.scheduledDate} has been reassigned to ${v.newStaffName ?? "another technician"}.`,
+      sms: `Hi ${v.staffName}, assignment for ${v.customerName} on ${v.scheduledDate} has been reassigned.`,
+    }),
+    schedule_changed_staff: (v) => ({
+      title: "Schedule Updated",
+      message: `Hi ${v.staffName}, your schedule for ${v.scheduledDate} has changed: ${v.changeDetails ?? "Please check your route in the app."}`,
+      sms: `Hi ${v.staffName}, schedule for ${v.scheduledDate} updated. Check app for details.`,
+    }),
+    assignment_cancelled_staff: (v) => ({
+      title: "Assignment Cancelled",
+      message: `Hi ${v.staffName}, scheduled service for ${v.customerName} on ${v.scheduledDate} was cancelled (${v.reason ?? "customer request"}).`,
+      sms: `Hi ${v.staffName}, service for ${v.customerName} on ${v.scheduledDate} was cancelled.`,
+    }),
+    dispatch_update_staff: (v) => ({
+      title: "Dispatch Update",
+      message: `Hi ${v.staffName}, dispatch notification: ${v.messageText}`,
+      sms: `Hi ${v.staffName}, dispatch update: ${v.messageText}`,
+    }),
+    makeup_booking_confirmed: (v) => ({
+      title: "Makeup Service Confirmed",
+      message: `Hi ${v.customerName}, your replacement makeup visit for ${v.serviceName} is confirmed for ${v.scheduledDate}${v.scheduledTime ? ` at ${v.scheduledTime}` : ""}. — ${brandName}`,
+      sms: `Hi ${v.customerName}, your makeup ${v.serviceName} is confirmed for ${v.scheduledDate} ${v.scheduledTime ?? ""}. — ${brandName}`,
+    }),
+    admin_assignment_failure: (v) => ({
+      title: "Alert: Assignment Failure",
+      message: `Assignment failed for booking #${v.bookingId} (${v.serviceName}) in ${v.cityName ?? "City"}. Manual dispatch required.`,
+      sms: `Alert: Assignment failed for booking #${v.bookingId}. Action required.`,
+    }),
+    admin_service_missed: (v) => ({
+      title: "Alert: Service Missed",
+      message: `Service #${v.bookingId} (${v.customerName}) was marked missed by ${v.staffName}. Reason: ${v.reason}.`,
+      sms: `Alert: Service #${v.bookingId} missed. Reason: ${v.reason}.`,
+    }),
+    admin_repeated_failure: (v) => ({
+      title: "Urgent Alert: Repeated Service Failure",
+      message: `Customer ${v.customerName} (${v.customerPhone ?? ""}) has experienced ${v.failureCount} missed or uncompleted services in the last ${v.periodDays ?? "7"} days.`,
+      sms: `Urgent: Customer ${v.customerName} has ${v.failureCount} missed services. Supervisor inspection required.`,
+    }),
+    admin_reschedule_approval_required: (v) => ({
+      title: "Reschedule Approval Required",
+      message: `Customer ${v.customerName} requested reschedule for booking #${v.bookingId} requiring approval: ${v.reason ?? "Capacity limit exceeded"}.`,
+      sms: `Reschedule review required for booking #${v.bookingId} (${v.customerName}).`,
+    }),
   };
 }
 
@@ -169,6 +241,18 @@ const TYPE_MAP: Record<NotificationTemplate, (typeof notificationsTable.type.enu
   ticket_created: "ticket_created",
   ticket_updated: "ticket_updated",
   ticket_resolved: "ticket_resolved",
+  technician_en_route: "technician_en_route",
+  service_started: "service_started",
+  staff_reassigned_customer: "staff_reassigned",
+  staff_reassigned_staff: "staff_reassigned",
+  schedule_changed_staff: "schedule_changed",
+  assignment_cancelled_staff: "assignment_cancelled",
+  dispatch_update_staff: "general",
+  makeup_booking_confirmed: "makeup_booking_confirmed",
+  admin_assignment_failure: "assignment_failure",
+  admin_service_missed: "cleaning_missed",
+  admin_repeated_failure: "repeated_execution_failure",
+  admin_reschedule_approval_required: "reschedule_approval_required",
 };
 
 export type DispatchNotificationInput = {
@@ -305,8 +389,8 @@ export async function dispatchNotification(input: DispatchNotificationInput) {
         customerId: input.customerId ?? null,
         cityId: input.cityId ?? null,
         title: tpl.title,
-        message: tpl.message,
-        type: TYPE_MAP[input.template],
+        message: smsText,
+        type: resolvedType as any,
         channel: "sms",
         deliveryStatus: "skipped",
         actionUrl: input.actionUrl ?? null,
@@ -324,8 +408,8 @@ export async function dispatchNotification(input: DispatchNotificationInput) {
         customerId: input.customerId ?? null,
         cityId: input.cityId ?? null,
         title: tpl.title,
-        message: tpl.message,
-        type: TYPE_MAP[input.template],
+        message: smsText,
+        type: resolvedType as any,
         channel: "sms",
         deliveryStatus: "skipped",
         actionUrl: input.actionUrl ?? null,
@@ -337,14 +421,14 @@ export async function dispatchNotification(input: DispatchNotificationInput) {
       });
       results.push({ channel: "sms", status: "skipped", error: "provider not configured" });
     } else {
-      const smsResult = await smsAdapter.sendSms(phone, tpl.sms);
+      const smsResult = await smsAdapter.sendSms(phone, smsText);
       await db.insert(notificationsTable).values({
         userId: userId ?? null,
         customerId: input.customerId ?? null,
         cityId: input.cityId ?? null,
         title: tpl.title,
-        message: tpl.message,
-        type: TYPE_MAP[input.template],
+        message: smsText,
+        type: resolvedType as any,
         channel: "sms",
         deliveryStatus: smsResult.success ? "sent" : "failed",
         actionUrl: input.actionUrl ?? null,
@@ -364,6 +448,57 @@ export async function dispatchNotification(input: DispatchNotificationInput) {
       if (!smsResult.success) {
         logger.error({ template: input.template, phone, error: smsResult.error }, "SMS delivery failed");
       }
+    }
+  }
+
+  if (channels.includes("whatsapp")) {
+    const waAdapter = input.adapters?.whatsapp;
+    if (!phone) {
+      results.push({ channel: "whatsapp", status: "skipped", error: "no phone" });
+    } else if (!waAdapter?.isConfigured()) {
+      logger.info({ template: input.template }, "WhatsApp skipped — provider not configured");
+      await db.insert(notificationsTable).values({
+        userId: userId ?? null,
+        customerId: input.customerId ?? null,
+        cityId: input.cityId ?? null,
+        title: tpl.title,
+        message: messageText,
+        type: resolvedType as any,
+        channel: "whatsapp",
+        deliveryStatus: "skipped",
+        actionUrl: input.actionUrl ?? null,
+        metadata: input.metadata ?? {},
+        errorMessage: "whatsapp provider not configured",
+        dedupeKey: input.dedupeKey ? `${input.dedupeKey}:whatsapp` : null,
+        companyId: input.companyId ?? null,
+        branchId: input.branchId ?? null,
+      });
+      results.push({ channel: "whatsapp", status: "skipped", error: "whatsapp provider not configured" });
+    } else {
+      const waResult = await waAdapter.sendSms(phone, messageText);
+      await db.insert(notificationsTable).values({
+        userId: userId ?? null,
+        customerId: input.customerId ?? null,
+        cityId: input.cityId ?? null,
+        title: tpl.title,
+        message: messageText,
+        type: resolvedType as any,
+        channel: "whatsapp",
+        deliveryStatus: waResult.success ? "sent" : "failed",
+        actionUrl: input.actionUrl ?? null,
+        metadata: input.metadata ?? {},
+        errorMessage: waResult.error ?? null,
+        externalId: waResult.externalId ?? null,
+        dedupeKey: input.dedupeKey ? `${input.dedupeKey}:whatsapp` : null,
+        companyId: input.companyId ?? null,
+        branchId: input.branchId ?? null,
+      });
+      results.push({
+        channel: "whatsapp",
+        status: waResult.success ? "sent" : "failed",
+        externalId: waResult.externalId,
+        error: waResult.error,
+      });
     }
   }
 
@@ -716,5 +851,375 @@ export async function notifyOperationalExceptionResolved(input: {
     dedupeKey: `exception:${input.exceptionId}:resolved`,
     actionUrl: "/customer/daily-cleaning",
   }).catch(err => logger.error({ err }, "Failed to notify customer of exception resolution"));
+}
+
+export async function notifyTechnicianEnRoute(input: {
+  bookingId: number;
+  customerId: number;
+  customerName?: string | null;
+  staffName: string;
+  serviceName: string;
+  etaMinutes?: number | null;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  const etaText = input.etaMinutes ? `estimated arrival in ~${input.etaMinutes} mins` : "arriving shortly";
+  return dispatchNotification({
+    template: "technician_en_route",
+    customerId: input.customerId,
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      customerName: input.customerName || "Customer",
+      staffName: input.staffName,
+      serviceName: input.serviceName,
+      etaText,
+    },
+    dedupeKey: `booking:${input.bookingId}:en_route`,
+    actionUrl: `/customer/bookings/${input.bookingId}`,
+  }).catch(err => logger.error({ err }, "Failed to notify customer of technician en route"));
+}
+
+export async function notifyServiceStarted(input: {
+  bookingId: number;
+  customerId: number;
+  customerName?: string | null;
+  staffName: string;
+  serviceName: string;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  return dispatchNotification({
+    template: "service_started",
+    customerId: input.customerId,
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      customerName: input.customerName || "Customer",
+      staffName: input.staffName,
+      serviceName: input.serviceName,
+    },
+    dedupeKey: `booking:${input.bookingId}:started`,
+    actionUrl: `/customer/bookings/${input.bookingId}`,
+  }).catch(err => logger.error({ err }, "Failed to notify customer of service start"));
+}
+
+export async function notifyServiceMissed(input: {
+  bookingId: number;
+  customerId: number;
+  customerName?: string | null;
+  serviceName: string;
+  scheduledDate: string;
+  reason?: string | null;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  return dispatchNotification({
+    template: "cleaning_missed",
+    customerId: input.customerId,
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      customerName: input.customerName || "Customer",
+      serviceName: input.serviceName,
+      scheduledDate: input.scheduledDate,
+      reason: input.reason || "Technician unable to complete service",
+    },
+    dedupeKey: `booking:${input.bookingId}:missed`,
+    actionUrl: `/customer/bookings/${input.bookingId}`,
+  }).catch(err => logger.error({ err }, "Failed to notify customer of missed service"));
+}
+
+export async function notifyMakeupBookingConfirmed(input: {
+  bookingId: number;
+  originalBookingId: number;
+  customerId: number;
+  customerName?: string | null;
+  serviceName: string;
+  scheduledDate: string;
+  scheduledTime?: string | null;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  return dispatchNotification({
+    template: "makeup_booking_confirmed",
+    customerId: input.customerId,
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      customerName: input.customerName || "Customer",
+      serviceName: input.serviceName,
+      scheduledDate: input.scheduledDate,
+      scheduledTime: input.scheduledTime || "",
+    },
+    dedupeKey: `booking:${input.bookingId}:makeup_confirmed`,
+    actionUrl: `/customer/bookings/${input.bookingId}`,
+  }).catch(err => logger.error({ err }, "Failed to notify customer of makeup confirmation"));
+}
+
+export async function notifyStaffReassigned(input: {
+  bookingId: number;
+  customerId: number;
+  customerName?: string | null;
+  serviceName: string;
+  scheduledDate: string;
+  newStaffId: number;
+  newStaffName: string;
+  previousStaffId?: number | null;
+  previousStaffName?: string | null;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  // 1. Notify Customer
+  await dispatchNotification({
+    template: "staff_reassigned_customer",
+    customerId: input.customerId,
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      customerName: input.customerName || "Customer",
+      staffName: input.newStaffName,
+      serviceName: input.serviceName,
+      scheduledDate: input.scheduledDate,
+    },
+    dedupeKey: `booking:${input.bookingId}:reassigned:${input.newStaffId}:customer`,
+    actionUrl: `/customer/bookings/${input.bookingId}`,
+  }).catch(err => logger.error({ err }, "Failed to notify customer of staff reassignment"));
+
+  // 2. Notify New Staff
+  const [newStaffRow] = await db
+    .select({ userId: usersTable.id, phone: usersTable.phone })
+    .from(usersTable)
+    .where(eq(usersTable.staffId, input.newStaffId))
+    .limit(1);
+
+  if (newStaffRow?.userId) {
+    await dispatchNotification({
+      template: "staff_assigned_staff",
+      userId: newStaffRow.userId,
+      phone: newStaffRow.phone,
+      cityId: input.cityId,
+      branchId: input.branchId,
+      vars: {
+        staffName: input.newStaffName,
+        customerName: input.customerName || "Customer",
+        serviceName: input.serviceName,
+        scheduledDate: input.scheduledDate,
+      },
+      dedupeKey: `booking:${input.bookingId}:assigned:staff:${input.newStaffId}`,
+      actionUrl: "/staff/bookings",
+    }).catch(err => logger.error({ err }, "Failed to notify new staff of reassignment"));
+  }
+
+  // 3. Notify Previous Staff (if present)
+  if (input.previousStaffId) {
+    const [prevStaffRow] = await db
+      .select({ userId: usersTable.id, phone: usersTable.phone })
+      .from(usersTable)
+      .where(eq(usersTable.staffId, input.previousStaffId))
+      .limit(1);
+
+    if (prevStaffRow?.userId) {
+      await dispatchNotification({
+        template: "staff_reassigned_staff",
+        userId: prevStaffRow.userId,
+        phone: prevStaffRow.phone,
+        cityId: input.cityId,
+        branchId: input.branchId,
+        vars: {
+          staffName: input.previousStaffName || "Technician",
+          customerName: input.customerName || "Customer",
+          scheduledDate: input.scheduledDate,
+          newStaffName: input.newStaffName,
+        },
+        dedupeKey: `booking:${input.bookingId}:reassigned:prev:${input.previousStaffId}`,
+        actionUrl: "/staff/bookings",
+      }).catch(err => logger.error({ err }, "Failed to notify previous staff of reassignment"));
+    }
+  }
+}
+
+export async function notifyStaffScheduleChanged(input: {
+  staffId: number;
+  staffName?: string | null;
+  scheduledDate: string;
+  changeDetails: string;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  const [staffRow] = await db
+    .select({ userId: usersTable.id, phone: usersTable.phone })
+    .from(usersTable)
+    .where(eq(usersTable.staffId, input.staffId))
+    .limit(1);
+
+  if (!staffRow?.userId) return;
+
+  return dispatchNotification({
+    template: "schedule_changed_staff",
+    userId: staffRow.userId,
+    phone: staffRow.phone,
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      staffName: input.staffName || "Technician",
+      scheduledDate: input.scheduledDate,
+      changeDetails: input.changeDetails,
+    },
+    dedupeKey: `staff:${input.staffId}:schedule_change:${input.scheduledDate}:${Date.now()}`,
+    actionUrl: "/staff/bookings",
+  }).catch(err => logger.error({ err }, "Failed to notify staff of schedule change"));
+}
+
+export async function notifyStaffAssignmentCancelled(input: {
+  staffId: number;
+  bookingId: number;
+  customerName?: string | null;
+  scheduledDate: string;
+  reason?: string | null;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  const [staffRow] = await db
+    .select({ userId: usersTable.id, phone: usersTable.phone })
+    .from(usersTable)
+    .where(eq(usersTable.staffId, input.staffId))
+    .limit(1);
+
+  if (!staffRow?.userId) return;
+
+  return dispatchNotification({
+    template: "assignment_cancelled_staff",
+    userId: staffRow.userId,
+    phone: staffRow.phone,
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      staffName: "Technician",
+      customerName: input.customerName || "Customer",
+      scheduledDate: input.scheduledDate,
+      reason: input.reason || "Cancelled",
+    },
+    dedupeKey: `booking:${input.bookingId}:staff_cancelled:${input.staffId}`,
+    actionUrl: "/staff/bookings",
+  }).catch(err => logger.error({ err }, "Failed to notify staff of assignment cancellation"));
+}
+
+export async function notifyStaffDispatchUpdate(input: {
+  staffId: number;
+  messageText: string;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  const [staffRow] = await db
+    .select({ userId: usersTable.id, phone: usersTable.phone })
+    .from(usersTable)
+    .where(eq(usersTable.staffId, input.staffId))
+    .limit(1);
+
+  if (!staffRow?.userId) return;
+
+  return dispatchNotification({
+    template: "dispatch_update_staff",
+    userId: staffRow.userId,
+    phone: staffRow.phone,
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      staffName: "Technician",
+      messageText: input.messageText,
+    },
+    dedupeKey: `staff:${input.staffId}:dispatch:${Date.now()}`,
+    actionUrl: "/staff/bookings",
+  }).catch(err => logger.error({ err }, "Failed to deliver staff dispatch update"));
+}
+
+export async function notifyAdminAssignmentFailure(input: {
+  bookingId: number;
+  serviceName: string;
+  cityName?: string | null;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  return dispatchNotification({
+    template: "admin_assignment_failure",
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      bookingId: String(input.bookingId),
+      serviceName: input.serviceName,
+      cityName: input.cityName || "City",
+    },
+    dedupeKey: `admin:assignment_failed:${input.bookingId}`,
+    actionUrl: "/admin/assign-services",
+  }).catch(err => logger.error({ err }, "Failed to notify admin of assignment failure"));
+}
+
+export async function notifyAdminServiceMissed(input: {
+  bookingId: number;
+  customerName?: string | null;
+  staffName?: string | null;
+  reason?: string | null;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  return dispatchNotification({
+    template: "admin_service_missed",
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      bookingId: String(input.bookingId),
+      customerName: input.customerName || "Customer",
+      staffName: input.staffName || "Technician",
+      reason: input.reason || "Not specified",
+    },
+    dedupeKey: `admin:missed:${input.bookingId}`,
+    actionUrl: "/admin/bookings",
+  }).catch(err => logger.error({ err }, "Failed to notify admin of missed service"));
+}
+
+export async function notifyAdminRepeatedFailure(input: {
+  customerId: number;
+  customerName: string;
+  customerPhone?: string | null;
+  failureCount: number;
+  periodDays?: number;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  return dispatchNotification({
+    template: "admin_repeated_failure",
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      customerName: input.customerName,
+      customerPhone: input.customerPhone || "",
+      failureCount: String(input.failureCount),
+      periodDays: String(input.periodDays || 7),
+    },
+    dedupeKey: `admin:repeated_failure:${input.customerId}:${Date.now()}`,
+    actionUrl: "/admin/complaints",
+  }).catch(err => logger.error({ err }, "Failed to notify admin of repeated failure"));
+}
+
+export async function notifyAdminRescheduleApprovalRequired(input: {
+  bookingId: number;
+  customerName: string;
+  reason?: string | null;
+  cityId?: number | null;
+  branchId?: number | null;
+}) {
+  return dispatchNotification({
+    template: "admin_reschedule_approval_required",
+    cityId: input.cityId,
+    branchId: input.branchId,
+    vars: {
+      bookingId: String(input.bookingId),
+      customerName: input.customerName,
+      reason: input.reason || "Approval required",
+    },
+    dedupeKey: `admin:reschedule_approval:${input.bookingId}`,
+    actionUrl: "/admin/approvals",
+  }).catch(err => logger.error({ err }, "Failed to notify admin of reschedule approval"));
 }
 

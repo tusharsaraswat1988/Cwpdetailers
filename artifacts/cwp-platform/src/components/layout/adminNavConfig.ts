@@ -136,6 +136,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         perm: { resource: "bookings", action: "view" },
       },
       {
+        id: "makeup-approvals",
+        href: "/admin/approvals",
+        label: "Makeup Approvals",
+        icon: ClipboardCheck,
+        perm: { resource: "bookings", action: "edit" },
+      },
+      {
         id: "jobs",
         href: "/admin/jobs",
         label: "Job Board",

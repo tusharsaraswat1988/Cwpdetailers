@@ -11,6 +11,9 @@ project(':capacitor-camera').projectDir = new File('../../../node_modules/.pnpm/
 include ':capacitor-geolocation'
 project(':capacitor-geolocation').projectDir = new File('../../../node_modules/.pnpm/@capacitor+geolocation@7.1.8_@capacitor+core@7.6.8/node_modules/@capacitor/geolocation/android')
 
+include ':capacitor-community-background-geolocation'
+project(':capacitor-community-background-geolocation').projectDir = new File('../../../node_modules/.pnpm/@capacitor-community+backgr_b2157cd11d45cd77e93f037b5f66bb28/node_modules/@capacitor-community/background-geolocation/android')
+
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../../../node_modules/.pnpm/@capacitor+status-bar@7.0.6_@capacitor+core@7.6.8/node_modules/@capacitor/status-bar/android')
 

@@ -1,4 +1,4 @@
-import { Camera, CheckCircle, Route, ArrowRight, Loader2 } from "lucide-react";
+import { Camera, CheckCircle, Route, ArrowRight, Loader2, Radio } from "lucide-react";
 import type { StaffJob } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { StaffButton, StaffSuccessBanner, StaffSyncChip } from "@/features/staff-ds";
@@ -33,19 +33,58 @@ export function StaffJobActions({
   if (job.source === "execution") {
     if (job.status === "scheduled") {
       return (
-        <StaffButton
-          className={btnClass}
-          onClick={() => void transitionJob(job.id, "in_progress", job)}
-          disabled={isActionPending}
-          data-testid={`btn-start-execution-${job.id}`}
-        >
-          {isLocating ? (
-            <Loader2 size={iconSize} className="mr-2 animate-spin" />
-          ) : (
-            <ArrowRight size={iconSize} className="mr-2" />
-          )}
-          {isLocating ? "Getting location…" : "Start Job"}
-        </StaffButton>
+        <div className="flex flex-col sm:flex-row gap-2 w-full">
+          <StaffButton
+            className={`${btnClass} bg-[hsl(var(--tone-warning))] hover:bg-[hsl(var(--tone-warning)/0.9)] text-white flex-1`}
+            onClick={() => void transitionJob(job.id, "en_route", job)}
+            disabled={isActionPending}
+            data-testid={`btn-en-route-execution-${job.id}`}
+          >
+            {isLocating ? (
+              <Loader2 size={iconSize} className="mr-2 animate-spin" />
+            ) : (
+              <Route size={iconSize} className="mr-2" />
+            )}
+            {isLocating ? "Getting location…" : "On My Way"}
+          </StaffButton>
+          <StaffButton
+            className={`${btnClass} flex-1`}
+            onClick={() => void transitionJob(job.id, "in_progress", job)}
+            disabled={isActionPending}
+            data-testid={`btn-start-execution-${job.id}`}
+          >
+            {isLocating ? (
+              <Loader2 size={iconSize} className="mr-2 animate-spin" />
+            ) : (
+              <ArrowRight size={iconSize} className="mr-2" />
+            )}
+            {isLocating ? "Getting location…" : "Start Job"}
+          </StaffButton>
+        </div>
+      );
+    }
+
+    if (job.status === "en_route") {
+      return (
+        <div className="space-y-2 w-full">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-md border border-emerald-500/20">
+            <Radio size={14} className="animate-pulse text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>Live route tracking active — sending location updates</span>
+          </div>
+          <StaffButton
+            className={btnClass}
+            onClick={() => void transitionJob(job.id, "in_progress", job)}
+            disabled={isActionPending}
+            data-testid={`btn-start-execution-${job.id}`}
+          >
+            {isLocating ? (
+              <Loader2 size={iconSize} className="mr-2 animate-spin" />
+            ) : (
+              <ArrowRight size={iconSize} className="mr-2" />
+            )}
+            {isLocating ? "Getting location…" : "Start Job"}
+          </StaffButton>
+        </div>
       );
     }
 
@@ -94,7 +133,11 @@ export function StaffJobActions({
 
   if (job.status === "en_route" && !job.beforePhotoUrl) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-2 w-full">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-md border border-emerald-500/20">
+          <Radio size={14} className="animate-pulse text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>Live route tracking active — sending location updates</span>
+        </div>
         {isUploading ? <StaffSyncChip state="uploading" /> : null}
         <StaffButton
           className={`${btnClass}`}
@@ -126,19 +169,25 @@ export function StaffJobActions({
 
   if (job.status === "en_route" && job.beforePhotoUrl) {
     return (
-      <StaffButton
-        className={btnClass}
-        onClick={() => void transitionJob(job.id, "in_progress", job)}
-        disabled={isActionPending}
-        data-testid={`btn-start-job-${job.id}`}
-      >
-        {isLocating ? (
-          <Loader2 size={iconSize} className="mr-2 animate-spin" />
-        ) : (
-          <ArrowRight size={iconSize} className="mr-2" />
-        )}
-        {isLocating ? "Verifying location…" : "Start Job"}
-      </StaffButton>
+      <div className="space-y-2 w-full">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-md border border-emerald-500/20">
+          <Radio size={14} className="animate-pulse text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>Live route tracking active — sending location updates</span>
+        </div>
+        <StaffButton
+          className={btnClass}
+          onClick={() => void transitionJob(job.id, "in_progress", job)}
+          disabled={isActionPending}
+          data-testid={`btn-start-job-${job.id}`}
+        >
+          {isLocating ? (
+            <Loader2 size={iconSize} className="mr-2 animate-spin" />
+          ) : (
+            <ArrowRight size={iconSize} className="mr-2" />
+          )}
+          {isLocating ? "Verifying location…" : "Start Job"}
+        </StaffButton>
+      </div>
     );
   }
 

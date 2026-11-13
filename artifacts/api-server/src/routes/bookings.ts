@@ -92,6 +92,16 @@ const bookingSelect = {
   notes: bookingsTable.notes,
   cancellationReason: bookingsTable.cancellationReason,
   customerConfirmedAt: bookingsTable.customerConfirmedAt,
+  rescheduledFromBookingId: bookingsTable.rescheduledFromBookingId,
+  rescheduledToBookingId: bookingsTable.rescheduledToBookingId,
+  isMakeupBooking: bookingsTable.isMakeupBooking,
+  makeupEligibilityStatus: bookingsTable.makeupEligibilityStatus,
+  technicianEnRouteAt: bookingsTable.technicianEnRouteAt,
+  estimatedArrivalAt: bookingsTable.estimatedArrivalAt,
+  etaMinutes: bookingsTable.etaMinutes,
+  lastLocationUpdateAt: bookingsTable.lastLocationUpdateAt,
+  lastKnownLatitude: bookingsTable.lastKnownLatitude,
+  lastKnownLongitude: bookingsTable.lastKnownLongitude,
   createdAt: bookingsTable.createdAt,
   updatedAt: bookingsTable.updatedAt,
 };
@@ -832,6 +842,73 @@ router.post("/bookings/:id/cancel", async (req, res) => {
     }
     req.log.error({ err }, "Cancel booking error");
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/bookings/:id/makeup-eligibility", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { checkMakeupEligibility } = await import("../lib/booking/services/makeupService");
+    const customerId = req.user?.role === "customer" ? req.user.id : undefined;
+    const result = await checkMakeupEligibility(id, customerId);
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Check makeup eligibility error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/bookings/:id/reschedule-missed", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { scheduledDate, scheduledTime, notes } = req.body;
+    if (!scheduledDate) {
+      return res.status(400).json({ error: "scheduledDate is required", code: "MISSING_DATE" });
+    }
+    const { scheduleMakeupBooking } = await import("../lib/booking/services/makeupService");
+    const result = await scheduleMakeupBooking(req, {
+      bookingId: id,
+      scheduledDate,
+      scheduledTime,
+      notes,
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    if (err instanceof BookingValidationError) {
+      return res.status(400).json({ error: err.message, code: err.code });
+    }
+    req.log.error({ err }, "Reschedule missed booking error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+router.post("/bookings/:id/en-route", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { latitude, longitude, accuracy } = req.body;
+    const { markTechnicianEnRoute } = await import("../lib/booking/services/trackingService");
+    const result = await markTechnicianEnRoute(req, {
+      bookingId: id,
+      latitude: latitude != null ? Number(latitude) : undefined,
+      longitude: longitude != null ? Number(longitude) : undefined,
+      accuracy: accuracy != null ? Number(accuracy) : undefined,
+    });
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Mark booking en route error");
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+router.get("/bookings/:id/tracking", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { getLiveTracking } = await import("../lib/booking/services/trackingService");
+    const tracking = await getLiveTracking(req, id);
+    return res.json(tracking);
+  } catch (err) {
+    req.log.error({ err }, "Get booking tracking error");
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Internal server error" });
   }
 });
 

@@ -1117,6 +1117,22 @@ export async function reassignAssignment(
         actorName: actor.actorName ?? undefined,
         reason: notes ? `Reassigned to ${staff.name}: ${notes}` : `Reassigned to ${staff.name}`,
       });
+
+      const { notifyStaffReassigned } = await import("../notifications/dispatcher");
+      const [prevStaff] = await db.select({ name: staffTable.name }).from(staffTable).where(eq(staffTable.id, previousStaffId)).limit(1);
+      const [cust] = await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, assignment.customerId)).limit(1);
+      await notifyStaffReassigned({
+        bookingId: assignment.bookingId,
+        customerId: assignment.customerId,
+        customerName: cust?.name,
+        serviceName: assignment.serviceLabel ?? "Service",
+        scheduledDate: assignment.scheduledDate,
+        newStaffId,
+        newStaffName: staff.name,
+        previousStaffId,
+        previousStaffName: prevStaff?.name,
+        branchId: assignment.branchId,
+      }).catch(err => console.warn("[Assignment] notifyStaffReassigned error:", err));
     } catch (err) {
       console.warn(`[Assignment] Failed to sync booking ${assignment.bookingId} reassignment:`, err);
     }
@@ -1267,6 +1283,17 @@ export async function removeAssignment(
         actorId: actor.actorId ?? undefined,
         actorName: actor.actorName ?? undefined,
       });
+
+      const { notifyStaffAssignmentCancelled } = await import("../notifications/dispatcher");
+      const [cust] = await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, assignment.customerId)).limit(1);
+      await notifyStaffAssignmentCancelled({
+        staffId: previousStaffId,
+        bookingId: assignment.bookingId,
+        customerName: cust?.name,
+        scheduledDate: assignment.scheduledDate,
+        reason: notes ?? "Assignment removed",
+        branchId: assignment.branchId,
+      }).catch(err => console.warn("[Assignment] notifyStaffAssignmentCancelled error:", err));
     } catch (err) {
       console.warn(`[Assignment] Failed to sync booking ${assignment.bookingId} removal:`, err);
     }

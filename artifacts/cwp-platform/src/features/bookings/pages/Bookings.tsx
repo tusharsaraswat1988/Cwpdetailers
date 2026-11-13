@@ -270,7 +270,25 @@ export default function AdminBookings() {
     },
     {
       key: "status", header: "Status", sortable: true,
-      cell: b => <StatusBadge status={b.status ?? "scheduled"} />,
+      cell: b => (
+        <div className="space-y-1">
+          <StatusBadge status={b.status ?? "scheduled"} />
+          {(b as any).isMakeupBooking && (
+            <div>
+              <span className="inline-flex items-center text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 rounded px-1.5 py-0.5 border border-emerald-300 dark:border-emerald-700">
+                Makeup Visit
+              </span>
+            </div>
+          )}
+          {(b as any).rescheduledToBookingId && (
+            <div>
+              <span className="inline-flex items-center text-[10px] font-medium bg-muted text-muted-foreground rounded px-1.5 py-0.5">
+                Rescheduled → #{(b as any).rescheduledToBookingId}
+              </span>
+            </div>
+          )}
+        </div>
+      ),
     },
     {
       key: "action", header: "", align: "right", hideable: false, sticky: "right",
@@ -476,9 +494,28 @@ export default function AdminBookings() {
                 parkingLevel?: string | null;
                 parkingBay?: string | null;
                 parkingNotes?: string | null;
+                isMakeupBooking?: boolean;
+                rescheduledFromBookingId?: number | null;
+                rescheduledToBookingId?: number | null;
               };
               return (
                 <div className="grid grid-cols-2 gap-3 text-sm">
+                  {b.isMakeupBooking && (
+                    <div className="col-span-2 rounded border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 p-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">Complimentary Makeup Booking</p>
+                      <p className="text-sm font-medium mt-0.5">
+                        Replacement visit fulfilled at ₹0 for original missed service #{b.rescheduledFromBookingId ?? "—"}.
+                      </p>
+                    </div>
+                  )}
+                  {b.rescheduledToBookingId && (
+                    <div className="col-span-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 p-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Replacement Service Scheduled</p>
+                      <p className="text-sm font-medium mt-0.5">
+                        Customer scheduled makeup visit as Booking #{b.rescheduledToBookingId}.
+                      </p>
+                    </div>
+                  )}
                   <div><p className="text-muted-foreground">Service</p><p className="font-medium">{b.serviceName ?? b.serviceType?.replace(/_/g, " ")}</p></div>
                   <div><p className="text-muted-foreground">Date</p><p className="font-medium">{b.scheduledDate}</p></div>
                   <div><p className="text-muted-foreground">Time</p><p className="font-medium">{b.scheduledTime ?? "—"}</p></div>

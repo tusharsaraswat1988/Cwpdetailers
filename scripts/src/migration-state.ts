@@ -71,6 +71,9 @@ export const PENDING_MIGRATIONS = [
   "073_branch_governance_and_assignments.sql",
   "074_universal_city_lifecycle_and_governance.sql",
   "075_universal_staff_payout_ledgers.sql",
+  "076_core_service_operations_and_booking_lifecycle.sql",
+  "077_customer_rescheduling_dispatch_and_technician_eta.sql",
+  "078_makeup_approval_requests_and_gps_retention.sql",
 ] as const;
 
 export type Queryable = {
@@ -201,6 +204,12 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
         && (await hasColumn(db, "cities", "status"));
     case "075_universal_staff_payout_ledgers.sql":
       return hasTable(db, "staff_payout_ledgers");
+    case "076_core_service_operations_and_booking_lifecycle.sql":
+      return hasColumn(db, "bookings", "assigned_staff_id");
+    case "077_customer_rescheduling_dispatch_and_technician_eta.sql":
+      return hasColumn(db, "bookings", "rescheduled_to_booking_id");
+    case "078_makeup_approval_requests_and_gps_retention.sql":
+      return hasTable(db, "makeup_approval_requests");
     default:
       return false;
   }

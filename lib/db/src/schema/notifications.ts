@@ -25,6 +25,16 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "ticket_updated",
   "ticket_resolved",
   "staff_assigned",
+  "technician_en_route",
+  "service_started",
+  "staff_reassigned",
+  "schedule_changed",
+  "assignment_cancelled",
+  "makeup_booking_confirmed",
+  "assignment_failure",
+  "repeated_execution_failure",
+  "reschedule_approval_required",
+  "general",
 ]);
 export const notificationChannelEnum = pgEnum("notification_channel", ["in_app", "whatsapp", "email", "sms"]);
 export const notificationDeliveryStatusEnum = pgEnum("notification_delivery_status", [
