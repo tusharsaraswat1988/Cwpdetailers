@@ -44,7 +44,7 @@ import { SchedulePlanStep } from "@/components/schedule/SchedulePlanStep";
 import { ScheduleServiceStep } from "@/components/schedule/ScheduleServiceStep";
 import { ScheduleDateStep } from "@/components/schedule/ScheduleDateStep";
 import { ScheduleTimeStep } from "@/components/schedule/ScheduleTimeStep";
-import { ScheduleReviewStep } from "@/components/schedule/ScheduleReviewStep";
+import { ScheduleReviewStep, type AppliedCouponInfo } from "@/components/schedule/ScheduleReviewStep";
 import { ScheduleSuccessScreen } from "@/components/schedule/ScheduleSuccessScreen";
 import { loadSelectedAddress, saveSelectedAddress } from "@/lib/selected-address";
 import {
@@ -123,6 +123,7 @@ export default function BookService() {
   const [addressSheetOpen, setAddressSheetOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [successId, setSuccessId] = useState<number | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCouponInfo | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [callbackLeadId, setCallbackLeadId] = useState<number | null>(null);
   const [callbackPending, setCallbackPending] = useState(false);
@@ -486,7 +487,9 @@ export default function BookService() {
         serviceType: serviceType as "car_wash" | "detailing" | "solar_cleaning" | "pickup_drop",
         scheduledDate,
         scheduledTime,
-        notes: notes || undefined,
+        notes: appliedCoupon
+          ? `${notes ? `${notes}\n` : ""}Promo Applied: ${appliedCoupon.code} (-₹${appliedCoupon.discountAmount})`
+          : (notes || undefined),
         address: bookingLocation.address,
         locationLat: bookingLocation.latitude,
         locationLng: bookingLocation.longitude,
@@ -663,6 +666,9 @@ export default function BookService() {
             coveredByPlan={coveredByPlan}
             siteVisitRequired={solarNeedsSiteVisit}
             gstExtra={catalogQuote?.pricingType === "exclusive"}
+            serviceId={serviceId}
+            appliedCoupon={appliedCoupon}
+            onApplyCoupon={setAppliedCoupon}
           />
         )}
 

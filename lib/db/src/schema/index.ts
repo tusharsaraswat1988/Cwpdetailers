@@ -58,5 +58,6 @@ export * from "./staff-location";
 export * from "./societies";
 export * from "./legal-entities";
 export * from "./promotions";
+export * from "./marketing-cms";
 export * from "./admin-audit";
 export * from "./staff-payouts";

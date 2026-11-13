@@ -820,6 +820,123 @@ export async function ensureStartupMigrations(): Promise<void> {
       logger.warn({ err: mig79Err }, "Phase 19 migration DDL check failed (non-fatal, continuing)");
     }
 
+    // 19. Phase 20: City/Branch-Wise Marketing, Homepage CMS & Campaign Management (Migration 080)
+    try {
+      await client.query(`
+        ALTER TABLE promotions ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL;
+        ALTER TABLE promotions ADD COLUMN IF NOT EXISTS campaign_id INTEGER;
+        ALTER TABLE promotions ADD COLUMN IF NOT EXISTS alt_text TEXT;
+        ALTER TABLE promotions ADD COLUMN IF NOT EXISTS desktop_image_url TEXT;
+        ALTER TABLE promotions ADD COLUMN IF NOT EXISTS admin_notes TEXT;
+        ALTER TABLE promotions ADD COLUMN IF NOT EXISTS target_audience VARCHAR(50) DEFAULT 'all';
+        ALTER TABLE promotions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'published';
+
+        CREATE TABLE IF NOT EXISTS homepage_sections (
+          id SERIAL PRIMARY KEY,
+          section_key VARCHAR(60) NOT NULL,
+          title VARCHAR(255),
+          subtitle TEXT,
+          city_id INTEGER REFERENCES cities(id) ON DELETE CASCADE,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE,
+          is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          content JSONB DEFAULT '{}'::jsonb,
+          scheduled_publish_at TIMESTAMPTZ,
+          expires_at TIMESTAMPTZ,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS marketing_campaigns (
+          id SERIAL PRIMARY KEY,
+          code VARCHAR(50) NOT NULL UNIQUE,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          city_id INTEGER REFERENCES cities(id) ON DELETE CASCADE,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE,
+          offer_type VARCHAR(50) NOT NULL DEFAULT 'percentage_discount',
+          discount_value NUMERIC(10, 2) NOT NULL DEFAULT 0,
+          min_order_amount NUMERIC(10, 2) DEFAULT 0,
+          max_discount_amount NUMERIC(10, 2),
+          applicable_service_ids JSONB DEFAULT '[]'::jsonb,
+          applicable_package_ids JSONB DEFAULT '[]'::jsonb,
+          applicable_vehicle_categories JSONB DEFAULT '[]'::jsonb,
+          usage_limit INTEGER,
+          used_count INTEGER NOT NULL DEFAULT 0,
+          per_customer_limit INTEGER DEFAULT 1,
+          eligibility_rule VARCHAR(50) DEFAULT 'all',
+          start_date TIMESTAMPTZ,
+          end_date TIMESTAMPTZ,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          status VARCHAR(20) NOT NULL DEFAULT 'active',
+          terms_and_conditions TEXT,
+          banner_id INTEGER REFERENCES promotions(id) ON DELETE SET NULL,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS city_landing_pages (
+          id SERIAL PRIMARY KEY,
+          city_id INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE,
+          slug VARCHAR(100) NOT NULL,
+          page_title TEXT NOT NULL,
+          seo_title TEXT,
+          seo_description TEXT,
+          seo_keywords TEXT,
+          canonical_url TEXT,
+          og_title TEXT,
+          og_description TEXT,
+          og_image TEXT,
+          hero_headline TEXT,
+          hero_subheadline TEXT,
+          custom_faqs JSONB DEFAULT '[]'::jsonb,
+          custom_testimonials JSONB DEFAULT '[]'::jsonb,
+          localized_content JSONB DEFAULT '{}'::jsonb,
+          is_published BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS marketing_media_assets (
+          id SERIAL PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          alt_text TEXT,
+          file_url TEXT NOT NULL,
+          thumbnail_url TEXT,
+          file_type VARCHAR(50),
+          file_size_bytes INTEGER,
+          width INTEGER,
+          height INTEGER,
+          tags JSONB DEFAULT '[]'::jsonb,
+          city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS marketing_events (
+          id SERIAL PRIMARY KEY,
+          event_type VARCHAR(50) NOT NULL,
+          banner_id INTEGER,
+          campaign_id INTEGER,
+          city_id INTEGER,
+          branch_id INTEGER,
+          customer_id INTEGER,
+          session_id TEXT,
+          order_id TEXT,
+          conversion_value NUMERIC(10, 2),
+          metadata JSONB DEFAULT '{}'::jsonb,
+          recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+    } catch (mig80Err) {
+      logger.warn({ err: mig80Err }, "Phase 20 marketing CMS DDL check failed (non-fatal, continuing)");
+    }
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

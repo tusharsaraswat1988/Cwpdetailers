@@ -38,6 +38,7 @@ import {
   Wrench,
   CreditCard,
   Star,
+  Megaphone,
 } from "lucide-react";
 
 export type AdminNavPermission = { resource: string; action: string };
@@ -292,6 +293,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         label: "Communications",
         icon: Radio,
         perm: { resource: "communications", action: "view" },
+      },
+      {
+        id: "marketing-cms",
+        href: "/admin/marketing",
+        label: "Marketing & CMS",
+        icon: Megaphone,
+        perm: { resource: "settings", action: "view" },
       },
       {
         id: "settings",

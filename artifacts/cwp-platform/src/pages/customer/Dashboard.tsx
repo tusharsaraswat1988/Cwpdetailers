@@ -37,6 +37,7 @@ import { guessCityFromAddress } from "@workspace/address-model";
 import { ServiceAddressSelector } from "@/components/home/ServiceAddressSelector";
 import { HomeGreeting } from "@/components/home/HomeGreeting";
 import { MarketingHero } from "@/components/home/MarketingHero";
+import { PromotionalOffersSection } from "@/components/home/PromotionalOffersSection";
 import { ServicesGrid } from "@/components/home/ServicesGrid";
 import { CustomerReviewsSection } from "@/components/home/CustomerReviewsSection";
 import { TodayServiceCard } from "@/components/home/TodayServiceCard";
@@ -378,6 +379,9 @@ export default function CustomerDashboard() {
 
             {/* Core Product Marketing Hero */}
             <MarketingHero cityName={currentCityName} />
+
+            {/* City/Branch-Specific Promotional Offers & Coupon Rewards */}
+            <PromotionalOffersSection citySlug={currentCitySlug} cityName={currentCityName} />
 
             {/* Today's Service Card (Shown when service is active / scheduled today) */}
             {(dashboard.hero || dashboard.primaryPlan?.isDailyCleaning) && (

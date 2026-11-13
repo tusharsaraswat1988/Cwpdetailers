@@ -1,10 +1,21 @@
+import { useState } from "react";
 import { ServiceAddressRow } from "@/components/shared/ServiceAddressRow";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { LocationValue } from "@/features/master-data/api";
 import type { CustomerPlan } from "@/lib/customer-plans";
 import type { ScheduleAsset, PlanMode } from "@/lib/schedule-journey";
 import { formatDateLabel } from "@/lib/schedule-slots";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Tag, Check, X, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+export interface AppliedCouponInfo {
+  code: string;
+  discountAmount: number;
+  finalPayable: number;
+  discountPercentage?: number;
+}
 
 interface ScheduleReviewStepProps {
   asset: ScheduleAsset;
@@ -21,6 +32,9 @@ interface ScheduleReviewStepProps {
   coveredByPlan: boolean;
   siteVisitRequired?: boolean;
   gstExtra?: boolean;
+  serviceId?: string;
+  appliedCoupon?: AppliedCouponInfo | null;
+  onApplyCoupon?: (coupon: AppliedCouponInfo | null) => void;
 }
 
 export function ScheduleReviewStep({
@@ -38,7 +52,69 @@ export function ScheduleReviewStep({
   coveredByPlan,
   siteVisitRequired = false,
   gstExtra = false,
+  serviceId,
+  appliedCoupon = null,
+  onApplyCoupon,
 }: ScheduleReviewStepProps) {
+  const { toast } = useToast();
+  const [couponInput, setCouponInput] = useState("");
+  const [validating, setValidating] = useState(false);
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim() || !estimatedPrice) return;
+    setValidating(true);
+    try {
+      const res = await fetch("/api/marketing/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: couponInput.trim(),
+          orderAmount: estimatedPrice,
+          cityId: address.cityId || null,
+          serviceId: serviceId ? parseInt(serviceId, 10) : null,
+          vehicleCategory: asset.kind === "vehicle" ? (asset as { vehicleType?: string }).vehicleType : null,
+        }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.isValid) {
+        toast({
+          title: "Invalid Coupon",
+          description: data.errorMessage || "This coupon could not be applied.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      onApplyCoupon?.({
+        code: couponInput.trim().toUpperCase(),
+        discountAmount: data.discountAmount,
+        finalPayable: data.finalPayable,
+        discountPercentage: data.discountPercentage,
+      });
+
+      toast({
+        title: "Coupon Applied!",
+        description: `You saved ₹${data.discountAmount} on this booking.`,
+      });
+      setCouponInput("");
+    } catch {
+      toast({
+        title: "Validation Error",
+        description: "Failed to validate coupon code.",
+        variant: "destructive",
+      });
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    onApplyCoupon?.(null);
+  };
+
+  const finalPrice = appliedCoupon ? appliedCoupon.finalPayable : estimatedPrice;
+
   return (
     <div className="space-y-4" data-testid="schedule-step-review">
       <div className="rounded-2xl border border-slate-200/90 bg-white divide-y divide-slate-100 text-sm shadow-[0_2px_8px_rgba(11,29,54,0.04)] overflow-hidden">
@@ -59,7 +135,7 @@ export function ScheduleReviewStep({
         <textarea
           id="schedule-notes"
           value={notes}
-          onChange={e => onNotesChange(e.target.value)}
+          onChange={(e) => onNotesChange(e.target.value)}
           placeholder="E.g., Key at security desk, park in basement B2, etc."
           className="mt-1.5 flex min-h-[80px] w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary shadow-2xs"
           data-testid="schedule-notes"
@@ -75,10 +151,72 @@ export function ScheduleReviewStep({
         </div>
       )}
 
+      {/* Coupon Code Section */}
       {estimatedPrice != null && !coveredByPlan && !siteVisitRequired && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 flex justify-between items-center text-sm">
-          <span className="text-muted-foreground font-medium">Estimated price{gstExtra ? " (+ GST)" : ""}</span>
-          <span className="font-display font-bold text-lg text-primary">₹{estimatedPrice.toLocaleString("en-IN")}</span>
+        <div className="rounded-xl border border-slate-200 bg-card p-3.5 shadow-2xs space-y-2">
+          <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+            <Tag size={13} className="text-primary" /> Have a Promo / Coupon Code?
+          </Label>
+
+          {appliedCoupon ? (
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs">
+              <div className="flex items-center gap-2">
+                <Check size={14} className="text-emerald-700" />
+                <span className="font-mono font-bold text-emerald-800">{appliedCoupon.code}</span>
+                <span className="text-emerald-700">(-₹{appliedCoupon.discountAmount} saved)</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRemoveCoupon}
+                className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 cursor-pointer"
+              >
+                <X size={13} /> Remove
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Enter coupon (e.g. WELCOME50)"
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                className="h-8 text-xs font-mono uppercase"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs px-3 font-semibold shrink-0"
+                disabled={validating || !couponInput.trim()}
+                onClick={handleApplyCoupon}
+              >
+                {validating ? <Loader2 size={12} className="animate-spin" /> : "Apply"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Price Summary Breakdown */}
+      {estimatedPrice != null && !coveredByPlan && !siteVisitRequired && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm space-y-1.5 shadow-2xs">
+          <div className="flex justify-between items-center text-xs text-muted-foreground">
+            <span>Service Base Price</span>
+            <span>₹{estimatedPrice.toLocaleString("en-IN")}</span>
+          </div>
+
+          {appliedCoupon && (
+            <div className="flex justify-between items-center text-xs text-emerald-700 font-semibold">
+              <span>Coupon Discount ({appliedCoupon.code})</span>
+              <span>-₹{appliedCoupon.discountAmount.toLocaleString("en-IN")}</span>
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-slate-200 flex justify-between items-center font-bold">
+            <span className="text-foreground">Estimated Total{gstExtra ? " (+ GST)" : ""}</span>
+            <span className="font-display text-lg text-primary">
+              ₹{(finalPrice || 0).toLocaleString("en-IN")}
+            </span>
+          </div>
         </div>
       )}
 
@@ -98,11 +236,9 @@ export function ScheduleReviewStep({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-center gap-3 px-3.5 py-3 sm:px-4">
-      <span className="text-xs text-muted-foreground font-medium shrink-0">{label}</span>
-      <span className="font-semibold text-foreground text-right truncate text-xs sm:text-sm">{value}</span>
+    <div className="p-3.5 sm:p-4 flex items-center justify-between gap-4">
+      <span className="text-muted-foreground text-xs font-medium shrink-0">{label}</span>
+      <span className="font-medium text-foreground text-right truncate text-xs sm:text-sm">{value}</span>
     </div>
   );
 }
-
-export default ScheduleReviewStep;

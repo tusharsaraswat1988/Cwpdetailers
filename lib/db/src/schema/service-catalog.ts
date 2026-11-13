@@ -3,6 +3,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { homepageSectionsTable } from "./marketing-cms";
 
 export const pricingTypeEnum = pgEnum("pricing_type", ["inclusive", "exclusive"]);
 export const pricingModelEnum = pgEnum("pricing_model", ["fixed", "vehicle_matrix", "solar_slab"]);
@@ -218,18 +219,6 @@ export const serviceCityContentTable = pgTable("service_city_content", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-/** Homepage CMS sections */
-export const homepageSectionsTable = pgTable("homepage_sections", {
-  id: serial("id").primaryKey(),
-  sectionKey: text("section_key").notNull().unique(),
-  title: text("title"),
-  subtitle: text("subtitle"),
-  content: json("content").$type<Record<string, unknown>>().notNull().default({}),
-  isActive: boolean("is_active").notNull().default(true),
-  sortOrder: integer("sort_order").notNull().default(0),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-
 /** Reminder hooks for future notification engine */
 export const catalogReminderHooksTable = pgTable("catalog_reminder_hooks", {
   id: serial("id").primaryKey(),
@@ -255,5 +244,4 @@ export type ServiceAddon = typeof serviceAddonsTable.$inferSelect;
 export type CatalogPackage = typeof catalogPackagesTable.$inferSelect;
 export type CatalogPackageAddon = typeof catalogPackageAddonsTable.$inferSelect;
 export type CustomerEntitlement = typeof customerEntitlementsTable.$inferSelect;
-export type HomepageSection = typeof homepageSectionsTable.$inferSelect;
 export type SolarPricingSlab = typeof solarPricingSlabsTable.$inferSelect;
