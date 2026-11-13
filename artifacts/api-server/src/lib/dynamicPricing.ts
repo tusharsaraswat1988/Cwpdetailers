@@ -24,12 +24,14 @@ export async function resolveVehiclePricing(
   vehicleModelId: number,
   cityId?: number | null,
   seatCategoryIdOverride?: number | null,
+  branchId?: number | null,
 ): Promise<PricingResult | null> {
-  return resolveVehiclePricingWithCity(serviceId, vehicleModelId, cityId, seatCategoryIdOverride);
+  return resolveVehiclePricingWithCity(serviceId, vehicleModelId, cityId, seatCategoryIdOverride, branchId);
 }
 
 /**
  * Resolve wash pricing from matrix.
+ * Precedence: Branch override -> City override -> Global default.
  * Seat category: override (vehicle.seatCategoryId) wins over model default.
  */
 export async function resolveVehiclePricingWithCity(
@@ -37,6 +39,7 @@ export async function resolveVehiclePricingWithCity(
   vehicleModelId: number,
   cityId?: number | null,
   seatCategoryIdOverride?: number | null,
+  branchId?: number | null,
 ): Promise<PricingResult | null> {
   const [model] = await db
     .select({
@@ -75,24 +78,42 @@ export async function resolveVehiclePricingWithCity(
     eq(servicePricingTable.isActive, true),
   ];
 
-  if (cityId) {
-    pricingConditions.push(
-      or(eq(servicePricingTable.cityId, cityId), isNull(servicePricingTable.cityId))!,
-    );
+  const orBranchesOrCities = [];
+  if (branchId) {
+    orBranchesOrCities.push(eq(servicePricingTable.branchId, branchId));
   }
+  if (cityId) {
+    orBranchesOrCities.push(and(eq(servicePricingTable.cityId, cityId), isNull(servicePricingTable.branchId)));
+  }
+  orBranchesOrCities.push(and(isNull(servicePricingTable.cityId), isNull(servicePricingTable.branchId)));
+  pricingConditions.push(or(...orBranchesOrCities)!);
 
-  const allPricing = await db
+  const rawPricing = await db
     .select()
     .from(servicePricingTable)
     .where(and(...pricingConditions));
 
-  const preferCity = (rows: typeof allPricing) => {
-    const citySpecific = rows.filter(r => r.cityId === cityId);
-    return citySpecific.length ? citySpecific : rows.filter(r => r.cityId == null);
+  const now = new Date();
+  const allPricing = rawPricing.filter(r => {
+    if (r.effectiveFrom && new Date(r.effectiveFrom) > now) return false;
+    if (r.effectiveUntil && new Date(r.effectiveUntil) < now) return false;
+    return true;
+  });
+
+  const preferBranchThenCity = (rows: typeof allPricing) => {
+    if (branchId) {
+      const branchSpecific = rows.filter(r => r.branchId === branchId);
+      if (branchSpecific.length) return branchSpecific;
+    }
+    if (cityId) {
+      const citySpecific = rows.filter(r => r.cityId === cityId && !r.branchId);
+      if (citySpecific.length) return citySpecific;
+    }
+    return rows.filter(r => !r.cityId && !r.branchId);
   };
 
   // Try exact match: category + seat
-  const exactPool = preferCity(allPricing.filter(r =>
+  const exactPool = preferBranchThenCity(allPricing.filter(r =>
     r.vehicleCategoryId === model.vehicleCategoryId &&
     r.seatCategoryId === seatCategoryId,
   ));
@@ -109,7 +130,7 @@ export async function resolveVehiclePricingWithCity(
   }
 
   // Fallback: seat category only
-  const seatPool = preferCity(allPricing.filter(r =>
+  const seatPool = preferBranchThenCity(allPricing.filter(r =>
     r.seatCategoryId === seatCategoryId && !r.vehicleCategoryId,
   ));
   const seatOnly = seatPool[0];
@@ -125,7 +146,7 @@ export async function resolveVehiclePricingWithCity(
   }
 
   // Fallback: category only
-  const catPool = preferCity(allPricing.filter(r =>
+  const catPool = preferBranchThenCity(allPricing.filter(r =>
     r.vehicleCategoryId === model.vehicleCategoryId && !r.seatCategoryId,
   ));
   const catOnly = catPool[0];
@@ -167,6 +188,7 @@ export async function resolveBookingAmount(opts: {
   panelCount?: number;
   cityId?: number | null;
   citySlug?: string;
+  branchId?: number | null;
 }): Promise<number | null> {
   if (opts.serviceId) {
     const { resolveCatalogPricing } = await import("./catalog/pricingEngine");
@@ -200,6 +222,7 @@ export async function resolveBookingAmount(opts: {
       panelCount,
       cityId: opts.cityId,
       citySlug: opts.citySlug,
+      branchId: opts.branchId,
     });
     if (pricing) return pricing.amount;
   }

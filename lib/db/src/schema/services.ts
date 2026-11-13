@@ -38,6 +38,12 @@ export const servicesTable = pgTable("services", {
   ogImageUrl: text("og_image_url"),
   schemaData: json("schema_data").$type<Record<string, unknown>>(),
   assignmentStrategy: assignmentStrategyEnum("assignment_strategy").notNull().default("manual"),
+  code: text("code"),
+  serviceType: text("service_type"),
+  supportedVehicleCategories: json("supported_vehicle_categories").$type<string[]>().default([]),
+  applicableBookingModes: json("applicable_booking_modes").$type<string[]>().default(["one_time"]),
+  defaultConfig: json("default_config").$type<Record<string, unknown>>().default({}),
+  metadata: json("metadata").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

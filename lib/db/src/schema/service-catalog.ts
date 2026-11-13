@@ -36,6 +36,24 @@ export const serviceCityAvailabilityTable = pgTable("service_city_availability",
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+/** Universal Service Availability Matrix (PRD v4.9, SVC-012) */
+export const serviceAvailabilityMatrixTable = pgTable("service_availability_matrix", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("service_id").notNull(),
+  cityId: integer("city_id").notNull(),
+  branchId: integer("branch_id"), // null = city-wide default, non-null = branch override
+  isActive: boolean("is_active").notNull().default(true),
+  bookingModes: json("booking_modes").$type<string[]>().default(["one_time"]),
+  effectiveFrom: timestamp("effective_from", { withTimezone: true }).notNull().defaultNow(),
+  effectiveUntil: timestamp("effective_until", { withTimezone: true }),
+  basePriceOverride: numeric("base_price_override", { precision: 10, scale: 2 }),
+  packageConfigId: integer("package_config_id"),
+  operationalConstraints: json("operational_constraints").$type<Record<string, unknown>>().default({}),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /**
  * Solar rate card rows — fully admin-configurable.
  * Panel bands, ₹/panel, minimum billing, and site-visit flags live here (not in app code).
@@ -109,6 +127,20 @@ export const catalogPackagesTable = pgTable("catalog_packages", {
   imageUrl: text("image_url"),
   sortOrder: integer("sort_order").notNull().default(0),
   status: serviceStatusEnum("status").notNull().default("active"),
+  branchId: integer("branch_id"),
+  serviceId: integer("service_id"),
+  packageType: text("package_type").default("recurring_monthly"),
+  includedVisits: integer("included_visits").default(1),
+  complimentaryVisits: integer("complimentary_visits").default(0),
+  serviceFrequency: text("service_frequency").default("daily"),
+  vehicleCategoryIds: json("vehicle_category_ids").$type<number[]>().default([]),
+  termsAndConditions: text("terms_and_conditions"),
+  effectiveFrom: timestamp("effective_from", { withTimezone: true }),
+  effectiveUntil: timestamp("effective_until", { withTimezone: true }),
+  isRenewalEligible: boolean("is_renewal_eligible").default(true),
+  renewalDiscountPercent: numeric("renewal_discount_percent", { precision: 5, scale: 2 }).default("0"),
+  version: integer("version").notNull().default(1),
+  metadata: json("metadata").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -210,12 +242,15 @@ export const catalogReminderHooksTable = pgTable("catalog_reminder_hooks", {
 });
 
 export const insertCatalogSettingsSchema = createInsertSchema(catalogSettingsTable).omit({ id: true, updatedAt: true });
+export const insertServiceAvailabilityMatrixSchema = createInsertSchema(serviceAvailabilityMatrixTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertServiceAddonSchema = createInsertSchema(serviceAddonsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCatalogPackageSchema = createInsertSchema(catalogPackagesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCustomerEntitlementSchema = createInsertSchema(customerEntitlementsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertHomepageSectionSchema = createInsertSchema(homepageSectionsTable).omit({ id: true, updatedAt: true });
 
 export type CatalogSetting = typeof catalogSettingsTable.$inferSelect;
+export type ServiceAvailabilityMatrix = typeof serviceAvailabilityMatrixTable.$inferSelect;
+export type InsertServiceAvailabilityMatrix = z.infer<typeof insertServiceAvailabilityMatrixSchema>;
 export type ServiceAddon = typeof serviceAddonsTable.$inferSelect;
 export type CatalogPackage = typeof catalogPackagesTable.$inferSelect;
 export type CatalogPackageAddon = typeof catalogPackageAddonsTable.$inferSelect;

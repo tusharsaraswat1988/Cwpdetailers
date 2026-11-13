@@ -3,6 +3,8 @@ import { db } from "@workspace/db";
 import {
   catalogSettingsTable,
   serviceCityAvailabilityTable,
+  serviceAvailabilityMatrixTable,
+  servicePricingTable,
   solarPricingSlabsTable,
   serviceAddonsTable,
   serviceAddonLinksTable,
@@ -15,10 +17,17 @@ import {
   servicesTable,
   serviceCategoriesTable,
   citiesTable,
+  branchesTable,
 } from "@workspace/db";
-import { eq, and, asc, desc, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, sql } from "drizzle-orm";
 import { listHomepagePlans } from "../lib/catalog/homepagePlans";
 import { getSolarRateCard, resolveCatalogPricing, resolveCityId } from "../lib/catalog/pricingEngine";
+import {
+  getCityBranchServiceMatrix,
+  setServiceAvailability,
+  isServiceBookableInScope,
+  getEffectiveServicesForScope,
+} from "../lib/catalog/serviceAvailabilityService";
 import type { SolarPricingTerm } from "@workspace/db";
 import { tenantStamp } from "../middlewares/tenantScope";
 import { createInvoiceForPackagePurchase } from "../lib/billing/invoiceService";
@@ -117,6 +126,202 @@ router.patch("/catalog/city-availability/:id", async (req, res) => {
     return res.json(row);
   } catch (err) {
     req.log.error({ err }, "Update error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Service Availability Matrix (PRD Phase 19, SVC-012) ───────────────────
+
+router.get("/catalog/matrix", async (req, res) => {
+  try {
+    const { cityId, branchId, serviceId, includeInactive } = req.query as Record<string, string>;
+    const parsedBranchId = branchId !== undefined
+      ? (branchId === "null" || branchId === "" ? null : parseInt(branchId, 10))
+      : undefined;
+
+    const data = await getCityBranchServiceMatrix({
+      cityId: cityId ? parseInt(cityId, 10) : undefined,
+      branchId: parsedBranchId,
+      serviceId: serviceId ? parseInt(serviceId, 10) : undefined,
+      includeInactive: includeInactive === "true",
+    });
+    return res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "Get service availability matrix error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/catalog/matrix", async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Authentication required" });
+    const {
+      serviceId, cityId, branchId, isActive, bookingModes,
+      effectiveFrom, effectiveUntil, basePriceOverride,
+      packageConfigId, operationalConstraints, adminNotes,
+    } = req.body;
+
+    if (!serviceId || !cityId) {
+      return res.status(400).json({ error: "serviceId and cityId are required" });
+    }
+
+    // Branch scoping authorization
+    if (!req.scope?.isSuperAdmin && req.scope?.branchIds !== null && branchId != null) {
+      if (!req.scope.branchIds.includes(Number(branchId))) {
+        return res.status(403).json({ error: "Unauthorized branch scope" });
+      }
+    }
+
+    const row = await setServiceAvailability({
+      serviceId: Number(serviceId),
+      cityId: Number(cityId),
+      branchId: branchId != null && branchId !== "" ? Number(branchId) : null,
+      isActive: isActive !== false,
+      bookingModes: Array.isArray(bookingModes) ? bookingModes : ["one_time"],
+      effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : undefined,
+      effectiveUntil: effectiveUntil ? new Date(effectiveUntil) : null,
+      basePriceOverride: basePriceOverride != null && basePriceOverride !== "" ? Number(basePriceOverride) : null,
+      packageConfigId: packageConfigId ? Number(packageConfigId) : null,
+      operationalConstraints: operationalConstraints ?? {},
+      adminNotes: adminNotes ?? null,
+      performedBy: req.user.id,
+    });
+
+    return res.status(201).json(row);
+  } catch (err: any) {
+    req.log.error({ err }, "Set service availability error");
+    return res.status(400).json({ error: err.message || "Failed to set availability" });
+  }
+});
+
+router.get("/catalog/preview", async (req, res) => {
+  try {
+    const { cityId, branchId, date } = req.query as Record<string, string>;
+    if (!cityId) return res.status(400).json({ error: "cityId is required" });
+
+    const services = await getEffectiveServicesForScope({
+      cityId: parseInt(cityId, 10),
+      branchId: branchId ? parseInt(branchId, 10) : undefined,
+      targetDate: date ? new Date(date) : undefined,
+    });
+    return res.json(services);
+  } catch (err) {
+    req.log.error({ err }, "Catalog preview error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Centralized Pricing Rules Management (PRD Phase 19, SVC-013) ───────────
+
+router.get("/catalog/pricing-rules", async (req, res) => {
+  try {
+    const { serviceId, cityId, branchId, vehicleCategoryId, seatCategoryId, includeInactive } = req.query as Record<string, string>;
+    const conditions = [];
+    if (includeInactive !== "true") conditions.push(eq(servicePricingTable.isActive, true));
+    if (serviceId) conditions.push(eq(servicePricingTable.serviceId, parseInt(serviceId, 10)));
+    if (cityId) conditions.push(eq(servicePricingTable.cityId, parseInt(cityId, 10)));
+    if (branchId) conditions.push(eq(servicePricingTable.branchId, parseInt(branchId, 10)));
+    if (vehicleCategoryId) conditions.push(eq(servicePricingTable.vehicleCategoryId, parseInt(vehicleCategoryId, 10)));
+    if (seatCategoryId) conditions.push(eq(servicePricingTable.seatCategoryId, parseInt(seatCategoryId, 10)));
+
+    const rows = await db
+      .select({
+        id: servicePricingTable.id,
+        serviceId: servicePricingTable.serviceId,
+        cityId: servicePricingTable.cityId,
+        branchId: servicePricingTable.branchId,
+        vehicleCategoryId: servicePricingTable.vehicleCategoryId,
+        seatCategoryId: servicePricingTable.seatCategoryId,
+        price: servicePricingTable.price,
+        gstRate: servicePricingTable.gstRate,
+        pricingType: servicePricingTable.pricingType,
+        durationMinutes: servicePricingTable.durationMinutes,
+        isActive: servicePricingTable.isActive,
+        effectiveFrom: servicePricingTable.effectiveFrom,
+        effectiveUntil: servicePricingTable.effectiveUntil,
+        createdAt: servicePricingTable.createdAt,
+        updatedAt: servicePricingTable.updatedAt,
+        serviceName: servicesTable.name,
+        cityName: citiesTable.name,
+        branchName: branchesTable.name,
+      })
+      .from(servicePricingTable)
+      .leftJoin(servicesTable, eq(servicePricingTable.serviceId, servicesTable.id))
+      .leftJoin(citiesTable, eq(servicePricingTable.cityId, citiesTable.id))
+      .leftJoin(branchesTable, eq(servicePricingTable.branchId, branchesTable.id))
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(servicePricingTable.updatedAt));
+
+    return res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "List pricing rules error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/catalog/pricing-rules", async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Authentication required" });
+    const {
+      serviceId, cityId, branchId, vehicleCategoryId, seatCategoryId,
+      price, gstRate, pricingType, durationMinutes, isActive,
+      effectiveFrom, effectiveUntil,
+    } = req.body;
+
+    if (!serviceId) return res.status(400).json({ error: "serviceId is required" });
+    if (price == null || Number(price) <= 0) {
+      return res.status(400).json({ error: "price must be a positive number greater than 0" });
+    }
+
+    const [row] = await db.insert(servicePricingTable).values({
+      serviceId: Number(serviceId),
+      cityId: cityId ? Number(cityId) : null,
+      branchId: branchId ? Number(branchId) : null,
+      vehicleCategoryId: vehicleCategoryId ? Number(vehicleCategoryId) : null,
+      seatCategoryId: seatCategoryId ? Number(seatCategoryId) : null,
+      price: String(price),
+      gstRate: gstRate ? String(gstRate) : null,
+      pricingType: pricingType ?? "inclusive",
+      durationMinutes: durationMinutes ? Number(durationMinutes) : null,
+      isActive: isActive !== false,
+      effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : null,
+      effectiveUntil: effectiveUntil ? new Date(effectiveUntil) : null,
+    }).returning();
+
+    return res.status(201).json(row);
+  } catch (err) {
+    req.log.error({ err }, "Create pricing rule error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/catalog/pricing-rules/:id", async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Authentication required" });
+    const id = parseInt(req.params.id, 10);
+    const body = { ...req.body, updatedAt: new Date() };
+    delete body.id;
+    delete body.createdAt;
+    if (body.price != null && Number(body.price) <= 0) {
+      return res.status(400).json({ error: "price must be a positive number greater than 0" });
+    }
+    const [row] = await db.update(servicePricingTable).set(body).where(eq(servicePricingTable.id, id)).returning();
+    if (!row) return res.status(404).json({ error: "Pricing rule not found" });
+    return res.json(row);
+  } catch (err) {
+    req.log.error({ err }, "Update pricing rule error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/catalog/pricing-rules/:id", async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Authentication required" });
+    const id = parseInt(req.params.id, 10);
+    await db.update(servicePricingTable).set({ isActive: false, updatedAt: new Date() }).where(eq(servicePricingTable.id, id));
+    return res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Delete pricing rule error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -388,6 +593,14 @@ router.get("/catalog/packages/:id", async (req, res) => {
 router.post("/catalog/packages", async (req, res) => {
   try {
     const { addons: rawAddons, solarVisitCredits, entitlements: rawEntitlements, ...rest } = req.body;
+    if (!rest.name) return res.status(400).json({ error: "Package name is required" });
+    if (rest.price != null && Number(rest.price) <= 0) {
+      return res.status(400).json({ error: "Package price must be greater than 0" });
+    }
+    if (rest.includedVisits != null && Number(rest.includedVisits) <= 0) {
+      return res.status(400).json({ error: "includedVisits must be positive" });
+    }
+
     const addons = normalizePackageAddons(rawAddons);
     const addonPrice = await resolvePackageAddonPrice(addons);
     const basePrice = Number(rest.price ?? 0);
@@ -395,6 +608,7 @@ router.post("/catalog/packages", async (req, res) => {
       ...rest,
       slug: rest.slug ?? slugify(rest.name),
       price: (basePrice + addonPrice).toFixed(2),
+      version: rest.version ?? 1,
     };
     // Drop non-column fields
     delete (body as { solarVisitCredits?: unknown }).solarVisitCredits;
@@ -433,9 +647,9 @@ router.post("/catalog/packages", async (req, res) => {
       .where(eq(catalogPackageEntitlementsTable.packageId, row.id));
     const savedAddons = await getPackageAddons(row.id);
     return res.status(201).json({ ...row, entitlements: items, addons: savedAddons });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Create package error");
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(400).json({ error: err.message || "Internal server error" });
   }
 });
 
@@ -443,7 +657,18 @@ router.patch("/catalog/packages/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { addons: rawAddons, solarVisitCredits: _svc, entitlements: _ents, ...rest } = req.body;
-    const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date() };
+    if (rest.price != null && Number(rest.price) <= 0) {
+      return res.status(400).json({ error: "Package price must be greater than 0" });
+    }
+    if (rest.includedVisits != null && Number(rest.includedVisits) <= 0) {
+      return res.status(400).json({ error: "includedVisits must be positive" });
+    }
+
+    const updateData: Record<string, unknown> = {
+      ...rest,
+      version: sql`${catalogPackagesTable.version} + 1`,
+      updatedAt: new Date(),
+    };
     delete updateData.id;
     delete updateData.createdAt;
     delete updateData.solarVisitCredits;
@@ -464,9 +689,9 @@ router.patch("/catalog/packages/:id", async (req, res) => {
     if (!row) return res.status(404).json({ error: "Not found" });
     const addons = await getPackageAddons(id);
     return res.json({ ...row, addons });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Update package error");
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(400).json({ error: err.message || "Internal server error" });
   }
 });
 
@@ -497,24 +722,29 @@ router.get("/catalog/entitlements", async (req, res) => {
 });
 
 router.post("/catalog/entitlements/grant-package", async (req, res) => {
-  const { customerId, packageId, cityId, subscriptionId, vehicleId, solarSiteId } = req.body;
-  if (!customerId || !packageId) return res.status(400).json({ error: "customerId and packageId required" });
-  const stamped = tenantStamp(req, {});
+  try {
+    const { customerId, packageId, cityId, branchId, subscriptionId, vehicleId, solarSiteId } = req.body;
+    if (!customerId || !packageId) return res.status(400).json({ error: "customerId and packageId required" });
+    const stamped = tenantStamp(req, {});
 
-  const result = await db.transaction(async (tx) => {
-    const grants = await grantPackageEntitlements(customerId, packageId, {
-      cityId, subscriptionId, vehicleId, solarSiteId,
-    }, tx);
-    const invoice = await createInvoiceForPackagePurchase(
-      customerId,
-      packageId,
-      stamped,
-      tx,
-    );
-    return { grants, invoice };
-  });
+    const result = await db.transaction(async (tx) => {
+      const grants = await grantPackageEntitlements(customerId, packageId, {
+        cityId, branchId, subscriptionId, vehicleId, solarSiteId,
+      }, tx);
+      const invoice = await createInvoiceForPackagePurchase(
+        customerId,
+        packageId,
+        stamped,
+        tx,
+      );
+      return { grants, invoice };
+    });
 
-  return res.status(201).json(result);
+    return res.status(201).json(result);
+  } catch (err: any) {
+    req.log.error({ err }, "Grant package error");
+    return res.status(400).json({ error: err.message || "Failed to purchase package" });
+  }
 });
 
 router.get("/catalog/self-booking/check", async (req, res) => {
@@ -664,36 +894,35 @@ router.get("/catalog/services/:citySlug", async (req, res) => {
   const cityId = await resolveCityId(req.params.citySlug);
   if (!cityId) return res.status(404).json({ error: "City not found" });
 
-  const data = await db
-    .select({
-      id: servicesTable.id,
-      name: servicesTable.name,
-      slug: servicesTable.slug,
-      description: servicesTable.description,
-      shortDescription: servicesTable.shortDescription,
-      category: servicesTable.category,
-      basePrice: servicesTable.basePrice,
-      gstRate: servicesTable.gstRate,
-      pricingType: servicesTable.pricingType,
-      pricingModel: servicesTable.pricingModel,
-      durationMinutes: servicesTable.durationMinutes,
-      imageUrl: servicesTable.imageUrl,
-      features: servicesTable.features,
-      benefits: servicesTable.benefits,
-      categoryName: serviceCategoriesTable.name,
-      categorySlug: serviceCategoriesTable.slug,
-      cityBaseOverride: serviceCityAvailabilityTable.basePriceOverride,
-    })
-    .from(servicesTable)
-    .innerJoin(serviceCityAvailabilityTable, and(
-      eq(serviceCityAvailabilityTable.serviceId, servicesTable.id),
-      eq(serviceCityAvailabilityTable.cityId, cityId),
-      eq(serviceCityAvailabilityTable.isActive, true),
-    ))
-    .leftJoin(serviceCategoriesTable, eq(servicesTable.serviceCategoryId, serviceCategoriesTable.id))
-    .where(and(eq(servicesTable.isActive, true), eq(servicesTable.status, "active")))
-    .orderBy(asc(serviceCategoriesTable.sortOrder), asc(servicesTable.name));
-  return res.json(data);
+  const branchId = req.query.branchId ? parseInt(req.query.branchId as string, 10) : undefined;
+  const effectiveItems = await getEffectiveServicesForScope({
+    cityId,
+    branchId,
+  });
+
+  const availableOnly = effectiveItems
+    .filter(item => item.isAvailable)
+    .map(item => ({
+      id: item.id,
+      name: item.name,
+      slug: item.slug,
+      code: item.code,
+      description: item.description,
+      shortDescription: item.shortDescription,
+      category: item.category,
+      serviceType: item.serviceType,
+      basePrice: String(item.effectivePrice),
+      effectivePrice: item.effectivePrice,
+      gstRate: String(item.gstRate),
+      pricingType: item.pricingType,
+      durationMinutes: item.durationMinutes,
+      imageUrl: item.imageUrl,
+      bookingModes: item.bookingModes,
+      cityBaseOverride: item.cityPriceOverride != null ? String(item.cityPriceOverride) : null,
+      branchBaseOverride: item.branchPriceOverride != null ? String(item.branchPriceOverride) : null,
+    }));
+
+  return res.json(availableOnly);
 });
 
 router.get("/catalog/:citySlug/:serviceSlug", async (req, res) => {

@@ -74,6 +74,7 @@ export const PENDING_MIGRATIONS = [
   "076_core_service_operations_and_booking_lifecycle.sql",
   "077_customer_rescheduling_dispatch_and_technician_eta.sql",
   "078_makeup_approval_requests_and_gps_retention.sql",
+  "079_universal_service_catalog_pricing_matrix.sql",
 ] as const;
 
 export type Queryable = {

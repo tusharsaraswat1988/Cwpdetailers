@@ -214,6 +214,11 @@ export async function syncContractFromSubscription(sub: Subscription, extras?: {
 
 export async function syncContractFromEntitlement(ent: CustomerEntitlement, extras?: {
   packageName?: string | null;
+  packageVersion?: number | null;
+  packagePrice?: string | null;
+  packageType?: string | null;
+  termsAndConditions?: string | null;
+  validityDays?: number | null;
   serviceName?: string | null;
   contractType?: "contract_credits";
   companyId?: number | null;
@@ -244,6 +249,11 @@ export async function syncContractFromEntitlement(ent: CustomerEntitlement, extr
       entitlementType: ent.entitlementType,
       packageId: ent.packageId,
       packageName: extras?.packageName,
+      packageVersion: extras?.packageVersion,
+      packagePrice: extras?.packagePrice,
+      packageType: extras?.packageType,
+      termsAndConditions: extras?.termsAndConditions,
+      validityDays: extras?.validityDays,
       serviceName: extras?.serviceName,
       serviceId: ent.serviceId,
       remainingCredits: ent.remainingCredits,

@@ -43,12 +43,20 @@ export function ServicesGrid({ className, citySlug, cityName }: ServicesGridProp
   const cityCatalogQuery = useCityCatalogServices(citySlug);
 
   const availableServices = useMemo(() => {
-    if (!citySlug || !cityCatalogQuery.data || cityCatalogQuery.data.length === 0) {
+    if (!citySlug) {
       return CWP_PRODUCT_LIST;
     }
+    if (!cityCatalogQuery.data) {
+      return cityCatalogQuery.isLoading ? [] : CWP_PRODUCT_LIST;
+    }
+    if (cityCatalogQuery.data.length === 0) {
+      return [];
+    }
+
     const catalogData = cityCatalogQuery.data;
     const activeCategories = new Set(catalogData.map(s => s.category?.toLowerCase()).filter(Boolean));
     const activeSlugs = new Set(catalogData.map(s => s.slug?.toLowerCase()).filter(Boolean));
+    const priceBySlug = new Map(catalogData.map(s => [s.slug?.toLowerCase(), s.basePrice || (s as any).cityBaseOverride]));
 
     return CWP_PRODUCT_LIST.filter(prod => {
       if (activeSlugs.has(prod.slug.toLowerCase())) return true;
@@ -57,8 +65,14 @@ export function ServicesGrid({ className, citySlug, cityName }: ServicesGridProp
       if (prod.serviceType === "detailing" && activeCategories.has("detailing")) return true;
       if (prod.serviceType === "solar_cleaning" && (activeCategories.has("solar_cleaning") || activeCategories.has("amc"))) return true;
       return false;
+    }).map(prod => {
+      const customPrice = priceBySlug.get(prod.slug.toLowerCase());
+      if (customPrice && Number(customPrice) > 0) {
+        return { ...prod, startingPrice: Number(customPrice) };
+      }
+      return prod;
     });
-  }, [citySlug, cityCatalogQuery.data]);
+  }, [citySlug, cityCatalogQuery.data, cityCatalogQuery.isLoading]);
 
   return (
     <section className={cn("space-y-4", className)} aria-labelledby="cwp-services-heading">
@@ -75,85 +89,95 @@ export function ServicesGrid({ className, citySlug, cityName }: ServicesGridProp
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-        {availableServices.map((prod) => {
-          const Icon = serviceIcons[prod.slug] || Sparkles;
-          const accent = serviceAccents[prod.slug] || {
-            bg: "bg-blue-50",
-            text: "text-primary",
-            border: "border-blue-100",
-          };
+      {availableServices.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center" data-testid="services-unavailable-banner">
+          <Sparkles className="mx-auto h-8 w-8 text-slate-400 mb-2" />
+          <h3 className="font-semibold text-sm text-foreground">Services Launching Soon</h3>
+          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+            {cityName ? `Services in ${cityName} are currently being onboarded.` : "No services currently available for this selection."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+          {availableServices.map((prod) => {
+            const Icon = serviceIcons[prod.slug] || Sparkles;
+            const accent = serviceAccents[prod.slug] || {
+              bg: "bg-blue-50",
+              text: "text-primary",
+              border: "border-blue-100",
+            };
 
-          return (
-            <Link
-              key={prod.slug}
-              href={`/customer/services/${prod.slug}`}
-              className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-[0_2px_8px_rgba(11,29,54,0.04)] hover:shadow-[0_6px_20px_rgba(11,29,54,0.08)] hover:border-primary/50 active:scale-[0.985] transition-all duration-200 flex flex-col justify-between group text-left relative overflow-hidden cursor-pointer"
-              data-testid={`service-card-${prod.slug}`}
-            >
-              {/* Product Card Top: Icon, Category & Rating */}
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div
-                    className={cn(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center border transition-transform duration-200 group-hover:scale-105 shadow-2xs",
-                      accent.bg,
-                      accent.text,
-                      accent.border
-                    )}
-                  >
-                    <Icon size={22} />
-                  </div>
-
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-slate-700">
-                    <Star size={11} className="fill-amber-400 text-amber-400" />
-                    <span>{prod.rating}</span>
-                    <span className="text-slate-400 font-normal">({prod.totalReviews})</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                    {prod.category}
-                  </span>
-                  <h3 className="font-display font-bold text-base text-foreground group-hover:text-primary transition-colors leading-snug">
-                    {prod.title}
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-                    {prod.shortDescription}
-                  </p>
-                </div>
-
-                {/* Micro tags */}
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {prod.features.slice(0, 2).map((feat, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center text-[10px] text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded-md"
-                    >
-                      {feat}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Product Card Footer: Price & Direct Page CTA */}
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+            return (
+              <Link
+                key={prod.slug}
+                href={`/customer/services/${prod.slug}`}
+                className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-[0_2px_8px_rgba(11,29,54,0.04)] hover:shadow-[0_6px_20px_rgba(11,29,54,0.08)] hover:border-primary/50 active:scale-[0.985] transition-all duration-200 flex flex-col justify-between group text-left relative overflow-hidden cursor-pointer"
+                data-testid={`service-card-${prod.slug}`}
+              >
+                {/* Product Card Top: Icon, Category & Rating */}
                 <div>
-                  <span className="text-[10px] text-muted-foreground block font-medium">Starts from</span>
-                  <p className="font-display font-bold text-sm text-foreground">
-                    ₹{prod.startingPrice} <span className="text-[10px] font-normal text-muted-foreground">{prod.priceUnit}</span>
-                  </p>
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div
+                      className={cn(
+                        "w-12 h-12 rounded-2xl flex items-center justify-center border transition-transform duration-200 group-hover:scale-105 shadow-2xs",
+                        accent.bg,
+                        accent.text,
+                        accent.border
+                      )}
+                    >
+                      <Icon size={22} />
+                    </div>
+
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-slate-700">
+                      <Star size={11} className="fill-amber-400 text-amber-400" />
+                      <span>{prod.rating}</span>
+                      <span className="text-slate-400 font-normal">({prod.totalReviews})</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      {prod.category}
+                    </span>
+                    <h3 className="font-display font-bold text-base text-foreground group-hover:text-primary transition-colors leading-snug">
+                      {prod.title}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                      {prod.shortDescription}
+                    </p>
+                  </div>
+
+                  {/* Micro tags */}
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {prod.features.slice(0, 2).map((feat, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center text-[10px] text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded-md"
+                      >
+                        {feat}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-primary group-hover:translate-x-0.5 transition-transform">
-                  View & Book <ArrowRight size={13} />
-                </span>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+                {/* Product Card Footer: Price & Direct Page CTA */}
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block font-medium">Starts from</span>
+                    <p className="font-display font-bold text-sm text-foreground">
+                      ₹{prod.startingPrice} <span className="text-[10px] font-normal text-muted-foreground">{prod.priceUnit}</span>
+                    </p>
+                  </div>
+
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-primary group-hover:translate-x-0.5 transition-transform">
+                    View & Book <ArrowRight size={13} />
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

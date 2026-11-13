@@ -37,6 +37,7 @@ const SERVICE_FIELDS = [
   "serviceCategoryId", "category", "basePrice", "gstRate", "pricingType", "pricingModel",
   "durationMinutes", "isActive", "status", "imageUrl", "features", "benefits", "process",
   "seoTitle", "seoDescription", "assignmentStrategy",
+  "code", "serviceType", "supportedVehicleCategories", "applicableBookingModes", "defaultConfig", "metadata",
 ] as const;
 
 function pickServiceFields(body: Record<string, unknown>) {
@@ -99,6 +100,12 @@ router.get("/services", async (req, res) => {
       assignmentStrategy: servicesTable.assignmentStrategy,
       seoTitle: servicesTable.seoTitle,
       seoDescription: servicesTable.seoDescription,
+      code: servicesTable.code,
+      serviceType: servicesTable.serviceType,
+      supportedVehicleCategories: servicesTable.supportedVehicleCategories,
+      applicableBookingModes: servicesTable.applicableBookingModes,
+      defaultConfig: servicesTable.defaultConfig,
+      metadata: servicesTable.metadata,
       createdAt: servicesTable.createdAt,
       updatedAt: servicesTable.updatedAt,
       categoryName: serviceCategoriesTable.name,
@@ -179,6 +186,12 @@ router.get("/services/:id", async (req, res) => {
         assignmentStrategy: servicesTable.assignmentStrategy,
         seoTitle: servicesTable.seoTitle,
         seoDescription: servicesTable.seoDescription,
+        code: servicesTable.code,
+        serviceType: servicesTable.serviceType,
+        supportedVehicleCategories: servicesTable.supportedVehicleCategories,
+        applicableBookingModes: servicesTable.applicableBookingModes,
+        defaultConfig: servicesTable.defaultConfig,
+        metadata: servicesTable.metadata,
         createdAt: servicesTable.createdAt,
         updatedAt: servicesTable.updatedAt,
         categoryName: serviceCategoriesTable.name,

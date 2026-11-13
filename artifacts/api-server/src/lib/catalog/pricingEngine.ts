@@ -4,6 +4,8 @@ import {
   servicesTable,
   solarPricingSlabsTable,
   serviceCityAvailabilityTable,
+  serviceAvailabilityMatrixTable,
+  serviceBranchOverridesTable,
   citiesTable,
   catalogPackagesTable,
   catalogPackageEntitlementsTable,
@@ -322,7 +324,7 @@ export async function resolveSolarSlabPrice(
 export interface CatalogPricingResult {
   status: "priced" | "needs_site_visit" | "no_slab" | "base";
   amount: number;
-  source: "pricing_matrix" | "city_override" | "base_price" | "solar_slab" | "manual";
+  source: "pricing_matrix" | "branch_override" | "city_override" | "base_price" | "solar_slab" | "manual";
   vehicleCategory?: string;
   seatCategory?: string;
   durationMinutes?: number;
@@ -330,6 +332,7 @@ export interface CatalogPricingResult {
   pricingType: "inclusive" | "exclusive";
   breakdown: PricingBreakdown;
   cityId?: number | null;
+  branchId?: number | null;
   solar?: SolarQuoteResult;
   message?: string;
 }
@@ -344,10 +347,12 @@ export async function resolveCatalogPricing(opts: {
   term?: SolarPricingTerm;
   cityId?: number | null;
   citySlug?: string;
+  branchId?: number | null;
   /** Advisor override after site visit — skips slab math when set. */
   manualAmount?: number;
 }): Promise<CatalogPricingResult | null> {
   const cityId = opts.cityId ?? (opts.citySlug ? await resolveCityId(opts.citySlug) : await getDefaultCityId());
+  const branchId = opts.branchId ?? null;
 
   // ── Package (solar AMC) path ─────────────────────────────────────────────
   if (opts.packageId != null) {
@@ -506,8 +511,9 @@ export async function resolveCatalogPricing(opts: {
       opts.vehicleModelId,
       cityId,
       opts.seatCategoryId,
+      branchId,
     );
-    if (pricing) {
+    if (pricing && pricing.amount > 0) {
       const breakdown = buildPricingBreakdown(pricing.amount, gstRate, pricingType);
       return {
         status: "priced",
@@ -520,26 +526,89 @@ export async function resolveCatalogPricing(opts: {
         pricingType,
         breakdown,
         cityId,
+        branchId,
       };
     }
   }
 
-  let baseAmount = parseFloat(svc.basePrice);
+  let baseAmount: number | null = null;
   let source: CatalogPricingResult["source"] = "base_price";
 
-  if (cityId) {
-    const [cityRow] = await db.select()
-      .from(serviceCityAvailabilityTable)
+  // 1. Check branch-specific price override
+  if (branchId) {
+    const [branchMatrix] = await db
+      .select({ basePriceOverride: serviceAvailabilityMatrixTable.basePriceOverride })
+      .from(serviceAvailabilityMatrixTable)
       .where(and(
-        eq(serviceCityAvailabilityTable.serviceId, opts.serviceId),
-        eq(serviceCityAvailabilityTable.cityId, cityId),
-        eq(serviceCityAvailabilityTable.isActive, true),
+        eq(serviceAvailabilityMatrixTable.serviceId, opts.serviceId),
+        eq(serviceAvailabilityMatrixTable.branchId, branchId),
+        eq(serviceAvailabilityMatrixTable.isActive, true),
       ))
       .limit(1);
-    if (cityRow?.basePriceOverride) {
-      baseAmount = parseFloat(cityRow.basePriceOverride);
-      source = "city_override";
+
+    if (branchMatrix?.basePriceOverride && parseFloat(branchMatrix.basePriceOverride) > 0) {
+      baseAmount = parseFloat(branchMatrix.basePriceOverride);
+      source = "branch_override";
+    } else {
+      const [branchOverride] = await db
+        .select({ basePriceOverride: serviceBranchOverridesTable.basePriceOverride })
+        .from(serviceBranchOverridesTable)
+        .where(and(
+          eq(serviceBranchOverridesTable.serviceId, opts.serviceId),
+          eq(serviceBranchOverridesTable.branchId, branchId),
+          eq(serviceBranchOverridesTable.isActive, true),
+        ))
+        .limit(1);
+      if (branchOverride?.basePriceOverride && parseFloat(branchOverride.basePriceOverride) > 0) {
+        baseAmount = parseFloat(branchOverride.basePriceOverride);
+        source = "branch_override";
+      }
     }
+  }
+
+  // 2. Check city-specific price override
+  if (baseAmount == null && cityId) {
+    const [cityMatrix] = await db
+      .select({ basePriceOverride: serviceAvailabilityMatrixTable.basePriceOverride })
+      .from(serviceAvailabilityMatrixTable)
+      .where(and(
+        eq(serviceAvailabilityMatrixTable.serviceId, opts.serviceId),
+        eq(serviceAvailabilityMatrixTable.cityId, cityId),
+        eq(serviceAvailabilityMatrixTable.isActive, true),
+      ))
+      .limit(1);
+
+    if (cityMatrix?.basePriceOverride && parseFloat(cityMatrix.basePriceOverride) > 0) {
+      baseAmount = parseFloat(cityMatrix.basePriceOverride);
+      source = "city_override";
+    } else {
+      const [cityRow] = await db.select()
+        .from(serviceCityAvailabilityTable)
+        .where(and(
+          eq(serviceCityAvailabilityTable.serviceId, opts.serviceId),
+          eq(serviceCityAvailabilityTable.cityId, cityId),
+          eq(serviceCityAvailabilityTable.isActive, true),
+        ))
+        .limit(1);
+      if (cityRow?.basePriceOverride && parseFloat(cityRow.basePriceOverride) > 0) {
+        baseAmount = parseFloat(cityRow.basePriceOverride);
+        source = "city_override";
+      }
+    }
+  }
+
+  // 3. Fallback to global base price
+  if (baseAmount == null) {
+    const parsedBase = parseFloat(svc.basePrice);
+    if (parsedBase > 0) {
+      baseAmount = parsedBase;
+      source = "base_price";
+    }
+  }
+
+  // Fail-closed validation: Never silently return 0 if price configuration is missing
+  if (baseAmount == null || baseAmount <= 0 || !Number.isFinite(baseAmount)) {
+    throw new Error(`MISSING_PRICE_CONFIGURATION: Service #${opts.serviceId} lacks valid pricing for city ${cityId ?? "default"}${branchId ? ` branch #${branchId}` : ""}`);
   }
 
   const breakdown = buildPricingBreakdown(baseAmount, gstRate, pricingType);
@@ -552,6 +621,7 @@ export async function resolveCatalogPricing(opts: {
     pricingType,
     breakdown,
     cityId,
+    branchId,
   };
 }
 

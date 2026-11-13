@@ -38,6 +38,10 @@ import {
   Layers,
   Sparkles,
   Info,
+  Eye,
+  SlidersHorizontal,
+  Building2,
+  Calendar,
 } from "lucide-react";
 
 type City = {
@@ -46,6 +50,14 @@ type City = {
   slug: string;
   stateName?: string;
   isActive: boolean;
+};
+
+type Branch = {
+  id: number;
+  cityId: number;
+  name: string;
+  code?: string;
+  isActive?: boolean;
 };
 
 type ServiceItem = {
@@ -61,13 +73,33 @@ type CityAvailabilityRecord = {
   id: number;
   serviceId: number;
   cityId: number;
+  branchId?: number | null;
   basePriceOverride?: string | number | null;
+  bookingModes?: string[];
+  effectiveFrom?: string | null;
+  effectiveUntil?: string | null;
+  adminNotes?: string | null;
   isActive: boolean;
 };
 
+type PreviewServiceItem = {
+  id: number;
+  name: string;
+  category: string;
+  effectivePrice: number;
+  globalBasePrice: number;
+  cityPriceOverride: number | null;
+  branchPriceOverride: number | null;
+  isAvailable: boolean;
+  bookingModes: string[];
+  source: string;
+};
+
 const CITIES_KEY = ["masters", "cities"];
+const BRANCHES_KEY = ["/api/branches"];
 const SERVICES_KEY = ["catalog", "services-all"];
 const CITY_AVAILABILITY_KEY = ["catalog", "city-availability"];
+const MATRIX_KEY = ["catalog", "matrix"];
 
 export function CityAvailabilityMatrix() {
   const qc = useQueryClient();
@@ -76,6 +108,12 @@ export function CityAvailabilityMatrix() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedCityFilter, setSelectedCityFilter] = useState<string>("all");
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>("all");
+
+  // State for Customer Catalog Preview Dialog
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewCityId, setPreviewCityId] = useState<string>("");
+  const [previewBranchId, setPreviewBranchId] = useState<string>("");
 
   // State for Confirm Disable Dialog
   const [confirmDisable, setConfirmDisable] = useState<{
@@ -83,13 +121,27 @@ export function CityAvailabilityMatrix() {
     city: City;
   } | null>(null);
 
-  // State for Price Override Dialog
-  const [priceOverrideTarget, setPriceOverrideTarget] = useState<{
+  // State for Advanced Availability & Price Dialog
+  const [configTarget, setConfigTarget] = useState<{
     service: ServiceItem;
     city: City;
-    currentOverride: string;
+    branchId?: number | null;
+    record?: CityAvailabilityRecord;
   } | null>(null);
-  const [overrideInput, setOverrideInput] = useState<string>("");
+
+  const [configForm, setConfigForm] = useState<{
+    basePriceOverride: string;
+    bookingModes: string[];
+    effectiveFrom: string;
+    effectiveUntil: string;
+    adminNotes: string;
+  }>({
+    basePriceOverride: "",
+    bookingModes: ["one_time"],
+    effectiveFrom: "",
+    effectiveUntil: "",
+    adminNotes: "",
+  });
 
   // Track cell-level pending mutations
   const [pendingCells, setPendingCells] = useState<Record<string, boolean>>({});
@@ -105,7 +157,17 @@ export function CityAvailabilityMatrix() {
     },
   });
 
-  // 2. Fetch All Services
+  // 2. Fetch Branches
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: BRANCHES_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/branches", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  // 3. Fetch All Services
   const { data: services = [], isLoading: servicesLoading } = useQuery<ServiceItem[]>({
     queryKey: SERVICES_KEY,
     queryFn: async () => {
@@ -115,51 +177,87 @@ export function CityAvailabilityMatrix() {
     },
   });
 
-  // 3. Fetch City Availability Records
+  // 4. Fetch Matrix Records
   const { data: availabilityRecords = [], isLoading: availabilityLoading } = useQuery<CityAvailabilityRecord[]>({
-    queryKey: CITY_AVAILABILITY_KEY,
+    queryKey: MATRIX_KEY,
     queryFn: async () => {
-      const res = await fetch("/api/catalog/city-availability", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load city availability");
+      const res = await fetch("/api/catalog/matrix?includeInactive=true", { credentials: "include" });
+      if (!res.ok) {
+        // Fallback to legacy endpoint if needed
+        const fallback = await fetch("/api/catalog/city-availability", { credentials: "include" });
+        if (!fallback.ok) return [];
+        return fallback.json();
+      }
       return res.json();
     },
   });
 
-  // Build availability lookup map: "serviceId-cityId" -> CityAvailabilityRecord
+  // Preview query
+  const { data: previewServices = [], isLoading: previewLoading } = useQuery<PreviewServiceItem[]>({
+    queryKey: ["catalog", "preview", previewCityId, previewBranchId],
+    queryFn: async () => {
+      if (!previewCityId) return [];
+      const qs = new URLSearchParams({ cityId: previewCityId });
+      if (previewBranchId && previewBranchId !== "all") qs.append("branchId", previewBranchId);
+      const res = await fetch(`/api/catalog/preview?${qs.toString()}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: previewOpen && Boolean(previewCityId),
+  });
+
+  // Build availability lookup map
   const availabilityMap = useMemo(() => {
     const map = new Map<string, CityAvailabilityRecord>();
     for (const record of availabilityRecords) {
-      map.set(`${record.serviceId}-${record.cityId}`, record);
+      if (record.branchId) {
+        map.set(`${record.serviceId}-${record.cityId}-b${record.branchId}`, record);
+      } else {
+        map.set(`${record.serviceId}-${record.cityId}`, record);
+      }
     }
     return map;
   }, [availabilityRecords]);
 
-  // Mutation to toggle availability or set price override
+  // Mutation to update availability in Matrix
   const updateAvailabilityMutation = useMutation({
     mutationFn: async ({
       serviceId,
       cityId,
+      branchId,
       isActive,
       basePriceOverride,
+      bookingModes,
+      effectiveFrom,
+      effectiveUntil,
+      adminNotes,
     }: {
       serviceId: number;
       cityId: number;
+      branchId?: number | null;
       isActive: boolean;
       basePriceOverride?: number | null;
+      bookingModes?: string[];
+      effectiveFrom?: string | null;
+      effectiveUntil?: string | null;
+      adminNotes?: string | null;
     }) => {
-      const cellKey = `${serviceId}-${cityId}`;
+      const cellKey = branchId ? `${serviceId}-${cityId}-b${branchId}` : `${serviceId}-${cityId}`;
       setPendingCells(p => ({ ...p, [cellKey]: true }));
 
       const payload: Record<string, unknown> = {
         serviceId,
         cityId,
+        branchId: branchId ?? null,
         isActive,
       };
-      if (basePriceOverride !== undefined) {
-        payload.basePriceOverride = basePriceOverride;
-      }
+      if (basePriceOverride !== undefined) payload.basePriceOverride = basePriceOverride;
+      if (bookingModes !== undefined) payload.bookingModes = bookingModes;
+      if (effectiveFrom) payload.effectiveFrom = effectiveFrom;
+      if (effectiveUntil !== undefined) payload.effectiveUntil = effectiveUntil;
+      if (adminNotes !== undefined) payload.adminNotes = adminNotes;
 
-      const res = await fetch("/api/catalog/city-availability", {
+      const res = await fetch("/api/catalog/matrix", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -168,15 +266,18 @@ export function CityAvailabilityMatrix() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to update city service availability");
+        throw new Error(err.error || "Failed to update service availability matrix");
       }
       return res.json();
     },
     onSuccess: (data, variables) => {
+      qc.invalidateQueries({ queryKey: MATRIX_KEY });
       qc.invalidateQueries({ queryKey: CITY_AVAILABILITY_KEY });
-      // Invalidate customer discovery caches as well
       qc.invalidateQueries({ queryKey: ["services"] });
-      const cellKey = `${variables.serviceId}-${variables.cityId}`;
+      qc.invalidateQueries({ queryKey: ["catalog", "preview"] });
+      const cellKey = variables.branchId
+        ? `${variables.serviceId}-${variables.cityId}-b${variables.branchId}`
+        : `${variables.serviceId}-${variables.cityId}`;
       setPendingCells(p => {
         const next = { ...p };
         delete next[cellKey];
@@ -184,12 +285,14 @@ export function CityAvailabilityMatrix() {
       });
 
       toast({
-        title: variables.isActive ? "Service Enabled in City" : "Service Disabled in City",
-        description: `Changes are active immediately in customer discovery and booking validation.`,
+        title: variables.isActive ? "Service Enabled in Scope" : "Service Disabled in Scope",
+        description: `Availability configuration updated and live across all customer portals.`,
       });
     },
     onError: (err: Error, variables) => {
-      const cellKey = `${variables.serviceId}-${variables.cityId}`;
+      const cellKey = variables.branchId
+        ? `${variables.serviceId}-${variables.cityId}-b${variables.branchId}`
+        : `${variables.serviceId}-${variables.cityId}`;
       setPendingCells(p => {
         const next = { ...p };
         delete next[cellKey];
@@ -205,10 +308,8 @@ export function CityAvailabilityMatrix() {
 
   const handleToggle = (service: ServiceItem, city: City, currentActive: boolean) => {
     if (currentActive) {
-      // Disabling an active service requires confirmation to prevent accidental outages
       setConfirmDisable({ service, city });
     } else {
-      // Enabling can proceed directly
       updateAvailabilityMutation.mutate({
         serviceId: service.id,
         cityId: city.id,
@@ -228,28 +329,34 @@ export function CityAvailabilityMatrix() {
     setConfirmDisable(null);
   };
 
-  const handleOpenPriceOverride = (service: ServiceItem, city: City, currentOverride: string | number | null | undefined) => {
-    setPriceOverrideTarget({
-      service,
-      city,
-      currentOverride: currentOverride != null ? String(currentOverride) : "",
+  const handleOpenConfig = (service: ServiceItem, city: City, record?: CityAvailabilityRecord) => {
+    setConfigTarget({ service, city, record });
+    setConfigForm({
+      basePriceOverride: record?.basePriceOverride != null ? String(record.basePriceOverride) : "",
+      bookingModes: record?.bookingModes && Array.isArray(record.bookingModes) ? record.bookingModes : ["one_time"],
+      effectiveFrom: record?.effectiveFrom ? new Date(record.effectiveFrom).toISOString().slice(0, 10) : "",
+      effectiveUntil: record?.effectiveUntil ? new Date(record.effectiveUntil).toISOString().slice(0, 10) : "",
+      adminNotes: record?.adminNotes ?? "",
     });
-    setOverrideInput(currentOverride != null ? String(currentOverride) : "");
   };
 
-  const handleSavePriceOverride = () => {
-    if (!priceOverrideTarget) return;
-    const val = overrideInput.trim() ? parseFloat(overrideInput) : null;
-    const currentRecord = availabilityMap.get(`${priceOverrideTarget.service.id}-${priceOverrideTarget.city.id}`);
-    const isActive = currentRecord ? currentRecord.isActive : true;
+  const handleSaveConfig = () => {
+    if (!configTarget) return;
+    const val = configForm.basePriceOverride.trim() ? parseFloat(configForm.basePriceOverride) : null;
+    const isActive = configTarget.record ? configTarget.record.isActive : true;
 
     updateAvailabilityMutation.mutate({
-      serviceId: priceOverrideTarget.service.id,
-      cityId: priceOverrideTarget.city.id,
+      serviceId: configTarget.service.id,
+      cityId: configTarget.city.id,
+      branchId: configTarget.branchId ?? null,
       isActive,
       basePriceOverride: val,
+      bookingModes: configForm.bookingModes,
+      effectiveFrom: configForm.effectiveFrom || null,
+      effectiveUntil: configForm.effectiveUntil || null,
+      adminNotes: configForm.adminNotes.trim() || null,
     });
-    setPriceOverrideTarget(null);
+    setConfigTarget(null);
   };
 
   // Categories list
@@ -290,21 +397,35 @@ export function CityAvailabilityMatrix() {
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
             <MapPin className="text-primary" size={22} />
-            City-Wise Service Availability Matrix
+            Universal City/Branch Service Availability Matrix
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Configure which services are available in each city. The backend strictly enforces this matrix during customer discovery and checkout.
+            Single source of truth for service catalog visibility, booking modes, and price overrides across all cities and branches.
           </p>
         </div>
+
+        {/* Customer Catalog Preview Button */}
+        <Button
+          variant="outline"
+          className="flex items-center gap-2 border-primary/30 text-primary hover:bg-primary/5"
+          onClick={() => {
+            if (cities[0]) setPreviewCityId(String(cities[0].id));
+            setPreviewOpen(true);
+          }}
+          data-testid="preview-customer-catalog-btn"
+        >
+          <Eye size={16} />
+          Customer Catalog Preview
+        </Button>
       </div>
 
       {/* Info notice about zero code deployment */}
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 text-xs text-emerald-950 dark:text-emerald-200 flex items-start gap-2.5">
         <Sparkles size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <p className="font-semibold">Dynamic Configuration Without Code Deployments</p>
+          <p className="font-semibold">Configuration-Driven Multi-City Architecture</p>
           <p className="text-muted-foreground dark:text-emerald-300">
-            Enabling or disabling services takes effect instantly across the customer booking engine and mobile portals. For Noida launch, only Daily Car Cleaning should remain active, while Varanasi supports the full catalog.
+            Changes are immediate and enforced deterministically on the backend. For example, Noida can offer exclusively Daily Car Cleaning while Varanasi offers the complete catalog without code modifications.
           </p>
         </div>
       </div>
@@ -383,7 +504,7 @@ export function CityAvailabilityMatrix() {
                   <th className="p-3.5 min-w-[280px]">Service & Category</th>
                   <th className="p-3.5 min-w-[110px]">Base Price</th>
                   {visibleCities.map(city => (
-                    <th key={city.id} className="p-3.5 min-w-[180px] text-center border-l border-border/60">
+                    <th key={city.id} className="p-3.5 min-w-[200px] text-center border-l border-border/60">
                       <div className="flex items-center justify-center gap-1.5 font-bold text-foreground">
                         <MapPin size={13} className="text-primary" />
                         <span>{city.name}</span>
@@ -461,27 +582,28 @@ export function CityAvailabilityMatrix() {
                               </div>
 
                               {/* Price Override Badge & Action */}
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1.5 flex-wrap justify-center">
                                 {hasOverride ? (
                                   <button
                                     type="button"
-                                    onClick={() => handleOpenPriceOverride(service, city, record?.basePriceOverride)}
+                                    onClick={() => handleOpenConfig(service, city, record)}
                                     className="inline-flex items-center gap-1 text-[11px] font-mono font-medium px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 transition-colors"
-                                    title="Click to edit city price override"
+                                    title="Click to edit city configuration"
                                   >
                                     <Tag size={10} />
                                     ₹{Number(record?.basePriceOverride).toLocaleString("en-IN")}
                                   </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenPriceOverride(service, city, null)}
-                                    className="text-[10px] text-muted-foreground hover:text-primary transition-colors underline decoration-dotted"
-                                    title="Set a city-specific price override"
-                                  >
-                                    + Price Override
-                                  </button>
-                                )}
+                                ) : null}
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenConfig(service, city, record)}
+                                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors underline decoration-dotted"
+                                  title="Configure booking modes, pricing and dates"
+                                >
+                                  <SlidersHorizontal size={10} />
+                                  {hasOverride ? "Settings" : "+ Override"}
+                                </button>
                               </div>
                             </div>
                           </td>
@@ -509,7 +631,7 @@ export function CityAvailabilityMatrix() {
                 Are you sure you want to disable <strong>{confirmDisable?.service.name}</strong> for <strong>{confirmDisable?.city.name}</strong>?
               </p>
               <p className="text-xs text-muted-foreground">
-                Customers in {confirmDisable?.city.name} will no longer see this service on the portal or app, and new booking requests will be rejected by the backend city validator with <code>SERVICE_UNAVAILABLE_IN_CITY</code>.
+                Customers in {confirmDisable?.city.name} will no longer see this service on the portal or app, and new booking requests will be rejected by the backend city validator with <code>SERVICE_UNAVAILABLE_IN_SCOPE</code>.
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -519,54 +641,208 @@ export function CityAvailabilityMatrix() {
               onClick={executeDisable}
               className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
-              Confirm Disable
+              Disable Service
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Price Override Dialog */}
-      <Dialog open={Boolean(priceOverrideTarget)} onOpenChange={open => !open && setPriceOverrideTarget(null)}>
+      {/* Advanced Scope Availability & Price Dialog */}
+      <Dialog open={Boolean(configTarget)} onOpenChange={open => !open && setConfigTarget(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <DollarSign className="text-primary" size={18} />
-              City Price Override
+              <SlidersHorizontal size={18} className="text-primary" />
+              Configure Service Availability & Pricing
             </DialogTitle>
             <DialogDescription>
-              Set a city-specific price for <strong>{priceOverrideTarget?.service.name}</strong> in <strong>{priceOverrideTarget?.city.name}</strong>.
+              {configTarget?.service.name} in {configTarget?.city.name}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-2">
-            <div className="text-xs text-muted-foreground">
-              Standard Catalog Base Price: <strong className="font-mono text-foreground">₹{Number(priceOverrideTarget?.service.basePrice || 0).toLocaleString("en-IN")}</strong>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs">Base Price Override (₹)</Label>
+              <Input
+                type="number"
+                placeholder={`Global default: ₹${configTarget?.service.basePrice || 0}`}
+                value={configForm.basePriceOverride}
+                onChange={e => setConfigForm(f => ({ ...f, basePriceOverride: e.target.value }))}
+                className="mt-1"
+              />
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Leave empty to inherit the global catalog base price.
+              </p>
             </div>
 
             <div>
-              <label className="text-xs font-semibold block mb-1">
-                City Override Price (₹)
-              </label>
+              <Label className="text-xs">Allowed Booking Modes</Label>
+              <div className="flex gap-4 mt-1.5 text-xs">
+                {["one_time", "subscription", "package"].map(mode => (
+                  <label key={mode} className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={configForm.bookingModes.includes(mode)}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setConfigForm(f => ({
+                          ...f,
+                          bookingModes: checked
+                            ? [...f.bookingModes, mode]
+                            : f.bookingModes.filter(m => m !== mode),
+                        }));
+                      }}
+                      className="rounded border-border"
+                    />
+                    <span className="capitalize">{mode.replace(/_/g, " ")}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Effective From (Launch Date)</Label>
+                <Input
+                  type="date"
+                  value={configForm.effectiveFrom}
+                  onChange={e => setConfigForm(f => ({ ...f, effectiveFrom: e.target.value }))}
+                  className="mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Effective Until (Sunset Date)</Label>
+                <Input
+                  type="date"
+                  value={configForm.effectiveUntil}
+                  onChange={e => setConfigForm(f => ({ ...f, effectiveUntil: e.target.value }))}
+                  className="mt-1 text-xs"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs">Admin Notes</Label>
               <Input
-                type="number"
-                step="1"
-                min="0"
-                value={overrideInput}
-                onChange={e => setOverrideInput(e.target.value)}
-                placeholder="Leave blank to use standard catalog price"
-                className="font-mono"
+                placeholder="e.g. Launched for Diwali promotion / Sector 62 pilot"
+                value={configForm.adminNotes}
+                onChange={e => setConfigForm(f => ({ ...f, adminNotes: e.target.value }))}
+                className="mt-1 text-xs"
               />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Leave empty to remove the override and inherit the base price.
-              </p>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPriceOverrideTarget(null)}>Cancel</Button>
-            <Button onClick={handleSavePriceOverride}>
-              Save Price Override
+            <Button variant="outline" onClick={() => setConfigTarget(null)}>Cancel</Button>
+            <Button onClick={handleSaveConfig} disabled={updateAvailabilityMutation.isPending}>
+              Save Scope Configuration
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer Catalog Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye size={18} className="text-primary" />
+              Customer Catalog Simulation Preview
+            </DialogTitle>
+            <DialogDescription>
+              Preview exactly what customers in a selected city and branch see when browsing the service catalog.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Scope Selectors */}
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-muted/40 rounded-lg border border-border">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs font-semibold">City:</Label>
+              <select
+                value={previewCityId}
+                onChange={e => setPreviewCityId(e.target.value)}
+                className="text-xs bg-background border border-border rounded px-2.5 py-1.5 font-medium"
+              >
+                {cities.map(c => (
+                  <option key={c.id} value={String(c.id)}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label className="text-xs font-semibold">Branch:</Label>
+              <select
+                value={previewBranchId}
+                onChange={e => setPreviewBranchId(e.target.value)}
+                className="text-xs bg-background border border-border rounded px-2.5 py-1.5 font-medium"
+              >
+                <option value="all">All Branches (City Default)</option>
+                {branches
+                  .filter(b => !previewCityId || String(b.cityId) === previewCityId)
+                  .map(b => (
+                    <option key={b.id} value={String(b.id)}>{b.name}</option>
+                  ))}
+              </select>
+            </div>
+
+            <Badge variant="outline" className="ml-auto text-xs">
+              {previewServices.filter(s => s.isAvailable).length} Available Services
+            </Badge>
+          </div>
+
+          {/* Services List Preview */}
+          <div className="space-y-3 mt-3">
+            {previewLoading ? (
+              <div className="space-y-2 py-4">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
+            ) : previewServices.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No services configured for this scope.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {previewServices.map(svc => (
+                  <div
+                    key={svc.id}
+                    className={`rounded-lg border p-3 flex flex-col justify-between ${
+                      svc.isAvailable ? "border-emerald-500/30 bg-card" : "border-border/60 bg-muted/30 opacity-60"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-sm">{svc.name}</span>
+                        {svc.isAvailable ? (
+                          <Badge className="bg-emerald-600 text-[10px]">Active</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground">Unavailable</Badge>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-muted-foreground uppercase tracking-wider block mt-0.5">
+                        {svc.category}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-muted-foreground text-[10px] block">Customer Price</span>
+                        <span className="font-mono font-bold text-sm">₹{svc.effectivePrice}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-muted-foreground block">Source</span>
+                        <span className="text-[10px] font-mono capitalize">{svc.source.replace(/_/g, " ")}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setPreviewOpen(false)}>Close Preview</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

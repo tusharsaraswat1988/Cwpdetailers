@@ -392,6 +392,8 @@ export function useCatalogPricingQuote(params: {
   vehicleId?: number;
   seatCategoryId?: number;
   panelCount?: number;
+  cityId?: number;
+  branchId?: number;
   citySlug?: string;
   term?: SolarPricingTerm;
   manualAmount?: number;
@@ -404,6 +406,8 @@ export function useCatalogPricingQuote(params: {
   if (params.vehicleId) qs.set("vehicleId", String(params.vehicleId));
   if (params.seatCategoryId) qs.set("seatCategoryId", String(params.seatCategoryId));
   if (params.panelCount != null) qs.set("panelCount", String(params.panelCount));
+  if (params.cityId) qs.set("cityId", String(params.cityId));
+  if (params.branchId) qs.set("branchId", String(params.branchId));
   if (params.citySlug) qs.set("citySlug", params.citySlug);
   if (params.term) qs.set("term", params.term);
   if (params.manualAmount != null) qs.set("manualAmount", String(params.manualAmount));

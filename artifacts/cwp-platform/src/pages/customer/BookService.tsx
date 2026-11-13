@@ -202,6 +202,7 @@ export default function BookService() {
     vehicleModelId: selectedVehicle?.vehicleModelId,
     vehicleId: selectedVehicle?.id,
     panelCount: selectedSolar?.panelCount,
+    cityId: bookingLocation?.cityId ?? selectedVehicle?.cityId ?? undefined,
     term: asset?.kind === "solar" ? "one_time" : undefined,
   });
   const pricingQuote = (catalogQuote as CatalogPricingQuote | undefined) ?? pricingQuoteLegacy;

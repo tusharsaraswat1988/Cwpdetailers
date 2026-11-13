@@ -20,14 +20,23 @@ export type EntitlementGrantInput = {
   vehicleId?: number;
   solarSiteId?: number;
   cityId?: number;
+  branchId?: number;
   entitlementType: "wash_credit" | "cleaning_credit" | "solar_visit" | "detailing_credit" | "generic";
   creditCount: number;
   validityDays: number;
   validFrom?: string;
   notes?: string;
+  packageVersion?: number | null;
+  packagePrice?: string | null;
+  packageType?: string | null;
+  termsAndConditions?: string | null;
+  serviceName?: string | null;
 };
 
 export async function grantEntitlement(input: EntitlementGrantInput, tx?: Transaction) {
+  if (input.creditCount <= 0) {
+    throw new Error("Entitlement credit count must be positive");
+  }
   const ctx = tx ?? db;
   const validFrom = input.validFrom ?? getTodayIST();
   const validUntilDate = new Date(validFrom);
@@ -58,6 +67,13 @@ export async function grantEntitlement(input: EntitlementGrantInput, tx?: Transa
   const { syncContractFromEntitlement } = await import("../contracts/contractRegistry");
   await syncContractFromEntitlement(ent, {
     contractType: input.entitlementType === "solar_visit" ? undefined : "contract_credits",
+    packageName: input.notes?.startsWith("From package: ") ? input.notes.replace("From package: ", "") : undefined,
+    packageVersion: input.packageVersion,
+    packagePrice: input.packagePrice,
+    packageType: input.packageType,
+    termsAndConditions: input.termsAndConditions,
+    validityDays: input.validityDays,
+    branchId: input.branchId,
   });
   const { enqueuePendingFromEntitlement } = await import("../assignments/enqueueAdapters");
   await enqueuePendingFromEntitlement(ent.id);
@@ -118,6 +134,7 @@ export async function grantPackageEntitlements(
   opts?: {
     subscriptionId?: number;
     cityId?: number;
+    branchId?: number;
     validFrom?: string;
     vehicleId?: number;
     solarSiteId?: number;
@@ -131,31 +148,91 @@ export async function grantPackageEntitlements(
   const [pkg] = await ctx.select().from(catalogPackagesTable).where(eq(catalogPackagesTable.id, packageId)).limit(1);
   if (!pkg) throw new Error("Package not found");
 
+  if (pkg.status !== "active") {
+    throw new Error(`Package is ${pkg.status}, only active packages can be granted`);
+  }
+
+  const today = getTodayIST();
+  if (pkg.effectiveFrom && new Date(pkg.effectiveFrom).toISOString().slice(0, 10) > today) {
+    throw new Error("Package is not yet active (future effective date)");
+  }
+  if (pkg.effectiveUntil && new Date(pkg.effectiveUntil).toISOString().slice(0, 10) < today) {
+    throw new Error("Package has expired (past effective until date)");
+  }
+
+  if (pkg.cityId && opts?.cityId && pkg.cityId !== opts.cityId) {
+    throw new Error(`Package is restricted to city ${pkg.cityId}`);
+  }
+  if (pkg.branchId && opts?.branchId && pkg.branchId !== opts.branchId) {
+    throw new Error(`Package is restricted to branch ${pkg.branchId}`);
+  }
+
   const items = await ctx.select()
     .from(catalogPackageEntitlementsTable)
     .where(eq(catalogPackageEntitlementsTable.packageId, packageId))
     .orderBy(catalogPackageEntitlementsTable.sortOrder);
 
   const grants = [];
-  for (const item of items) {
+
+  if (items.length > 0) {
+    for (const item of items) {
+      if (item.creditCount <= 0) {
+        throw new Error(`Package entitlement creditCount must be positive, received ${item.creditCount}`);
+      }
+      const ent = await grantEntitlement({
+        customerId,
+        packageId,
+        subscriptionId: opts?.subscriptionId,
+        serviceId: item.serviceId,
+        serviceLocationId: opts?.serviceLocationId,
+        assetId: opts?.assetId,
+        vehicleId: opts?.vehicleId,
+        solarSiteId: opts?.solarSiteId,
+        cityId: opts?.cityId ?? pkg.cityId ?? undefined,
+        branchId: opts?.branchId ?? pkg.branchId ?? undefined,
+        entitlementType: item.entitlementType,
+        creditCount: item.creditCount,
+        validityDays: pkg.validityDays,
+        validFrom: opts?.validFrom,
+        notes: `From package: ${pkg.name}`,
+        packageVersion: pkg.version ?? 1,
+        packagePrice: pkg.price,
+        packageType: pkg.packageType,
+        termsAndConditions: pkg.termsAndConditions,
+      }, ctx);
+      grants.push(ent);
+    }
+  } else if (pkg.serviceId) {
+    const totalCredits = (pkg.includedVisits ?? 1) + (pkg.complimentaryVisits ?? 0);
+    if (totalCredits <= 0) {
+      throw new Error(`Package total credits must be positive, received ${totalCredits}`);
+    }
     const ent = await grantEntitlement({
       customerId,
       packageId,
       subscriptionId: opts?.subscriptionId,
-      serviceId: item.serviceId,
+      serviceId: pkg.serviceId,
       serviceLocationId: opts?.serviceLocationId,
       assetId: opts?.assetId,
       vehicleId: opts?.vehicleId,
       solarSiteId: opts?.solarSiteId,
       cityId: opts?.cityId ?? pkg.cityId ?? undefined,
-      entitlementType: item.entitlementType,
-      creditCount: item.creditCount,
+      branchId: opts?.branchId ?? pkg.branchId ?? undefined,
+      entitlementType: "wash_credit",
+      creditCount: totalCredits,
       validityDays: pkg.validityDays,
       validFrom: opts?.validFrom,
       notes: `From package: ${pkg.name}`,
+      packageVersion: pkg.version ?? 1,
+      packagePrice: pkg.price,
+      packageType: pkg.packageType,
+      termsAndConditions: pkg.termsAndConditions,
     }, ctx);
     grants.push(ent);
+  } else {
+    throw new Error("Package has no configured entitlements or service association");
   }
+
   return grants;
 }
 

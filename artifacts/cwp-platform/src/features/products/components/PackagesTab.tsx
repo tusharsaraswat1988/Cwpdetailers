@@ -389,7 +389,10 @@ export function PackagesTab({ packageFilter }: Props = {}) {
             <Card key={pkg.id} className={pkg.isHighlighted ? "ring-2 ring-primary/30" : ""}>
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start gap-2">
-                  <CardTitle className="text-base">{pkg.name}</CardTitle>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <CardTitle className="text-base">{pkg.name}</CardTitle>
+                    <Badge variant="outline" className="text-[10px] font-mono py-0">v{pkg.version ?? 1}</Badge>
+                  </div>
                   {pkg.tag && <Badge variant="secondary" className="text-xs">{pkg.tag}</Badge>}
                 </div>
                 <CardDescription>{pkg.validityDays} days · ₹{Number(pkg.price).toLocaleString("en-IN")}</CardDescription>

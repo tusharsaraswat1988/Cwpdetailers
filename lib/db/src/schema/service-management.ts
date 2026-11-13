@@ -45,6 +45,7 @@ export const servicePricingTable = pgTable("service_pricing", {
   id: serial("id").primaryKey(),
   serviceId: integer("service_id").notNull(),
   cityId: integer("city_id"),
+  branchId: integer("branch_id"),
   vehicleCategoryId: integer("vehicle_category_id"),
   seatCategoryId: integer("seat_category_id"),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
@@ -52,6 +53,8 @@ export const servicePricingTable = pgTable("service_pricing", {
   pricingType: text("pricing_type"),
   durationMinutes: integer("duration_minutes"),
   isActive: boolean("is_active").notNull().default(true),
+  effectiveFrom: timestamp("effective_from", { withTimezone: true }),
+  effectiveUntil: timestamp("effective_until", { withTimezone: true }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
