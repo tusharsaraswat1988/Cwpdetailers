@@ -17,6 +17,7 @@ import {
   invoicesTable,
   citiesTable,
   staffTable,
+  serviceExceptionsTable,
 } from "@workspace/db";
 import { eq, ilike, or, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
@@ -841,9 +842,10 @@ router.get("/customers/:id/360", async (req, res) => {
       savedLocations,
       dcmsSubs,
       contracts,
-      recentBookings,
+      recentBookingsRaw,
       recentPayments,
       supportCases,
+      exceptions,
       notifications,
       cityInfo,
     ] = await Promise.all([
@@ -851,15 +853,17 @@ router.get("/customers/:id/360", async (req, res) => {
       db.select().from(savedLocationsTable).where(eq(savedLocationsTable.customerId, id)).orderBy(desc(savedLocationsTable.isDefault)),
       db
         .select({
-          sub: dcmsSubscriptionsTable,
+          id: dcmsSubscriptionsTable.id,
+          customerId: dcmsSubscriptionsTable.customerId,
+          vehicleId: dcmsSubscriptionsTable.vehicleId,
+          planId: dcmsSubscriptionsTable.planId,
+          status: dcmsSubscriptionsTable.status,
+          startDate: dcmsSubscriptionsTable.startDate,
           planName: dcmsPlansTable.name,
-          planTier: dcmsPlansTable.tier,
-          frequency: dcmsPlansTable.frequency,
-          cleanerName: staffTable.name,
+          planPrice: dcmsPlansTable.price,
         })
         .from(dcmsSubscriptionsTable)
         .leftJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
-        .leftJoin(staffTable, eq(dcmsSubscriptionsTable.assignedCleanerId, staffTable.id))
         .where(eq(dcmsSubscriptionsTable.customerId, id))
         .orderBy(desc(dcmsSubscriptionsTable.id)),
       db
@@ -869,8 +873,13 @@ router.get("/customers/:id/360", async (req, res) => {
         .orderBy(desc(subscriptionsTable.id)),
       db
         .select({
-          booking: bookingsTable,
+          id: bookingsTable.id,
+          serviceType: bookingsTable.serviceType,
+          scheduledDate: bookingsTable.scheduledDate,
+          scheduledTime: bookingsTable.scheduledTime,
+          status: bookingsTable.status,
           staffName: staffTable.name,
+          createdAt: bookingsTable.createdAt,
         })
         .from(bookingsTable)
         .leftJoin(staffTable, eq(bookingsTable.assignedStaffId, staffTable.id))
@@ -888,6 +897,12 @@ router.get("/customers/:id/360", async (req, res) => {
         .from(complaintsTable)
         .where(eq(complaintsTable.customerId, id))
         .orderBy(desc(complaintsTable.createdAt))
+        .limit(10),
+      db
+        .select()
+        .from(serviceExceptionsTable)
+        .where(eq(serviceExceptionsTable.customerId, id))
+        .orderBy(desc(serviceExceptionsTable.createdAt))
         .limit(10),
       db
         .select()
@@ -914,6 +929,22 @@ router.get("/customers/:id/360", async (req, res) => {
       pendingDues = Number(c.totalDues ?? 0);
     }
 
+    const totalSpend = recentPayments
+      .filter((p) => p.status === "completed" || !p.status)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const activeSubsCount =
+      dcmsSubs.filter((s) => s.status === "active").length +
+      contracts.filter((ct) => ct.status === "active").length;
+
+    const openComplaintsCount = supportCases.filter((sc) =>
+      ["open", "in_progress", "pending"].includes(sc.status ?? "")
+    ).length;
+
+    const unresolvedExceptionsCount = exceptions.filter((ex) =>
+      ["open", "investigating", "acknowledged"].includes(ex.status ?? "")
+    ).length;
+
     return res.json({
       customer: {
         ...c,
@@ -922,25 +953,29 @@ router.get("/customers/:id/360", async (req, res) => {
         isPiiMasked: !isSuperOrAdmin,
         cityName: cityInfo[0]?.name || c.city || null,
         branchName: branch?.name || null,
+        customerSince: c.createdAt,
+      },
+      stats: {
+        totalBookings: recentBookingsRaw.length,
+        completedBookings: recentBookingsRaw.filter((b) => b.status === "completed").length,
+        totalSpend,
+        walletBalance,
+        loyaltyPoints: Number(c.loyaltyPoints ?? 0),
+        activeSubscriptions: activeSubsCount,
+        openComplaints: openComplaintsCount,
+        unresolvedExceptions: unresolvedExceptionsCount,
       },
       walletBalance,
       pendingDues,
       vehicles,
       savedLocations,
-      dcmsSubscriptions: dcmsSubs.map((s) => ({
-        ...s.sub,
-        planName: s.planName,
-        planTier: s.planTier,
-        frequency: s.frequency,
-        cleanerName: s.cleanerName,
-      })),
+      activeSubscriptions: dcmsSubs,
+      dcmsSubscriptions: dcmsSubs,
       contracts,
-      recentBookings: recentBookings.map((b) => ({
-        ...b.booking,
-        staffName: b.staffName,
-      })),
+      recentBookings: recentBookingsRaw,
       recentPayments,
       supportCases,
+      exceptions,
       notifications,
     });
   } catch (err: any) {
@@ -972,7 +1007,7 @@ router.get("/customers/:id/bookings", async (req, res) => {
         })
         .from(bookingsTable)
         .leftJoin(staffTable, eq(bookingsTable.assignedStaffId, staffTable.id))
-        .leftJoin(vehiclesTable, eq(bookingsTable.vehicleId, vehiclesTable.id))
+        .leftJoin(vehiclesTable, eq(bookingsTable.assetId, vehiclesTable.id))
         .where(and(...conds))
         .orderBy(desc(bookingsTable.scheduledDate), desc(bookingsTable.createdAt))
         .limit(limit)

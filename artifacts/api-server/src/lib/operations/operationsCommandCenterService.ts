@@ -13,7 +13,7 @@ import {
   branchesTable,
   serviceExecutionsTable,
 } from "@workspace/db";
-import { eq, and, sql, desc, inArray, isNull, isNotNull, type SQL } from "drizzle-orm";
+import { eq, and, or, sql, desc, inArray, isNull, isNotNull, type SQL } from "drizzle-orm";
 import type { Request } from "express";
 import { getTodayIST } from "../../subscriptions/service";
 import { scanAndSyncOperationalExceptions } from "./exceptionService";
