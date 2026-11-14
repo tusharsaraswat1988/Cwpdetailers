@@ -16,6 +16,36 @@ import { validateStartupEnvironment } from "./lib/startupEnv";
 import { startGpsRetentionScheduler } from "./lib/tracking/gpsRetentionWorker";
 import { bootstrapSchedulerWorker } from "./lib/scheduler/bootstrapScheduler";
 
+process.on("uncaughtException", (err: any) => {
+  const msg = err?.message || String(err);
+  if (
+    msg.includes("Connection terminated") ||
+    msg.includes("terminating connection") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("closed") ||
+    msg.includes("socket")
+  ) {
+    logger.warn({ err }, "Caught transient database connection termination (recovering)");
+    return;
+  }
+  logger.error({ err }, "Uncaught exception");
+});
+
+process.on("unhandledRejection", (reason: any) => {
+  const msg = reason?.message || String(reason);
+  if (
+    msg.includes("Connection terminated") ||
+    msg.includes("terminating connection") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("closed") ||
+    msg.includes("socket")
+  ) {
+    logger.warn({ reason }, "Caught transient async database error (recovering)");
+    return;
+  }
+  logger.error({ reason }, "Unhandled async rejection");
+});
+
 const envSummary = validateStartupEnvironment();
 const port = envSummary.port;
 const dbHost = envSummary.databaseHost;

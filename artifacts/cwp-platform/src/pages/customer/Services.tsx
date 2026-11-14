@@ -1,225 +1,359 @@
+import { useState, useMemo, useEffect } from "react";
+import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useAccountScope } from "@/lib/account-scope";
-import { useListSubscriptions, getListSubscriptionsQueryKey } from "@workspace/api-client-react";
+import { useGetCustomer, useListVehicles } from "@workspace/api-client-react";
 import CustomerLayout from "@/components/layout/CustomerLayout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { CompletionRing } from "@/components/shared/CompletionRing";
-import { StatusBadge } from "@/components/shared/StatusBadge";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { ErrorState } from "@/components/shared/ErrorState";
-import { Sun, CreditCard, Pause, Calendar, ArrowRight } from "lucide-react";
-import { Link } from "wouter";
-import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
+import {
+  CustomerPage,
+  CustomerCard,
+  CustomerButton,
+  CustomerSkeleton,
+} from "@/features/customer-ds";
+import { Badge } from "@/components/ui/badge";
+import {
+  Search,
+  Sparkles,
+  Droplets,
+  ShieldCheck,
+  SunMedium,
+  Shield,
+  Clock,
+  Car,
+  MapPin,
+  CheckCircle2,
+  ArrowRight,
+  Filter,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type Subscription = {
+interface CatalogServiceItem {
   id: number;
-  type?: string | null;
-  status?: string | null;
-  serviceName?: string | null;
-  endDate?: string | null;
-  nextServiceDate?: string | null;
-  nextDueDate?: string | null;
-  totalServices?: number | null;
-  servicesRemaining?: number | null;
-  servicesUsed?: number | null;
-  dueAmount?: string | number | null;
-  vehicleName?: string | null;
-};
-
-function isSolarAmc(sub: Subscription) {
-  return sub.type === "solar_amc" || sub.type?.includes("solar");
+  name: string;
+  slug: string;
+  code: string;
+  description: string;
+  shortDescription?: string;
+  category: string;
+  serviceType: string;
+  basePrice: string | number;
+  effectivePrice: number;
+  durationMinutes?: number;
+  gstRate?: string;
+  pricingType?: string;
 }
 
-function visitsDone(sub: Subscription) {
-  if (sub.totalServices != null && sub.servicesRemaining != null) {
-    return sub.totalServices - sub.servicesRemaining;
-  }
-  return sub.servicesUsed ?? 0;
-}
+const CATEGORIES = [
+  { id: "all", label: "All Services", icon: Sparkles },
+  { id: "daily_cleaning", label: "Daily Cleaning", icon: Sparkles },
+  { id: "car_wash", label: "Car Wash", icon: Droplets },
+  { id: "detailing", label: "Detailing & Coating", icon: ShieldCheck },
+  { id: "solar_cleaning", label: "Solar Care", icon: SunMedium },
+];
 
-function isDailyCleaning(sub: Subscription) {
-  return sub.type === "daily_cleaning";
-}
+const VEHICLE_CATEGORIES = [
+  { id: "hatchback", label: "Hatchback", multiplier: 1.0 },
+  { id: "sedan", label: "Sedan", multiplier: 1.15 },
+  { id: "suv", label: "SUV / MUV", multiplier: 1.3 },
+  { id: "luxury", label: "Luxury", multiplier: 1.5 },
+];
 
-function SubscriptionCard({ sub, accent }: { sub: Subscription; accent?: "amber" }) {
-  const solar = isSolarAmc(sub);
-  const daily = isDailyCleaning(sub);
-  const done = visitsDone(sub);
-  const remaining = sub.servicesRemaining ?? (sub.totalServices != null ? sub.totalServices - done : null);
+export default function Services() {
+  const [, setLocation] = useLocation();
+  const { customerId } = useAccountScope();
+  const [selectedCity, setSelectedCity] = useState<"varanasi" | "noida">("varanasi");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedVehicleCategory, setSelectedVehicleCategory] = useState<string>("hatchback");
 
-  return (
-    <Card
-      className={accent === "amber" ? "border-amber-500/30 bg-amber-500/5" : undefined}
-      data-testid={`services-sub-${sub.id}`}
-    >
-      <CardContent className="p-4 flex items-start gap-4">
-        {sub.totalServices != null && sub.totalServices > 0 ? (
-          <CompletionRing value={done} max={sub.totalServices} size={56} label="done" />
-        ) : (
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            {solar ? <Sun size={22} className="text-primary" /> : <CreditCard size={22} className="text-primary" />}
-          </div>
-        )}
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-start justify-between gap-2">
-            <p className="font-semibold text-sm capitalize">{sub.type?.replace(/_/g, " ") ?? "Plan"}</p>
-            <StatusBadge status={sub.status ?? "active"} className="shrink-0" />
-          </div>
-          <p className="text-xs text-muted-foreground">{sub.serviceName}{sub.vehicleName ? ` · ${sub.vehicleName}` : ""}</p>
-          {sub.endDate && <p className="text-xs text-muted-foreground">Valid until {sub.endDate}</p>}
-          {solar && (
-            <div className="mt-2 p-2.5 rounded-lg bg-primary/5 border border-primary/10 text-xs space-y-0.5">
-              <p className="font-medium text-primary">Solar AMC</p>
-              {sub.nextServiceDate && <p>Next visit: {sub.nextServiceDate}</p>}
-              {sub.totalServices != null && (
-                <p>{done} visits done · {remaining ?? "—"} remaining</p>
-              )}
-            </div>
-          )}
-          {!solar && daily && (
-            <div className="mt-2 p-2.5 rounded-lg bg-primary/5 border border-primary/10 text-xs space-y-1">
-              <p className="font-medium text-primary">Daily Car Cleaning</p>
-              {sub.totalServices != null && (
-                <p>{done} visits done · {remaining ?? "—"} remaining</p>
-              )}
-              <Link href="/customer/daily-cleaning" className="text-primary hover:underline inline-flex items-center gap-1">
-                Open plan <ArrowRight size={11} />
-              </Link>
-            </div>
-          )}
-          {!solar && !daily && sub.nextServiceDate && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Calendar size={11} /> Next: {sub.nextServiceDate}
-            </p>
-          )}
-          {Number(sub.dueAmount) > 0 && (
-            <p className="text-xs text-destructive font-medium">₹{Number(sub.dueAmount).toLocaleString("en-IN")} due</p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+  // Fetch customer profile to detect city
+  const customerQuery = useGetCustomer(customerId ?? 0, {
+    query: { enabled: !!customerId },
+  });
+
+  // Fetch saved vehicles
+  const vehiclesQuery = useListVehicles(
+    { customerId: customerId ?? 0 },
+    { query: { enabled: !!customerId } },
   );
-}
 
-export default function CustomerServices() {
-  const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
+  // Auto-detect city from customer address or city if available
+  useEffect(() => {
+    const rawCity = customerQuery.data?.city?.toLowerCase() || "";
+    if (rawCity.includes("noida") || rawCity.includes("delhi") || rawCity.includes("ncr")) {
+      setSelectedCity("noida");
+    } else if (rawCity.includes("varanasi") || rawCity.includes("banaras") || rawCity.includes("kashi")) {
+      setSelectedCity("varanasi");
+    }
+  }, [customerQuery.data?.city]);
 
-  const { data, isLoading, isError, refetch } = useListSubscriptions(
-    { customerId: String(customerId ?? "") } as any,
-    {
-      query: {
-        queryKey: getListSubscriptionsQueryKey({ customerId: String(customerId ?? "") } as any),
-        enabled: customerId != null,
-      },
+  // Telemetry: service_viewed
+  useEffect(() => {
+    fetch("/api/marketing/funnel/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        milestone: "service_viewed",
+        customerId,
+        metadata: {
+          screen: "service_catalog",
+          city: selectedCity,
+          category: activeCategory,
+        },
+      }),
+    }).catch(() => {});
+  }, [selectedCity, activeCategory, customerId]);
+
+  // Fetch city catalog
+  const { data: services = [], isLoading } = useQuery<CatalogServiceItem[]>({
+    queryKey: ["catalog-services", selectedCity],
+    queryFn: async () => {
+      const res = await fetch(`/api/catalog/services/${selectedCity}`);
+      if (!res.ok) throw new Error("Failed to fetch catalog");
+      return res.json();
     },
-  );
+    staleTime: 60000,
+  });
 
-  const all = (data?.data ?? []) as Subscription[];
-  const active = all.filter(s => s.status === "active");
-  const paused = all.filter(s => s.status === "paused");
-  const other = all.filter(s => s.status !== "active" && s.status !== "paused");
+  // Filter services
+  const filteredServices = useMemo(() => {
+    return services.filter((svc) => {
+      // Category filter
+      if (activeCategory !== "all") {
+        const matchesCategory =
+          svc.category === activeCategory ||
+          svc.serviceType === activeCategory ||
+          (activeCategory === "daily_cleaning" && svc.category === "subscription");
+        if (!matchesCategory) return false;
+      }
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = svc.name.toLowerCase().includes(q);
+        const matchesDesc = (svc.description || "").toLowerCase().includes(q);
+        if (!matchesName && !matchesDesc) return false;
+      }
+      return true;
+    });
+  }, [services, activeCategory, searchQuery]);
 
-  if (scopeLoading) {
-    return (
-      <CustomerLayout>
-        <div className="space-y-3">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-28 rounded-xl" />
-          <Skeleton className="h-28 rounded-xl" />
-        </div>
-      </CustomerLayout>
-    );
-  }
+  const handleBookService = (svc: CatalogServiceItem) => {
+    // Telemetry: service_selected
+    fetch("/api/marketing/funnel/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        milestone: "service_selected",
+        customerId,
+        serviceId: svc.id,
+        serviceName: svc.name,
+        conversionValue: svc.effectivePrice,
+        metadata: {
+          city: selectedCity,
+          vehicleCategory: selectedVehicleCategory,
+        },
+      }),
+    }).catch(() => {});
 
-  if (missingCustomerLink || customerId == null) {
-    return (
-      <CustomerLayout>
-        <div className="max-w-md mx-auto text-center space-y-2 py-12">
-          <p className="font-semibold">Account not linked</p>
-          <NoCustomerProfileMessage />
-        </div>
-      </CustomerLayout>
-    );
-  }
+    // Route to schedule flow with pre-selected service
+    setLocation(`/customer/schedule?service=${svc.slug}&serviceId=${svc.id}&city=${selectedCity}`);
+  };
 
   return (
     <CustomerLayout>
-      <div className="space-y-5">
-        <div className="flex items-start justify-between gap-3">
+      <CustomerPage className="space-y-6">
+        {/* Header with City Selector Pill */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-display font-bold text-2xl">My Services</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              {isLoading ? "" : `${active.length} active plan${active.length !== 1 ? "s" : ""}`}
+            <h1 className="font-display font-bold text-2xl text-foreground">
+              Doorstep Service Catalog
+            </h1>
+            <p className="text-xs text-muted-foreground mt-1">
+              Select your vehicle category and book certified doorstep care in your city
             </p>
           </div>
-          <Link href="/customer/schedule">
-            <Button size="sm" className="gap-1 shrink-0">
-              Schedule <ArrowRight size={14} />
-            </Button>
-          </Link>
+
+          {/* City Selector Pill */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 self-start sm:self-auto">
+            <span className="text-[11px] font-semibold text-muted-foreground px-2 flex items-center gap-1">
+              <MapPin size={12} className="text-primary" /> City:
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedCity("varanasi")}
+              className={cn(
+                "px-3 py-1 text-xs font-bold rounded-lg transition-all",
+                selectedCity === "varanasi"
+                  ? "bg-white text-primary shadow-xs border border-slate-200"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Varanasi
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCity("noida")}
+              className={cn(
+                "px-3 py-1 text-xs font-bold rounded-lg transition-all",
+                selectedCity === "noida"
+                  ? "bg-white text-primary shadow-xs border border-slate-200"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Noida
+            </button>
+          </div>
         </div>
 
-        {isError ? (
-          <ErrorState onRetry={() => refetch()} />
-        ) : isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+        {/* Vehicle Category Filter Pills */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+            <Car size={13} /> Select Vehicle Type (Adjusts Pricing)
+          </p>
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {VEHICLE_CATEGORIES.map((vc) => (
+              <button
+                key={vc.id}
+                type="button"
+                onClick={() => setSelectedVehicleCategory(vc.id)}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all border",
+                  selectedVehicleCategory === vc.id
+                    ? "bg-primary text-white border-primary shadow-xs"
+                    : "bg-white text-foreground border-slate-200 hover:border-primary/40 hover:bg-slate-50"
+                )}
+              >
+                {vc.label}
+              </button>
+            ))}
           </div>
-        ) : active.length === 0 && paused.length === 0 ? (
-          <EmptyState
-            icon={<CreditCard size={20} />}
-            title="No active services"
-            description="Schedule a daily wash, package, or solar AMC to get started"
-            action={
-              <Link href="/customer/schedule">
-                <Button>Schedule a Service</Button>
-              </Link>
-            }
-          />
+        </div>
+
+        {/* Search & Category Filter */}
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+            <input
+              type="text"
+              placeholder="Search services (e.g. foam wash, ceramic, interior)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            />
+          </div>
+
+          {/* Categories Tab Strip */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            {CATEGORIES.map((cat) => {
+              const Icon = cat.icon;
+              const active = activeCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all border",
+                    active
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-white text-muted-foreground border-slate-200 hover:text-foreground hover:bg-slate-50"
+                  )}
+                >
+                  <Icon size={13} />
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Service Cards Grid */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CustomerSkeleton className="h-44 w-full rounded-2xl" />
+            <CustomerSkeleton className="h-44 w-full rounded-2xl" />
+            <CustomerSkeleton className="h-44 w-full rounded-2xl" />
+            <CustomerSkeleton className="h-44 w-full rounded-2xl" />
+          </div>
+        ) : filteredServices.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+            <Sparkles className="mx-auto h-8 w-8 text-slate-400 mb-2" />
+            <h3 className="font-semibold text-sm text-foreground">No services found</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Try adjusting your search query or category filter.
+            </p>
+          </div>
         ) : (
-          <>
-            {active.length > 0 && (
-              <section data-testid="services-active-section">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Active</h2>
-                <div className="space-y-3">
-                  {active.map(sub => <SubscriptionCard key={sub.id} sub={sub} />)}
-                </div>
-              </section>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-5">
+            {filteredServices.map((svc) => {
+              const multiplier =
+                VEHICLE_CATEGORIES.find((v) => v.id === selectedVehicleCategory)?.multiplier || 1.0;
+              const calculatedPrice = Math.round(svc.effectivePrice * (svc.serviceType === "solar_cleaning" ? 1.0 : multiplier));
 
-            {paused.length > 0 && (
-              <section data-testid="services-paused-section">
-                <div className="flex items-center gap-2 mb-2">
-                  <Pause size={14} className="text-amber-600" />
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700">Paused — no visits remaining</h2>
-                </div>
-                <div className="space-y-3">
-                  {paused.map(sub => <SubscriptionCard key={sub.id} sub={sub} accent="amber" />)}
-                </div>
-                <Link href="/customer/plans" className="block mt-3">
-                  <Button variant="outline" size="sm" className="w-full">Renew Plan</Button>
-                </Link>
-              </section>
-            )}
+              return (
+                <CustomerCard
+                  key={svc.id}
+                  className="p-5 flex flex-col justify-between hover:border-primary/40 hover:shadow-md transition-all duration-200 group relative bg-white"
+                  data-testid={`service-catalog-card-${svc.slug}`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wide">
+                            {svc.category.replace(/_/g, " ")}
+                          </Badge>
+                          <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                            <CheckCircle2 size={12} /> Available in {selectedCity === "varanasi" ? "Varanasi" : "Noida"}
+                          </span>
+                        </div>
+                        <h3 className="font-display font-bold text-base text-foreground mt-1 group-hover:text-primary transition-colors">
+                          {svc.name}
+                        </h3>
+                      </div>
 
-            {other.length > 0 && (
-              <section>
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Other</h2>
-                <div className="space-y-3">
-                  {other.map(sub => <SubscriptionCard key={sub.id} sub={sub} />)}
-                </div>
-              </section>
-            )}
-          </>
+                      {/* Duration badge */}
+                      {svc.durationMinutes && (
+                        <span className="text-[11px] font-medium text-muted-foreground bg-slate-100 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                          <Clock size={12} /> {svc.durationMinutes}m
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {svc.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-4 mt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                        Applicable Price
+                      </p>
+                      <p className="font-display font-black text-xl text-foreground text-primary">
+                        ₹{calculatedPrice.toLocaleString("en-IN")}
+                        <span className="text-xs font-normal text-muted-foreground ml-1">
+                          {svc.serviceType === "daily_cleaning" ? "/mo" : "incl. GST"}
+                        </span>
+                      </p>
+                    </div>
+
+                    <CustomerButton
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleBookService(svc)}
+                      className="gap-1.5 shadow-xs"
+                      data-testid={`book-btn-${svc.slug}`}
+                    >
+                      Book Now <ArrowRight size={14} />
+                    </CustomerButton>
+                  </div>
+                </CustomerCard>
+              );
+            })}
+          </div>
         )}
-
-        <Link href="/customer/assets">
-          <Button variant="ghost" size="sm" className="w-full text-muted-foreground">
-            Manage vehicles & solar sites
-          </Button>
-        </Link>
-      </div>
+      </CustomerPage>
     </CustomerLayout>
   );
 }

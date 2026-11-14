@@ -625,27 +625,50 @@ export default function BookingDetail() {
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancel this scheduled service?</DialogTitle>
+            <DialogTitle>Cancel scheduled service?</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Free cancellation up to 2 hours before your scheduled arrival. If you need a different time, you can also reschedule.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label>Reason (optional)</Label>
-            <Textarea
-              value={cancelReason}
-              onChange={e => setCancelReason(e.target.value)}
-              placeholder="Let us know why, so we can improve"
-              data-testid="input-cancel-reason"
-            />
+
+          <div className="space-y-3 py-2">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1">
+              <p className="font-semibold flex items-center gap-1.5 text-amber-900">
+                <AlertTriangle size={14} /> Cancellation Policy
+              </p>
+              <p>
+                Any promotional discounts or redeemed loyalty points for this session will be restored to your account upon cancellation.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select reason for cancellation</Label>
+              <Select value={cancelReason} onValueChange={setCancelReason}>
+                <SelectTrigger className="w-full text-xs">
+                  <SelectValue placeholder="Choose a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Change of plans / travelling">Change of plans / travelling</SelectItem>
+                  <SelectItem value="Want to reschedule for another time">Want to reschedule for another time</SelectItem>
+                  <SelectItem value="Booked by mistake">Booked by mistake</SelectItem>
+                  <SelectItem value="Need a different service">Need a different service</SelectItem>
+                  <SelectItem value="Weather / Rain">Weather / Rain</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
           <DialogFooter className="gap-2">
             <CustomerButton variant="outline" onClick={() => setCancelOpen(false)}>Keep service</CustomerButton>
             <CustomerButton
               variant="destructive"
               disabled={cancelMutation.isPending}
               data-testid="btn-confirm-cancel"
-              onClick={() => cancelMutation.mutate(cancelReason)}
+              onClick={() => cancelMutation.mutate(cancelReason || "Customer cancelled")}
             >
               {cancelMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
-              Yes, cancel
+              Confirm Cancellation
             </CustomerButton>
           </DialogFooter>
         </DialogContent>

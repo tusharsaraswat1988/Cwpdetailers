@@ -87,6 +87,7 @@ import CustomerComplaints from "@/pages/customer/Complaints";
 import CustomerWallet from "@/pages/customer/Wallet";
 import LoyaltyRewardsPage from "@/pages/customer/LoyaltyRewardsPage";
 import CustomerMyPlans from "@/pages/customer/MyPlans";
+import CustomerServices from "@/pages/customer/Services";
 import PlanDetail from "@/pages/customer/PlanDetail";
 import CustomerProductDetailPage from "@/pages/customer/ProductDetail";
 import {
@@ -308,7 +309,7 @@ function Router() {
       <Route path="/customer/rewards" component={() => <ProtectedRoute component={LoyaltyRewardsPage} roles={["customer"]} />} />
       {/* Services & Dedicated Product Detail Pages */}
       <Route path="/customer/services/:slug" component={() => <ProtectedRoute component={CustomerProductDetailPage} roles={["customer"]} />} />
-      <Route path="/customer/services" component={() => <ProtectedRoute component={RedirectToPlans} roles={["customer"]} />} />
+      <Route path="/customer/services" component={() => <ProtectedRoute component={CustomerServices} roles={["customer"]} />} />
       <Route path="/customer/bookings/:id" component={() => <ProtectedRoute component={RedirectBookingsIdToSchedule} roles={["customer"]} />} />
       <Route path="/customer/bookings" component={() => <ProtectedRoute component={RedirectToSchedule} roles={["customer"]} />} />
       <Route path="/customer/book" component={() => <ProtectedRoute component={RedirectToSchedule} roles={["customer"]} />} />
@@ -337,6 +338,17 @@ function Router() {
           </div>
         </div>
       )} roles={["franchisee"]} />} />
+
+      {/* Top-level friendly customer aliases */}
+      <Route path="/services" component={() => <Redirect to="/customer/services" />} />
+      <Route path="/catalog" component={() => <Redirect to="/customer/services" />} />
+      <Route path="/book" component={() => <Redirect to="/customer/schedule" />} />
+      <Route path="/schedule" component={() => <Redirect to="/customer/schedule" />} />
+      <Route path="/bookings" component={() => <Redirect to="/customer/history" />} />
+      <Route path="/plans" component={() => <Redirect to="/customer/plans" />} />
+      <Route path="/history" component={() => <Redirect to="/customer/history" />} />
+      <Route path="/account" component={() => <Redirect to="/customer/account" />} />
+      <Route path="/rewards" component={() => <Redirect to="/customer/rewards" />} />
 
       {/* City SEO pages: /varanasi/daily-car-cleaning — must be after all fixed routes */}
       <Route path="/:citySlug/:serviceSlug" component={CityServicePage} />

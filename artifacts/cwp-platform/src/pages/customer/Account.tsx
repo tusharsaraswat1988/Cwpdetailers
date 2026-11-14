@@ -6,6 +6,7 @@ import { CustomerPage, CustomerHeader } from "@/features/customer-ds";
 import { ProfileCard } from "./account/ProfileCard";
 import { AccountSummary } from "./account/AccountSummary";
 import { BillingSection } from "./account/BillingSection";
+import { LoyaltyReferralSection } from "./account/LoyaltyReferralSection";
 import { NotificationSection } from "./account/NotificationSection";
 import { SupportSection } from "./account/SupportSection";
 import { LogoutSection } from "./account/LogoutSection";
@@ -70,6 +71,7 @@ export default function CustomerAccount() {
           </div>
 
           <div className="flex flex-col gap-6">
+            <LoyaltyReferralSection />
             <BillingSection totalDues={profile?.totalDues} />
             <NotificationSection />
             <SupportSection supervisor={supervisorData?.supervisor ?? null} />

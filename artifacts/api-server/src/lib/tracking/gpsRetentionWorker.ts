@@ -118,9 +118,10 @@ export async function purgeOldGpsLocationLogs(opts?: PurgeOptions): Promise<{
   // Acquire PostgreSQL advisory lock to ensure only one instance executes purge
   let lockAcquired = false;
   try {
-    const [lockRes] = await db.execute<{ acquired: boolean }>(
+    const lockExecRes = await db.execute<{ acquired: boolean }>(
       sql`SELECT pg_try_advisory_lock(${GPS_PURGE_ADVISORY_LOCK_ID}) AS acquired`,
     );
+    const lockRes = Array.isArray(lockExecRes) ? lockExecRes[0] : (lockExecRes as any)?.rows?.[0];
 
     lockAcquired = Boolean((lockRes as any)?.acquired ?? (lockRes as any)?.rows?.[0]?.acquired);
     if (!lockAcquired) {

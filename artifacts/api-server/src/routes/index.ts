@@ -59,6 +59,7 @@ import adminApprovalsRouter from "./admin-approvals";
 import marketingRouter from "./marketing";
 import { loyaltyRouter } from "./loyalty";
 import { automationRouter } from "./automation";
+import uxExperimentsRouter from "./ux-experiments";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -308,6 +309,7 @@ router.use(promotionsRouter);
 router.use(marketingRouter);
 router.use(loyaltyRouter);
 router.use(automationRouter);
+router.use(uxExperimentsRouter);
 router.use(supportRouter);
 router.use(qualityRouter);
 router.use(citiesRouter);

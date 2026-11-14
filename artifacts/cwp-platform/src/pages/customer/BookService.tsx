@@ -391,6 +391,33 @@ export default function BookService() {
     });
   }, [initialized, asset?.id, planMode, selectedPlan?.id, serviceId, scheduledDate, scheduledTime, applyAutoSkips]);
 
+  // Booking Conversion Funnel Telemetry
+  useEffect(() => {
+    let milestone = "";
+    if (step === "asset" && asset) milestone = "vehicle_selected";
+    else if (step === "service" && serviceId) milestone = "service_selected";
+    else if (step === "date" && scheduledDate) milestone = "slot_selected";
+    else if (step === "review") milestone = "checkout_started";
+
+    if (milestone) {
+      fetch("/api/marketing/funnel/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          milestone,
+          customerId,
+          serviceId: serviceId ? parseInt(serviceId, 10) : undefined,
+          serviceName: selectedService?.name,
+          conversionValue: calculatedEstimatedPrice ?? undefined,
+          metadata: {
+            step,
+            cityId: bookingLocation?.cityId,
+          },
+        }),
+      }).catch(() => {});
+    }
+  }, [step, asset?.id, serviceId, scheduledDate, scheduledTime, customerId, selectedService?.name, calculatedEstimatedPrice, bookingLocation?.cityId]);
+
   const goNext = () => {
     const n = nextStep(step);
     if (n) setStep(n);
@@ -578,7 +605,18 @@ export default function BookService() {
   if (successId != null) {
     return (
       <CustomerLayout>
-        <ScheduleSuccessScreen requestId={successId} onScheduleAnother={resetFlow} />
+        <ScheduleSuccessScreen
+          requestId={successId}
+          serviceName={selectedService?.name || "Doorstep Service"}
+          assetName={asset?.name}
+          assetSubtitle={asset?.subtitle}
+          address={bookingLocation?.address}
+          date={scheduledDate}
+          time={scheduledTime}
+          paymentAmount={appliedCoupon?.finalPayable ?? calculatedEstimatedPrice ?? undefined}
+          coveredByPlan={coveredByPlan}
+          onScheduleAnother={resetFlow}
+        />
       </CustomerLayout>
     );
   }

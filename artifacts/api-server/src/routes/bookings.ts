@@ -525,6 +525,36 @@ router.post("/bookings", async (req, res) => {
           companyId: booking.companyId,
           branchId: booking.branchId,
         }).catch((err) => req.log?.error?.({ err }, "Failed to send booking confirmed notification"));
+
+        // Server-authoritative booking conversion telemetry & experiment conversion
+        const telemetrySessionId = (req.headers["x-session-id"] as string) || (req.body as any).sessionId || `sess_cust_${booking.customerId}`;
+        const telemetryFinalAmount = booking.finalAmount ? Number(booking.finalAmount) : undefined;
+        import("../lib/marketing/bookingFunnelAnalyticsService").then(({ logFunnelEvent }) => {
+          logFunnelEvent({
+            milestone: "booking_confirmed",
+            sessionId: telemetrySessionId,
+            customerId: booking.customerId,
+            cityId: booking.cityId ?? undefined,
+            branchId: booking.branchId ?? undefined,
+            serviceId: booking.serviceId ?? undefined,
+            serviceName: authoritativeService.name ?? undefined,
+            orderId: String(booking.id),
+            conversionValue: telemetryFinalAmount,
+            metadata: {
+              bookingId: booking.id,
+              serviceType: booking.serviceType,
+            },
+          }).catch(() => {});
+        }).catch(() => {});
+
+        import("../lib/ux/uxExperimentService").then(({ recordExperimentConversion }) => {
+          recordExperimentConversion({
+            sessionId: telemetrySessionId,
+            customerId: booking.customerId,
+            eventName: "booking_confirmed",
+            conversionValue: telemetryFinalAmount,
+          }).catch(() => {});
+        }).catch(() => {});
       }
 
       const fresh = await getBookingWithScope(req, booking.id);

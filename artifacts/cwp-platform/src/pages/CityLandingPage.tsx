@@ -43,6 +43,21 @@ const RESERVED_SLUGS = new Set([
   "contact-us",
   "solar",
   "vehicle",
+  "services",
+  "service",
+  "book",
+  "bookings",
+  "schedule",
+  "plans",
+  "history",
+  "account",
+  "rewards",
+  "loyalty",
+  "wallet",
+  "catalog",
+  "assets",
+  "invoices",
+  "support",
 ]);
 
 interface CityLandingData {

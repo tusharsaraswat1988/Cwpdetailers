@@ -43,6 +43,7 @@ import { ServicesGrid } from "@/components/home/ServicesGrid";
 import { CustomerReviewsSection } from "@/components/home/CustomerReviewsSection";
 import { TodayServiceCard } from "@/components/home/TodayServiceCard";
 import { UpcomingServicePreview } from "@/components/home/UpcomingServicePreview";
+import { AdaptivePrimaryCTA } from "@/components/home/AdaptivePrimaryCTA";
 
 import {
   CustomerPage,
@@ -377,6 +378,21 @@ export default function CustomerDashboard() {
                 </Link>
               </div>
             )}
+
+            {/* Adaptive Primary CTA (Personalized & A/B Experiment-Enabled) */}
+            <AdaptivePrimaryCTA
+              vehicleCount={vehicleRows.length}
+              hasActiveSubscription={Boolean(dashboard.primaryPlan?.isDailyCleaning)}
+              activePlanName={dashboard.primaryPlan?.name}
+              upcomingBooking={upcomingFutureBooking ? {
+                id: upcomingFutureBooking.id,
+                scheduledDate: upcomingFutureBooking.scheduledDate,
+                serviceType: upcomingFutureBooking.serviceType,
+                status: upcomingFutureBooking.status,
+              } : null}
+              cityName={currentCityName}
+              customerId={customerId}
+            />
 
             {/* Core Product Marketing Hero */}
             <MarketingHero cityName={currentCityName} />

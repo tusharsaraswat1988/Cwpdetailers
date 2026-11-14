@@ -42,7 +42,11 @@ import {
   Globe,
   FileText,
   Search,
+  FlaskConical,
+  TrendingDown,
 } from "lucide-react";
+import { BookingFunnelDashboard } from "@/components/admin/BookingFunnelDashboard";
+import { UxExperimentsDashboard } from "@/components/admin/UxExperimentsDashboard";
 
 type City = { id: number; name: string; slug: string };
 type Branch = { id: number; name: string; cityId: number };
@@ -423,6 +427,12 @@ export default function MarketingCMSPage() {
           <TabsTrigger value="analytics" className="text-xs font-semibold gap-1.5">
             <TrendingUp size={14} /> Campaign Analytics
           </TabsTrigger>
+          <TabsTrigger value="funnel" className="text-xs font-semibold gap-1.5">
+            <TrendingDown size={14} /> Booking Funnel
+          </TabsTrigger>
+          <TabsTrigger value="experiments" className="text-xs font-semibold gap-1.5">
+            <FlaskConical size={14} /> A/B Experiments
+          </TabsTrigger>
         </TabsList>
 
         {/* Tab 1: Homepage Sections */}
@@ -701,6 +711,16 @@ export default function MarketingCMSPage() {
               </p>
             </div>
           </Card>
+        </TabsContent>
+
+        {/* Tab 6: Booking Conversion Funnel */}
+        <TabsContent value="funnel" className="space-y-4">
+          <BookingFunnelDashboard cityId={selectedCityId} />
+        </TabsContent>
+
+        {/* Tab 7: UX Experimentation & A/B Engine */}
+        <TabsContent value="experiments" className="space-y-4">
+          <UxExperimentsDashboard />
         </TabsContent>
       </Tabs>
 

@@ -25,6 +25,10 @@ import {
   logMarketingEvent,
   getMarketingAnalyticsSummary,
 } from "../lib/marketing/marketingAnalyticsService";
+import {
+  logFunnelEvent,
+  getBookingFunnelAnalytics,
+} from "../lib/marketing/bookingFunnelAnalyticsService";
 import { getEffectiveServicesForScope } from "../lib/catalog/serviceAvailabilityService";
 
 const router = Router();
@@ -280,6 +284,53 @@ router.post("/marketing/events", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "Failed to record marketing event");
     return res.status(500).json({ error: "Failed to record marketing event" });
+  }
+});
+
+/**
+ * POST /api/marketing/funnel/event
+ * Records a booking conversion funnel milestone
+ */
+router.post("/marketing/funnel/event", async (req: Request, res: Response) => {
+  try {
+    const {
+      milestone,
+      sessionId,
+      customerId,
+      cityId,
+      branchId,
+      serviceId,
+      serviceName,
+      orderId,
+      deviceType,
+      conversionValue,
+      metadata,
+    } = req.body;
+
+    if (!milestone) {
+      return res.status(400).json({ error: "milestone is required" });
+    }
+
+    const resolvedSessionId = sessionId || (req.headers["x-session-id"] as string) || "anon";
+
+    const event = await logFunnelEvent({
+      milestone,
+      sessionId: resolvedSessionId,
+      customerId: customerId ? parseInt(customerId, 10) : (req.user?.customerId || null),
+      cityId: cityId ? parseInt(cityId, 10) : null,
+      branchId: branchId ? parseInt(branchId, 10) : null,
+      serviceId: serviceId ? parseInt(serviceId, 10) : null,
+      serviceName: serviceName ? String(serviceName) : null,
+      orderId: orderId ? String(orderId) : null,
+      deviceType: deviceType || "mobile",
+      conversionValue: typeof conversionValue === "number" ? conversionValue : null,
+      metadata,
+    });
+
+    return res.json({ success: true, eventId: event?.id, milestone });
+  } catch (err) {
+    req.log.error({ err }, "Failed to record funnel event");
+    return res.status(500).json({ error: "Failed to record funnel event" });
   }
 });
 
@@ -923,6 +974,30 @@ router.get("/marketing/analytics", requireAuth, async (req: Request, res: Respon
   } catch (err) {
     req.log.error({ err }, "Failed to generate marketing analytics");
     return res.status(500).json({ error: "Failed to generate marketing analytics" });
+  }
+});
+
+/**
+ * GET /api/marketing/funnel/analytics
+ * Booking conversion funnel drop-off and conversion rates
+ */
+router.get("/marketing/funnel/analytics", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { cityId, branchId, serviceId, deviceType, startDate, endDate } = req.query as Record<string, string>;
+
+    const analytics = await getBookingFunnelAnalytics({
+      cityId: cityId ? parseInt(cityId, 10) : null,
+      branchId: branchId ? parseInt(branchId, 10) : null,
+      serviceId: serviceId ? parseInt(serviceId, 10) : null,
+      deviceType: deviceType || null,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+    });
+
+    return res.json(analytics);
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate booking funnel analytics");
+    return res.status(500).json({ error: "Failed to generate booking funnel analytics" });
   }
 });
 
