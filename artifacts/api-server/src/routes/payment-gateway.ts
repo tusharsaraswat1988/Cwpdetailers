@@ -1,6 +1,10 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
-import { getActivePaymentGateway } from "../lib/razorpay/razorpayConfig";
+import {
+  getActivePaymentGateway,
+  cleanEnvVar,
+  getRazorpayBaseUrl,
+} from "../lib/razorpay/razorpayConfig";
 import { createUnifiedPaymentOrder } from "../lib/payments/unifiedPaymentService";
 import {
   verifyRazorpayPayment,
@@ -19,6 +23,69 @@ router.get("/payments/gateway-info", (req: Request, res: Response) => {
   return res.json({
     activeGateway,
     supportedGateways: ["razorpay", "cashfree"],
+  });
+});
+
+/**
+ * GET /api/payments/gateway-diagnostics
+ * Safe operational diagnostic endpoint reporting gateway readiness, credentials presence,
+ * environment mode, and server build identifier without exposing any secrets or keys.
+ */
+router.get("/payments/gateway-diagnostics", (_req: Request, res: Response) => {
+  const activeGateway = getActivePaymentGateway();
+  const rzpKeyId = cleanEnvVar(process.env.RAZORPAY_KEY_ID);
+  const rzpKeySecret = cleanEnvVar(process.env.RAZORPAY_KEY_SECRET);
+  const rzpWebhookSecret = cleanEnvVar(process.env.RAZORPAY_WEBHOOK_SECRET);
+
+  const cfAppId = cleanEnvVar(process.env.CASHFREE_APP_ID);
+  const cfSecretKey = cleanEnvVar(process.env.CASHFREE_SECRET_KEY);
+  const cfEnv = cleanEnvVar(process.env.CASHFREE_ENV);
+
+  let keyPrefix = "none";
+  let keyEnvironment: "production" | "sandbox" | "unconfigured" = "unconfigured";
+  if (rzpKeyId) {
+    if (rzpKeyId.startsWith("rzp_live_")) {
+      keyPrefix = "rzp_live_";
+      keyEnvironment = "production";
+    } else if (rzpKeyId.startsWith("rzp_test_")) {
+      keyPrefix = "rzp_test_";
+      keyEnvironment = "sandbox";
+    } else {
+      keyPrefix = "custom";
+      keyEnvironment = "sandbox";
+    }
+  }
+
+  let razorpayBaseHost = "api.razorpay.com";
+  try {
+    const url = new URL(getRazorpayBaseUrl());
+    razorpayBaseHost = url.hostname;
+  } catch {
+    // fallback
+  }
+
+  return res.status(200).json({
+    status: "ok",
+    activeGateway,
+    supportedGateways: ["razorpay", "cashfree"],
+    razorpay: {
+      hasKeyId: Boolean(rzpKeyId),
+      hasKeySecret: Boolean(rzpKeySecret),
+      hasWebhookSecret: Boolean(rzpWebhookSecret),
+      keyEnvironment,
+      keyPrefix,
+      apiBaseUrlHost: razorpayBaseHost,
+    },
+    cashfree: {
+      hasAppId: Boolean(cfAppId),
+      hasSecretKey: Boolean(cfSecretKey),
+      environment: cfEnv || "sandbox",
+    },
+    server: {
+      buildId: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.COMMIT_SHA || "local-dev",
+      nodeVersion: process.version,
+      timestamp: new Date().toISOString(),
+    },
   });
 });
 
@@ -166,15 +233,24 @@ router.post("/payments/razorpay/verify", requireAuth, async (req: Request, res: 
  */
 async function handleRazorpayWebhook(req: Request, res: Response) {
   const signature = (req.headers["x-razorpay-signature"] as string) || "";
-  const rawBody = (req as any).rawBody || Buffer.from(JSON.stringify(req.body), "utf8");
+  const eventId = (req.headers["x-razorpay-event-id"] as string) || undefined;
+  const rawBody = (req as any).rawBody;
 
   if (!signature) {
     logger.warn("[RAZORPAY_WEBHOOK_ROUTE] Missing x-razorpay-signature header");
     return res.status(400).json({ error: "Missing signature header" });
   }
 
+  if (!rawBody || !Buffer.isBuffer(rawBody)) {
+    logger.error("[RAZORPAY_WEBHOOK_ROUTE] Missing raw request body buffer for webhook signature verification");
+    return res.status(400).json({
+      error: "MISSING_RAW_BODY",
+      message: "Raw request body buffer required for cryptographic webhook verification",
+    });
+  }
+
   try {
-    const result = await handleRazorpayWebhookPayload(rawBody, signature);
+    const result = await handleRazorpayWebhookPayload(rawBody, signature, eventId);
     return res.status(200).json({ received: true, ...result });
   } catch (err: any) {
     const status = err.statusCode || 400;

@@ -81,3 +81,41 @@ export interface CashfreeApiErrorBody {
   code?: string;
   type?: string;
 }
+
+export type CashfreeRefundStatus = "SUCCESS" | "PENDING" | "CANCELLED" | "FAILED";
+
+export interface CashfreeCreateRefundPayload {
+  refund_amount: number;
+  refund_id: string;
+  refund_note?: string;
+  refund_speed?: "STANDARD" | "INSTANT";
+}
+
+export interface CashfreeRefundEntity {
+  cf_refund_id: string | number;
+  refund_id: string;
+  order_id: string;
+  entity: "refund";
+  refund_amount: number;
+  refund_currency: string;
+  refund_note?: string;
+  refund_status: CashfreeRefundStatus;
+  refund_arn?: string;
+  status_description?: string;
+  created_at?: string;
+  processed_at?: string;
+}
+
+export interface CashfreeSettlementEntity {
+  cf_settlement_id?: string | number;
+  settlement_id?: string;
+  order_id?: string;
+  entity?: "settlement";
+  order_amount?: number;
+  settlement_amount?: number;
+  service_charge?: number;
+  service_tax?: number;
+  settlement_status?: string;
+  settlement_time?: string;
+}
+

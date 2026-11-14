@@ -15,6 +15,7 @@ import {
   complaintsTable,
   notificationsTable,
   invoicesTable,
+  paymentAttemptsTable,
   citiesTable,
   staffTable,
   serviceExceptionsTable,
@@ -1044,8 +1045,16 @@ router.get("/customers/:id/payments", async (req, res) => {
 
     const [payments, countResult] = await Promise.all([
       db
-        .select()
+        .select({
+          payment: paymentsTable,
+          invoice: invoicesTable,
+          attempt: paymentAttemptsTable,
+          booking: bookingsTable,
+        })
         .from(paymentsTable)
+        .leftJoin(invoicesTable, eq(paymentsTable.invoiceId, invoicesTable.id))
+        .leftJoin(paymentAttemptsTable, eq(paymentsTable.transactionId, paymentAttemptsTable.cfOrderId))
+        .leftJoin(bookingsTable, eq(invoicesTable.bookingId, bookingsTable.id))
         .where(eq(paymentsTable.customerId, customerId))
         .orderBy(desc(paymentsTable.createdAt))
         .limit(limit)
@@ -1055,8 +1064,35 @@ router.get("/customers/:id/payments", async (req, res) => {
 
     const total = Number(countResult[0]?.count ?? 0);
 
+    const enriched = payments.map(({ payment, invoice, attempt, booking }) => {
+      const bookingId = payment.bookingId ?? invoice?.bookingId ?? booking?.id ?? null;
+      let statusLabel = payment.status;
+      if (payment.refundStatus === "refunded") statusLabel = "refunded";
+      else if (payment.refundStatus === "partial") statusLabel = "partially_refunded" as any;
+
+      return {
+        id: payment.id,
+        amount: parseFloat(payment.amount),
+        method: payment.method,
+        paymentMode: payment.method,
+        status: statusLabel,
+        refundStatus: payment.refundStatus || "none",
+        refundedAmount: parseFloat(payment.refundedAmount || "0"),
+        transactionId: payment.transactionId,
+        cfOrderId: attempt?.gatewayOrderId || attempt?.cfOrderId || payment.transactionId,
+        cfPaymentId: attempt?.cfPaymentId || null,
+        invoiceId: invoice?.id ?? payment.invoiceId,
+        invoiceNumber: invoice?.invoiceNumber ?? (payment.invoiceId ? `#${payment.invoiceId}` : null),
+        bookingId,
+        bookingRef: bookingId ? `BK-${bookingId}` : null,
+        notes: payment.notes,
+        receivedAt: payment.receivedAt,
+        createdAt: payment.createdAt,
+      };
+    });
+
     return res.json({
-      data: payments,
+      data: enriched,
       total,
       limit,
       offset,

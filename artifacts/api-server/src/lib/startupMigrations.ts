@@ -1208,6 +1208,97 @@ export async function ensureStartupMigrations(): Promise<void> {
       logger.warn({ err: migExpErr }, "Phase 25 universal service exceptions DDL check failed (non-fatal, continuing)");
     }
 
+    // Phase 26 — Financial Command Center, Refunds & Reconciliation (Migration 086)
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS payment_refunds (
+          id SERIAL PRIMARY KEY,
+          refund_id TEXT NOT NULL UNIQUE,
+          payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
+          attempt_id INTEGER REFERENCES payment_attempts(id) ON DELETE SET NULL,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+          booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+          invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL,
+          city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+          amount NUMERIC(10, 2) NOT NULL,
+          currency VARCHAR(3) NOT NULL DEFAULT 'INR',
+          reason TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'initiated',
+          gateway_provider TEXT NOT NULL DEFAULT 'cashfree',
+          cf_refund_id TEXT,
+          rzp_refund_id TEXT,
+          gateway_refund_id TEXT,
+          raw_gateway_payload JSONB,
+          initiated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          processed_at TIMESTAMP WITH TIME ZONE,
+          failure_reason TEXT,
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS payment_refunds_refund_id_idx ON payment_refunds (refund_id);
+        CREATE INDEX IF NOT EXISTS payment_refunds_payment_id_idx ON payment_refunds (payment_id);
+        CREATE INDEX IF NOT EXISTS payment_refunds_attempt_id_idx ON payment_refunds (attempt_id);
+        CREATE INDEX IF NOT EXISTS payment_refunds_customer_id_idx ON payment_refunds (customer_id);
+        CREATE INDEX IF NOT EXISTS payment_refunds_booking_id_idx ON payment_refunds (booking_id);
+        CREATE INDEX IF NOT EXISTS payment_refunds_invoice_id_idx ON payment_refunds (invoice_id);
+        CREATE INDEX IF NOT EXISTS payment_refunds_status_idx ON payment_refunds (status);
+        CREATE INDEX IF NOT EXISTS payment_refunds_created_at_idx ON payment_refunds (created_at);
+        CREATE INDEX IF NOT EXISTS payment_refunds_gateway_provider_idx ON payment_refunds (gateway_provider);
+
+        ALTER TABLE payment_attempts
+          ADD COLUMN IF NOT EXISTS booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS refund_status TEXT NOT NULL DEFAULT 'none',
+          ADD COLUMN IF NOT EXISTS refunded_amount NUMERIC(10, 2) NOT NULL DEFAULT '0',
+          ADD COLUMN IF NOT EXISTS reconciliation_status TEXT NOT NULL DEFAULT 'unreconciled',
+          ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMP WITH TIME ZONE,
+          ADD COLUMN IF NOT EXISTS reconciliation_notes TEXT;
+
+        CREATE INDEX IF NOT EXISTS payment_attempts_booking_id_idx ON payment_attempts (booking_id);
+        CREATE INDEX IF NOT EXISTS payment_attempts_refund_status_idx ON payment_attempts (refund_status);
+        CREATE INDEX IF NOT EXISTS payment_attempts_reconciliation_status_idx ON payment_attempts (reconciliation_status);
+
+        ALTER TABLE payments
+          ADD COLUMN IF NOT EXISTS booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS refund_status TEXT NOT NULL DEFAULT 'none',
+          ADD COLUMN IF NOT EXISTS refunded_amount NUMERIC(10, 2) NOT NULL DEFAULT '0',
+          ADD COLUMN IF NOT EXISTS reconciliation_status TEXT NOT NULL DEFAULT 'unreconciled',
+          ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMP WITH TIME ZONE;
+
+        CREATE INDEX IF NOT EXISTS payments_booking_id_idx ON payments (booking_id);
+        CREATE INDEX IF NOT EXISTS payments_refund_status_idx ON payments (refund_status);
+        CREATE INDEX IF NOT EXISTS payments_reconciliation_status_idx ON payments (reconciliation_status);
+      `);
+    } catch (mig86Err) {
+      logger.warn({ err: mig86Err }, "Phase 26 payment refunds & reconciliation DDL check failed (non-fatal, continuing)");
+    }
+
+    // Phase 26 — Payment Webhook Events Deduplication (Migration 087 / PAY-006)
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS payment_webhook_events (
+          id SERIAL PRIMARY KEY,
+          event_id TEXT NOT NULL UNIQUE,
+          gateway_provider TEXT NOT NULL DEFAULT 'razorpay',
+          event_type TEXT NOT NULL,
+          order_id TEXT,
+          payment_id TEXT,
+          payload JSONB,
+          status TEXT NOT NULL DEFAULT 'processed',
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS payment_webhook_events_event_id_idx ON payment_webhook_events (event_id);
+        CREATE INDEX IF NOT EXISTS payment_webhook_events_order_id_idx ON payment_webhook_events (order_id);
+        CREATE INDEX IF NOT EXISTS payment_webhook_events_payment_id_idx ON payment_webhook_events (payment_id);
+        CREATE INDEX IF NOT EXISTS payment_webhook_events_created_at_idx ON payment_webhook_events (created_at);
+      `);
+    } catch (mig87Err) {
+      logger.warn({ err: mig87Err }, "Phase 26 payment webhook events DDL check failed (non-fatal, continuing)");
+    }
+
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

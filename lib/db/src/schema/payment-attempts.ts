@@ -14,6 +14,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
 import { invoicesTable } from "./invoices";
+import { bookingsTable } from "./bookings";
 
 export type PaymentAttemptStatus =
   | "initiated"
@@ -24,6 +25,8 @@ export type PaymentAttemptStatus =
   | "expired";
 
 export type PaymentGatewayProvider = "cashfree" | "razorpay";
+export type PaymentRefundStatus = "none" | "partial" | "refunded";
+export type PaymentReconciliationStatus = "unreconciled" | "matched" | "mismatch" | "reconciled";
 
 export const paymentAttemptsTable = pgTable(
   "payment_attempts",
@@ -38,6 +41,7 @@ export const paymentAttemptsTable = pgTable(
       .notNull()
       .references(() => customersTable.id),
     invoiceId: integer("invoice_id").references(() => invoicesTable.id),
+    bookingId: integer("booking_id").references(() => bookingsTable.id),
     cityId: integer("city_id"),
     branchId: integer("branch_id"),
     subscriptionId: integer("subscription_id"),
@@ -50,6 +54,11 @@ export const paymentAttemptsTable = pgTable(
     rzpPaymentId: text("rzp_payment_id"),
     rzpSignature: text("rzp_signature"),
     paymentMethod: text("payment_method"),
+    refundStatus: text("refund_status").notNull().default("none").$type<PaymentRefundStatus>(),
+    refundedAmount: numeric("refunded_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    reconciliationStatus: text("reconciliation_status").notNull().default("unreconciled").$type<PaymentReconciliationStatus>(),
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    reconciliationNotes: text("reconciliation_notes"),
     idempotencyKey: text("idempotency_key").notNull().unique(),
     metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
     rawWebhookPayload: jsonb("raw_webhook_payload").$type<Record<string, unknown> | null>(),
@@ -60,10 +69,13 @@ export const paymentAttemptsTable = pgTable(
   (t) => [
     index("payment_attempts_customer_id_idx").on(t.customerId),
     index("payment_attempts_invoice_id_idx").on(t.invoiceId),
+    index("payment_attempts_booking_id_idx").on(t.bookingId),
     index("payment_attempts_subscription_id_idx").on(t.subscriptionId),
     index("payment_attempts_city_id_idx").on(t.cityId),
     index("payment_attempts_branch_id_idx").on(t.branchId),
     index("payment_attempts_status_idx").on(t.status),
+    index("payment_attempts_refund_status_idx").on(t.refundStatus),
+    index("payment_attempts_reconciliation_status_idx").on(t.reconciliationStatus),
     index("payment_attempts_attempt_id_idx").on(t.attemptId),
     index("payment_attempts_cf_order_id_idx").on(t.cfOrderId),
     index("payment_attempts_rzp_order_id_idx").on(t.rzpOrderId),

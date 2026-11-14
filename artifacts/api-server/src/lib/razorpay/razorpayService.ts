@@ -5,6 +5,7 @@ import {
   invoicesTable,
   paymentsTable,
   paymentAttemptsTable,
+  paymentWebhookEventsTable,
   dcmsSubscriptionsTable,
 } from "@workspace/db";
 import { normalizeIndianMobile } from "@workspace/validation";
@@ -775,7 +776,11 @@ export async function verifyRazorpayPayment(params: {
 /**
  * Processes incoming Razorpay Webhook events.
  */
-export async function handleRazorpayWebhookPayload(rawBody: Buffer, signature: string) {
+export async function handleRazorpayWebhookPayload(
+  rawBody: Buffer,
+  signature: string,
+  eventId?: string,
+) {
   const isValid = verifyRazorpayWebhookSignature(rawBody, signature);
   if (!isValid) {
     logger.warn("[RAZORPAY_WEBHOOK] Received webhook with invalid signature");
@@ -790,13 +795,43 @@ export async function handleRazorpayWebhookPayload(rawBody: Buffer, signature: s
   }
 
   const event = payload.event;
-  logger.info({ event, accountId: payload.account_id }, "[RAZORPAY_WEBHOOK] Ingested webhook event");
+  logger.info({ event, accountId: payload.account_id, eventId }, "[RAZORPAY_WEBHOOK] Ingested webhook event");
 
-  if (event === "payment.captured" || event === "order.paid") {
+  // 1. Durable event-level deduplication using x-razorpay-event-id
+  if (eventId) {
+    try {
+      const [existingEvent] = await db
+        .select()
+        .from(paymentWebhookEventsTable)
+        .where(eq(paymentWebhookEventsTable.eventId, eventId))
+        .limit(1);
+
+      if (existingEvent) {
+        logger.info(
+          { eventId, event },
+          "[RAZORPAY_WEBHOOK] Duplicate webhook event detected, skipping idempotent processing",
+        );
+        return { received: true, duplicate: true, status: existingEvent.status };
+      }
+    } catch (checkErr) {
+      logger.warn({ checkErr, eventId }, "[RAZORPAY_WEBHOOK] Event deduplication check warning");
+    }
+  }
+
+  let orderId: string | undefined;
+  let paymentId: string | undefined;
+
+  // 2. Settlement event handling: captured, order.paid, or auto-captured authorization
+  if (
+    event === "payment.captured" ||
+    event === "order.paid" ||
+    (event === "payment.authorized" &&
+      (payload.payload.payment?.entity?.status === "captured" || payload.payload.payment?.entity?.captured))
+  ) {
     const payment = payload.payload.payment?.entity;
     const order = payload.payload.order?.entity;
-    const orderId = order?.id || payment?.order_id;
-    const paymentId = payment?.id;
+    orderId = order?.id || payment?.order_id;
+    paymentId = payment?.id;
 
     if (!orderId || !paymentId) {
       logger.warn({ payload }, "[RAZORPAY_WEBHOOK] Webhook missing orderId or paymentId");
@@ -810,24 +845,106 @@ export async function handleRazorpayWebhookPayload(rawBody: Buffer, signature: s
       rawPayload: payload as any,
     });
 
+    if (eventId) {
+      try {
+        await db.insert(paymentWebhookEventsTable).values({
+          eventId,
+          gatewayProvider: "razorpay",
+          eventType: event,
+          orderId,
+          paymentId,
+          payload: payload as any,
+          status: "processed",
+        });
+      } catch (insertErr) {
+        logger.warn({ insertErr, eventId }, "[RAZORPAY_WEBHOOK] Webhook event recording note");
+      }
+    }
+
     return { received: true, settled: true };
   }
 
+  // 3. Authorization event handling
+  if (event === "payment.authorized") {
+    const payment = payload.payload.payment?.entity;
+    orderId = payment?.order_id;
+    paymentId = payment?.id;
+
+    if (orderId) {
+      await db
+        .update(paymentAttemptsTable)
+        .set({
+          status: "active",
+          rzpPaymentId: paymentId || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(paymentAttemptsTable.rzpOrderId, orderId));
+    }
+
+    if (eventId) {
+      try {
+        await db.insert(paymentWebhookEventsTable).values({
+          eventId,
+          gatewayProvider: "razorpay",
+          eventType: event,
+          orderId: orderId || null,
+          paymentId: paymentId || null,
+          payload: payload as any,
+          status: "authorized",
+        });
+      } catch {}
+    }
+
+    return { received: true, authorized: true };
+  }
+
+  // 4. Failure event handling
   if (event === "payment.failed") {
     const payment = payload.payload.payment?.entity;
-    const orderId = payment?.order_id;
+    orderId = payment?.order_id;
+    paymentId = payment?.id;
 
     if (orderId) {
       await db
         .update(paymentAttemptsTable)
         .set({
           status: "failed",
+          rzpPaymentId: paymentId || null,
           updatedAt: new Date(),
         })
         .where(eq(paymentAttemptsTable.rzpOrderId, orderId));
     }
 
+    if (eventId) {
+      try {
+        await db.insert(paymentWebhookEventsTable).values({
+          eventId,
+          gatewayProvider: "razorpay",
+          eventType: event,
+          orderId: orderId || null,
+          paymentId: paymentId || null,
+          payload: payload as any,
+          status: "failed",
+        });
+      } catch {}
+    }
+
     return { received: true, failed: true };
+  }
+
+  // 5. Durably record unhandled event for audit trail
+  if (eventId) {
+    try {
+      await db.insert(paymentWebhookEventsTable).values({
+        eventId,
+        gatewayProvider: "razorpay",
+        eventType: event,
+        orderId: payload.payload.order?.entity?.id || payload.payload.payment?.entity?.order_id || null,
+        paymentId: payload.payload.payment?.entity?.id || null,
+        payload: payload as any,
+        status: "unhandled",
+      });
+    } catch {}
   }
 
   return { received: true, unhandledEvent: event };

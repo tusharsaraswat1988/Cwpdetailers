@@ -194,11 +194,23 @@ export default function CustomerDailyCleaningPage() {
         });
       }
     } catch (err: any) {
-      toast({
-        title: "Payment Error",
-        description: err.message || "Failed to launch payment checkout.",
-        variant: "destructive",
-      });
+      const isDismissed =
+        err.message?.includes("closed") ||
+        err.message?.includes("dismissed") ||
+        err.message?.includes("cancelled");
+
+      if (isDismissed) {
+        toast({
+          title: "Payment Cancelled",
+          description: "Payment window was closed. Your subscription retry was cancelled.",
+        });
+      } else {
+        toast({
+          title: "Payment Error",
+          description: err.message || "Failed to launch payment checkout.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsRetryingPayment(false);
     }

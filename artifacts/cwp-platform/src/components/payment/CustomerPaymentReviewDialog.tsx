@@ -145,8 +145,21 @@ export function CustomerPaymentReviewDialog({
       }
     } catch (err: any) {
       console.warn("[CustomerPaymentReviewDialog] Checkout exception:", err);
-      // Shield the customer from raw exceptions, stack traces, and network failure messages
-      setShowAlternativeOptions(true);
+      const isDismissed =
+        err.message?.includes("closed") ||
+        err.message?.includes("dismissed") ||
+        err.message?.includes("cancelled") ||
+        err.name === "UserDismissError";
+
+      if (isDismissed) {
+        toast({
+          title: "Payment Cancelled",
+          description: "Payment window was closed. Your outstanding balance remains unchanged.",
+        });
+      } else {
+        // Shield the customer from raw exceptions, stack traces, and network failure messages
+        setShowAlternativeOptions(true);
+      }
       setIsProcessing(false);
     }
   };

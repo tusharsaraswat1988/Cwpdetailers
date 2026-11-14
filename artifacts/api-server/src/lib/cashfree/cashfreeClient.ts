@@ -5,6 +5,9 @@ import type {
   CashfreeOrderEntity,
   CashfreePaymentEntity,
   CashfreeApiErrorBody,
+  CashfreeCreateRefundPayload,
+  CashfreeRefundEntity,
+  CashfreeSettlementEntity,
 } from "./types";
 import { logger } from "../logger";
 
@@ -178,6 +181,73 @@ export class CashfreeClient {
     options?: RequestOptions,
   ): Promise<CashfreePaymentEntity[]> {
     return this.request<CashfreePaymentEntity[]>(`/orders/${encodeURIComponent(orderId)}/payments`, {
+      method: "GET",
+      timeoutMs: options?.timeoutMs,
+      orderId,
+    });
+  }
+
+  /**
+   * Initiates a refund for an order.
+   * Path: POST /orders/{order_id}/refunds
+   */
+  public async createRefund(
+    orderId: string,
+    payload: CashfreeCreateRefundPayload,
+    options?: RequestOptions,
+  ): Promise<CashfreeRefundEntity> {
+    return this.request<CashfreeRefundEntity>(`/orders/${encodeURIComponent(orderId)}/refunds`, {
+      method: "POST",
+      body: payload,
+      idempotencyKey: options?.idempotencyKey,
+      timeoutMs: options?.timeoutMs,
+      orderId,
+    });
+  }
+
+  /**
+   * Fetches single refund details for an order.
+   * Path: GET /orders/{order_id}/refunds/{refund_id}
+   */
+  public async getRefund(
+    orderId: string,
+    refundId: string,
+    options?: RequestOptions,
+  ): Promise<CashfreeRefundEntity> {
+    return this.request<CashfreeRefundEntity>(
+      `/orders/${encodeURIComponent(orderId)}/refunds/${encodeURIComponent(refundId)}`,
+      {
+        method: "GET",
+        timeoutMs: options?.timeoutMs,
+        orderId,
+      },
+    );
+  }
+
+  /**
+   * Lists all refunds for an order.
+   * Path: GET /orders/{order_id}/refunds
+   */
+  public async getOrderRefunds(
+    orderId: string,
+    options?: RequestOptions,
+  ): Promise<CashfreeRefundEntity[]> {
+    return this.request<CashfreeRefundEntity[]>(`/orders/${encodeURIComponent(orderId)}/refunds`, {
+      method: "GET",
+      timeoutMs: options?.timeoutMs,
+      orderId,
+    });
+  }
+
+  /**
+   * Fetches settlement details for an order (if enabled/available).
+   * Path: GET /orders/{order_id}/settlements
+   */
+  public async getOrderSettlements(
+    orderId: string,
+    options?: RequestOptions,
+  ): Promise<CashfreeSettlementEntity[]> {
+    return this.request<CashfreeSettlementEntity[]>(`/orders/${encodeURIComponent(orderId)}/settlements`, {
       method: "GET",
       timeoutMs: options?.timeoutMs,
       orderId,

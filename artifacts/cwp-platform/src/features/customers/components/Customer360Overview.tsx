@@ -687,18 +687,34 @@ export function Customer360Overview({ customerId, basePath }: Props) {
               <div className="divide-y rounded-lg border">
                 {(paymentsData?.data || []).map((p: any) => (
                   <div key={p.id} className="p-3 flex items-center justify-between hover:bg-muted/20 text-xs">
-                    <div>
-                      <p className="font-semibold text-sm text-foreground">
-                        ₹{Number(p.amount || 0).toLocaleString("en-IN")}
-                      </p>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-foreground">
+                          ₹{Number(p.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </span>
+                        {p.refundStatus && p.refundStatus !== "none" && (
+                          <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 text-[10px]">
+                            {p.refundStatus === "partial" ? "Partially Refunded" : "Refunded"}
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-muted-foreground mt-0.5">
-                        Mode: <span className="capitalize font-medium">{p.paymentMode || "Online"}</span>
-                        {p.transactionId ? ` · Ref: ${p.transactionId}` : ""}
-                        {p.createdAt ? ` · ${new Date(p.createdAt).toLocaleString("en-IN")}` : ""}
+                        Mode: <span className="capitalize font-medium">{p.paymentMode || p.method || "Online"}</span>
+                        {p.cfOrderId ? ` · Order: ${p.cfOrderId}` : p.transactionId ? ` · Ref: ${p.transactionId}` : ""}
+                        {p.invoiceNumber ? ` · Inv: ${p.invoiceNumber}` : ""}
+                        {p.bookingRef ? ` · Booking: ${p.bookingRef}` : ""}
+                        {p.createdAt ? ` · ${new Date(p.createdAt).toLocaleDateString("en-IN")}` : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
                       <div>{getStatusBadge(p.status || "completed")}</div>
+                      {p.bookingId && (
+                        <Link href={`/admin/bookings/${p.bookingId}`}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="View Booking">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </Button>
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -64,6 +64,15 @@ vi.mock("@workspace/db", () => {
       version: "dcms_subscriptions.version",
       updatedAt: "dcms_subscriptions.updated_at",
     },
+    paymentWebhookEventsTable: {
+      id: "payment_webhook_events.id",
+      eventId: "payment_webhook_events.event_id",
+      gatewayProvider: "payment_webhook_events.gateway_provider",
+      eventType: "payment_webhook_events.event_type",
+      orderId: "payment_webhook_events.order_id",
+      paymentId: "payment_webhook_events.payment_id",
+      status: "payment_webhook_events.status",
+    },
   };
 });
 
@@ -77,6 +86,7 @@ import {
   createRazorpayPaymentOrder,
   reconcileRazorpayPayment,
   verifyRazorpayPayment,
+  handleRazorpayWebhookPayload,
   RazorpayPaymentServiceError,
 } from "../../lib/razorpay/razorpayService";
 import { getCustomerOutstandingDues, recordPayment } from "../../lib/billing/invoiceService";
@@ -392,5 +402,155 @@ describe("Phase 25: Multi-Gateway Payment Redundancy & Razorpay Integration (PAY
         customerId: 101,
       }),
     ).rejects.toThrow("Payment signature verification failed");
+  });
+
+  it("5. Rejects incoming webhook with invalid HMAC signature", async () => {
+    const rawPayload = Buffer.from(JSON.stringify({ event: "order.paid" }), "utf8");
+    const badSignature = "0000000000000000000000000000000000000000000000000000000000000000";
+
+    await expect(
+      handleRazorpayWebhookPayload(rawPayload, badSignature),
+    ).rejects.toThrow("Invalid webhook signature");
+  });
+
+  it("6. Ingests valid webhook payload signed with raw body Buffer", async () => {
+    const payloadObj = {
+      entity: "event",
+      account_id: "acc_test_123",
+      event: "payment.captured",
+      contains: ["payment"],
+      payload: {
+        payment: {
+          entity: {
+            id: "pay_webhook_live_1",
+            order_id: "order_webhook_live_1",
+            status: "captured",
+            amount: 149900,
+            currency: "INR",
+          },
+        },
+      },
+      created_at: 1715000000,
+    };
+    const rawPayload = Buffer.from(JSON.stringify(payloadObj), "utf8");
+    const validSignature = createHmac("sha256", "webhook_secret_999")
+      .update(rawPayload)
+      .digest("hex");
+
+    const mockTx = {
+      select: vi.fn().mockImplementation(() => ({
+        from: () => ({
+          where: () => ({
+            for: () => ({
+              limit: vi.fn().mockResolvedValue([
+                { id: 10, attemptId: "cwp_att_10", customerId: 101, amount: "1499.00", status: "initiated" },
+              ]),
+            }),
+            limit: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      })),
+      update: vi.fn().mockImplementation(() => ({
+        set: () => ({
+          where: () => ({
+            returning: vi.fn().mockResolvedValue([{ id: 10, status: "paid" }]),
+          }),
+        }),
+      })),
+    };
+
+    mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
+    (recordPayment as any).mockResolvedValue({
+      id: 9005,
+      customerId: 101,
+      amount: "1499.00",
+      method: "razorpay",
+      transactionId: "order_webhook_live_1",
+      status: "completed",
+    });
+
+    mockSelect.mockImplementation(() => ({
+      from: () => ({
+        where: () => ({
+          limit: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    }));
+
+    mockInsert.mockImplementation(() => ({
+      values: () => Promise.resolve(),
+    }));
+
+    const res = await handleRazorpayWebhookPayload(rawPayload, validSignature, "evt_unique_123");
+    expect(res.received).toBe(true);
+    expect(res.settled).toBe(true);
+  });
+
+  it("7. Deduplicates repeated webhooks using x-razorpay-event-id", async () => {
+    const rawPayload = Buffer.from(JSON.stringify({ event: "payment.captured" }), "utf8");
+    const validSignature = createHmac("sha256", "webhook_secret_999")
+      .update(rawPayload)
+      .digest("hex");
+
+    // Mock existing event record in paymentWebhookEventsTable
+    mockSelect.mockImplementation(() => ({
+      from: () => ({
+        where: () => ({
+          limit: vi.fn().mockResolvedValue([
+            { id: 99, eventId: "evt_already_processed_888", status: "processed" },
+          ]),
+        }),
+      }),
+    }));
+
+    const res = await handleRazorpayWebhookPayload(rawPayload, validSignature, "evt_already_processed_888");
+    expect(res.received).toBe(true);
+    expect(res.duplicate).toBe(true);
+  });
+
+  it("8. Transitions payment attempt to failed on payment.failed event", async () => {
+    const payloadObj = {
+      entity: "event",
+      account_id: "acc_test_123",
+      event: "payment.failed",
+      contains: ["payment"],
+      payload: {
+        payment: {
+          entity: {
+            id: "pay_failed_1",
+            order_id: "order_failed_1",
+            status: "failed",
+            amount: 149900,
+          },
+        },
+      },
+      created_at: 1715000000,
+    };
+    const rawPayload = Buffer.from(JSON.stringify(payloadObj), "utf8");
+    const validSignature = createHmac("sha256", "webhook_secret_999")
+      .update(rawPayload)
+      .digest("hex");
+
+    mockSelect.mockImplementation(() => ({
+      from: () => ({
+        where: () => ({
+          limit: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    }));
+
+    mockUpdate.mockImplementation(() => ({
+      set: () => ({
+        where: () => Promise.resolve(),
+      }),
+    }));
+
+    mockInsert.mockImplementation(() => ({
+      values: () => Promise.resolve(),
+    }));
+
+    const res = await handleRazorpayWebhookPayload(rawPayload, validSignature, "evt_failed_001");
+    expect(res.received).toBe(true);
+    expect(res.failed).toBe(true);
   });
 });

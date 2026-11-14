@@ -234,11 +234,23 @@ export function CustomerSubscribeModal({
         });
       }
     } catch (err: any) {
-      toast({
-        title: "Checkout Error",
-        description: err.message || "Could not start payment checkout. Please try again.",
-        variant: "destructive",
-      });
+      const isDismissed =
+        err.message?.includes("closed") ||
+        err.message?.includes("dismissed") ||
+        err.message?.includes("cancelled");
+
+      if (isDismissed) {
+        toast({
+          title: "Subscription Setup Paused",
+          description: "Payment window was closed. You can complete your subscription at any time.",
+        });
+      } else {
+        toast({
+          title: "Checkout Error",
+          description: err.message || "Could not start payment checkout. Please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
