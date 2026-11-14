@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,22 @@ export function CustomerPaymentReviewDialog({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showAlternativeOptions, setShowAlternativeOptions] = useState(false);
   const [isSettled, setIsSettled] = useState(false);
+  const [activeGateway, setActiveGateway] = useState<"razorpay" | "cashfree">("razorpay");
+
+  useEffect(() => {
+    if (open) {
+      fetch("/api/payments/gateway-info")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.activeGateway === "razorpay" || data?.activeGateway === "cashfree") {
+            setActiveGateway(data.activeGateway);
+          }
+        })
+        .catch(() => {
+          // Gracefully retain default
+        });
+    }
+  }, [open]);
 
   const effectiveOutstanding = Math.max(0, Number(outstandingAmount ?? payableAmount ?? 0));
   const effectivePayable = Math.max(0, Number(payableAmount ?? outstandingAmount ?? 0));
@@ -213,8 +229,12 @@ export function CustomerPaymentReviewDialog({
 
             <div className="flex justify-between items-center pt-1">
               <span className="text-[#64748B]">Gateway Provider</span>
-              <span className="font-semibold text-blue-600 flex items-center gap-1">
-                Cashfree Payments
+              <span
+                className={`font-semibold flex items-center gap-1 ${
+                  activeGateway === "razorpay" ? "text-emerald-600" : "text-blue-600"
+                }`}
+              >
+                {activeGateway === "razorpay" ? "Razorpay" : "Cashfree Payments"}
               </span>
             </div>
           </div>

@@ -103,7 +103,13 @@ export function ReceiptModal({ open, onOpenChange, receipt }: ReceiptModalProps)
             <div className="flex justify-between items-center py-1 border-b border-[#F1F5F9]">
               <span className="text-[#64748B]">Payment Method</span>
               <span className="font-medium text-[#111827] capitalize">
-                {receipt.paymentMethod || "Cashfree PG"}
+                {receipt.paymentMethod
+                  ? receipt.paymentMethod.toLowerCase() === "razorpay"
+                    ? "Razorpay"
+                    : receipt.paymentMethod.toLowerCase() === "cashfree"
+                    ? "Cashfree PG"
+                    : receipt.paymentMethod
+                  : "Online Gateway"}
               </span>
             </div>
 

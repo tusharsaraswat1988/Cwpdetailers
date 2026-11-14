@@ -183,6 +183,14 @@ async function handleRazorpayWebhook(req: Request, res: Response) {
   }
 }
 
+router.get("/webhooks/razorpay", (_req: Request, res: Response) => {
+  return res.status(200).json({
+    status: "active",
+    gateway: "razorpay",
+    message: "Razorpay webhook endpoint is live and awaiting POST events from Razorpay.",
+  });
+});
+
 router.post("/webhooks/razorpay", handleRazorpayWebhook);
 router.post("/payments/razorpay/webhook", handleRazorpayWebhook);
 
