@@ -157,6 +157,7 @@ export default function CustomerDailyCleaningPage() {
           amountInPaise: resData.amountInPaise,
           name: "CWP Detailers",
           description: "Subscription Payment Retry",
+          correlationId: resData.correlationId,
           prefill: {
             name: resData.customer?.name || "",
             contact: resData.customer?.phone || "",
@@ -167,12 +168,16 @@ export default function CustomerDailyCleaningPage() {
         // Verify payment
         const verifyRes = await fetch("/api/payments/razorpay/verify", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-correlation-id": resData.correlationId,
+          },
           credentials: "include",
           body: JSON.stringify({
             orderId: rzpResponse.razorpay_order_id,
             paymentId: rzpResponse.razorpay_payment_id,
             signature: rzpResponse.razorpay_signature,
+            correlationId: resData.correlationId,
           }),
         });
 
@@ -195,7 +200,9 @@ export default function CustomerDailyCleaningPage() {
       }
     } catch (err: any) {
       const isDismissed =
-        err.message?.includes("closed") ||
+        err.isDismissal === true ||
+        err.code === "USER_DROPPED" ||
+        err.message?.includes("closed by the user") ||
         err.message?.includes("dismissed") ||
         err.message?.includes("cancelled");
 
@@ -206,8 +213,8 @@ export default function CustomerDailyCleaningPage() {
         });
       } else {
         toast({
-          title: "Payment Error",
-          description: err.message || "Failed to launch payment checkout.",
+          title: "Online Checkout Notice",
+          description: "Online checkout is momentarily unavailable. Our team has been alerted.",
           variant: "destructive",
         });
       }

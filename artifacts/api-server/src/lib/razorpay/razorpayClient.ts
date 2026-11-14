@@ -9,6 +9,7 @@ import { logger } from "../logger";
 
 export interface RequestOptions {
   timeoutMs?: number;
+  correlationId?: string;
 }
 
 export class RazorpayClient {
@@ -36,15 +37,35 @@ export class RazorpayClient {
       method: "GET" | "POST";
       body?: unknown;
       timeoutMs?: number;
+      correlationId?: string;
     },
   ): Promise<T> {
     const timeoutMs = options.timeoutMs ?? this.config.timeoutMs;
     const url = this.buildUrl(endpoint);
+    const correlationId = options.correlationId || "unknown";
     const headers: Record<string, string> = {
       Authorization: this.getAuthHeader(),
       "Content-Type": "application/json",
       Accept: "application/json",
     };
+
+    const isOrderCreation = endpoint === "/orders" && options.method === "POST";
+    if (isOrderCreation) {
+      logger.info(
+        {
+          stage: "RAZORPAY_ORDER_REQUEST_SENT",
+          correlationId,
+          endpoint,
+          method: options.method,
+          amountPaise: (options.body as any)?.amount,
+          currency: (options.body as any)?.currency,
+          receipt: (options.body as any)?.receipt,
+          paymentCapture: (options.body as any)?.payment_capture,
+          keyPrefix: this.config.keyId?.slice(0, 9),
+        },
+        "[RAZORPAY_CLIENT] Stage 6: RAZORPAY_ORDER_REQUEST_SENT",
+      );
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -68,27 +89,66 @@ export class RazorpayClient {
       }
 
       if (!response.ok) {
-        const errorDetail =
-          typeof responseBody === "object" && responseBody?.error
-            ? responseBody.error.description || responseBody.error.message || JSON.stringify(responseBody.error)
-            : typeof responseBody === "string"
-              ? responseBody
-              : "Razorpay API request failed";
+        const errObj = typeof responseBody === "object" ? responseBody?.error : null;
+        const errCode = errObj?.code || `HTTP_${response.status}`;
+        const errDesc =
+          errObj?.description ||
+          errObj?.message ||
+          (typeof responseBody === "string" ? responseBody : "Razorpay API request failed");
+        const errField = errObj?.field;
+        const errSource = errObj?.source;
+        const errStep = errObj?.step;
+        const errReason = errObj?.reason;
 
-        logger.warn(
+        logger.error(
           {
+            stage: isOrderCreation ? "RAZORPAY_ORDER_RESPONSE_RECEIVED" : "GATEWAY_API_ERROR",
+            stageStatus: "FAILED",
+            correlationId,
             status: response.status,
             endpoint,
-            errorDetail,
+            code: errCode,
+            description: errDesc,
+            field: errField,
+            source: errSource,
+            step: errStep,
+            reason: errReason,
           },
           "[RAZORPAY_CLIENT] Gateway API error response",
         );
 
         throw new RazorpayError(
-          `Razorpay error: ${errorDetail}`,
-          responseBody?.error?.code || `HTTP_${response.status}`,
+          `Razorpay error: ${errDesc}`,
+          errCode,
           response.status,
           responseBody,
+          {
+            code: errCode,
+            statusCode: response.status,
+            description: errDesc,
+            field: errField,
+            source: errSource,
+            step: errStep,
+            reason: errReason,
+            rawBody: responseBody,
+            stageName: isOrderCreation ? "RAZORPAY_ORDER_RESPONSE_RECEIVED" : undefined,
+            correlationId,
+          },
+        );
+      }
+
+      if (isOrderCreation) {
+        logger.info(
+          {
+            stage: "RAZORPAY_ORDER_RESPONSE_RECEIVED",
+            stageStatus: "SUCCESS",
+            correlationId,
+            orderId: responseBody?.id,
+            status: responseBody?.status,
+            amountPaise: responseBody?.amount,
+            currency: responseBody?.currency,
+          },
+          "[RAZORPAY_CLIENT] Stage 7: RAZORPAY_ORDER_RESPONSE_RECEIVED",
         );
       }
 
@@ -101,19 +161,59 @@ export class RazorpayClient {
       }
 
       if (err.name === "AbortError") {
-        logger.error({ endpoint, timeoutMs }, "[RAZORPAY_CLIENT] Request timed out");
+        logger.error(
+          {
+            stage: isOrderCreation ? "RAZORPAY_ORDER_RESPONSE_RECEIVED" : "GATEWAY_TIMEOUT",
+            stageStatus: "FAILED",
+            correlationId,
+            endpoint,
+            timeoutMs,
+          },
+          "[RAZORPAY_CLIENT] Request timed out",
+        );
         throw new RazorpayError(
           `Razorpay request timed out after ${timeoutMs}ms`,
           "GATEWAY_TIMEOUT",
           504,
+          undefined,
+          {
+            code: "GATEWAY_TIMEOUT",
+            statusCode: 504,
+            description: `Request timed out after ${timeoutMs}ms`,
+            source: "gateway_network",
+            step: "order_creation",
+            reason: "timeout",
+            stageName: isOrderCreation ? "RAZORPAY_ORDER_RESPONSE_RECEIVED" : undefined,
+            correlationId,
+          },
         );
       }
 
-      logger.error({ err: err.message, endpoint }, "[RAZORPAY_CLIENT] Network or fetch error");
+      logger.error(
+        {
+          stage: isOrderCreation ? "RAZORPAY_ORDER_RESPONSE_RECEIVED" : "NETWORK_ERROR",
+          stageStatus: "FAILED",
+          correlationId,
+          err: err.message,
+          endpoint,
+        },
+        "[RAZORPAY_CLIENT] Network or fetch error",
+      );
       throw new RazorpayError(
         `Failed to communicate with Razorpay: ${err.message}`,
         "NETWORK_ERROR",
         502,
+        undefined,
+        {
+          code: "NETWORK_ERROR",
+          statusCode: 502,
+          description: err.message,
+          source: "network",
+          step: "connection",
+          reason: "fetch_failure",
+          stageName: isOrderCreation ? "RAZORPAY_ORDER_RESPONSE_RECEIVED" : undefined,
+          correlationId,
+        },
       );
     }
   }
@@ -130,6 +230,7 @@ export class RazorpayClient {
       method: "POST",
       body: payload,
       timeoutMs: options?.timeoutMs,
+      correlationId: options?.correlationId,
     });
   }
 
@@ -140,6 +241,7 @@ export class RazorpayClient {
     return this.request<RazorpayOrderEntity>(`/orders/${encodeURIComponent(orderId)}`, {
       method: "GET",
       timeoutMs: options?.timeoutMs,
+      correlationId: options?.correlationId,
     });
   }
 
@@ -150,6 +252,7 @@ export class RazorpayClient {
     return this.request<RazorpayPaymentEntity>(`/payments/${encodeURIComponent(paymentId)}`, {
       method: "GET",
       timeoutMs: options?.timeoutMs,
+      correlationId: options?.correlationId,
     });
   }
 
@@ -165,6 +268,7 @@ export class RazorpayClient {
       {
         method: "GET",
         timeoutMs: options?.timeoutMs,
+        correlationId: options?.correlationId,
       },
     );
   }

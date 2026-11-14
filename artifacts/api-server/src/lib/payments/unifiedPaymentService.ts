@@ -14,6 +14,7 @@ export interface UnifiedCreateOrderParams {
   baseUrl?: string;
   idempotencyKey?: string;
   forceGateway?: PaymentGatewayType;
+  correlationId?: string;
 }
 
 export type UnifiedCreateOrderResult =
@@ -32,6 +33,7 @@ export type UnifiedCreateOrderResult =
         email?: string;
       };
       environment: "sandbox" | "production";
+      correlationId: string;
     }
   | {
       success: true;
@@ -41,6 +43,7 @@ export type UnifiedCreateOrderResult =
       orderAmount: number;
       orderCurrency: "INR";
       environment: "sandbox" | "production";
+      correlationId: string;
     };
 
 /**
@@ -51,10 +54,20 @@ export async function createUnifiedPaymentOrder(
   params: UnifiedCreateOrderParams,
 ): Promise<UnifiedCreateOrderResult> {
   const activeGateway = params.forceGateway || getActivePaymentGateway();
+  const correlationId =
+    params.correlationId ||
+    `cwp_cor_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   logger.info(
-    { activeGateway, customerId: params.customerId, invoiceId: params.invoiceId, subscriptionId: params.subscriptionId },
-    "[UNIFIED_PAYMENTS] Dispatching payment order creation to active gateway",
+    {
+      stage: "PAYMENT_INITIATED",
+      correlationId,
+      activeGateway,
+      customerId: params.customerId,
+      invoiceId: params.invoiceId,
+      subscriptionId: params.subscriptionId,
+    },
+    "[UNIFIED_PAYMENTS] Stage 1: PAYMENT_INITIATED",
   );
 
   if (activeGateway === "razorpay") {
@@ -67,12 +80,22 @@ export async function createUnifiedPaymentOrder(
         branchId: params.branchId,
         legalEntityId: params.legalEntityId,
         idempotencyKey: params.idempotencyKey,
+        correlationId,
       });
 
-      return result;
+      return {
+        ...result,
+        correlationId,
+      };
     } catch (err: any) {
       logger.warn(
-        { err: err.message, code: err.code, customerId: params.customerId },
+        {
+          stageStatus: "FAILED",
+          correlationId,
+          err: err.message,
+          code: err.code,
+          customerId: params.customerId,
+        },
         "[UNIFIED_PAYMENTS] Primary gateway (Razorpay) order creation failed",
       );
       throw err;
@@ -95,5 +118,6 @@ export async function createUnifiedPaymentOrder(
   return {
     ...result,
     gateway: "cashfree",
+    correlationId,
   };
 }

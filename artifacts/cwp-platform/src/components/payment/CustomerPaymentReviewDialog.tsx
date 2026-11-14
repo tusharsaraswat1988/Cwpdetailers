@@ -6,9 +6,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ShieldCheck, Lock, ArrowRight, Loader2, CheckCircle2, MessageCircle, Home } from "lucide-react";
+import { ShieldCheck, Lock, ArrowRight, Loader2, CheckCircle2, MessageCircle, Home, Copy, Check } from "lucide-react";
 import { launchCashfreeCheckout } from "@/lib/cashfree";
-import { launchRazorpayCheckout } from "@/lib/razorpay";
+import { launchRazorpayCheckout, RazorpayCheckoutError } from "@/lib/razorpay";
 import { toast } from "@/hooks/use-toast";
 import { buildWhatsAppPaymentUrl } from "@/lib/paymentCustomerShield";
 
@@ -43,6 +43,8 @@ export function CustomerPaymentReviewDialog({
   const [showAlternativeOptions, setShowAlternativeOptions] = useState(false);
   const [isSettled, setIsSettled] = useState(false);
   const [activeGateway, setActiveGateway] = useState<"razorpay" | "cashfree">("razorpay");
+  const [diagnosticRef, setDiagnosticRef] = useState<string | null>(null);
+  const [copiedRef, setCopiedRef] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -66,28 +68,36 @@ export function CustomerPaymentReviewDialog({
     if (isProcessing) return;
     setIsProcessing(true);
 
+    const correlationId = `cwp_cor_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
     try {
-      // 1. Server-side payment order creation using unified payment router
+      // 1. Server-side payment order creation using unified payment router (Stage 1: PAYMENT_INITIATED)
       const res = await fetch("/api/payments/create-order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-correlation-id": correlationId,
         },
         credentials: "include",
         body: JSON.stringify({
           invoiceId: invoiceId ?? undefined,
           returnUrl: "/customer/payment/return?order_id={order_id}",
+          correlationId,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        console.warn("[CustomerPaymentReviewDialog] Gateway order creation response:", data);
+        console.warn("[CustomerPaymentReviewDialog] Gateway order creation response:", {
+          status: res.status,
+          code: data.code,
+          correlationId: data.correlationId || correlationId,
+        });
         if (data.code === "NO_OUTSTANDING_DUES" || data.code === "NO_OUTSTANDING_BALANCE") {
           setIsSettled(true);
         } else {
-          // Never display raw technical errors, gateway rejection codes, or scary red boxes to the customer
+          setDiagnosticRef(data.correlationId || correlationId);
           setShowAlternativeOptions(true);
         }
         setIsProcessing(false);
@@ -97,13 +107,14 @@ export function CustomerPaymentReviewDialog({
       onPaymentInitiated?.();
 
       if (data.gateway === "razorpay") {
-        // 2a. Launch Razorpay Standard Checkout inline modal
+        // 2a. Launch Razorpay Standard Checkout inline modal (Stages 9 & 10)
         const rzpResponse = await launchRazorpayCheckout({
           keyId: data.keyId,
           orderId: data.orderId,
           amountInPaise: data.amountInPaise,
           name: "CWP Detailers",
           description: invoiceNumber ? `Invoice #${invoiceNumber}` : "Account Balance Settlement",
+          correlationId: data.correlationId || correlationId,
           prefill: {
             name: data.customer?.name || customerName,
             contact: data.customer?.phone || "",
@@ -111,15 +122,19 @@ export function CustomerPaymentReviewDialog({
           },
         });
 
-        // 2b. Verify and reconcile atomically on server
+        // 2b. Verify and reconcile atomically on server (Stages 12 & 13)
         const verifyRes = await fetch("/api/payments/razorpay/verify", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-correlation-id": data.correlationId || correlationId,
+          },
           credentials: "include",
           body: JSON.stringify({
             orderId: rzpResponse.razorpay_order_id,
             paymentId: rzpResponse.razorpay_payment_id,
             signature: rzpResponse.razorpay_signature,
+            correlationId: data.correlationId || correlationId,
           }),
         });
 
@@ -132,6 +147,7 @@ export function CustomerPaymentReviewDialog({
             description: `Payment of ₹${effectivePayable.toFixed(2)} completed successfully!`,
           });
         } else {
+          setDiagnosticRef(data.correlationId || correlationId);
           setShowAlternativeOptions(true);
         }
         setIsProcessing(false);
@@ -144,11 +160,17 @@ export function CustomerPaymentReviewDialog({
         });
       }
     } catch (err: any) {
-      console.warn("[CustomerPaymentReviewDialog] Checkout exception:", err);
+      console.warn("[CustomerPaymentReviewDialog] Checkout exception:", {
+        message: err.message,
+        code: err.code,
+        isDismissal: err.isDismissal,
+        correlationId: err.correlationId || correlationId,
+      });
+
       const isDismissed =
-        err.message?.includes("closed") ||
-        err.message?.includes("dismissed") ||
-        err.message?.includes("cancelled") ||
+        err.isDismissal === true ||
+        err.code === "USER_DROPPED" ||
+        err.message?.includes("closed by the user") ||
         err.name === "UserDismissError";
 
       if (isDismissed) {
@@ -157,7 +179,8 @@ export function CustomerPaymentReviewDialog({
           description: "Payment window was closed. Your outstanding balance remains unchanged.",
         });
       } else {
-        // Shield the customer from raw exceptions, stack traces, and network failure messages
+        // Safe customer shielding (FINDING 9) — store support correlation ID without exposing internals
+        setDiagnosticRef(err.correlationId || correlationId);
         setShowAlternativeOptions(true);
       }
       setIsProcessing(false);
@@ -169,6 +192,7 @@ export function CustomerPaymentReviewDialog({
       if (!val) {
         setShowAlternativeOptions(false);
         setIsSettled(false);
+        setDiagnosticRef(null);
       }
       onOpenChange(val);
     }
@@ -252,15 +276,36 @@ export function CustomerPaymentReviewDialog({
             </div>
           </div>
 
-          {/* Friendly Concierge & Alternative Payment Options (Zero Technical Errors) */}
+          {/* Friendly Concierge & Alternative Payment Options (Zero Technical Errors - FINDING 9) */}
           {showAlternativeOptions && (
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-200">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                <span className="text-xs font-semibold text-slate-800">Alternative Payment Options</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                  <span className="text-xs font-semibold text-slate-800">Online Checkout Notice</span>
+                </div>
+                {diagnosticRef && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(diagnosticRef);
+                      setCopiedRef(true);
+                      setTimeout(() => setCopiedRef(false), 2000);
+                      toast({
+                        title: "Support Reference Copied",
+                        description: diagnosticRef,
+                      });
+                    }}
+                    className="text-[10px] text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer font-mono bg-white px-2 py-0.5 rounded border border-slate-200"
+                    title="Copy reference for support"
+                  >
+                    <span>Ref: {diagnosticRef.slice(0, 15)}...</span>
+                    {copiedRef ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                  </button>
+                )}
               </div>
               <p className="text-[11px] text-slate-600 leading-relaxed">
-                You can complete your payment via WhatsApp UPI QR code, or pay our detailing specialist directly upon service delivery.
+                Online payment is temporarily unavailable. Our team has been notified. You can retry in a moment, complete your payment via WhatsApp UPI QR code, or pay our detailing specialist directly upon service delivery.
               </p>
               <div className="grid grid-cols-2 gap-2 pt-0.5">
                 <a

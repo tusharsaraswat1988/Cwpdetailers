@@ -32,6 +32,7 @@ export interface CreateRazorpayOrderParams {
   branchId?: number;
   legalEntityId?: number;
   idempotencyKey?: string;
+  correlationId?: string;
 }
 
 export interface CreateRazorpayOrderResult {
@@ -49,17 +50,28 @@ export interface CreateRazorpayOrderResult {
     email?: string;
   };
   environment: RazorpayEnvironment;
+  correlationId: string;
 }
 
 export class RazorpayPaymentServiceError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
+  public readonly stageName?: string;
+  public readonly correlationId?: string;
 
-  constructor(message: string, code: string, statusCode = 400) {
+  constructor(
+    message: string,
+    code: string,
+    statusCode = 400,
+    stageName?: string,
+    correlationId?: string,
+  ) {
     super(message);
     this.name = "RazorpayPaymentServiceError";
     this.code = code;
     this.statusCode = statusCode;
+    this.stageName = stageName;
+    this.correlationId = correlationId;
   }
 
   get status(): number {
@@ -128,8 +140,11 @@ export async function createRazorpayPaymentOrder(
   params: CreateRazorpayOrderParams,
 ): Promise<CreateRazorpayOrderResult> {
   const { customerId, invoiceId } = params;
+  const correlationId =
+    params.correlationId ||
+    `cwp_cor_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-  // 1. Verify customer
+  // Stage 2: CUSTOMER_AUTHENTICATED
   const [customer] = await db
     .select({
       id: customersTable.id,
@@ -142,8 +157,23 @@ export async function createRazorpayPaymentOrder(
     .limit(1);
 
   if (!customer) {
-    throw new RazorpayPaymentServiceError("Customer not found", "CUSTOMER_NOT_FOUND", 404);
+    logger.warn(
+      { stage: "CUSTOMER_AUTHENTICATED", stageStatus: "FAILED", correlationId, customerId },
+      "[RAZORPAY_SERVICE] Customer record not found",
+    );
+    throw new RazorpayPaymentServiceError(
+      "Customer not found",
+      "CUSTOMER_NOT_FOUND",
+      404,
+      "CUSTOMER_AUTHENTICATED",
+      correlationId,
+    );
   }
+
+  logger.info(
+    { stage: "CUSTOMER_AUTHENTICATED", stageStatus: "SUCCESS", correlationId, customerId },
+    "[RAZORPAY_SERVICE] Stage 2: CUSTOMER_AUTHENTICATED",
+  );
 
   let phone = normalizeIndianMobile(customer.phone);
   if (!phone) {
@@ -157,7 +187,7 @@ export async function createRazorpayPaymentOrder(
   const customerName = customer.name?.trim() || "Valued Customer";
   const customerEmail = customer.email?.trim() || undefined;
 
-  // 2. Resolve payable amount from trusted backend billing records
+  // Stage 3: INVOICE_VALIDATED & Stage 4: PAYABLE_AMOUNT_RESOLVED
   let payableAmount = 0;
   let targetInvoiceId: number | null = null;
 
@@ -175,11 +205,31 @@ export async function createRazorpayPaymentOrder(
       .limit(1);
 
     if (!invoice) {
-      throw new RazorpayPaymentServiceError("Invoice not found", "INVOICE_NOT_FOUND", 404);
+      logger.warn(
+        { stage: "INVOICE_VALIDATED", stageStatus: "FAILED", correlationId, invoiceId },
+        "[RAZORPAY_SERVICE] Target invoice not found",
+      );
+      throw new RazorpayPaymentServiceError(
+        "Invoice not found",
+        "INVOICE_NOT_FOUND",
+        404,
+        "INVOICE_VALIDATED",
+        correlationId,
+      );
     }
 
     if (invoice.customerId !== customerId) {
-      throw new RazorpayPaymentServiceError("Unauthorized access to invoice", "FORBIDDEN_INVOICE_ACCESS", 403);
+      logger.warn(
+        { stage: "INVOICE_VALIDATED", stageStatus: "FAILED", correlationId, invoiceId, customerId, invoiceCustomerId: invoice.customerId },
+        "[RAZORPAY_SERVICE] Forbidden invoice access",
+      );
+      throw new RazorpayPaymentServiceError(
+        "Unauthorized access to invoice",
+        "FORBIDDEN_INVOICE_ACCESS",
+        403,
+        "INVOICE_VALIDATED",
+        correlationId,
+      );
     }
 
     const balanceDue = parseFloat(invoice.balanceDue);
@@ -189,29 +239,94 @@ export async function createRazorpayPaymentOrder(
       invoice.status === "cancelled" ||
       balanceDue <= 0
     ) {
-      throw new RazorpayPaymentServiceError("Invoice has no outstanding balance", "NO_OUTSTANDING_BALANCE", 400);
+      logger.info(
+        { stage: "INVOICE_VALIDATED", stageStatus: "ZERO_BALANCE", correlationId, invoiceId, status: invoice.status, balanceDue },
+        "[RAZORPAY_SERVICE] Invoice has zero balance or is already settled",
+      );
+      throw new RazorpayPaymentServiceError(
+        "Invoice has no outstanding balance",
+        "NO_OUTSTANDING_BALANCE",
+        200,
+        "INVOICE_VALIDATED",
+        correlationId,
+      );
     }
 
     payableAmount = balanceDue;
     targetInvoiceId = invoice.id;
+    logger.info(
+      { stage: "INVOICE_VALIDATED", stageStatus: "SUCCESS", correlationId, invoiceId: invoice.id, balanceDue },
+      "[RAZORPAY_SERVICE] Stage 3: INVOICE_VALIDATED",
+    );
   } else {
     const outstandingDues = await getCustomerOutstandingDues(customerId);
     if (outstandingDues <= 0) {
-      throw new RazorpayPaymentServiceError("No outstanding balance to pay", "NO_OUTSTANDING_BALANCE", 400);
+      logger.info(
+        { stage: "INVOICE_VALIDATED", stageStatus: "ZERO_BALANCE", correlationId, customerId, outstandingDues },
+        "[RAZORPAY_SERVICE] Customer has no outstanding balance",
+      );
+      throw new RazorpayPaymentServiceError(
+        "No outstanding balance to pay",
+        "NO_OUTSTANDING_BALANCE",
+        200,
+        "INVOICE_VALIDATED",
+        correlationId,
+      );
     }
     payableAmount = outstandingDues;
     targetInvoiceId = null;
+    logger.info(
+      { stage: "INVOICE_VALIDATED", stageStatus: "SUCCESS", correlationId, customerId, outstandingDues },
+      "[RAZORPAY_SERVICE] Stage 3: INVOICE_VALIDATED (account-level dues)",
+    );
   }
 
   payableAmount = Math.round(payableAmount * 100) / 100;
   if (payableAmount <= 0) {
-    throw new RazorpayPaymentServiceError("No outstanding balance to pay", "NO_OUTSTANDING_BALANCE", 400);
+    throw new RazorpayPaymentServiceError(
+      "No outstanding balance to pay",
+      "NO_OUTSTANDING_BALANCE",
+      200,
+      "PAYABLE_AMOUNT_RESOLVED",
+      correlationId,
+    );
   }
 
   const amountInPaise = Math.round(payableAmount * 100);
-  const cfg = getRazorpayConfig();
+  logger.info(
+    { stage: "PAYABLE_AMOUNT_RESOLVED", stageStatus: "SUCCESS", correlationId, payableAmount, amountInPaise },
+    "[RAZORPAY_SERVICE] Stage 4: PAYABLE_AMOUNT_RESOLVED",
+  );
 
-  // 3. Check for existing session by client-provided idempotencyKey
+  // Stage 5: RAZORPAY_CREDENTIALS_VALIDATED
+  let cfg;
+  try {
+    cfg = getRazorpayConfig();
+    logger.info(
+      {
+        stage: "RAZORPAY_CREDENTIALS_VALIDATED",
+        stageStatus: "SUCCESS",
+        correlationId,
+        keyPrefix: cfg.keyId?.slice(0, 9),
+        env: cfg.env,
+      },
+      "[RAZORPAY_SERVICE] Stage 5: RAZORPAY_CREDENTIALS_VALIDATED",
+    );
+  } catch (cfgErr: any) {
+    logger.error(
+      { stage: "RAZORPAY_CREDENTIALS_VALIDATED", stageStatus: "FAILED", correlationId, err: cfgErr.message },
+      "[RAZORPAY_SERVICE] Razorpay credentials validation failed",
+    );
+    throw new RazorpayPaymentServiceError(
+      cfgErr.message || "Razorpay credentials unconfigured",
+      cfgErr.code || "UNCONFIGURED_RAZORPAY_CREDENTIALS",
+      500,
+      "RAZORPAY_CREDENTIALS_VALIDATED",
+      correlationId,
+    );
+  }
+
+  // Check for existing session by client-provided idempotencyKey
   let existingFailedAttempt: typeof paymentAttemptsTable.$inferSelect | null = null;
 
   if (params.idempotencyKey) {
@@ -227,6 +342,8 @@ export async function createRazorpayPaymentOrder(
           "Idempotency key belongs to another customer",
           "IDEMPOTENCY_KEY_COLLISION",
           409,
+          "PAYMENT_ATTEMPT_REUSE",
+          correlationId,
         );
       }
 
@@ -235,6 +352,8 @@ export async function createRazorpayPaymentOrder(
           "Idempotency key was used for a different invoice target",
           "IDEMPOTENCY_KEY_REUSE_MISMATCH",
           409,
+          "PAYMENT_ATTEMPT_REUSE",
+          correlationId,
         );
       }
 
@@ -243,6 +362,8 @@ export async function createRazorpayPaymentOrder(
           "Idempotency key was used for a different amount",
           "IDEMPOTENCY_KEY_REUSE_MISMATCH",
           409,
+          "PAYMENT_ATTEMPT_REUSE",
+          correlationId,
         );
       }
 
@@ -251,33 +372,49 @@ export async function createRazorpayPaymentOrder(
           "Payment already completed for this attempt",
           "PAYMENT_ALREADY_COMPLETED",
           400,
+          "PAYMENT_ATTEMPT_REUSE",
+          correlationId,
         );
       }
 
       if (existingByKey.status === "failed") {
         existingFailedAttempt = existingByKey;
       } else if (existingByKey.rzpOrderId) {
-        return {
-          success: true,
-          gateway: "razorpay",
-          orderId: existingByKey.rzpOrderId,
-          keyId: cfg.keyId,
-          orderAmount: parseFloat(existingByKey.amount),
-          amountInPaise: Math.round(parseFloat(existingByKey.amount) * 100),
-          orderCurrency: existingByKey.currency as "INR",
-          customer: {
-            id: customerId,
-            name: customerName,
-            phone,
-            email: customerEmail,
-          },
-          environment: cfg.env,
-        };
+        const attemptKeyId = (existingByKey.metadata as any)?.keyId;
+        // Key consistency verification: do not reuse if order was created with a different key
+        if (!attemptKeyId || attemptKeyId === cfg.keyId) {
+          logger.info(
+            {
+              stage: "PAYMENT_ATTEMPT_REUSED",
+              correlationId,
+              orderId: existingByKey.rzpOrderId,
+              keyId: cfg.keyId,
+            },
+            "[RAZORPAY_SERVICE] Reusing attempt by idempotency key",
+          );
+          return {
+            success: true,
+            gateway: "razorpay",
+            orderId: existingByKey.rzpOrderId,
+            keyId: cfg.keyId,
+            orderAmount: parseFloat(existingByKey.amount),
+            amountInPaise: Math.round(parseFloat(existingByKey.amount) * 100),
+            orderCurrency: existingByKey.currency as "INR",
+            customer: {
+              id: customerId,
+              name: customerName,
+              phone,
+              email: customerEmail,
+            },
+            environment: cfg.env,
+            correlationId,
+          };
+        }
       }
     }
   }
 
-  // 4. Active session reuse window (within 20 minutes)
+  // Active session reuse window (within 20 minutes)
   if (!params.idempotencyKey) {
     const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
     const reuseCondition = targetInvoiceId !== null
@@ -307,7 +444,18 @@ export async function createRazorpayPaymentOrder(
 
     if (activeAttempt && activeAttempt.rzpOrderId) {
       const attemptAmount = parseFloat(activeAttempt.amount);
-      if (Math.abs(attemptAmount - payableAmount) < 0.01) {
+      const attemptKeyId = (activeAttempt.metadata as any)?.keyId;
+      // Key consistency check: only reuse if attempt was generated with the current active key
+      if (Math.abs(attemptAmount - payableAmount) < 0.01 && (!attemptKeyId || attemptKeyId === cfg.keyId)) {
+        logger.info(
+          {
+            stage: "PAYMENT_ATTEMPT_REUSED",
+            correlationId,
+            orderId: activeAttempt.rzpOrderId,
+            attemptId: activeAttempt.attemptId,
+          },
+          "[RAZORPAY_SERVICE] Reusing active non-failed Razorpay order attempt",
+        );
         return {
           success: true,
           gateway: "razorpay",
@@ -323,23 +471,25 @@ export async function createRazorpayPaymentOrder(
             email: customerEmail,
           },
           environment: cfg.env,
+          correlationId,
         };
       }
     }
   }
 
-  // 5. Generate unique IDs
+  // Generate unique IDs
   const randomSuffix = randomBytes(4).toString("hex");
   const attemptId = `cwp_att_${Date.now()}_${randomSuffix}`;
   const effectiveIdempotencyKey = params.idempotencyKey?.trim() || attemptId;
   const formattedAmount = payableAmount.toFixed(2);
 
-  // 6. Invoke Razorpay API Client to create order
+  // Invoke Razorpay API Client to create order (Stages 6 and 7 logged inside RazorpayClient)
   const client = new RazorpayClient();
 
   const notes: Record<string, string> = {
     customer_id: String(customerId),
     attempt_id: attemptId,
+    correlation_id: correlationId,
     ...(targetInvoiceId ? { invoice_id: String(targetInvoiceId) } : {}),
     ...(params.subscriptionId ? { subscription_id: String(params.subscriptionId) } : {}),
     ...(params.cityId ? { city_id: String(params.cityId) } : {}),
@@ -348,22 +498,49 @@ export async function createRazorpayPaymentOrder(
 
   let rzpOrder: RazorpayOrderEntity;
   try {
-    rzpOrder = await client.createOrder({
-      amount: amountInPaise,
-      currency: "INR",
-      receipt: attemptId.slice(0, 40),
-      notes,
-      payment_capture: 1, // Auto-capture payment on authorization
-    });
+    rzpOrder = await client.createOrder(
+      {
+        amount: amountInPaise,
+        currency: "INR",
+        receipt: attemptId.slice(0, 40),
+        notes,
+        payment_capture: 1, // Auto-capture payment on authorization
+      },
+      { correlationId },
+    );
   } catch (err: any) {
     logger.error(
-      { err: err.message, customerId, amountInPaise },
+      {
+        stage: "RAZORPAY_ORDER_RESPONSE_RECEIVED",
+        stageStatus: "FAILED",
+        correlationId,
+        err: err.message,
+        code: err.code,
+        customerId,
+        amountInPaise,
+      },
       "[RAZORPAY_SERVICE] Failed to create order on Razorpay gateway",
     );
     throw err;
   }
 
-  // 7. Insert or update payment attempt
+  const metadataObj = {
+    correlationId,
+    keyId: cfg.keyId,
+    environment: cfg.env,
+    stages: [
+      "PAYMENT_INITIATED",
+      "CUSTOMER_AUTHENTICATED",
+      "INVOICE_VALIDATED",
+      "PAYABLE_AMOUNT_RESOLVED",
+      "RAZORPAY_CREDENTIALS_VALIDATED",
+      "RAZORPAY_ORDER_REQUEST_SENT",
+      "RAZORPAY_ORDER_RESPONSE_RECEIVED",
+      "PAYMENT_ATTEMPT_PERSISTED",
+    ],
+  };
+
+  // Stage 8: PAYMENT_ATTEMPT_PERSISTED
   if (existingFailedAttempt) {
     await db
       .update(paymentAttemptsTable)
@@ -378,6 +555,7 @@ export async function createRazorpayPaymentOrder(
         cityId: params.cityId ?? null,
         branchId: params.branchId ?? null,
         legalEntityId: params.legalEntityId ?? null,
+        metadata: metadataObj,
         updatedAt: new Date(),
       })
       .where(eq(paymentAttemptsTable.id, existingFailedAttempt.id));
@@ -401,6 +579,7 @@ export async function createRazorpayPaymentOrder(
           status: "initiated",
           idempotencyKey: effectiveIdempotencyKey,
           paymentMethod: "razorpay",
+          metadata: metadataObj,
         });
     } catch (err: any) {
       if (err?.code === "23505" || err?.cause?.code === "23505") {
@@ -426,12 +605,25 @@ export async function createRazorpayPaymentOrder(
               email: customerEmail,
             },
             environment: cfg.env,
+            correlationId,
           };
         }
       }
       throw err;
     }
   }
+
+  logger.info(
+    {
+      stage: "PAYMENT_ATTEMPT_PERSISTED",
+      stageStatus: "SUCCESS",
+      correlationId,
+      attemptId,
+      orderId: rzpOrder.id,
+      amount: payableAmount,
+    },
+    "[RAZORPAY_SERVICE] Stage 8: PAYMENT_ATTEMPT_PERSISTED",
+  );
 
   return {
     success: true,
@@ -448,6 +640,7 @@ export async function createRazorpayPaymentOrder(
       email: customerEmail,
     },
     environment: cfg.env,
+    correlationId,
   };
 }
 
@@ -694,6 +887,94 @@ export async function reconcileRazorpayPayment(params: ReconcileRazorpayPaymentP
 }
 
 /**
+ * Records checkout failure received from client-side modal (Finding 1 & Finding 2: Stage 11).
+ * Updates payment_attempts table status to 'failed' and stores diagnostic failure payload in metadata.
+ */
+export async function recordRazorpayCheckoutFailure(params: {
+  orderId: string;
+  customerId?: number;
+  correlationId: string;
+  error: {
+    code?: string;
+    description?: string;
+    source?: string;
+    step?: string;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  };
+}) {
+  const { orderId, customerId, correlationId, error } = params;
+
+  logger.warn(
+    {
+      stage: "CHECKOUT_FAILURE_RECEIVED",
+      stageStatus: "RECORDING",
+      correlationId,
+      orderId,
+      customerId,
+      code: error.code,
+      description: error.description,
+      source: error.source,
+      step: error.step,
+      reason: error.reason,
+    },
+    "[RAZORPAY_SERVICE] Stage 11: Recording CHECKOUT_FAILURE_RECEIVED",
+  );
+
+  const [attempt] = await db
+    .select()
+    .from(paymentAttemptsTable)
+    .where(
+      and(
+        eq(paymentAttemptsTable.rzpOrderId, orderId),
+        customerId ? eq(paymentAttemptsTable.customerId, customerId) : sql`TRUE`,
+      ),
+    )
+    .limit(1);
+
+  if (attempt) {
+    const existingMeta = (attempt.metadata as Record<string, unknown>) || {};
+    const failureMeta = {
+      ...existingMeta,
+      lastFailure: {
+        code: error.code || "CHECKOUT_FAILURE",
+        description: error.description || "Checkout failed",
+        source: error.source || "gateway",
+        step: error.step || "payment_authorization",
+        reason: error.reason || "unknown",
+        paymentId: error.metadata?.payment_id,
+        correlationId,
+        failedAt: new Date().toISOString(),
+      },
+    };
+
+    await db
+      .update(paymentAttemptsTable)
+      .set({
+        status: "failed",
+        metadata: failureMeta,
+        updatedAt: new Date(),
+      })
+      .where(eq(paymentAttemptsTable.id, attempt.id));
+
+    logger.info(
+      {
+        stage: "CHECKOUT_FAILURE_PERSISTED",
+        stageStatus: "SUCCESS",
+        correlationId,
+        orderId,
+        attemptId: attempt.attemptId,
+      },
+      "[RAZORPAY_SERVICE] Transitioned payment attempt to failed status",
+    );
+
+    return { recorded: true, attemptId: attempt.attemptId };
+  }
+
+  return { recorded: false };
+}
+
+/**
  * Verifies client-submitted Razorpay payment completion tokens.
  */
 export async function verifyRazorpayPayment(params: {
@@ -701,20 +982,36 @@ export async function verifyRazorpayPayment(params: {
   paymentId: string;
   signature: string;
   customerId: number;
+  correlationId?: string;
 }) {
   const { orderId, paymentId, signature, customerId } = params;
+  const correlationId = params.correlationId || `cwp_cor_${Date.now()}`;
+
+  logger.info(
+    {
+      stage: "PAYMENT_VERIFICATION_RECEIVED",
+      stageStatus: "RECEIVED",
+      correlationId,
+      orderId,
+      paymentId,
+      customerId,
+    },
+    "[RAZORPAY_SERVICE] Stage 12: PAYMENT_VERIFICATION_RECEIVED",
+  );
 
   // 1. Verify cryptographic payment signature
   const isValidSignature = verifyRazorpayPaymentSignature(orderId, paymentId, signature);
   if (!isValidSignature) {
     logger.warn(
-      { orderId, paymentId },
+      { stage: "PAYMENT_VERIFICATION_RECEIVED", stageStatus: "FAILED", correlationId, orderId, paymentId },
       "[RAZORPAY_SERVICE] Client submitted invalid payment signature",
     );
     throw new RazorpayPaymentServiceError(
       "Payment signature verification failed",
       "INVALID_PAYMENT_SIGNATURE",
       400,
+      "PAYMENT_VERIFICATION_RECEIVED",
+      correlationId,
     );
   }
 
@@ -722,16 +1019,18 @@ export async function verifyRazorpayPayment(params: {
   const client = new RazorpayClient();
   let paymentEntity: RazorpayPaymentEntity;
   try {
-    paymentEntity = await client.getPayment(paymentId);
+    paymentEntity = await client.getPayment(paymentId, { correlationId });
   } catch (err: any) {
     logger.error(
-      { err: err.message, paymentId, orderId },
+      { stage: "PAYMENT_VERIFICATION_RECEIVED", stageStatus: "GATEWAY_ERROR", err: err.message, paymentId, orderId, correlationId },
       "[RAZORPAY_SERVICE] Failed to fetch payment from Razorpay API",
     );
     throw new RazorpayPaymentServiceError(
       "Could not confirm payment with Razorpay gateway",
       "GATEWAY_VERIFICATION_FAILED",
       502,
+      "PAYMENT_VERIFICATION_RECEIVED",
+      correlationId,
     );
   }
 
@@ -740,6 +1039,8 @@ export async function verifyRazorpayPayment(params: {
       "Payment does not match the specified order",
       "ORDER_MISMATCH",
       400,
+      "PAYMENT_VERIFICATION_RECEIVED",
+      correlationId,
     );
   }
 
@@ -749,11 +1050,12 @@ export async function verifyRazorpayPayment(params: {
       status: paymentEntity.status.toUpperCase(),
       orderId,
       paymentId,
+      correlationId,
       message: `Payment is in ${paymentEntity.status} status`,
     };
   }
 
-  // 3. Atomically reconcile with ledger
+  // 3. Atomically reconcile with ledger (Stage 13: LEDGER_RECONCILIATION_COMPLETED)
   const result = await reconcileRazorpayPayment({
     orderId,
     paymentId,
@@ -763,6 +1065,18 @@ export async function verifyRazorpayPayment(params: {
     rawPayload: paymentEntity as any,
   });
 
+  logger.info(
+    {
+      stage: "LEDGER_RECONCILIATION_COMPLETED",
+      stageStatus: "SUCCESS",
+      correlationId,
+      orderId,
+      paymentId,
+      paymentRecordId: result.payment?.id,
+    },
+    "[RAZORPAY_SERVICE] Stage 13: LEDGER_RECONCILIATION_COMPLETED",
+  );
+
   return {
     success: true,
     status: "PAID",
@@ -770,6 +1084,7 @@ export async function verifyRazorpayPayment(params: {
     paymentId,
     amount: paymentEntity.amount / 100,
     receipt: result.receipt,
+    correlationId,
   };
 }
 

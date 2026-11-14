@@ -190,6 +190,7 @@ export function CustomerSubscribeModal({
           amountInPaise: data.amountInPaise,
           name: "CWP Detailers",
           description: "Daily Car Cleaning Subscription",
+          correlationId: data.correlationId,
           prefill: {
             name: data.customer?.name || "",
             contact: data.customer?.phone || "",
@@ -200,12 +201,16 @@ export function CustomerSubscribeModal({
         // Verify payment atomically on backend
         const verifyRes = await fetch("/api/payments/razorpay/verify", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-correlation-id": data.correlationId,
+          },
           credentials: "include",
           body: JSON.stringify({
             orderId: rzpResponse.razorpay_order_id,
             paymentId: rzpResponse.razorpay_payment_id,
             signature: rzpResponse.razorpay_signature,
+            correlationId: data.correlationId,
           }),
         });
 
@@ -235,7 +240,9 @@ export function CustomerSubscribeModal({
       }
     } catch (err: any) {
       const isDismissed =
-        err.message?.includes("closed") ||
+        err.isDismissal === true ||
+        err.code === "USER_DROPPED" ||
+        err.message?.includes("closed by the user") ||
         err.message?.includes("dismissed") ||
         err.message?.includes("cancelled");
 
@@ -246,8 +253,8 @@ export function CustomerSubscribeModal({
         });
       } else {
         toast({
-          title: "Checkout Error",
-          description: err.message || "Could not start payment checkout. Please try again.",
+          title: "Online Checkout Notice",
+          description: "Online checkout is momentarily unavailable. Our team has been alerted.",
           variant: "destructive",
         });
       }
