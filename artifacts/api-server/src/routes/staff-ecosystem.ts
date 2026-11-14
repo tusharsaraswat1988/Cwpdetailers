@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import {
   staffTable, staffRoleMasterTable, staffRoleAssignmentsTable,
   staffDocumentsTable, staffNotesTable, branchesTable, franchiseesTable,
-  complaintsTable,
+  complaintsTable, citiesTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, or, sql } from "drizzle-orm";
 import { rowInScope } from "../middlewares/tenantScope";
@@ -132,11 +132,58 @@ router.get("/staff/me/context", async (req, res) => {
       openTeamComplaints = Number(countRow?.count ?? 0);
     }
 
+    let cityId = staff.cityId;
+    let cityName = staff.city ?? null;
+
+    if (!cityId && staff.branchId) {
+      const [branch] = await db
+        .select({ cityId: branchesTable.cityId })
+        .from(branchesTable)
+        .where(eq(branchesTable.id, staff.branchId))
+        .limit(1);
+      if (branch?.cityId) {
+        cityId = branch.cityId;
+      }
+    }
+
+    if (cityId) {
+      const [cityRow] = await db
+        .select({ name: citiesTable.name })
+        .from(citiesTable)
+        .where(eq(citiesTable.id, cityId))
+        .limit(1);
+      if (cityRow?.name) {
+        cityName = cityRow.name;
+      }
+    }
+
+    let availableServiceCategories: string[] = ["daily_cleaning"];
+    try {
+      if (cityId) {
+        const { getEffectiveServicesForScope } = await import("../lib/catalog/serviceAvailabilityService");
+        const effectiveServices = await getEffectiveServicesForScope({ cityId, branchId: staff.branchId });
+        const set = new Set<string>();
+        set.add("daily_cleaning");
+        for (const svc of effectiveServices) {
+          const type = (svc.serviceType?.toLowerCase() ?? "") + " " + (svc.code?.toLowerCase() ?? "");
+          if (type.includes("wash")) set.add("car_wash");
+          if (type.includes("solar")) set.add("solar_cleaning");
+          if (type.includes("detail") || type.includes("ceramic") || type.includes("ppf")) set.add("detailing");
+        }
+        availableServiceCategories = Array.from(set);
+      }
+    } catch {
+      // Fallback preserves baseline daily cleaning
+    }
+
     return res.json({
       staffId: staff.id,
       name: staff.name,
       staffCategory: staff.staffCategory,
       branchId: staff.branchId,
+      cityId: cityId ?? null,
+      cityName: cityName ?? null,
+      availableServiceCategories,
       reportingManager,
       directReports,
       openTeamComplaints,

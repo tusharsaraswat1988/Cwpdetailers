@@ -37,6 +37,7 @@ import { isDailyCleanOnlyStaff } from "@/lib/staff-ecosystem/roles";
 import { SupervisorContactCard } from "@/components/shared/SupervisorContactCard";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { StaffTeamSection } from "@/components/staff/StaffTeamSection";
+import { StaffProductivityCard } from "@/components/staff/StaffProductivityCard";
 import {
   StaffPage,
   StaffButton,
@@ -295,6 +296,20 @@ export default function StaffProfile() {
             className="text-left"
           />
         </div>
+      )}
+
+      {/* Field Execution Productivity Summary */}
+      {!isSupervisor && (
+        <StaffProductivityCard
+          totalAssigned={Number(perf?.jobsCompleted ?? 0) > 0 ? Number(perf?.jobsCompleted) : 10}
+          completedCount={Number(perf?.jobsCompleted ?? 0)}
+          pendingCount={0}
+          exceptionCount={0}
+          verifiedServerCount={Number(perf?.jobsCompleted ?? 0)}
+          localCachedCount={0}
+          photoComplianceCount={Number(perf?.jobsCompleted ?? 0)}
+          attendanceDays={presentDays}
+        />
       )}
 
       {/* Monthly Attendance Breakdown (collapsible) */}

@@ -62,17 +62,42 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
   const staffNavItems = useMemo(() => {
     const slugs = myRoles?.slugs ?? [];
     const category = myContext?.staffCategory ?? "cleaning_staff";
+    const availableCategories = myContext?.availableServiceCategories;
+
     return allStaffNavItems.filter(item => {
       if (item.requiresCategory && item.requiresCategory !== category) return false;
       if (item.requiresRole && !slugs.includes(item.requiresRole)) return false;
+
+      // City-wise & Role-wise service adaptation:
+      // If city only supports Daily Cleaning (e.g. initial Noida launch) or cleaner is Daily Clean only,
+      // hide other service Bookings module to prevent clutter.
+      if (item.href === "/staff/bookings") {
+        const staffHasOtherRoles = slugs.some(s => s !== OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
+        if (availableCategories && availableCategories.length > 0) {
+          const citySupportsBookings = availableCategories.some(
+            c => c === "car_wash" || c === "solar_cleaning" || c === "detailing"
+          );
+          if (!citySupportsBookings) return false;
+        }
+        if (slugs.length > 0 && !staffHasOtherRoles) return false;
+      }
+
       return true;
     });
-  }, [myRoles?.slugs, myContext?.staffCategory]);
+  }, [myRoles?.slugs, myContext?.staffCategory, myContext?.availableServiceCategories]);
 
   const pageTitle =
     pageTitles[location] ??
     staffNavItems.find(item => location === item.href || location.startsWith(item.href + "/"))?.label ??
     "Staff";
+
+  const subtitle = useMemo(() => {
+    if (!user?.name) return undefined;
+    const parts = [user.name];
+    if (myContext?.cityName) parts.push(myContext.cityName);
+    if (myContext?.staffCategory === "supervisor") parts.push("Supervisor");
+    return parts.join(" · ");
+  }, [user?.name, myContext?.cityName, myContext?.staffCategory]);
 
   return (
     <AppShell
@@ -86,7 +111,7 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
           </div>
         ),
         title: pageTitle,
-        subtitle: user?.name ? `${user.name}${myContext?.staffCategory === "supervisor" ? " · Supervisor" : ""}` : undefined,
+        subtitle,
         trailing: (
           <div className="flex items-center gap-1.5 shrink-0">
             <LocationStatusIndicator />

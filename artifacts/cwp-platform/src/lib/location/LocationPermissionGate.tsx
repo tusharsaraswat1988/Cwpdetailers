@@ -1,12 +1,15 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Loader2, MapPin, MapPinOff, Navigation, RefreshCw, Settings, ShieldAlert, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStaffLocation } from "./LocationProvider";
 import { useAuth } from "@/lib/auth";
+import { Capacitor } from "@capacitor/core";
+import { isStaffNativeApp } from "@/lib/native/staffNative";
 
 /**
  * Blocks staff UI only when location permission is missing, denied, or GPS is off.
  * Does NOT block navigation while GPS fix is acquired in the background.
+ * In desktop web / browser preview mode, provides a fallback to test without native GPS hardware.
  */
 export function LocationPermissionGate({ children }: { children: ReactNode }) {
   const {
@@ -21,8 +24,10 @@ export function LocationPermissionGate({ children }: { children: ReactNode }) {
     openAppSettings,
   } = useStaffLocation();
   const { logout } = useAuth();
+  const [browserPreviewBypass, setBrowserPreviewBypass] = useState(false);
 
-  const canEnterApp = permissionState === "granted";
+  const isNative = isStaffNativeApp() || Capacitor.isNativePlatform();
+  const canEnterApp = permissionState === "granted" || (!isNative && browserPreviewBypass);
 
   const renderIcon = () => {
     if (permissionState === "unsupported") {
@@ -198,9 +203,20 @@ export function LocationPermissionGate({ children }: { children: ReactNode }) {
               </Button>
             )}
 
+            {!isNative && (
+              <Button
+                variant="outline"
+                className="h-9 w-full text-xs font-medium text-primary mt-2 border-primary/30 bg-primary/5 hover:bg-primary/10"
+                onClick={() => setBrowserPreviewBypass(true)}
+                data-testid="gate-browser-preview-btn"
+              >
+                Continue in Web / Preview Mode
+              </Button>
+            )}
+
             <Button
               variant="ghost"
-              className="h-9 w-full text-xs text-muted-foreground hover:text-destructive mt-3"
+              className="h-9 w-full text-xs text-muted-foreground hover:text-destructive mt-2"
               onClick={() => logout("staff")}
               data-testid="gate-logout-btn"
             >

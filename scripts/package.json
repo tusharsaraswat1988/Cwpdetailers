@@ -38,6 +38,7 @@
     "setup:vapid": "tsx ./src/setup-vapid-keys.ts",
     "update:brand-logo": "tsx ./src/update-brand-logo.ts",
     "verify:m1-adversarial": "tsx ./src/verify-m1-adversarial.ts",
+    "seed:phase24": "tsx ./src/seed-phase24-demo-route.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -143,6 +143,9 @@ export type StaffMeContext = {
   name: string;
   staffCategory: StaffCategory;
   branchId: number;
+  cityId?: number | null;
+  cityName?: string | null;
+  availableServiceCategories?: string[];
   reportingManager: SupervisorContact | null;
   directReports: Array<{ id: number; name: string; phone: string; employeeCode: string | null; isActive: boolean }>;
   openTeamComplaints: number;
