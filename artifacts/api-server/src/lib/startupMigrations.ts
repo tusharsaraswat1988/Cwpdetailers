@@ -1134,6 +1134,80 @@ export async function ensureStartupMigrations(): Promise<void> {
       logger.warn({ err: mig82Err }, "Phase 22 scheduler & background workers DDL check failed (non-fatal, continuing)");
     }
 
+    // Phase 25 — Multi-Gateway Payment Redundancy & Razorpay Integration (Migration 084)
+    try {
+      await client.query(`
+        ALTER TABLE payment_attempts 
+        ADD COLUMN IF NOT EXISTS gateway_provider TEXT NOT NULL DEFAULT 'cashfree';
+
+        ALTER TABLE payment_attempts 
+        ALTER COLUMN cf_order_id DROP NOT NULL;
+
+        ALTER TABLE payment_attempts 
+        ADD COLUMN IF NOT EXISTS rzp_order_id TEXT,
+        ADD COLUMN IF NOT EXISTS rzp_payment_id TEXT,
+        ADD COLUMN IF NOT EXISTS rzp_signature TEXT,
+        ADD COLUMN IF NOT EXISTS gateway_order_id TEXT;
+
+        UPDATE payment_attempts 
+        SET gateway_order_id = cf_order_id 
+        WHERE gateway_order_id IS NULL AND cf_order_id IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS payment_attempts_gateway_provider_idx ON payment_attempts(gateway_provider);
+        CREATE UNIQUE INDEX IF NOT EXISTS payment_attempts_rzp_order_id_idx ON payment_attempts(rzp_order_id) WHERE rzp_order_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS payment_attempts_gateway_order_id_idx ON payment_attempts(gateway_order_id);
+      `);
+    } catch (mig84Err) {
+      logger.warn({ err: mig84Err }, "Phase 25 multi-gateway payment DDL check failed (non-fatal, continuing)");
+    }
+
+    // Phase 25 — Universal Service Exceptions Engine (Migration 084 / ADMIN-012)
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS service_exceptions (
+          id SERIAL PRIMARY KEY,
+          exception_code TEXT NOT NULL,
+          category TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'medium',
+          status TEXT NOT NULL DEFAULT 'open',
+          title TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          details JSONB,
+          booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+          customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+          staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+          execution_id INTEGER REFERENCES service_executions(id) ON DELETE SET NULL,
+          subscription_id INTEGER REFERENCES dcms_subscriptions(id) ON DELETE SET NULL,
+          complaint_id INTEGER REFERENCES complaints(id) ON DELETE SET NULL,
+          city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+          company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+          dedupe_key TEXT,
+          evidence_url TEXT,
+          acknowledged_at TIMESTAMP,
+          acknowledged_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          resolved_at TIMESTAMP,
+          resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          resolution_notes TEXT,
+          resolution_action TEXT,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_service_exceptions_code ON service_exceptions (exception_code);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_service_exceptions_dedupe ON service_exceptions (dedupe_key);
+        CREATE INDEX IF NOT EXISTS idx_service_exceptions_status ON service_exceptions (status);
+        CREATE INDEX IF NOT EXISTS idx_service_exceptions_category ON service_exceptions (category);
+        CREATE INDEX IF NOT EXISTS idx_service_exceptions_city_branch ON service_exceptions (city_id, branch_id);
+        CREATE INDEX IF NOT EXISTS idx_service_exceptions_booking ON service_exceptions (booking_id);
+        CREATE INDEX IF NOT EXISTS idx_service_exceptions_customer ON service_exceptions (customer_id);
+        CREATE INDEX IF NOT EXISTS idx_service_exceptions_staff ON service_exceptions (staff_id);
+        CREATE INDEX IF NOT EXISTS idx_service_exceptions_created ON service_exceptions (created_at);
+      `);
+    } catch (migExpErr) {
+      logger.warn({ err: migExpErr }, "Phase 25 universal service exceptions DDL check failed (non-fatal, continuing)");
+    }
+
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
     logger.error({ err }, "Startup schema migration error (non-fatal, continuing)");

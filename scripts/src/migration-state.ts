@@ -79,6 +79,8 @@ export const PENDING_MIGRATIONS = [
   "081_customer_referral_loyalty_retention.sql",
   "082_automated_job_scheduler_and_workers.sql",
   "083_ux_experimentation_and_funnel_analytics.sql",
+  "084_payment_gateway_multi_provider.sql",
+  "085_universal_service_exceptions.sql",
 ] as const;
 
 export type Queryable = {
@@ -225,6 +227,9 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
       return hasTable(db, "scheduled_jobs");
     case "083_ux_experimentation_and_funnel_analytics.sql":
       return hasTable(db, "ux_experiments");
+    case "084_payment_gateway_multi_provider.sql":
+      return (await hasColumn(db, "payment_attempts", "gateway_provider"))
+        && (await hasColumn(db, "payment_attempts", "rzp_order_id"));
     default:
       return false;
   }

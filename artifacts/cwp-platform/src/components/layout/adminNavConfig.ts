@@ -11,6 +11,7 @@ import {
   Bell,
   Building2,
   ShieldCheck,
+  ShieldAlert,
   Key,
   Funnel,
   Sparkles,
@@ -150,6 +151,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         label: "Job Board",
         icon: ListTodo,
         perm: { resource: "bookings", action: "edit" },
+      },
+      {
+        id: "exceptions-hub",
+        href: "/admin/exceptions",
+        label: "Service Exceptions",
+        icon: ShieldAlert,
+        perm: { resource: "bookings", action: "view" },
       },
       {
         id: "complaints",

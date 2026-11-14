@@ -36,6 +36,7 @@ import BillingFinancePage from "@/pages/admin/BillingFinancePage";
 import PaymentLedgerPage from "@/pages/admin/PaymentLedgerPage";
 import InvoiceBillingSettingsPage from "@/pages/admin/InvoiceBillingSettings";
 import AdminComplaints from "@/pages/admin/Complaints";
+import ExceptionsHub from "@/pages/admin/ExceptionsHub";
 import AdminBranches from "@/pages/admin/Branches";
 import AdminCities from "@/pages/admin/Cities";
 import SocietiesPage from "@/pages/admin/SocietiesPage";
@@ -228,6 +229,7 @@ function Router() {
       <Route path="/admin/quotations" component={() => <Redirect to="/admin/billing?tab=quotations" />} />
       <Route path="/admin/expenses" component={() => <Redirect to="/admin/billing?tab=expenses" />} />
       <Route path="/admin/settings/invoice-billing" component={() => <ProtectedRoute component={InvoiceBillingSettingsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/exceptions" component={() => <ProtectedRoute component={ExceptionsHub} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={["admin", "superadmin", "manager"]} permission={{ resource: "complaints", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/quality" component={() => <ProtectedRoute component={QualityHub} roles={["admin", "superadmin", "manager"]} permission={{ resource: "analytics", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/book-services" component={() => <ProtectedRoute component={BookServicesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
@@ -285,6 +287,7 @@ function Router() {
       <Route path="/manager/staff/:id" component={() => <ProtectedRoute component={AdminStaffDetail} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
       <Route path="/manager/staff" component={() => <ProtectedRoute component={AdminStaff} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
       <Route path="/manager/quality" component={() => <ProtectedRoute component={QualityHub} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/exceptions" component={() => <ProtectedRoute component={ExceptionsHub} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
       <Route path="/manager/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
       <Route path="/manager/collections" component={() => <ProtectedRoute component={AdminDues} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
       <Route path="/manager/reports" component={() => <ProtectedRoute component={OperationsWall} roles={MANAGER_ROLES} loginPath="/admin/login" />} />

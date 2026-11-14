@@ -25,6 +25,7 @@ import { CustomerCancelModal } from "../components/CustomerCancelModal";
 import { VisitFeedbackCard } from "@/components/feedback/VisitFeedbackCard";
 import { qualityApi } from "@/lib/quality/api";
 import { launchCashfreeCheckout } from "@/lib/cashfree";
+import { launchRazorpayCheckout } from "@/lib/razorpay";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CustomerPage,
@@ -148,7 +149,44 @@ export default function CustomerDailyCleaningPage() {
       if (!res.ok || !resData.success) {
         throw new Error(resData.error || "Failed to initiate payment retry");
       }
-      if (resData.paymentSessionId) {
+
+      if (resData.gateway === "razorpay") {
+        const rzpResponse = await launchRazorpayCheckout({
+          keyId: resData.keyId,
+          orderId: resData.orderId,
+          amountInPaise: resData.amountInPaise,
+          name: "CWP Detailers",
+          description: "Subscription Payment Retry",
+          prefill: {
+            name: resData.customer?.name || "",
+            contact: resData.customer?.phone || "",
+            email: resData.customer?.email || "",
+          },
+        });
+
+        // Verify payment
+        const verifyRes = await fetch("/api/payments/razorpay/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            orderId: rzpResponse.razorpay_order_id,
+            paymentId: rzpResponse.razorpay_payment_id,
+            signature: rzpResponse.razorpay_signature,
+          }),
+        });
+
+        const verifyData = await verifyRes.json();
+        if (verifyRes.ok && verifyData.success) {
+          toast({
+            title: "Payment Successful",
+            description: "Your daily cleaning subscription is now active!",
+          });
+          queryClient.invalidateQueries({ queryKey: ["dcms"] });
+        } else {
+          throw new Error(verifyData.message || "Payment verification failed");
+        }
+      } else if (resData.paymentSessionId) {
         await launchCashfreeCheckout({
           paymentSessionId: resData.paymentSessionId,
           environment: resData.environment || "sandbox",

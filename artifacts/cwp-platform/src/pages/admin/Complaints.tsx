@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,8 +24,16 @@ import {
   UserCheck,
   ShieldAlert,
   Search,
+  ExternalLink,
+  Calendar,
+  Phone,
+  Building2,
+  MapPin,
+  User,
 } from "lucide-react";
 import { supportApi, type SupportTicket } from "@/lib/support/api";
+import { useAppStore } from "@/lib/store";
+import { Link } from "wouter";
 
 const statusColors: Record<string, string> = {
   open: "bg-red-500/10 text-red-600 border-red-500/20",
@@ -43,13 +51,25 @@ const priorityBadges: Record<string, { label: string; color: string }> = {
   low: { label: "Low", color: "bg-slate-500/10 text-slate-600 border-slate-500/20" },
 };
 
+const categoryMap: Record<string, string> = {
+  quality: "Service Quality",
+  delay: "Booking / Delay Issue",
+  reclean: "Reclean Request",
+  damage: "Vehicle Damage Concern",
+  billing: "Payment / Refund Issue",
+  subscription: "Subscription Issue",
+  other: "Other / Staff Behaviour",
+};
+
 export default function AdminComplaints() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { activeCityId, activeBranchId } = useAppStore();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
 
   // Message & Resolution state
@@ -65,19 +85,37 @@ export default function AdminComplaints() {
   const [resolveNote, setResolveNote] = useState("");
   const [resolveInternalNote, setResolveInternalNote] = useState("");
 
+  // Create ticket dialog state
+  const [createTicketOpen, setCreateTicketOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    customerId: "",
+    bookingId: "",
+    type: "quality",
+    priority: "high",
+    title: "",
+    description: "",
+  });
+
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("customerId");
-    if (id) setSearch(`customer:${id}`);
+    if (id) {
+      setSearch(`customer:${id}`);
+      setCreateForm((f) => ({ ...f, customerId: id }));
+    }
   }, []);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-support-tickets", statusFilter, priorityFilter, search],
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["admin-support-tickets", statusFilter, priorityFilter, categoryFilter, search, activeCityId, activeBranchId],
     queryFn: () =>
       supportApi.listTickets({
         status: statusFilter,
         priority: priorityFilter,
+        type: categoryFilter !== "all" ? categoryFilter : undefined,
         search: search.trim() || undefined,
+        cityId: activeCityId ?? undefined,
+        branchId: activeBranchId ?? undefined,
       }),
+    refetchInterval: 30_000,
   });
 
   const { data: activeTicket, refetch: refetchDetail } = useQuery({
@@ -108,7 +146,7 @@ export default function AdminComplaints() {
       refetchDetail();
       qc.invalidateQueries({ queryKey: ["admin-support-tickets"] });
       toast({
-        title: vars.isInternal ? "Internal note recorded" : "Reply sent to customer",
+        title: vars.isInternal ? "Internal note recorded (Private)" : "Reply sent to customer",
       });
     },
     onError: (err: any) => {
@@ -142,77 +180,126 @@ export default function AdminComplaints() {
     },
   });
 
+  const createTicketMutation = useMutation({
+    mutationFn: () =>
+      supportApi.createTicket({
+        customerId: Number(createForm.customerId),
+        bookingId: createForm.bookingId ? Number(createForm.bookingId) : undefined,
+        type: createForm.type,
+        priority: createForm.priority,
+        title: createForm.title.trim(),
+        description: createForm.description.trim(),
+        cityId: activeCityId ?? undefined,
+        branchId: activeBranchId ?? undefined,
+      }),
+    onSuccess: () => {
+      setCreateTicketOpen(false);
+      setCreateForm({
+        customerId: "",
+        bookingId: "",
+        type: "quality",
+        priority: "high",
+        title: "",
+        description: "",
+      });
+      qc.invalidateQueries({ queryKey: ["admin-support-tickets"] });
+      toast({ title: "Support ticket created successfully" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to create ticket", description: err.message, variant: "destructive" });
+    },
+  });
+
   const tickets = data?.data ?? [];
-  const openCount = tickets.filter((t) => t.status === "open" || t.status === "assigned" || t.status === "in_progress").length;
+  const openCount = tickets.filter(
+    (t) => t.status === "open" || t.status === "assigned" || t.status === "in_progress",
+  ).length;
   const overdueCount = tickets.filter((t) => t.isOverdue).length;
 
   return (
     <AdminLayout>
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5" data-testid="support-command-center">
         <PageActionHeader
-          title="Support & Exceptions Command Center"
+          title="Customer Support Intelligence"
           description={`${data?.total ?? 0} total tickets · ${openCount} active · ${overdueCount} SLA overdue (>24h)`}
           primaryAction={{
-            label: openCount > 0 ? "Triage Active Tickets" : "All Caught Up",
-            href: "#support-list",
-            testId: "complaints-primary-cta",
+            label: "Create Support Case",
+            onClick: () => setCreateTicketOpen(true),
+            icon: PlusCircle,
+            testId: "complaints-create-cta",
           }}
         />
 
         {/* Filters bar */}
-        <div className="flex flex-wrap items-center gap-3 bg-card border border-border p-3 rounded-xl">
+        <div className="flex flex-wrap items-center gap-3 bg-card border border-border p-3 rounded-xl shadow-sm">
           <div className="relative flex-1 min-w-[200px]">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by ticket #, customer, phone..."
-              className="pl-9 h-9 text-xs"
+              placeholder="Search by ticket #, customer, phone, keywords..."
+              className="pl-8 h-8 text-xs"
             />
           </div>
 
-          <div className="w-40">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="awaiting_customer">Awaiting Customer</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-8 w-32 text-xs">
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="assigned">Assigned</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="awaiting_customer">Awaiting Customer</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
 
-          <div className="w-40">
-            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder="All Priorities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <SelectTrigger className="h-8 w-32 text-xs">
+              <SelectValue placeholder="All Priorities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="urgent">Urgent</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="quality">Service Quality</SelectItem>
+              <SelectItem value="delay">Booking Delay</SelectItem>
+              <SelectItem value="reclean">Reclean Request</SelectItem>
+              <SelectItem value="damage">Vehicle Damage</SelectItem>
+              <SelectItem value="billing">Payment / Refund</SelectItem>
+              <SelectItem value="subscription">Subscription Issue</SelectItem>
+              <SelectItem value="other">Other / Staff Behaviour</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => refetch()} title="Refresh">
+            <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />
+          </Button>
         </div>
 
         {/* Tickets Grid */}
         <div id="support-list" className="space-y-3">
           {isLoading ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-xl" />
-            ))
+            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)
           ) : tickets.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground bg-card border rounded-xl">
-              No support tickets found matching current filters.
+              <CheckCircle2 size={32} className="mx-auto text-green-500 mb-2" />
+              <p className="font-semibold text-sm">No support tickets found</p>
+              <p className="text-xs">No active cases match your current filters.</p>
             </div>
           ) : (
             tickets.map((t) => {
@@ -223,14 +310,14 @@ export default function AdminComplaints() {
                 <div
                   key={t.id}
                   onClick={() => setSelectedTicketId(t.id)}
-                  className={`bg-card border rounded-xl p-5 cursor-pointer hover:border-primary/50 transition-colors ${
+                  className={`bg-card border rounded-xl p-4 sm:p-5 cursor-pointer hover:border-primary/50 transition-colors shadow-sm ${
                     t.isOverdue ? "border-red-500/30 bg-red-500/5" : "border-border"
                   }`}
                   data-testid={`complaint-${t.id}`}
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-xs font-bold text-primary">
                           {t.ticketNumber}
                         </span>
@@ -240,52 +327,70 @@ export default function AdminComplaints() {
                         <Badge variant="outline" className={`text-xs ${pConf.color}`}>
                           {pConf.label}
                         </Badge>
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {t.type.replace(/_/g, " ")}
+                        <span className="text-xs text-muted-foreground">
+                          {categoryMap[t.type] || t.type}
                         </span>
                         {t.isOverdue && (
                           <Badge variant="destructive" className="text-[10px] h-5 gap-1">
-                            <Clock size={11} /> SLA Overdue (&gt;24h)
+                            <Clock size={10} /> SLA Overdue (&gt;24h)
                           </Badge>
                         )}
                         {t.operationalExceptionId && (
                           <Badge variant="secondary" className="text-[10px] h-5 bg-amber-500/10 text-amber-700">
-                            Linked DCMS Exception #{t.operationalExceptionId}
+                            Linked Exception #{t.operationalExceptionId}
                           </Badge>
                         )}
                       </div>
 
-                      <p className="font-semibold text-sm">{t.title}</p>
+                      <h3 className="font-semibold text-sm sm:text-base text-foreground">{t.title}</h3>
                       {t.description && (
                         <p className="text-muted-foreground text-xs line-clamp-2">{t.description}</p>
                       )}
 
-                      <div className="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
-                        <span>City: {t.cityName || "N/A"}</span>
-                        <span>·</span>
-                        <span>Branch: {t.branchName || "N/A"}</span>
-                        {(t.assignedSupervisorName || t.relatedStaffName) && (
-                          <>
-                            <span>·</span>
-                            <span>Supervisor: {t.assignedSupervisorName || "Unassigned"}</span>
-                            <span>·</span>
-                            <span>Cleaner: {t.relatedStaffName || "Unassigned"}</span>
-                          </>
+                      {/* Operational Link Pills */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+                        <Link
+                          href={`/admin/customers/${t.customerId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 bg-secondary/80 hover:bg-secondary text-secondary-foreground px-2 py-0.5 rounded text-[11px] font-medium"
+                        >
+                          <Phone size={10} className="text-primary" />
+                          {t.customerName || `Customer #${t.customerId}`}
+                        </Link>
+
+                        {t.bookingId && (
+                          <Link
+                            href={`/admin/bookings?bookingId=${t.bookingId}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1 bg-secondary/80 hover:bg-secondary text-secondary-foreground px-2 py-0.5 rounded text-[11px] font-medium"
+                          >
+                            <Calendar size={10} className="text-primary" />
+                            Booking #{t.bookingId}
+                          </Link>
+                        )}
+
+                        <span className="flex items-center gap-1">
+                          <MapPin size={10} /> {t.cityName || "All"} {t.branchName ? `· ${t.branchName}` : ""}
+                        </span>
+
+                        {t.assignedSupervisorName && (
+                          <span className="flex items-center gap-1">
+                            <UserCheck size={10} /> Owner: {t.assignedSupervisorName}
+                          </span>
                         )}
                       </div>
 
                       {t.resolution && (
-                        <p className="text-xs text-green-700 bg-green-500/10 border border-green-500/20 px-2 py-1 rounded inline-block mt-2">
-                          ✓ {t.resolution}
+                        <p className="text-xs text-green-700 bg-green-500/10 border border-green-500/20 px-2.5 py-1 rounded-md inline-flex items-center gap-1.5 mt-2">
+                          <CheckCircle2 size={12} /> {t.resolution}
                         </p>
                       )}
                     </div>
 
-                    <div className="text-right flex-shrink-0 space-y-2">
+                    <div className="sm:text-right flex-shrink-0 space-y-2">
                       <div>
-                        <p className="text-sm font-medium">{t.customerName}</p>
                         <p className="text-xs text-muted-foreground font-mono">{t.customerPhone}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-[11px] text-muted-foreground">
                           {new Date(t.createdAt).toLocaleDateString("en-IN", {
                             day: "numeric",
                             month: "short",
@@ -295,7 +400,7 @@ export default function AdminComplaints() {
                         </p>
                       </div>
 
-                      <div className="flex gap-1 justify-end">
+                      <div className="flex gap-1 sm:justify-end">
                         {t.status !== "resolved" && t.status !== "closed" && (
                           <Button
                             size="sm"
@@ -366,27 +471,29 @@ export default function AdminComplaints() {
                   </SheetDescription>
                 </SheetHeader>
 
-                {/* Quick context pill */}
-                <div className="py-2 px-3 bg-muted/40 rounded-lg text-xs space-y-1 border">
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Priority: <span className="font-semibold uppercase">{activeTicket.priority}</span></span>
-                    <span>Type: <span className="font-semibold capitalize">{activeTicket.type}</span></span>
-                    {activeTicket.isOverdue && (
-                      <span className="text-red-600 font-semibold flex items-center gap-1">
-                        <AlertTriangle size={12} /> Overdue
-                      </span>
+                {/* Context Pills & 1-Click Profile Link */}
+                <div className="py-2.5 px-3 bg-muted/40 rounded-lg text-xs space-y-1.5 border">
+                  <div className="flex justify-between items-center text-muted-foreground">
+                    <span>Priority: <span className="font-semibold uppercase text-foreground">{activeTicket.priority}</span></span>
+                    <span>Category: <span className="font-semibold capitalize text-foreground">{categoryMap[activeTicket.type] || activeTicket.type}</span></span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Link
+                      href={`/admin/customers/${activeTicket.customerId}`}
+                      className="text-primary hover:underline font-semibold flex items-center gap-1 text-[11px]"
+                    >
+                      <User size={12} /> Open Customer 360 View →
+                    </Link>
+                    {activeTicket.bookingId && (
+                      <Link
+                        href={`/admin/bookings?bookingId=${activeTicket.bookingId}`}
+                        className="text-primary hover:underline font-semibold flex items-center gap-1 text-[11px] ml-auto"
+                      >
+                        <Calendar size={12} /> View Booking #{activeTicket.bookingId} →
+                      </Link>
                     )}
                   </div>
-                  {activeTicket.operationalExceptionId && (
-                    <div className="text-amber-700 dark:text-amber-300">
-                      Auto-linked DCMS Exception: #{activeTicket.operationalExceptionId}
-                    </div>
-                  )}
-                  {activeTicket.internalNotes && (
-                    <div className="text-slate-600 dark:text-slate-400 bg-amber-500/10 p-1.5 rounded text-[11px]">
-                      <span className="font-semibold">Internal Audit Note:</span> {activeTicket.internalNotes}
-                    </div>
-                  )}
                 </div>
 
                 {/* Tabs: Customer Discussion vs Internal Notes */}
@@ -410,9 +517,7 @@ export default function AdminComplaints() {
                           return (
                             <div
                               key={m.id}
-                              className={`flex flex-col ${
-                                isStaff ? "items-end" : "items-start"
-                              }`}
+                              className={`flex flex-col ${isStaff ? "items-end" : "items-start"}`}
                             >
                               <div
                                 className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-xs shadow-sm ${
@@ -441,14 +546,14 @@ export default function AdminComplaints() {
                       <Input
                         value={customerMessage}
                         onChange={(e) => setCustomerMessage(e.target.value)}
-                        placeholder="Type update visible to customer..."
+                        placeholder="Type reply visible to customer..."
                         className="text-xs h-9"
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey && customerMessage.trim()) {
                             e.preventDefault();
                             addMessageMutation.mutate({
                               id: activeTicket.id,
-                              msg: customerMessage,
+                              msg: customerMessage.trim(),
                               isInternal: false,
                             });
                           }
@@ -456,48 +561,45 @@ export default function AdminComplaints() {
                       />
                       <Button
                         size="sm"
-                        disabled={addMessageMutation.isPending || !customerMessage.trim()}
+                        className="h-9 px-3 shrink-0"
+                        disabled={!customerMessage.trim() || addMessageMutation.isPending}
                         onClick={() =>
                           addMessageMutation.mutate({
                             id: activeTicket.id,
-                            msg: customerMessage,
+                            msg: customerMessage.trim(),
                             isInternal: false,
                           })
                         }
-                        className="h-9 px-3"
                       >
-                        <Send size={14} />
+                        <Send size={13} />
                       </Button>
                     </div>
                   </TabsContent>
 
-                  {/* Internal Shielded Notes */}
+                  {/* Strictly Internal Notes */}
                   <TabsContent value="internal" className="flex-1 flex flex-col overflow-hidden">
-                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-md text-[11px] text-amber-800 dark:text-amber-200 flex items-center gap-1.5 my-1">
-                      <ShieldAlert size={14} />
-                      <span>
-                        Internal operations channel. Customer will NEVER see these messages.
-                      </span>
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-md text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-1.5 my-2">
+                      <Lock size={12} className="shrink-0" />
+                      <span>Confidential: Internal notes are strictly shielded and NEVER visible to customers.</span>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto py-2 space-y-2">
+                    <div className="flex-1 overflow-y-auto py-2 space-y-2.5">
                       {(activeTicket.messages ?? [])
                         .filter((m) => m.isInternal)
                         .map((m) => (
-                          <div
-                            key={m.id}
-                            className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg text-xs space-y-1"
-                          >
-                            <div className="flex items-center justify-between text-[11px] font-semibold text-amber-900 dark:text-amber-100">
-                              <span>🔒 {m.senderName}</span>
-                              <span className="text-muted-foreground font-normal">
-                                {new Date(m.createdAt).toLocaleTimeString([], {
+                          <div key={m.id} className="bg-muted/60 border rounded-lg p-2.5 text-xs space-y-1">
+                            <div className="flex justify-between text-[10px] text-muted-foreground">
+                              <span className="font-semibold text-foreground">{m.senderName}</span>
+                              <span>
+                                {new Date(m.createdAt).toLocaleString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
                                   hour: "2-digit",
                                   minute: "2-digit",
                                 })}
                               </span>
                             </div>
-                            <p className="text-foreground whitespace-pre-wrap">{m.message}</p>
+                            <p className="whitespace-pre-wrap">{m.message}</p>
                           </div>
                         ))}
                     </div>
@@ -506,14 +608,14 @@ export default function AdminComplaints() {
                       <Input
                         value={internalNote}
                         onChange={(e) => setInternalNote(e.target.value)}
-                        placeholder="Add internal supervisor note..."
-                        className="text-xs h-9 bg-amber-500/5 border-amber-500/30"
+                        placeholder="Add staff-only private note..."
+                        className="text-xs h-9"
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey && internalNote.trim()) {
                             e.preventDefault();
                             addMessageMutation.mutate({
                               id: activeTicket.id,
-                              msg: internalNote,
+                              msg: internalNote.trim(),
                               isInternal: true,
                             });
                           }
@@ -522,107 +624,206 @@ export default function AdminComplaints() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={addMessageMutation.isPending || !internalNote.trim()}
+                        className="h-9 px-3 shrink-0 gap-1 text-xs"
+                        disabled={!internalNote.trim() || addMessageMutation.isPending}
                         onClick={() =>
                           addMessageMutation.mutate({
                             id: activeTicket.id,
-                            msg: internalNote,
+                            msg: internalNote.trim(),
                             isInternal: true,
                           })
                         }
-                        className="h-9 px-3"
                       >
-                        <Lock size={13} className="mr-1" /> Save
+                        <Lock size={12} /> Record Note
                       </Button>
                     </div>
                   </TabsContent>
                 </Tabs>
               </>
             ) : (
-              <div className="p-6 text-center text-xs text-muted-foreground">Loading...</div>
+              <div className="space-y-4 py-8">
+                <Skeleton className="h-8 w-3/4" />
+                <Skeleton className="h-20 w-full" />
+              </div>
             )}
           </SheetContent>
         </Sheet>
 
-        {/* Resolution Dialog */}
+        {/* Resolve Ticket Dialog */}
         <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Resolve Ticket {activeTicket?.ticketNumber}</DialogTitle>
+              <DialogTitle>Resolve Support Case</DialogTitle>
+              <DialogDescription>
+                Record resolution action and optional customer compensation.
+              </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 text-xs">
-              <div>
-                <Label>Resolution Action</Label>
-                <Select
-                  value={resolveAction}
-                  onValueChange={(val: any) => setResolveAction(val)}
-                >
-                  <SelectTrigger className="mt-1 h-9 text-xs">
+            <div className="space-y-3 py-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Resolution Action</Label>
+                <Select value={resolveAction} onValueChange={(v) => setResolveAction(v as any)}>
+                  <SelectTrigger className="h-9 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="grant_makeup_credit">
-                      Grant Makeup Cleaning (+1 Credit to Subscription)
-                    </SelectItem>
-                    <SelectItem value="schedule_reclean">
-                      Schedule Recleaning Visit
-                    </SelectItem>
-                    <SelectItem value="reassign_staff">
-                      Reassign Cleaner / Adjust Daily Route
-                    </SelectItem>
-                    <SelectItem value="custom_resolution">
-                      Customer Reassurance / Custom Resolution
-                    </SelectItem>
-                    <SelectItem value="no_action_needed">
-                      No Action Needed (False Alarm / Duplicate)
-                    </SelectItem>
+                    <SelectItem value="grant_makeup_credit">Grant Makeup Cleaning Credit (+1)</SelectItem>
+                    <SelectItem value="schedule_reclean">Schedule Free Reclean</SelectItem>
+                    <SelectItem value="reassign_staff">Reassign Service Staff</SelectItem>
+                    <SelectItem value="custom_resolution">Custom Customer Agreement</SelectItem>
+                    <SelectItem value="no_action_needed">No Further Action Required</SelectItem>
                   </SelectContent>
                 </Select>
-                {resolveAction === "grant_makeup_credit" && (
-                  <p className="text-[11px] text-green-600 mt-1">
-                    ✓ Atomically credits +1 remaining cleaning to the customer's DCMS subscription and notifies customer.
-                  </p>
-                )}
               </div>
 
-              <div>
-                <Label>Resolution Note (Visible to Customer)</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Customer Resolution Summary *</Label>
                 <Textarea
                   value={resolveNote}
                   onChange={(e) => setResolveNote(e.target.value)}
-                  placeholder="Explain how the issue was resolved..."
-                  rows={3}
-                  className="mt-1 text-xs"
+                  placeholder="Summary sent/explained to customer..."
+                  rows={2}
+                  className="text-xs"
                 />
               </div>
 
-              <div>
-                <Label>Internal Operations Note (Shielded)</Label>
-                <Input
+              <div className="space-y-1.5">
+                <Label className="text-xs">Private Internal Audit Note</Label>
+                <Textarea
                   value={resolveInternalNote}
                   onChange={(e) => setResolveInternalNote(e.target.value)}
-                  placeholder="Audit reason, supervisor coaching note, etc."
-                  className="mt-1 text-xs"
+                  placeholder="Confidential root-cause analysis for supervisors..."
+                  rows={2}
+                  className="text-xs"
                 />
               </div>
             </div>
 
             <DialogFooter>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setResolveDialogOpen(false)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setResolveDialogOpen(false)}>
                 Cancel
               </Button>
               <Button
                 size="sm"
-                className="bg-green-600 hover:bg-green-700 text-white"
-                disabled={resolveMutation.isPending || !resolveNote.trim()}
                 onClick={() => resolveMutation.mutate()}
+                disabled={resolveMutation.isPending || !resolveNote.trim()}
               >
                 {resolveMutation.isPending ? "Resolving..." : "Confirm Resolution"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Support Case Dialog */}
+        <Dialog open={createTicketOpen} onOpenChange={setCreateTicketOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create Support Case</DialogTitle>
+              <DialogDescription>
+                Open an authoritative customer support case linked to operational records.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Customer ID *</Label>
+                  <Input
+                    value={createForm.customerId}
+                    onChange={(e) => setCreateForm({ ...createForm, customerId: e.target.value })}
+                    placeholder="e.g. 45"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Booking ID (optional)</Label>
+                  <Input
+                    value={createForm.bookingId}
+                    onChange={(e) => setCreateForm({ ...createForm, bookingId: e.target.value })}
+                    placeholder="e.g. 120"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Category</Label>
+                  <Select
+                    value={createForm.type}
+                    onValueChange={(val) => setCreateForm({ ...createForm, type: val })}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="quality">Service Quality</SelectItem>
+                      <SelectItem value="delay">Booking Delay</SelectItem>
+                      <SelectItem value="reclean">Reclean Request</SelectItem>
+                      <SelectItem value="damage">Vehicle Damage</SelectItem>
+                      <SelectItem value="billing">Payment / Refund</SelectItem>
+                      <SelectItem value="subscription">Subscription</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Priority</Label>
+                  <Select
+                    value={createForm.priority}
+                    onValueChange={(val) => setCreateForm({ ...createForm, priority: val })}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Case Title *</Label>
+                <Input
+                  value={createForm.title}
+                  onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                  placeholder="e.g. Water spots left on windshield"
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Complaint Description *</Label>
+                <Textarea
+                  value={createForm.description}
+                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  placeholder="Detail the customer concern..."
+                  rows={3}
+                  className="text-xs"
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setCreateTicketOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => createTicketMutation.mutate()}
+                disabled={
+                  createTicketMutation.isPending ||
+                  !createForm.customerId ||
+                  !createForm.title.trim() ||
+                  !createForm.description.trim()
+                }
+              >
+                {createTicketMutation.isPending ? "Creating..." : "Create Case"}
               </Button>
             </DialogFooter>
           </DialogContent>

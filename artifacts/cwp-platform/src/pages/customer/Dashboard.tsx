@@ -43,7 +43,7 @@ import { ServicesGrid } from "@/components/home/ServicesGrid";
 import { CustomerReviewsSection } from "@/components/home/CustomerReviewsSection";
 import { TodayServiceCard } from "@/components/home/TodayServiceCard";
 import { UpcomingServicePreview } from "@/components/home/UpcomingServicePreview";
-import { AdaptivePrimaryCTA } from "@/components/home/AdaptivePrimaryCTA";
+import { AdaptivePrimaryCTA } from "@/components/home/AdaptivePrimaryCta";
 
 import {
   CustomerPage,

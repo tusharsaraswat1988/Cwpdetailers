@@ -206,7 +206,12 @@ export function TransactionDetailsDrawer({
               <div>
                 <p className="text-xs text-muted-foreground">Payment Method</p>
                 <div className="mt-0.5">
-                  {transaction.paymentMethod?.toLowerCase() === "cashfree" ? (
+                  {transaction.paymentMethod?.toLowerCase() === "razorpay" ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold tracking-wider uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <ShieldCheck size={13} className="text-emerald-600" />
+                      Razorpay Checkout
+                    </span>
+                  ) : transaction.paymentMethod?.toLowerCase() === "cashfree" ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold tracking-wider uppercase bg-blue-50 text-blue-700 border border-blue-200">
                       <ShieldCheck size={13} className="text-blue-600" />
                       Cashfree Hosted Checkout
@@ -221,7 +226,11 @@ export function TransactionDetailsDrawer({
 
               {transaction.cfOrderId && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Cashfree Order ID</p>
+                  <p className="text-xs text-muted-foreground">
+                    {transaction.paymentMethod?.toLowerCase() === "razorpay"
+                      ? "Razorpay Order ID"
+                      : "Gateway Order ID"}
+                  </p>
                   <div className="flex items-center justify-between gap-2 bg-muted/40 p-2 rounded-lg border border-border mt-0.5">
                     <span className="font-mono text-xs text-foreground truncate select-all">{transaction.cfOrderId}</span>
                     <Button

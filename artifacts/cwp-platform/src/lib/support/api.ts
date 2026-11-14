@@ -90,6 +90,9 @@ export const supportApi = {
     priority?: string;
     title: string;
     description: string;
+    bookingId?: number;
+    cityId?: number;
+    branchId?: number;
     subscriptionId?: number;
     visitId?: number;
     operationalExceptionId?: number;

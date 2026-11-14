@@ -20,6 +20,7 @@ import { useAccountScope } from "@/lib/account-scope";
 import { useListVehicles, getListVehiclesQueryKey } from "@workspace/api-client-react";
 import { useSocieties, useSocietyTowers } from "@/features/societies/api";
 import { launchCashfreeCheckout } from "@/lib/cashfree";
+import { launchRazorpayCheckout } from "@/lib/razorpay";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, Car, Building2, ShieldCheck, Check, AlertCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -177,16 +178,55 @@ export function CustomerSubscribeModal({
         throw new Error(data.error || "Failed to initialize subscription checkout.");
       }
 
-      toast({
-        title: "Subscription Initiated",
-        description: "Redirecting to secure Cashfree payment gateway...",
-      });
+      if (data.gateway === "razorpay") {
+        toast({
+          title: "Subscription Initiated",
+          description: "Opening secure Razorpay payment window...",
+        });
 
-      queryClient.invalidateQueries({ queryKey: ["dcms"] });
-      onOpenChange(false);
+        const rzpResponse = await launchRazorpayCheckout({
+          keyId: data.keyId,
+          orderId: data.orderId,
+          amountInPaise: data.amountInPaise,
+          name: "CWP Detailers",
+          description: "Daily Car Cleaning Subscription",
+          prefill: {
+            name: data.customer?.name || "",
+            contact: data.customer?.phone || "",
+            email: data.customer?.email || "",
+          },
+        });
 
-      // Launch Cashfree checkout
-      if (data.paymentSessionId) {
+        // Verify payment atomically on backend
+        const verifyRes = await fetch("/api/payments/razorpay/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            orderId: rzpResponse.razorpay_order_id,
+            paymentId: rzpResponse.razorpay_payment_id,
+            signature: rzpResponse.razorpay_signature,
+          }),
+        });
+
+        const verifyData = await verifyRes.json();
+        if (verifyRes.ok && verifyData.success) {
+          toast({
+            title: "Subscription Activated!",
+            description: "Your daily car cleaning subscription is now active.",
+          });
+          queryClient.invalidateQueries({ queryKey: ["dcms"] });
+          onOpenChange(false);
+        } else {
+          throw new Error(verifyData.message || "Payment verification failed");
+        }
+      } else if (data.paymentSessionId) {
+        toast({
+          title: "Subscription Initiated",
+          description: "Redirecting to secure Cashfree payment gateway...",
+        });
+        queryClient.invalidateQueries({ queryKey: ["dcms"] });
+        onOpenChange(false);
         await launchCashfreeCheckout({
           paymentSessionId: data.paymentSessionId,
           environment: data.environment || "sandbox",

@@ -64,3 +64,4 @@ export * from "./staff-payouts";
 export * from "./loyalty-rewards";
 export * from "./scheduler";
 export * from "./ux-experimentation";
+export * from "./service-exceptions";

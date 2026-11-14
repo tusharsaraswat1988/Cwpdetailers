@@ -1,6 +1,23 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { customersTable, vehiclesTable, solarSitesTable, subscriptionsTable, bookingsTable, paymentsTable, branchesTable, usersTable } from "@workspace/db";
+import {
+  customersTable,
+  vehiclesTable,
+  solarSitesTable,
+  subscriptionsTable,
+  bookingsTable,
+  paymentsTable,
+  branchesTable,
+  usersTable,
+  savedLocationsTable,
+  dcmsSubscriptionsTable,
+  dcmsPlansTable,
+  complaintsTable,
+  notificationsTable,
+  invoicesTable,
+  citiesTable,
+  staffTable,
+} from "@workspace/db";
 import { eq, ilike, or, and, sql, desc } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { getLedgerBalance } from "../lib/wallet/service";
@@ -783,6 +800,236 @@ router.get("/customers/:id/summary", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Customer summary error");
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Customer 360 Comprehensive Profile ──────────────────────────────────────
+
+router.get("/customers/:id/360", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [customer] = await db
+      .select()
+      .from(customersTable)
+      .leftJoin(branchesTable, eq(customersTable.branchId, branchesTable.id))
+      .where(eq(customersTable.id, id))
+      .limit(1);
+
+    if (!customer || !rowInScope(req, { ...customer.customers, customerId: customer.customers.id })) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    const c = customer.customers;
+    const branch = customer.branches;
+
+    // PII permission check: Mask contact if user lacks privileged admin rights
+    const isSuperOrAdmin = req.scope?.isSuperAdmin || ["admin", "superadmin", "manager"].includes(req.user?.role ?? "");
+    const maskedPhone = isSuperOrAdmin
+      ? c.phone
+      : c.phone
+      ? `${c.phone.slice(0, 3)}****${c.phone.slice(-3)}`
+      : null;
+    const maskedEmail = isSuperOrAdmin
+      ? c.email
+      : c.email
+      ? `${c.email[0]}***@${c.email.split("@")[1] || "..."}`
+      : null;
+
+    // Parallel queries for all Customer 360 pillars
+    const [
+      vehicles,
+      savedLocations,
+      dcmsSubs,
+      contracts,
+      recentBookings,
+      recentPayments,
+      supportCases,
+      notifications,
+      cityInfo,
+    ] = await Promise.all([
+      db.select().from(vehiclesTable).where(eq(vehiclesTable.customerId, id)).orderBy(desc(vehiclesTable.id)),
+      db.select().from(savedLocationsTable).where(eq(savedLocationsTable.customerId, id)).orderBy(desc(savedLocationsTable.isDefault)),
+      db
+        .select({
+          sub: dcmsSubscriptionsTable,
+          planName: dcmsPlansTable.name,
+          planTier: dcmsPlansTable.tier,
+          frequency: dcmsPlansTable.frequency,
+          cleanerName: staffTable.name,
+        })
+        .from(dcmsSubscriptionsTable)
+        .leftJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
+        .leftJoin(staffTable, eq(dcmsSubscriptionsTable.assignedCleanerId, staffTable.id))
+        .where(eq(dcmsSubscriptionsTable.customerId, id))
+        .orderBy(desc(dcmsSubscriptionsTable.id)),
+      db
+        .select()
+        .from(subscriptionsTable)
+        .where(eq(subscriptionsTable.customerId, id))
+        .orderBy(desc(subscriptionsTable.id)),
+      db
+        .select({
+          booking: bookingsTable,
+          staffName: staffTable.name,
+        })
+        .from(bookingsTable)
+        .leftJoin(staffTable, eq(bookingsTable.assignedStaffId, staffTable.id))
+        .where(eq(bookingsTable.customerId, id))
+        .orderBy(desc(bookingsTable.scheduledDate), desc(bookingsTable.createdAt))
+        .limit(10),
+      db
+        .select()
+        .from(paymentsTable)
+        .where(eq(paymentsTable.customerId, id))
+        .orderBy(desc(paymentsTable.createdAt))
+        .limit(10),
+      db
+        .select()
+        .from(complaintsTable)
+        .where(eq(complaintsTable.customerId, id))
+        .orderBy(desc(complaintsTable.createdAt))
+        .limit(10),
+      db
+        .select()
+        .from(notificationsTable)
+        .where(eq(notificationsTable.customerId, id))
+        .orderBy(desc(notificationsTable.createdAt))
+        .limit(15),
+      c.cityId
+        ? db.select({ name: citiesTable.name }).from(citiesTable).where(eq(citiesTable.id, c.cityId)).limit(1)
+        : Promise.resolve([]),
+    ]);
+
+    let walletBalance = 0;
+    try {
+      walletBalance = await getLedgerBalance(id);
+    } catch {
+      walletBalance = Number(c.walletBalance ?? 0);
+    }
+
+    let pendingDues = 0;
+    try {
+      pendingDues = await getCustomerOutstandingDues(id);
+    } catch {
+      pendingDues = Number(c.totalDues ?? 0);
+    }
+
+    return res.json({
+      customer: {
+        ...c,
+        phone: maskedPhone,
+        email: maskedEmail,
+        isPiiMasked: !isSuperOrAdmin,
+        cityName: cityInfo[0]?.name || c.city || null,
+        branchName: branch?.name || null,
+      },
+      walletBalance,
+      pendingDues,
+      vehicles,
+      savedLocations,
+      dcmsSubscriptions: dcmsSubs.map((s) => ({
+        ...s.sub,
+        planName: s.planName,
+        planTier: s.planTier,
+        frequency: s.frequency,
+        cleanerName: s.cleanerName,
+      })),
+      contracts,
+      recentBookings: recentBookings.map((b) => ({
+        ...b.booking,
+        staffName: b.staffName,
+      })),
+      recentPayments,
+      supportCases,
+      notifications,
+    });
+  } catch (err: any) {
+    req.log.error({ err }, "Customer 360 error");
+    return res.status(500).json({ error: err.message || "Failed to load Customer 360 profile" });
+  }
+});
+
+// ─── Paginated Customer Bookings History ──────────────────────────────────────
+
+router.get("/customers/:id/bookings", async (req, res) => {
+  try {
+    const customerId = parseInt(req.params.id);
+    const limit = Math.min(Number(req.query.limit) || 10, 50);
+    const offset = Number(req.query.offset) || 0;
+    const status = req.query.status as string | undefined;
+
+    const conds: SQL[] = [eq(bookingsTable.customerId, customerId)];
+    if (status && status !== "all") {
+      conds.push(eq(bookingsTable.status, status as any));
+    }
+
+    const [bookings, countResult] = await Promise.all([
+      db
+        .select({
+          booking: bookingsTable,
+          staffName: staffTable.name,
+          vehicleNumber: vehiclesTable.registrationNumber,
+        })
+        .from(bookingsTable)
+        .leftJoin(staffTable, eq(bookingsTable.assignedStaffId, staffTable.id))
+        .leftJoin(vehiclesTable, eq(bookingsTable.vehicleId, vehiclesTable.id))
+        .where(and(...conds))
+        .orderBy(desc(bookingsTable.scheduledDate), desc(bookingsTable.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(and(...conds)),
+    ]);
+
+    const total = Number(countResult[0]?.count ?? 0);
+
+    return res.json({
+      data: bookings.map((b) => ({
+        ...b.booking,
+        staffName: b.staffName,
+        vehicleNumber: b.vehicleNumber,
+      })),
+      total,
+      limit,
+      offset,
+      hasMore: offset + bookings.length < total,
+    });
+  } catch (err: any) {
+    req.log.error({ err }, "Customer bookings history error");
+    return res.status(500).json({ error: err.message || "Failed to load bookings history" });
+  }
+});
+
+// ─── Paginated Customer Payments History ──────────────────────────────────────
+
+router.get("/customers/:id/payments", async (req, res) => {
+  try {
+    const customerId = parseInt(req.params.id);
+    const limit = Math.min(Number(req.query.limit) || 10, 50);
+    const offset = Number(req.query.offset) || 0;
+
+    const [payments, countResult] = await Promise.all([
+      db
+        .select()
+        .from(paymentsTable)
+        .where(eq(paymentsTable.customerId, customerId))
+        .orderBy(desc(paymentsTable.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)` }).from(paymentsTable).where(eq(paymentsTable.customerId, customerId)),
+    ]);
+
+    const total = Number(countResult[0]?.count ?? 0);
+
+    return res.json({
+      data: payments,
+      total,
+      limit,
+      offset,
+      hasMore: offset + payments.length < total,
+    });
+  } catch (err: any) {
+    req.log.error({ err }, "Customer payments history error");
+    return res.status(500).json({ error: err.message || "Failed to load payments history" });
   }
 });
 

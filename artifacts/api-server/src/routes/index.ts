@@ -48,6 +48,7 @@ import serviceExecutionsRouter from "./service-executions";
 import jobsRouter from "./jobs";
 import bookingPlatformRouter from "./booking-platform";
 import cashfreeRouter from "./cashfree";
+import paymentGatewayRouter from "./payment-gateway";
 import adminLedgerRouter from "./admin-ledger";
 import societiesRouter from "./societies";
 import legalEntitiesRouter from "./legal-entities";
@@ -71,6 +72,7 @@ router.use(communicationsWebhooksRouter);
 router.use(authRouter);
 router.use(contactRouter);
 router.use(cashfreeRouter);
+router.use(paymentGatewayRouter);
 router.use(adminLedgerRouter);
 
 // Resource-guarded routers. Each guard maps HTTP method → permission action

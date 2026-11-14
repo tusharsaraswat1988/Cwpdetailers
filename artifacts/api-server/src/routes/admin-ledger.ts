@@ -235,7 +235,7 @@ async function fetchUnifiedLedger(options: {
   if (startUtc) attemptConditions.push(gte(paymentAttemptsTable.createdAt, startUtc));
   if (endUtc) attemptConditions.push(lte(paymentAttemptsTable.createdAt, endUtc));
 
-  // If method filter is not "all" and not "cashfree", we skip attempts because attempts are all cashfree
+  // If method filter is not "all" and not "cashfree" / "razorpay", we skip gateway attempts
   let attemptRecords: Array<{
     attempt: typeof paymentAttemptsTable.$inferSelect;
     customer: typeof customersTable.$inferSelect | null;
@@ -243,7 +243,14 @@ async function fetchUnifiedLedger(options: {
     branch: typeof branchesTable.$inferSelect | null;
   }> = [];
 
-  if (method === "all" || method.toLowerCase() === "cashfree") {
+  const lowerMethod = method.toLowerCase();
+  if (lowerMethod === "all" || lowerMethod === "cashfree" || lowerMethod === "razorpay") {
+    if (lowerMethod === "cashfree") {
+      attemptConditions.push(eq(paymentAttemptsTable.gatewayProvider, "cashfree"));
+    } else if (lowerMethod === "razorpay") {
+      attemptConditions.push(eq(paymentAttemptsTable.gatewayProvider, "razorpay"));
+    }
+
     const attemptsQuery = db
       .select({
         attempt: paymentAttemptsTable,
@@ -292,9 +299,9 @@ async function fetchUnifiedLedger(options: {
       invoiceAmount: invTotal != null && !isNaN(invTotal) ? invTotal : null,
       amountPaid: parseFloat(payment.amount),
       remainingDue: invoiceBal >= 0 ? invoiceBal : 0,
-      paymentMethod: payment.method || "cashfree",
-      cfOrderId: attempt?.cfOrderId || (payment.method === "cashfree" ? payment.transactionId : null),
-      cfPaymentId: attempt?.cfPaymentId || null,
+      paymentMethod: payment.method || attempt?.gatewayProvider || "cashfree",
+      cfOrderId: attempt?.gatewayOrderId || attempt?.rzpOrderId || attempt?.cfOrderId || (payment.method === "cashfree" || payment.method === "razorpay" ? payment.transactionId : null),
+      cfPaymentId: attempt?.rzpPaymentId || attempt?.cfPaymentId || null,
       internalReference: attempt?.attemptId || payment.transactionId || `PAY-${payment.id}`,
       status: rowStatus,
       notes: payment.notes ?? null,
@@ -332,12 +339,12 @@ async function fetchUnifiedLedger(options: {
       invoiceAmount: invTotal != null && !isNaN(invTotal) ? invTotal : null,
       amountPaid: parseFloat(attempt.amount),
       remainingDue: invoiceBal != null && !isNaN(invoiceBal) ? invoiceBal : null,
-      paymentMethod: "cashfree",
-      cfOrderId: attempt.cfOrderId,
-      cfPaymentId: attempt.cfPaymentId || null,
+      paymentMethod: attempt.gatewayProvider || attempt.paymentMethod || "cashfree",
+      cfOrderId: attempt.gatewayOrderId || attempt.rzpOrderId || attempt.cfOrderId,
+      cfPaymentId: attempt.rzpPaymentId || attempt.cfPaymentId || null,
       internalReference: attempt.attemptId,
       status: mappedStatus,
-      notes: `Cashfree gateway attempt (${attempt.status})`,
+      notes: `${attempt.gatewayProvider === "razorpay" ? "Razorpay" : "Cashfree"} gateway attempt (${attempt.status})`,
       subscriptionId: attempt.subscriptionId ?? null,
       branchId: effectiveBranchId,
       branchName: branch?.name ?? null,
@@ -680,9 +687,9 @@ router.get("/admin/payments/ledger/:id", requireAuth, requireAdminRole, async (r
         invoiceAmount: p.invoice ? parseFloat(p.invoice.totalAmount) : null,
         amountPaid: parseFloat(p.payment.amount),
         remainingDue: p.invoice ? parseFloat(p.invoice.balanceDue ?? p.invoice.dueAmount ?? "0") : 0,
-        paymentMethod: p.payment.method,
-        cfOrderId: p.attempt?.cfOrderId || (p.payment.method === "cashfree" ? p.payment.transactionId : null),
-        cfPaymentId: p.attempt?.cfPaymentId || null,
+        paymentMethod: p.payment.method || p.attempt?.gatewayProvider || "cashfree",
+        cfOrderId: p.attempt?.gatewayOrderId || p.attempt?.rzpOrderId || p.attempt?.cfOrderId || (p.payment.method === "cashfree" || p.payment.method === "razorpay" ? p.payment.transactionId : null),
+        cfPaymentId: p.attempt?.rzpPaymentId || p.attempt?.cfPaymentId || null,
         internalReference: p.attempt?.attemptId || p.payment.transactionId || `PAY-${p.payment.id}`,
         status: rowStatus,
         notes: p.payment.notes,
@@ -726,12 +733,12 @@ router.get("/admin/payments/ledger/:id", requireAuth, requireAdminRole, async (r
         invoiceAmount: a.invoice ? parseFloat(a.invoice.totalAmount) : null,
         amountPaid: parseFloat(a.attempt.amount),
         remainingDue: a.invoice ? parseFloat(a.invoice.balanceDue ?? a.invoice.dueAmount ?? "0") : null,
-        paymentMethod: "cashfree",
-        cfOrderId: a.attempt.cfOrderId,
-        cfPaymentId: a.attempt.cfPaymentId || null,
+        paymentMethod: a.attempt.gatewayProvider || a.attempt.paymentMethod || "cashfree",
+        cfOrderId: a.attempt.gatewayOrderId || a.attempt.rzpOrderId || a.attempt.cfOrderId,
+        cfPaymentId: a.attempt.rzpPaymentId || a.attempt.cfPaymentId || null,
         internalReference: a.attempt.attemptId,
         status: mappedStatus,
-        notes: `Cashfree gateway attempt (${a.attempt.status})`,
+        notes: `${a.attempt.gatewayProvider === "razorpay" ? "Razorpay" : "Cashfree"} gateway attempt (${a.attempt.status})`,
         rawWebhookPayload: a.attempt.rawWebhookPayload ?? null,
         rawVerificationPayload: a.attempt.rawVerificationPayload ?? null,
       });

@@ -23,12 +23,17 @@ export type PaymentAttemptStatus =
   | "user_dropped"
   | "expired";
 
+export type PaymentGatewayProvider = "cashfree" | "razorpay";
+
 export const paymentAttemptsTable = pgTable(
   "payment_attempts",
   {
     id: serial("id").primaryKey(),
     attemptId: text("attempt_id").notNull().unique(),
-    cfOrderId: text("cf_order_id").notNull().unique(),
+    gatewayProvider: text("gateway_provider").notNull().default("cashfree").$type<PaymentGatewayProvider>(),
+    cfOrderId: text("cf_order_id").unique(),
+    rzpOrderId: text("rzp_order_id").unique(),
+    gatewayOrderId: text("gateway_order_id"),
     customerId: integer("customer_id")
       .notNull()
       .references(() => customersTable.id),
@@ -42,6 +47,8 @@ export const paymentAttemptsTable = pgTable(
     cfPaymentSessionId: text("cf_payment_session_id"),
     status: text("status").notNull().default("initiated").$type<PaymentAttemptStatus>(),
     cfPaymentId: text("cf_payment_id"),
+    rzpPaymentId: text("rzp_payment_id"),
+    rzpSignature: text("rzp_signature"),
     paymentMethod: text("payment_method"),
     idempotencyKey: text("idempotency_key").notNull().unique(),
     metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
@@ -59,6 +66,9 @@ export const paymentAttemptsTable = pgTable(
     index("payment_attempts_status_idx").on(t.status),
     index("payment_attempts_attempt_id_idx").on(t.attemptId),
     index("payment_attempts_cf_order_id_idx").on(t.cfOrderId),
+    index("payment_attempts_rzp_order_id_idx").on(t.rzpOrderId),
+    index("payment_attempts_gateway_provider_idx").on(t.gatewayProvider),
+    index("payment_attempts_gateway_order_id_idx").on(t.gatewayOrderId),
     index("payment_attempts_idempotency_key_idx").on(t.idempotencyKey),
   ],
 );

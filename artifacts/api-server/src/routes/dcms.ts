@@ -48,7 +48,7 @@ import {
   invoicesTable,
   staffTable,
 } from "@workspace/db";
-import { createCashfreePaymentOrder } from "../lib/cashfree/cashfreeService";
+import { createUnifiedPaymentOrder } from "../lib/payments/unifiedPaymentService";
 import { pauseSubscription, resumeSubscription } from "../lib/dcms/subscriptionService";
 import { eq, desc, sql, inArray } from "drizzle-orm";
 import { OPERATIONAL_ROLE_SLUGS, staffHasOperationalRole, attachOperationalRoles } from "../lib/staffEcosystem/operationalRoles";
@@ -1190,7 +1190,7 @@ router.post(
         inferredBaseUrl = inferredBaseUrl.replace("http://", "https://");
       }
 
-      const checkoutSession = await createCashfreePaymentOrder({
+      const checkoutSession = await createUnifiedPaymentOrder({
         customerId,
         invoiceId: invoice?.id,
         subscriptionId: sub.id,
@@ -1248,7 +1248,7 @@ router.post(
         inferredBaseUrl = inferredBaseUrl.replace("http://", "https://");
       }
 
-      const checkoutSession = await createCashfreePaymentOrder({
+      const checkoutSession = await createUnifiedPaymentOrder({
         customerId,
         subscriptionId: sub.id,
         cityId: sub.cityId ?? undefined,

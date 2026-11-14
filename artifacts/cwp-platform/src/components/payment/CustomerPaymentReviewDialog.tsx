@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { ShieldCheck, Lock, ArrowRight, Loader2, CheckCircle2, MessageCircle, Home } from "lucide-react";
 import { launchCashfreeCheckout } from "@/lib/cashfree";
+import { launchRazorpayCheckout } from "@/lib/razorpay";
 import { toast } from "@/hooks/use-toast";
 import { buildWhatsAppPaymentUrl } from "@/lib/paymentCustomerShield";
 
@@ -50,8 +51,8 @@ export function CustomerPaymentReviewDialog({
     setIsProcessing(true);
 
     try {
-      // 1. Server-side payment order creation
-      const res = await fetch("/api/payments/cashfree/create-order", {
+      // 1. Server-side payment order creation using unified payment router
+      const res = await fetch("/api/payments/create-order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -67,7 +68,7 @@ export function CustomerPaymentReviewDialog({
 
       if (!res.ok || !data.success) {
         console.warn("[CustomerPaymentReviewDialog] Gateway order creation response:", data);
-        if (data.code === "NO_OUTSTANDING_DUES") {
+        if (data.code === "NO_OUTSTANDING_DUES" || data.code === "NO_OUTSTANDING_BALANCE") {
           setIsSettled(true);
         } else {
           // Never display raw technical errors, gateway rejection codes, or scary red boxes to the customer
@@ -79,12 +80,53 @@ export function CustomerPaymentReviewDialog({
 
       onPaymentInitiated?.();
 
-      // 2. Launch Cashfree Hosted Web Checkout
-      await launchCashfreeCheckout({
-        paymentSessionId: data.paymentSessionId,
-        environment: data.environment || "sandbox",
-        redirectTarget: "_self",
-      });
+      if (data.gateway === "razorpay") {
+        // 2a. Launch Razorpay Standard Checkout inline modal
+        const rzpResponse = await launchRazorpayCheckout({
+          keyId: data.keyId,
+          orderId: data.orderId,
+          amountInPaise: data.amountInPaise,
+          name: "CWP Detailers",
+          description: invoiceNumber ? `Invoice #${invoiceNumber}` : "Account Balance Settlement",
+          prefill: {
+            name: data.customer?.name || customerName,
+            contact: data.customer?.phone || "",
+            email: data.customer?.email || "",
+          },
+        });
+
+        // 2b. Verify and reconcile atomically on server
+        const verifyRes = await fetch("/api/payments/razorpay/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            orderId: rzpResponse.razorpay_order_id,
+            paymentId: rzpResponse.razorpay_payment_id,
+            signature: rzpResponse.razorpay_signature,
+          }),
+        });
+
+        const verifyData = await verifyRes.json();
+        if (verifyRes.ok && verifyData.success) {
+          setIsSettled(true);
+          onPaymentSuccess?.();
+          toast({
+            title: "Payment Successful",
+            description: `Payment of ₹${effectivePayable.toFixed(2)} completed successfully!`,
+          });
+        } else {
+          setShowAlternativeOptions(true);
+        }
+        setIsProcessing(false);
+      } else {
+        // 2c. Launch Cashfree Hosted Web Checkout
+        await launchCashfreeCheckout({
+          paymentSessionId: data.paymentSessionId,
+          environment: data.environment || "sandbox",
+          redirectTarget: "_self",
+        });
+      }
     } catch (err: any) {
       console.warn("[CustomerPaymentReviewDialog] Checkout exception:", err);
       // Shield the customer from raw exceptions, stack traces, and network failure messages

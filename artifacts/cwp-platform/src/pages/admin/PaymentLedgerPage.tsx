@@ -500,6 +500,7 @@ export default function PaymentLedgerPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Methods</SelectItem>
+                <SelectItem value="razorpay">Razorpay PG</SelectItem>
                 <SelectItem value="cashfree">Cashfree PG</SelectItem>
                 <SelectItem value="cash">Cash</SelectItem>
                 <SelectItem value="upi">UPI</SelectItem>
@@ -721,7 +722,11 @@ export default function PaymentLedgerPage() {
 
                     {/* Payment Method */}
                     <td className="px-3.5 py-3 whitespace-nowrap">
-                      {row.paymentMethod?.toLowerCase() === "cashfree" ? (
+                      {row.paymentMethod?.toLowerCase() === "razorpay" ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Razorpay
+                        </span>
+                      ) : row.paymentMethod?.toLowerCase() === "cashfree" ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-blue-50 text-blue-700 border border-blue-200">
                           Cashfree
                         </span>
