@@ -8,6 +8,7 @@ import {
 } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logger } from "../logger";
+import { consumePointsFifo } from "./loyaltyExpiryService";
 
 export class LoyaltyError extends Error {
   constructor(message: string, public code: string) {
@@ -285,6 +286,13 @@ export async function debitLoyaltyPoints(params: {
         updatedAt: new Date(),
       })
       .where(eq(customersTable.id, params.customerId));
+
+    // Allocate debit to earliest active credit batches via FIFO
+    try {
+      await consumePointsFifo(tx, params.customerId, params.points);
+    } catch (allocErr) {
+      logger.warn({ allocErr, customerId: params.customerId }, "FIFO points consumption allocation non-fatal failure");
+    }
 
     return entry;
   });

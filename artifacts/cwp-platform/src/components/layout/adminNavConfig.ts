@@ -310,6 +310,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         perm: { resource: "settings", action: "view" },
       },
       {
+        id: "automation-center",
+        href: "/admin/automation",
+        label: "Automation & Jobs",
+        icon: Activity,
+        perm: { resource: "settings", action: "view" },
+      },
+      {
         id: "settings",
         href: "/admin/settings/brand",
         label: "Platform Settings",

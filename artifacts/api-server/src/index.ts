@@ -14,6 +14,7 @@ import { todayStrInIST, getNext2359IST } from "./lib/dcms/dateUtils";
 import { bootstrapJobOrchestration } from "./lib/job-orchestration/bootstrap";
 import { validateStartupEnvironment } from "./lib/startupEnv";
 import { startGpsRetentionScheduler } from "./lib/tracking/gpsRetentionWorker";
+import { bootstrapSchedulerWorker } from "./lib/scheduler/bootstrapScheduler";
 
 const envSummary = validateStartupEnvironment();
 const port = envSummary.port;
@@ -46,6 +47,9 @@ app.listen(port, "0.0.0.0", (err) => {
   bootstrapPushEventProcessor();
   bootstrapJobOrchestration();
   startGpsRetentionScheduler();
+  bootstrapSchedulerWorker().catch(err => {
+    logger.error({ err }, "Scheduler background worker bootstrap failed");
+  });
 });
 
 function getNextMidnightIST(now: Date): Date {

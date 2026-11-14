@@ -78,6 +78,7 @@ export const loyaltyLedgerTable = pgTable("loyalty_ledger", {
   referralId: integer("referral_id").references(() => customerReferralsTable.id),
   reversalOfId: integer("reversal_of_id"),
   status: text("status").notNull().default("active"), // 'active', 'reversed', 'expired'
+  consumedPoints: integer("consumed_points").notNull().default(0),
   idempotencyKey: text("idempotency_key").unique(),
   expiresAt: timestamp("expires_at"),
   notes: text("notes"),

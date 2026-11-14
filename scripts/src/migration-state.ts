@@ -77,6 +77,7 @@ export const PENDING_MIGRATIONS = [
   "079_universal_service_catalog_pricing_matrix.sql",
   "080_city_branch_marketing_cms_campaigns.sql",
   "081_customer_referral_loyalty_retention.sql",
+  "082_automated_job_scheduler_and_workers.sql",
 ] as const;
 
 export type Queryable = {
@@ -219,6 +220,8 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
       return hasTable(db, "homepage_sections");
     case "081_customer_referral_loyalty_retention.sql":
       return hasTable(db, "loyalty_ledger");
+    case "082_automated_job_scheduler_and_workers.sql":
+      return hasTable(db, "scheduled_jobs");
     default:
       return false;
   }

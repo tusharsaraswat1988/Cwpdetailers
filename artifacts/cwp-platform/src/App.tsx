@@ -68,6 +68,7 @@ import SeoSettingsPage from "@/pages/admin/SeoSettings";
 import QualityHub from "@/pages/admin/QualityHub";
 import MarketingCMSPage from "@/pages/admin/MarketingCMSPage";
 import LoyaltyAdminPage from "@/pages/admin/LoyaltyAdminPage";
+import AutomationOpsCenter from "@/pages/admin/AutomationOpsCenter";
 
 import PrivacyPolicy from "@/pages/legal/PrivacyPolicy";
 import TermsAndConditions from "@/pages/legal/TermsAndConditions";
@@ -250,6 +251,8 @@ function Router() {
       <Route path="/admin/marketing" component={() => <ProtectedRoute component={MarketingCMSPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/loyalty" component={() => <ProtectedRoute component={LoyaltyAdminPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/referrals" component={() => <Redirect to="/admin/loyalty" />} />
+      <Route path="/admin/automation" component={() => <ProtectedRoute component={AutomationOpsCenter} roles={["admin", "superadmin", "manager"]} permission={{ resource: "settings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/scheduler" component={() => <Redirect to="/admin/automation" />} />
       <Route path="/admin/franchisees" component={() => <ProtectedRoute component={AdminFranchisees} roles={["admin", "superadmin"]} permission={{ resource: "franchisees", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/credentials" component={() => <ProtectedRoute component={AdminCredentials} roles={["admin", "superadmin"]} permission={{ resource: "staff", action: "approve" }} loginPath="/admin/login" />} />
       <Route path="/admin/churned" component={() => <ProtectedRoute component={AdminChurnedCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "churned", action: "view" }} loginPath="/admin/login" />} />
