@@ -327,7 +327,7 @@ router.post("/payments/razorpay/verify", requireAuth, async (req: Request, res: 
  */
 router.post("/payments/admin/diagnose-order-creation", requireAuth, async (req: Request, res: Response) => {
   const user = req.user;
-  if (!user || user.role !== "admin") {
+  if (!user || (user.role !== "admin" && user.role !== "superadmin" && user.role !== "central_admin")) {
     return res.status(403).json({ error: "FORBIDDEN", message: "Admin access required" });
   }
 
