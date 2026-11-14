@@ -5,6 +5,7 @@ import {
   invoicesTable,
   paymentsTable,
   paymentAttemptsTable,
+  paymentRefundsTable,
   dcmsSubscriptionsTable,
 } from "@workspace/db";
 import { normalizeIndianMobile } from "@workspace/validation";
@@ -1092,6 +1093,38 @@ export async function handleCashfreeWebhookPayload(payload: any) {
             updatedAt: new Date(),
           })
           .where(eq(paymentAttemptsTable.id, attempt.id));
+      }
+    }
+  } else if (eventType === "REFUND_STATUS_WEBHOOK") {
+    const refundData = payload.data?.refund || {};
+    const refundId = refundData.refund_id;
+    const cfRefundId = refundData.cf_refund_id ? String(refundData.cf_refund_id) : undefined;
+    const refundStatus = (refundData.refund_status || "").toUpperCase();
+
+    if (refundId) {
+      const [existingRef] = await db
+        .select()
+        .from(paymentRefundsTable)
+        .where(eq(paymentRefundsTable.refundId, refundId))
+        .limit(1);
+
+      if (existingRef) {
+        const mappedStatus = refundStatus === "SUCCESS" ? "succeeded" : refundStatus === "FAILED" ? "failed" : "pending";
+        await db
+          .update(paymentRefundsTable)
+          .set({
+            status: mappedStatus,
+            cfRefundId: cfRefundId || existingRef.cfRefundId,
+            rawGatewayPayload: payload,
+            processedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(paymentRefundsTable.id, existingRef.id));
+
+        logger.info(
+          { refundId, refundStatus: mappedStatus, orderId },
+          "[CASHFREE_WEBHOOK] Updated refund status from webhook",
+        );
       }
     }
   } else {
