@@ -1372,6 +1372,178 @@ export async function ensureStartupMigrations(): Promise<void> {
       logger.warn({ err: mig88Err }, "Phase 28 operational calendar DDL check failed (non-fatal, continuing)");
     }
 
+    // Phase 29 — Location Hierarchy, Operational Zones & Differential Pricing (Migration 089 / LOC-001–LOC-008, ZONE-001–ZONE-006, PRICE-001–PRICE-007)
+    await execStep("089_geographic_localities", `
+      CREATE TABLE IF NOT EXISTS geographic_localities (
+        id SERIAL PRIMARY KEY,
+        city_id INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+        service_area_id INTEGER REFERENCES service_areas(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL,
+        code TEXT,
+        pincode TEXT,
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        boundary_geojson JSONB,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_geographic_localities_city ON geographic_localities(city_id);
+    `);
+
+    await execStep("089_location_aliases", `
+      CREATE TABLE IF NOT EXISTS location_aliases (
+        id SERIAL PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        alias TEXT NOT NULL,
+        normalized_alias TEXT NOT NULL,
+        locale TEXT NOT NULL DEFAULT 'en',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_location_aliases_lookup ON location_aliases(entity_type, normalized_alias);
+    `);
+
+    await execStep("089_operational_zones", `
+      CREATE TABLE IF NOT EXISTS operational_zones (
+        id SERIAL PRIMARY KEY,
+        city_id INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+        branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        code TEXT NOT NULL UNIQUE,
+        description TEXT,
+        center_latitude DOUBLE PRECISION,
+        center_longitude DOUBLE PRECISION,
+        radius_meters INTEGER,
+        boundary_geojson JSONB,
+        status TEXT NOT NULL DEFAULT 'active',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_operational_zones_city ON operational_zones(city_id);
+    `);
+
+    await execStep("089_branch_zone_mappings", `
+      CREATE TABLE IF NOT EXISTS branch_zone_mappings (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+        zone_id INTEGER NOT NULL REFERENCES operational_zones(id) ON DELETE CASCADE,
+        is_primary BOOLEAN NOT NULL DEFAULT TRUE,
+        effective_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        effective_until TIMESTAMPTZ,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_branch_zone UNIQUE (branch_id, zone_id)
+      );
+    `);
+
+    await execStep("089_zone_coverage_rules", `
+      CREATE TABLE IF NOT EXISTS zone_coverage_rules (
+        id SERIAL PRIMARY KEY,
+        zone_id INTEGER NOT NULL REFERENCES operational_zones(id) ON DELETE CASCADE,
+        branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+        coverage_type TEXT NOT NULL,
+        society_id INTEGER REFERENCES residential_societies(id) ON DELETE CASCADE,
+        locality_id INTEGER REFERENCES geographic_localities(id) ON DELETE CASCADE,
+        pincode TEXT,
+        property_type TEXT NOT NULL DEFAULT 'ALL',
+        service_id INTEGER REFERENCES services(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'serviceable',
+        rejection_reason TEXT,
+        priority INTEGER NOT NULL DEFAULT 10,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await execStep("089_location_pricing_rules", `
+      CREATE TABLE IF NOT EXISTS location_pricing_rules (
+        id SERIAL PRIMARY KEY,
+        service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+        package_id INTEGER REFERENCES catalog_packages(id) ON DELETE SET NULL,
+        city_id INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+        branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+        zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL,
+        society_id INTEGER REFERENCES residential_societies(id) ON DELETE SET NULL,
+        location_type TEXT NOT NULL DEFAULT 'ALL',
+        vehicle_category_id INTEGER,
+        base_price NUMERIC(10, 2) NOT NULL,
+        gst_rate NUMERIC(5, 2) NOT NULL DEFAULT '18',
+        pricing_type TEXT NOT NULL DEFAULT 'inclusive',
+        effective_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        effective_until TIMESTAMPTZ,
+        status TEXT NOT NULL DEFAULT 'active',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        priority INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await execStep("089_pricing_rule_audit_logs", `
+      CREATE TABLE IF NOT EXISTS pricing_rule_audit_logs (
+        id SERIAL PRIMARY KEY,
+        rule_id INTEGER NOT NULL REFERENCES location_pricing_rules(id) ON DELETE CASCADE,
+        action TEXT NOT NULL,
+        previous_values JSONB,
+        new_values JSONB,
+        changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await execStep("089_alter_addresses", `
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'OTHER';
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS locality_id INTEGER REFERENCES geographic_localities(id) ON DELETE SET NULL;
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS society_id INTEGER REFERENCES residential_societies(id) ON DELETE SET NULL;
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS tower_id INTEGER REFERENCES society_towers(id) ON DELETE SET NULL;
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL;
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS serviceability_status TEXT;
+      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS resolution_status TEXT;
+    `);
+
+    await execStep("089_alter_saved_locations", `
+      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'OTHER';
+      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS locality_id INTEGER;
+      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS society_id INTEGER;
+      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS tower_id INTEGER;
+      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS zone_id INTEGER;
+      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS branch_id INTEGER;
+    `);
+
+    await execStep("089_alter_bookings", `
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER REFERENCES location_pricing_rules(id) ON DELETE SET NULL;
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price_snapshot JSONB;
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS property_type TEXT;
+    `);
+
+    await execStep("089_alter_subscriptions", `
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER REFERENCES location_pricing_rules(id) ON DELETE SET NULL;
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB;
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT;
+    `);
+
+    await execStep("089_alter_dcms_subscriptions", `
+      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER REFERENCES location_pricing_rules(id) ON DELETE SET NULL;
+      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB;
+      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
+      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT;
+    `);
+
+    await execStep("089_alter_staff", `
+      ALTER TABLE staff ADD COLUMN IF NOT EXISTS assigned_zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
+    `);
+
 
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
