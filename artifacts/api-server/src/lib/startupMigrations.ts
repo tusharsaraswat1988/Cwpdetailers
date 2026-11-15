@@ -1499,50 +1499,39 @@ export async function ensureStartupMigrations(): Promise<void> {
       );
     `);
 
-    await execStep("089_alter_addresses", `
-      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'OTHER';
-      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS locality_id INTEGER REFERENCES geographic_localities(id) ON DELETE SET NULL;
-      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS society_id INTEGER REFERENCES residential_societies(id) ON DELETE SET NULL;
-      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS tower_id INTEGER REFERENCES society_towers(id) ON DELETE SET NULL;
-      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
-      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL;
-      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS serviceability_status TEXT;
-      ALTER TABLE addresses ADD COLUMN IF NOT EXISTS resolution_status TEXT;
-    `);
+    // Individual column additions with isolated steps and no hard FK blocks
+    await execStep("089_dcms_pricing_rule_id", `ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER;`);
+    await execStep("089_dcms_price_snapshot", `ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB;`);
+    await execStep("089_dcms_zone_id", `ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER;`);
+    await execStep("089_dcms_property_type", `ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT;`);
 
-    await execStep("089_alter_saved_locations", `
-      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'OTHER';
-      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS locality_id INTEGER;
-      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS society_id INTEGER;
-      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS tower_id INTEGER;
-      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS zone_id INTEGER;
-      ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS branch_id INTEGER;
-    `);
+    await execStep("089_bookings_pricing_rule_id", `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER;`);
+    await execStep("089_bookings_price_snapshot", `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price_snapshot JSONB;`);
+    await execStep("089_bookings_zone_id", `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS zone_id INTEGER;`);
+    await execStep("089_bookings_property_type", `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS property_type TEXT;`);
 
-    await execStep("089_alter_bookings", `
-      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER REFERENCES location_pricing_rules(id) ON DELETE SET NULL;
-      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price_snapshot JSONB;
-      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
-      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS property_type TEXT;
-    `);
+    await execStep("089_subs_pricing_rule_id", `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER;`);
+    await execStep("089_subs_price_snapshot", `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB;`);
+    await execStep("089_subs_zone_id", `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER;`);
+    await execStep("089_subs_property_type", `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT;`);
 
-    await execStep("089_alter_subscriptions", `
-      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER REFERENCES location_pricing_rules(id) ON DELETE SET NULL;
-      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB;
-      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
-      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT;
-    `);
+    await execStep("089_staff_assigned_zone_id", `ALTER TABLE staff ADD COLUMN IF NOT EXISTS assigned_zone_id INTEGER;`);
 
-    await execStep("089_alter_dcms_subscriptions", `
-      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER REFERENCES location_pricing_rules(id) ON DELETE SET NULL;
-      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB;
-      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
-      ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT;
-    `);
+    await execStep("089_addr_property_type", `ALTER TABLE addresses ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'OTHER';`);
+    await execStep("089_addr_locality_id", `ALTER TABLE addresses ADD COLUMN IF NOT EXISTS locality_id INTEGER;`);
+    await execStep("089_addr_society_id", `ALTER TABLE addresses ADD COLUMN IF NOT EXISTS society_id INTEGER;`);
+    await execStep("089_addr_tower_id", `ALTER TABLE addresses ADD COLUMN IF NOT EXISTS tower_id INTEGER;`);
+    await execStep("089_addr_zone_id", `ALTER TABLE addresses ADD COLUMN IF NOT EXISTS zone_id INTEGER;`);
+    await execStep("089_addr_branch_id", `ALTER TABLE addresses ADD COLUMN IF NOT EXISTS branch_id INTEGER;`);
+    await execStep("089_addr_serviceability_status", `ALTER TABLE addresses ADD COLUMN IF NOT EXISTS serviceability_status TEXT;`);
+    await execStep("089_addr_resolution_status", `ALTER TABLE addresses ADD COLUMN IF NOT EXISTS resolution_status TEXT;`);
 
-    await execStep("089_alter_staff", `
-      ALTER TABLE staff ADD COLUMN IF NOT EXISTS assigned_zone_id INTEGER REFERENCES operational_zones(id) ON DELETE SET NULL;
-    `);
+    await execStep("089_saved_loc_property_type", `ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'OTHER';`);
+    await execStep("089_saved_loc_locality_id", `ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS locality_id INTEGER;`);
+    await execStep("089_saved_loc_society_id", `ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS society_id INTEGER;`);
+    await execStep("089_saved_loc_tower_id", `ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS tower_id INTEGER;`);
+    await execStep("089_saved_loc_zone_id", `ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS zone_id INTEGER;`);
+    await execStep("089_saved_loc_branch_id", `ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS branch_id INTEGER;`);
 
 
     logger.info("Startup schema migrations verified successfully.");

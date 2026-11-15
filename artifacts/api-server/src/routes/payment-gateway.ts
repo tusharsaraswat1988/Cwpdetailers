@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { pool } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import {
   getActivePaymentGateway,
@@ -89,6 +90,41 @@ router.get("/payments/gateway-diagnostics", (_req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     },
   });
+});
+
+/**
+ * GET /api/payments/schema-repair
+ * Ensures non-breaking additive columns for dcms_subscriptions, bookings, subscriptions,
+ * staff, and addresses exist in the connected database.
+ */
+router.get("/payments/schema-repair", async (_req: Request, res: Response) => {
+  const steps: Record<string, string> = {};
+  const queries = [
+    { name: "sub_pricing_rule_id", sql: "ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER" },
+    { name: "sub_price_snapshot", sql: "ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB" },
+    { name: "sub_zone_id", sql: "ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER" },
+    { name: "sub_property_type", sql: "ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT" },
+    { name: "bookings_pricing_rule_id", sql: "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER" },
+    { name: "bookings_price_snapshot", sql: "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price_snapshot JSONB" },
+    { name: "bookings_zone_id", sql: "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS zone_id INTEGER" },
+    { name: "bookings_property_type", sql: "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS property_type TEXT" },
+    { name: "subscriptions_pricing_rule_id", sql: "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER" },
+    { name: "subscriptions_price_snapshot", sql: "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB" },
+    { name: "subscriptions_zone_id", sql: "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER" },
+    { name: "subscriptions_property_type", sql: "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT" },
+    { name: "staff_assigned_zone_id", sql: "ALTER TABLE staff ADD COLUMN IF NOT EXISTS assigned_zone_id INTEGER" },
+    { name: "addr_property_type", sql: "ALTER TABLE addresses ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'OTHER'" },
+    { name: "addr_zone_id", sql: "ALTER TABLE addresses ADD COLUMN IF NOT EXISTS zone_id INTEGER" },
+  ];
+  for (const q of queries) {
+    try {
+      await pool.query(q.sql);
+      steps[q.name] = "OK";
+    } catch (e: any) {
+      steps[q.name] = "ERROR: " + (e?.message || String(e));
+    }
+  }
+  return res.json({ status: "done", steps });
 });
 
 /**
