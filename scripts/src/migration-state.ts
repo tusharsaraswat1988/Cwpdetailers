@@ -239,6 +239,10 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
         && (await hasColumn(db, "payment_attempts", "refund_status"));
     case "087_payment_webhook_events.sql":
       return hasTable(db, "payment_webhook_events");
+    case "088_operational_calendar_and_working_hours.sql":
+      return hasTable(db, "operating_hours");
+    case "089_location_serviceability_and_pricing.sql":
+      return hasTable(db, "operational_zones");
     default:
       return false;
   }
