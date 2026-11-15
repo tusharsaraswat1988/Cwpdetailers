@@ -159,13 +159,13 @@ export function ScheduleSuccessScreen({
         {/* Clear Action Buttons */}
         <div className="flex flex-col gap-2.5">
           <Link href={CUSTOMER_ROUTES.scheduledServiceDetail(requestId)} className="w-full">
-            <CustomerButton variant="primary" size="lg" className="w-full gap-2 font-bold shadow-xs cursor-pointer">
+            <CustomerButton variant="default" size="lg" className="w-full gap-2 font-bold shadow-xs cursor-pointer">
               Track Service & ETA <ArrowRight size={16} />
             </CustomerButton>
           </Link>
 
           <Link href={CUSTOMER_ROUTES.serviceHistory} className="w-full">
-            <CustomerButton variant="outline" size="md" className="w-full bg-white hover:bg-slate-50 cursor-pointer">
+            <CustomerButton variant="outline" size="default" className="w-full bg-white hover:bg-slate-50 cursor-pointer">
               View in My Bookings
             </CustomerButton>
           </Link>

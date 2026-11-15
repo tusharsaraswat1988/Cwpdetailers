@@ -143,10 +143,10 @@ export default function BookService() {
   const setDefaultSavedLoc = useSetDefaultSavedLocation();
 
   const { data: subsData } = useListSubscriptions(
-    { customerId: String(customerId ?? "") } as Parameters<typeof useListSubscriptions>[0],
+    { customerId: customerId ?? undefined },
     {
       query: {
-        queryKey: getListSubscriptionsQueryKey({ customerId: String(customerId ?? "") } as Parameters<typeof getListSubscriptionsQueryKey>[0]),
+        queryKey: getListSubscriptionsQueryKey({ customerId: customerId ?? undefined }),
         enabled: customerId != null,
       },
     },
@@ -408,7 +408,7 @@ export default function BookService() {
           customerId,
           serviceId: serviceId ? parseInt(serviceId, 10) : undefined,
           serviceName: selectedService?.name,
-          conversionValue: calculatedEstimatedPrice ?? undefined,
+          conversionValue: (appliedCoupon?.finalPayable ?? estimatedPrice) ?? undefined,
           metadata: {
             step,
             cityId: bookingLocation?.cityId,
@@ -416,7 +416,7 @@ export default function BookService() {
         }),
       }).catch(() => {});
     }
-  }, [step, asset?.id, serviceId, scheduledDate, scheduledTime, customerId, selectedService?.name, calculatedEstimatedPrice, bookingLocation?.cityId]);
+  }, [step, asset?.id, serviceId, scheduledDate, scheduledTime, customerId, selectedService?.name, estimatedPrice, appliedCoupon?.finalPayable, bookingLocation?.cityId]);
 
   const goNext = () => {
     const n = nextStep(step);
@@ -613,7 +613,7 @@ export default function BookService() {
           address={bookingLocation?.address}
           date={scheduledDate}
           time={scheduledTime}
-          paymentAmount={appliedCoupon?.finalPayable ?? calculatedEstimatedPrice ?? undefined}
+          paymentAmount={appliedCoupon?.finalPayable ?? estimatedPrice ?? undefined}
           coveredByPlan={coveredByPlan}
           onScheduleAnother={resetFlow}
         />

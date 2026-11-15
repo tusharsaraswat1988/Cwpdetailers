@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ServiceAddressRow } from "@/components/shared/ServiceAddressRow";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import type { LocationValue } from "@/features/master-data/api";
 import type { CustomerPlan } from "@/lib/customer-plans";
 import type { ScheduleAsset, PlanMode } from "@/lib/schedule-journey";
 import { formatDateLabel } from "@/lib/schedule-slots";
-import { CheckCircle2, Tag, Check, X, Loader2 } from "lucide-react";
+import { CheckCircle2, Tag, Check, X, Loader2, Gift } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export interface AppliedCouponInfo {

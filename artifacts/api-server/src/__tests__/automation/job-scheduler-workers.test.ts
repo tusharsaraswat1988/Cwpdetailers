@@ -95,7 +95,7 @@ describe("Phase 22: Universal Job Scheduler, Background Workers & Automation Rel
         ...pausedJob,
         status: "active",
         isActive: true,
-        nextRunAt: new Date("2026-11-14T13:00:00Z"),
+        nextRunAt: new Date(Date.now() + 3600_000),
       };
       expect(resumedJob.status).toBe("active");
       expect(resumedJob.isActive).toBe(true);
