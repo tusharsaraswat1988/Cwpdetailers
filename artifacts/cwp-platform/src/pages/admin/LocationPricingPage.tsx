@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
+import { ContextHelp } from "@/components/ui/context-help";
+import { useAppStore } from "@/lib/store";
 import {
   Plus,
   Percent,
@@ -70,12 +73,27 @@ type Service = { id: number; name: string };
 export default function LocationPricingPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const activeCityId = useAppStore((s) => s.activeCityId);
 
   // Filters
   const [selectedCityId, setSelectedCityId] = useState<string>("all");
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
   const [selectedLocationType, setSelectedLocationType] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Automatically sync with global active city / branch scope
+  useEffect(() => {
+    if (activeCityId && selectedCityId === "all") {
+      setSelectedCityId(String(activeCityId));
+    }
+  }, [activeCityId]);
+
+  useEffect(() => {
+    if (activeBranchId && selectedBranchId === "all") {
+      setSelectedBranchId(String(activeBranchId));
+    }
+  }, [activeBranchId]);
 
   // Create / Edit Modal
   const [pricingModalOpen, setPricingModalOpen] = useState(false);
@@ -302,7 +320,18 @@ export default function LocationPricingPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
               <Percent className="h-6 w-6 text-primary" />
-              Location-Based Differential Pricing
+              <span>Location-Based Differential Pricing</span>
+              <ContextHelp
+                title="Location Pricing Resolution Matrix"
+                description="Differential pricing rules enable location-specific rates, society group discounts, and travel surcharges based on property type (Society vs Individual House vs Apartment)."
+                guidance="Rules are matched top-down by priority number. Specific society or zone rules take precedence over city-wide default baselines."
+                technicalDetails={[
+                  { label: "Target Model", value: "location_pricing_rules" },
+                  { label: "Audit Ledger", value: "pricing_audit_logs" },
+                  { label: "Pricing Modes", value: "FLAT | PERCENTAGE_DISCOUNT | SURCHARGE" }
+                ]}
+                size="sm"
+              />
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
               Configure tiered pricing based on customer property type (Society vs Individual House), zones, and branches with deterministic priority resolution.
@@ -326,36 +355,30 @@ export default function LocationPricingPage() {
             />
           </div>
 
-          <div className="w-full sm:w-44">
-            <Select value={selectedCityId} onValueChange={setSelectedCityId}>
-              <SelectTrigger className="h-10">
-                <SelectValue placeholder="All Cities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Cities</SelectItem>
-                {cities.map(c => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="w-full sm:w-52">
+            <SearchableCombobox
+              items={cities.map(c => ({ value: String(c.id), label: c.name }))}
+              value={selectedCityId}
+              onValueChange={setSelectedCityId}
+              allOptionLabel="All Cities"
+              placeholder="Filter by city..."
+              searchPlaceholder="Search city name..."
+              emptyText="No cities found"
+              testId="filter-pricing-city"
+            />
           </div>
 
-          <div className="w-full sm:w-48">
-            <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-              <SelectTrigger className="h-10">
-                <SelectValue placeholder="All Branches" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Branches</SelectItem>
-                {branches.map(b => (
-                  <SelectItem key={b.id} value={String(b.id)}>
-                    {b.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="w-full sm:w-56">
+            <SearchableCombobox
+              items={branches.map(b => ({ value: String(b.id), label: b.name }))}
+              value={selectedBranchId}
+              onValueChange={setSelectedBranchId}
+              allOptionLabel="All Branches"
+              placeholder="Filter by branch..."
+              searchPlaceholder="Search branch name..."
+              emptyText="No branches found"
+              testId="filter-pricing-branch"
+            />
           </div>
 
           <div className="w-full sm:w-48">
@@ -495,7 +518,7 @@ export default function LocationPricingPage() {
 
         {/* Create / Edit Rule Dialog */}
         <Dialog open={pricingModalOpen} onOpenChange={setPricingModalOpen}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingRule ? "Edit Location Pricing Rule" : "Create Location Pricing Rule"}</DialogTitle>
               <DialogDescription>
@@ -506,26 +529,34 @@ export default function LocationPricingPage() {
             <div className="space-y-4 py-2">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Service *</Label>
-                  <Select
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Service *</Label>
+                    <ContextHelp
+                      title="Applicable Service"
+                      description="The core service item (e.g. Daily Car Cleaning, Deep Detailing, Foam Wash) to which this differential pricing rate applies."
+                      size="xs"
+                    />
+                  </div>
+                  <SearchableCombobox
+                    items={services.map(s => ({ value: String(s.id), label: s.name }))}
                     value={ruleForm.serviceId}
                     onValueChange={v => setRuleForm(p => ({ ...p, serviceId: v }))}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue placeholder="Select service" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {services.map(s => (
-                        <SelectItem key={s.id} value={String(s.id)}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select service..."
+                    searchPlaceholder="Search service..."
+                    emptyText="No service found"
+                    testId="pricing-rule-service-combobox"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Location Type *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Location Type *</Label>
+                    <ContextHelp
+                      title="Property Architecture Tier"
+                      description="Gated Societies typically enjoy bulk cluster rates; individual standalone houses may include travel surcharges."
+                      size="xs"
+                    />
+                  </div>
                   <Select
                     value={ruleForm.locationType}
                     onValueChange={v => setRuleForm(p => ({ ...p, locationType: v as any }))}
@@ -546,62 +577,57 @@ export default function LocationPricingPage() {
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">City *</Label>
-                  <Select
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">City *</Label>
+                    <ContextHelp
+                      title="Municipal Territory"
+                      description="City jurisdiction under which this pricing rule takes effect."
+                      size="xs"
+                    />
+                  </div>
+                  <SearchableCombobox
+                    items={cities.map(c => ({ value: String(c.id), label: c.name }))}
                     value={ruleForm.cityId}
                     onValueChange={v => setRuleForm(p => ({ ...p, cityId: v }))}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue placeholder="City" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cities.map(c => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="City..."
+                    searchPlaceholder="Search city..."
+                    emptyText="No city found"
+                    testId="pricing-rule-city-combobox"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Branch (optional)</Label>
-                  <Select
+                  <SearchableCombobox
+                    items={branches
+                      .filter(b => !ruleForm.cityId || !b.cityId || String(b.cityId) === ruleForm.cityId)
+                      .map(b => ({ value: String(b.id), label: b.name }))}
                     value={ruleForm.branchId}
                     onValueChange={v => setRuleForm(p => ({ ...p, branchId: v }))}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue placeholder="All Branches" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All Branches</SelectItem>
-                      {branches.map(b => (
-                        <SelectItem key={b.id} value={String(b.id)}>
-                          {b.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="All Branches"
+                    searchPlaceholder="Search branch..."
+                    emptyText="No branches found"
+                    allOptionLabel="All Branches"
+                    clearable={true}
+                    testId="pricing-rule-branch-combobox"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Zone (optional)</Label>
-                  <Select
+                  <SearchableCombobox
+                    items={zones
+                      .filter(z => !ruleForm.cityId || String(z.cityId) === ruleForm.cityId)
+                      .map(z => ({ value: String(z.id), label: z.name }))}
                     value={ruleForm.zoneId}
                     onValueChange={v => setRuleForm(p => ({ ...p, zoneId: v }))}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue placeholder="All Zones" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All Zones</SelectItem>
-                      {zones.map(z => (
-                        <SelectItem key={z.id} value={String(z.id)}>
-                          {z.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="All Zones"
+                    searchPlaceholder="Search zone..."
+                    emptyText="No zones found"
+                    allOptionLabel="All Zones"
+                    clearable={true}
+                    testId="pricing-rule-zone-combobox"
+                  />
                 </div>
               </div>
 

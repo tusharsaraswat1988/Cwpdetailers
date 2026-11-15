@@ -57,7 +57,7 @@ export default function PanelShell({ testId, mobileTitle, sidebar, children }: P
         </SheetContent>
       </Sheet>
 
-      <main className={cn("flex-1 min-h-0 overflow-y-auto overflow-x-hidden min-w-0 p-4 sm:p-6 pb-safe lg:pb-6 [padding-inline:max(1rem,env(safe-area-inset-left))]")}>
+      <main className={cn("flex-1 min-h-0 overflow-y-auto overflow-x-hidden min-w-0 px-2 py-3 sm:p-6 pb-safe lg:pb-6 [padding-inline:max(0.5rem,env(safe-area-inset-left))]")}>
         {children}
       </main>
     </div>

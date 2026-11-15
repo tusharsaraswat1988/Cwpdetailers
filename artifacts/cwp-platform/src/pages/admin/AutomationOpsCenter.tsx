@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { ContextHelp } from "@/components/ui/context-help";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
 import {
   Activity,
   Play,
@@ -293,8 +295,20 @@ export default function AutomationOpsCenter() {
               <div className="p-2 bg-primary/10 text-primary rounded-lg">
                 <Activity className="w-6 h-6" />
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Automation Operations Center
+              <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                <span>Automation Operations Center</span>
+                <ContextHelp
+                  title="Automation Operations & Scheduling Platform"
+                  description="Central orchestrator for all autonomous background jobs, customer retention triggers, points expiration, DCMS route generation, and missed visit detection across all operating cities."
+                  guidance="Use this dashboard to monitor distributed worker nodes, review execution latency, trigger on-demand test runs, or simulate executions via safe dry-run mode."
+                  technicalDetails={[
+                    { label: "Scheduling Engine", value: "automationEngine.ts" },
+                    { label: "Concurrency Control", value: "PostgreSQL FOR UPDATE SKIP LOCKED" },
+                    { label: "Timezone", value: "Asia/Kolkata (IST)" },
+                    { label: "Worker Lease Duration", value: "300s with auto-renewal" }
+                  ]}
+                  size="sm"
+                />
               </h1>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
@@ -334,7 +348,18 @@ export default function AutomationOpsCenter() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           <Card className="bg-card shadow-xs">
             <CardContent className="p-4">
-              <span className="text-xs font-medium text-muted-foreground">Total Schedulers</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Total Schedulers</span>
+                <ContextHelp
+                  title="Total Registered Schedulers"
+                  description="All scheduled background tasks configured in scheduled_jobs. These trigger autonomous DCMS route planning, customer reactivation campaigns, and system audits."
+                  technicalDetails={[
+                    { label: "Storage Table", value: "scheduled_jobs" },
+                    { label: "Trigger Types", value: "Cron (5-part) & Interval Seconds" }
+                  ]}
+                  size="xs"
+                />
+              </div>
               <p className="text-2xl font-bold mt-1 text-foreground">{kpis?.totalJobs ?? 0}</p>
               <span className="text-xs text-emerald-600 font-medium mt-1 inline-block">
                 {kpis?.activeJobs ?? 0} active
@@ -344,7 +369,19 @@ export default function AutomationOpsCenter() {
 
           <Card className="bg-card shadow-xs">
             <CardContent className="p-4">
-              <span className="text-xs font-medium text-muted-foreground">Active Workers</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Active Workers</span>
+                <ContextHelp
+                  title="Distributed Worker Fleet"
+                  description="Node.js worker instances actively reporting heartbeats. If a worker goes silent for >45 seconds, its leases are marked stale and re-assigned by the stale sweeper."
+                  technicalDetails={[
+                    { label: "Heartbeat Cadence", value: "15 seconds" },
+                    { label: "Stale Threshold", value: "45 seconds" },
+                    { label: "Table", value: "worker_nodes" }
+                  ]}
+                  size="xs"
+                />
+              </div>
               <p className="text-2xl font-bold mt-1 text-foreground">{kpis?.activeWorkersCount ?? 0}</p>
               <span className="text-xs text-blue-600 font-medium mt-1 inline-flex items-center">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-ping" />
@@ -355,7 +392,18 @@ export default function AutomationOpsCenter() {
 
           <Card className="bg-card shadow-xs">
             <CardContent className="p-4">
-              <span className="text-xs font-medium text-muted-foreground">24h Successes</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">24h Successes</span>
+                <ContextHelp
+                  title="24h Successful Executions"
+                  description="Total tasks completed successfully in the past 24 hours without throwing uncaught errors."
+                  technicalDetails={[
+                    { label: "Logged In", value: "job_executions" },
+                    { label: "Payload Sanitization", value: "Sensitive credentials scrubbed" }
+                  ]}
+                  size="xs"
+                />
+              </div>
               <p className="text-2xl font-bold mt-1 text-emerald-600">{kpis?.successJobs24h ?? 0}</p>
               <span className="text-xs text-muted-foreground mt-1 inline-block">
                 Avg {kpis?.avgExecutionDurationMs ?? 0}ms
@@ -365,7 +413,18 @@ export default function AutomationOpsCenter() {
 
           <Card className="bg-card shadow-xs">
             <CardContent className="p-4">
-              <span className="text-xs font-medium text-muted-foreground">24h Failures</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">24h Failures</span>
+                <ContextHelp
+                  title="24h Job Failures & Retries"
+                  description="Executions that threw unhandled errors or exceeded worker lease timeouts. Failed jobs enter retry backoff before administrative notification."
+                  technicalDetails={[
+                    { label: "Retry Algorithm", value: "Exponential backoff with jitter" },
+                    { label: "Max Retries", value: "Default 3 attempts" }
+                  ]}
+                  size="xs"
+                />
+              </div>
               <p className="text-2xl font-bold mt-1 text-rose-600">{kpis?.failedJobs24h ?? 0}</p>
               <span className="text-xs text-muted-foreground mt-1 inline-block">
                 {kpis?.retryQueueCount ?? 0} in retry backoff
@@ -375,7 +434,15 @@ export default function AutomationOpsCenter() {
 
           <Card className="bg-card shadow-xs">
             <CardContent className="p-4">
-              <span className="text-xs font-medium text-muted-foreground">Pending / Overdue</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Pending / Overdue</span>
+                <ContextHelp
+                  title="Pending & Overdue Schedulers"
+                  description="Jobs whose next scheduled execution is more than 5 minutes overdue and have not yet been acquired by an available worker."
+                  guidance="If this number is non-zero, check that at least one worker node is healthy and not starved of database connection pool slots."
+                  size="xs"
+                />
+              </div>
               <p className="text-2xl font-bold mt-1 text-amber-600">{kpis?.overdueJobs ?? 0}</p>
               <span className="text-xs text-muted-foreground mt-1 inline-block">
                 Tolerance: 5 min
@@ -385,7 +452,18 @@ export default function AutomationOpsCenter() {
 
           <Card className="bg-card shadow-xs">
             <CardContent className="p-4">
-              <span className="text-xs font-medium text-muted-foreground">Running Now</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Running Now</span>
+                <ContextHelp
+                  title="In-Flight Leases"
+                  description="Background jobs actively claimed and executing under row-level PostgreSQL SKIP LOCKED leases."
+                  technicalDetails={[
+                    { label: "Lock Strategy", value: "FOR UPDATE SKIP LOCKED" },
+                    { label: "Max Lease Duration", value: "5 minutes" }
+                  ]}
+                  size="xs"
+                />
+              </div>
               <p className="text-2xl font-bold mt-1 text-blue-600">{kpis?.runningJobs ?? 0}</p>
               <span className="text-xs text-muted-foreground mt-1 inline-block">
                 Skip-Locked Leased
@@ -477,33 +555,84 @@ export default function AutomationOpsCenter() {
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Server className="w-4 h-4 text-primary" />
-                      Worker Cluster Reliability
+                      <span>Worker Cluster Reliability</span>
+                      <ContextHelp
+                        title="Cluster High-Availability Telemetry"
+                        description="PostgreSQL-backed distributed locking and worker state machine. Guarantees zero duplicate job execution and automatic stale-node lease recovery."
+                        technicalDetails={[
+                          { label: "Lock Primitive", value: "FOR UPDATE SKIP LOCKED" },
+                          { label: "Heartbeat Store", value: "worker_nodes" }
+                        ]}
+                        size="xs"
+                      />
                     </CardTitle>
                     <CardDescription>PostgreSQL FOR UPDATE SKIP LOCKED & Leases</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3 text-xs">
-                    <div className="flex justify-between py-1.5 border-b">
-                      <span className="text-muted-foreground">Concurrency Pool:</span>
+                    <div className="flex justify-between items-center py-1.5 border-b">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <span>Concurrency Pool:</span>
+                        <ContextHelp
+                          title="Worker Slot Concurrency"
+                          description="Limits concurrent asynchronous jobs per node to 5 slots, preventing database connection pool exhaustion."
+                          size="xs"
+                        />
+                      </span>
                       <span className="font-medium text-foreground">5 concurrent tasks / node</span>
                     </div>
-                    <div className="flex justify-between py-1.5 border-b">
-                      <span className="text-muted-foreground">Lease Duration:</span>
+                    <div className="flex justify-between items-center py-1.5 border-b">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <span>Lease Duration:</span>
+                        <ContextHelp
+                          title="Distributed Job Lease"
+                          description="Executing worker node retains exclusive lock for 5 minutes (300s), continuously renewed while task is in-flight."
+                          size="xs"
+                        />
+                      </span>
                       <span className="font-medium text-foreground">5 minutes with renew</span>
                     </div>
-                    <div className="flex justify-between py-1.5 border-b">
-                      <span className="text-muted-foreground">Heartbeat Interval:</span>
+                    <div className="flex justify-between items-center py-1.5 border-b">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <span>Heartbeat Interval:</span>
+                        <ContextHelp
+                          title="Node Health Heartbeat"
+                          description="Worker instances broadcast vitality every 15s. A node missing 3 heartbeats (45s) is declared dead."
+                          size="xs"
+                        />
+                      </span>
                       <span className="font-medium text-foreground">15 seconds</span>
                     </div>
-                    <div className="flex justify-between py-1.5 border-b">
-                      <span className="text-muted-foreground">Stale Sweeper:</span>
+                    <div className="flex justify-between items-center py-1.5 border-b">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <span>Stale Sweeper:</span>
+                        <ContextHelp
+                          title="Stale Lease Sweeper"
+                          description="Autonomous background janitor that reclaims and resets abandoned jobs when a worker node dies mid-execution."
+                          size="xs"
+                        />
+                      </span>
                       <span className="font-medium text-emerald-600">Active (Auto-recovering)</span>
                     </div>
-                    <div className="flex justify-between py-1.5 border-b">
-                      <span className="text-muted-foreground">Retry Policy:</span>
+                    <div className="flex justify-between items-center py-1.5 border-b">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <span>Retry Policy:</span>
+                        <ContextHelp
+                          title="Exponential Backoff"
+                          description="Retries failed executions with exponential delay (2^attempt * baseDelay) and random jitter to avoid load spikes."
+                          size="xs"
+                        />
+                      </span>
                       <span className="font-medium text-foreground">Exp backoff with jitter</span>
                     </div>
-                    <div className="flex justify-between py-1.5">
-                      <span className="text-muted-foreground">Alert Channel:</span>
+                    <div className="flex justify-between items-center py-1.5">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <span>Alert Channel:</span>
+                        <ContextHelp
+                          title="Critical Failure Alerting"
+                          description="Dispatches system notifications to Superadmin when a job exhausts all retries or enters dead-letter state."
+                          size="xs"
+                        />
+                      </span>
                       <span className="font-medium text-foreground">In-App Admin Notification</span>
                     </div>
                   </CardContent>
@@ -573,12 +702,48 @@ export default function AutomationOpsCenter() {
                   <table className="w-full text-xs text-left">
                     <thead className="bg-muted/50 border-b text-muted-foreground uppercase text-[10px] tracking-wider">
                       <tr>
-                        <th className="py-3 px-4">Job Details</th>
-                        <th className="py-3 px-3">Schedule & Timezone</th>
-                        <th className="py-3 px-3">Scope</th>
+                        <th className="py-3 px-4">
+                          <span className="flex items-center gap-1">
+                            <span>Job Details</span>
+                            <ContextHelp
+                              title="Scheduled Automation Definition"
+                              description="Unique job key and human-readable descriptor registered in scheduled_jobs."
+                              size="xs"
+                            />
+                          </span>
+                        </th>
+                        <th className="py-3 px-3">
+                          <span className="flex items-center gap-1">
+                            <span>Schedule & Timezone</span>
+                            <ContextHelp
+                              title="Cron Schedule & Timezone"
+                              description="Standard 5-part cron syntax or interval in seconds. Timezone Asia/Kolkata (IST) ensures precise operational execution timing."
+                              size="xs"
+                            />
+                          </span>
+                        </th>
+                        <th className="py-3 px-3">
+                          <span className="flex items-center gap-1">
+                            <span>Scope</span>
+                            <ContextHelp
+                              title="Multi-City Tenant Boundary"
+                              description="Global automations process records across all cities; city-scoped jobs are restricted strictly to that city's operational boundary."
+                              size="xs"
+                            />
+                          </span>
+                        </th>
                         <th className="py-3 px-3">Status</th>
                         <th className="py-3 px-3">Next Run</th>
-                        <th className="py-3 px-3">Last Run Status</th>
+                        <th className="py-3 px-3">
+                          <span className="flex items-center gap-1">
+                            <span>Last Run Status</span>
+                            <ContextHelp
+                              title="Execution Status & Duration"
+                              description="Outcome of the most recent execution attempt. Success = finished cleanly; Failed = encountered error with error message; Running = active in-flight lease."
+                              size="xs"
+                            />
+                          </span>
+                        </th>
                         <th className="py-3 px-3 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -848,7 +1013,7 @@ export default function AutomationOpsCenter() {
 
         {/* Action Confirmation / Dry Run Dialog */}
         <Dialog open={confirmModalOpen} onOpenChange={setConfirmModalOpen}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[520px] max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {actionType === "dry_run" ? <Eye className="w-5 h-5 text-primary" /> : <ShieldAlert className="w-5 h-5 text-amber-500" />}
@@ -860,6 +1025,13 @@ export default function AutomationOpsCenter() {
                   : `Are you sure you want to execute ${actionType.replace("_", " ")} on scheduled job '${actionJob?.name}'?`}
               </DialogDescription>
             </DialogHeader>
+
+            {actionType === "dry_run" && (
+              <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs flex items-center gap-2">
+                <Eye className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Safe simulation preview. No SMS, WhatsApp, payment changes, or database modifications will be committed.</span>
+              </div>
+            )}
 
             {actionResult && (
               <div className="bg-muted p-3.5 rounded-lg space-y-2 text-xs">
@@ -893,7 +1065,7 @@ export default function AutomationOpsCenter() {
 
         {/* Create Scheduled Job Modal */}
         <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-          <DialogContent className="sm:max-w-[540px]">
+          <DialogContent className="sm:max-w-[560px] max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create Scheduled Background Job</DialogTitle>
               <DialogDescription>
@@ -914,17 +1086,23 @@ export default function AutomationOpsCenter() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="job-type">Job Type</Label>
-                  <Select value={newJobType} onValueChange={setNewJobType}>
-                    <SelectTrigger id="job-type">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {jobTypes.map((t) => (
-                        <SelectItem key={t.type} value={t.type}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="job-type">Job Type *</Label>
+                    <ContextHelp
+                      title="Autonomous Automation Routine"
+                      description="Determines the service logic dispatched by worker nodes. Examples: retention_automation evaluates inactive customer cycles; dcms_daily_assignment generates cleaner morning routes."
+                      size="xs"
+                    />
+                  </div>
+                  <SearchableCombobox
+                    items={jobTypes.map((t) => ({ value: t.type, label: t.label, sublabel: t.type }))}
+                    value={newJobType}
+                    onValueChange={setNewJobType}
+                    placeholder="Select job type..."
+                    searchPlaceholder="Search job types..."
+                    emptyText="No job types found"
+                    testId="create-job-type-combobox"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -947,7 +1125,19 @@ export default function AutomationOpsCenter() {
 
               {newScheduleType === "recurring_cron" ? (
                 <div className="space-y-1.5">
-                  <Label htmlFor="cron-expr">Cron Expression (5-part syntax)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="cron-expr">Cron Expression (5-part syntax)</Label>
+                    <ContextHelp
+                      title="5-Part Cron Schedule Syntax"
+                      description="Standard Unix cron syntax: minute (0-59), hour (0-23), day of month (1-31), month (1-12), day of week (0-7)."
+                      guidance="Common schedules: '0 10 * * *' = 10:00 AM daily; '59 23 * * *' = 11:59 PM EOD; '0 */4 * * *' = Every 4 hours."
+                      technicalDetails={[
+                        { label: "Syntax", value: "m h dom mon dow" },
+                        { label: "Execution TZ", value: "Asia/Kolkata (IST)" }
+                      ]}
+                      size="xs"
+                    />
+                  </div>
                   <Input
                     id="cron-expr"
                     placeholder="0 10 * * *"

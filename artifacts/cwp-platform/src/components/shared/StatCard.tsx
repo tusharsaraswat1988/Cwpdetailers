@@ -1,12 +1,14 @@
+import * as React from "react";
 import { LucideIcon, ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ContextualHelp } from "@/components/ui/contextual-help";
 
 export type StatCardTrend = "up" | "down" | "neutral";
 export type StatCardTone = "default" | "success" | "warning" | "destructive";
 
-interface StatCardProps {
+export interface StatCardProps {
   label: string;
   value: ReactValue;
   icon?: LucideIcon;
@@ -23,6 +25,10 @@ interface StatCardProps {
   /** Renders the tile as a link instead of/alongside onClick. */
   href?: string;
   className?: string;
+  help?: {
+    title?: string;
+    content: React.ReactNode;
+  } | React.ReactNode;
 }
 
 type ReactValue = string | number;
@@ -54,10 +60,50 @@ const toneIconColor: Record<StatCardTone, string> = {
  */
 export function StatCard({
   label, value, icon: Icon, delta, subtitle, trend = "neutral", tone = "default",
-  prominent, isLoading, onClick, href, className,
+  prominent, isLoading, onClick, href, className, help,
 }: StatCardProps) {
   const TrendIcon = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : undefined;
   const interactive = !!onClick || !!href;
+
+  const renderedHelp = React.useMemo(() => {
+    if (!help) return null;
+    if (React.isValidElement(help)) {
+      return (
+        <span
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="inline-flex shrink-0"
+        >
+          {help}
+        </span>
+      );
+    }
+    if (typeof help === "object" && help !== null && "content" in help) {
+      const helpConfig = help as { title?: string; content: React.ReactNode };
+      return (
+        <span
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="inline-flex shrink-0"
+        >
+          <ContextualHelp
+            title={helpConfig.title}
+            content={helpConfig.content}
+            variant="tooltip"
+          />
+        </span>
+      );
+    }
+    return (
+      <span
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        className="inline-flex shrink-0"
+      >
+        {help as React.ReactNode}
+      </span>
+    );
+  }, [help]);
 
   const content = (
     <div
@@ -74,7 +120,10 @@ export function StatCard({
       data-testid="stat-card"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{label}</p>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide truncate">{label}</p>
+          {renderedHelp}
+        </div>
         {Icon && (
           <span className={cn(
             "flex shrink-0 items-center justify-center rounded-xl",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
+import { ContextHelp } from "@/components/ui/context-help";
+import { useAppStore } from "@/lib/store";
 import {
   Plus,
   MapPin,
@@ -67,10 +70,25 @@ type Branch = { id: number; name: string; cityId?: number };
 export default function OperationalZonesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const activeCityId = useAppStore((s) => s.activeCityId);
 
   const [selectedCityId, setSelectedCityId] = useState<string>("all");
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Automatically sync with global active city / branch scope
+  useEffect(() => {
+    if (activeCityId && selectedCityId === "all") {
+      setSelectedCityId(String(activeCityId));
+    }
+  }, [activeCityId]);
+
+  useEffect(() => {
+    if (activeBranchId && selectedBranchId === "all") {
+      setSelectedBranchId(String(activeBranchId));
+    }
+  }, [activeBranchId]);
 
   // Create / Edit Zone Modal
   const [zoneModalOpen, setZoneModalOpen] = useState(false);
@@ -257,9 +275,11 @@ export default function OperationalZonesPage() {
 
   const openCreateZone = () => {
     setEditingZone(null);
+    const defaultCityId = activeCityId ? String(activeCityId) : cities[0] ? String(cities[0].id) : "";
+    const defaultBranchId = activeBranchId ? String(activeBranchId) : branches[0] ? String(branches[0].id) : "";
     setZoneForm({
-      cityId: cities[0] ? String(cities[0].id) : "",
-      branchId: branches[0] ? String(branches[0].id) : "",
+      cityId: defaultCityId,
+      branchId: defaultBranchId,
       name: "",
       code: "",
       description: "",
@@ -306,7 +326,18 @@ export default function OperationalZonesPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
               <Layers className="h-6 w-6 text-primary" />
-              Operational Zones & Coverage
+              <span>Operational Zones & Coverage</span>
+              <ContextHelp
+                title="Operational Zones Architecture"
+                description="Operational zones decouple geographic service boundaries from branch physical hub buildings. Each zone maps a territorial cluster to its primary serving branch, establishing geofenced serviceability and localized rules."
+                guidance="Define a zone for each service cluster (e.g., Noida Expressway, Sigra Zone) to map societies, towers, and pricing models."
+                technicalDetails={[
+                  { label: "Entity Model", value: "operational_zones" },
+                  { label: "Geofence Engine", value: "Radial Lat/Lng with Haversine" },
+                  { label: "Scope Isolation", value: "City & Branch multi-tenant" }
+                ]}
+                size="sm"
+              />
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
               Decouple geographic locations from branches. Define operational zones, serviceability boundaries, and coverage rules.
@@ -330,36 +361,30 @@ export default function OperationalZonesPage() {
             />
           </div>
 
-          <div className="w-full sm:w-48">
-            <Select value={selectedCityId} onValueChange={setSelectedCityId}>
-              <SelectTrigger className="h-10">
-                <SelectValue placeholder="All Cities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Cities</SelectItem>
-                {cities.map(c => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="w-full sm:w-56">
+            <SearchableCombobox
+              items={cities.map(c => ({ value: String(c.id), label: c.name }))}
+              value={selectedCityId}
+              onValueChange={setSelectedCityId}
+              allOptionLabel="All Cities"
+              placeholder="Filter by city..."
+              searchPlaceholder="Search city name..."
+              emptyText="No cities found"
+              testId="combobox-filter-city"
+            />
           </div>
 
-          <div className="w-full sm:w-52">
-            <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-              <SelectTrigger className="h-10">
-                <SelectValue placeholder="All Branches" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Branches</SelectItem>
-                {branches.map(b => (
-                  <SelectItem key={b.id} value={String(b.id)}>
-                    {b.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="w-full sm:w-60">
+            <SearchableCombobox
+              items={branches.map(b => ({ value: String(b.id), label: b.name }))}
+              value={selectedBranchId}
+              onValueChange={setSelectedBranchId}
+              allOptionLabel="All Branches"
+              placeholder="Filter by branch..."
+              searchPlaceholder="Search branch name..."
+              emptyText="No branches found"
+              testId="combobox-filter-branch"
+            />
           </div>
         </div>
 
@@ -476,7 +501,7 @@ export default function OperationalZonesPage() {
 
         {/* Zone Create / Edit Modal */}
         <Dialog open={zoneModalOpen} onOpenChange={setZoneModalOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingZone ? "Edit Operational Zone" : "Create Operational Zone"}</DialogTitle>
               <DialogDescription>
@@ -487,41 +512,46 @@ export default function OperationalZonesPage() {
             <div className="space-y-4 py-2">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">City *</Label>
-                  <Select
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">City *</Label>
+                    <ContextHelp
+                      title="Operating Municipal City"
+                      description="The city jurisdiction governing this zone. All societies mapped to this zone must belong to this city."
+                      size="xs"
+                    />
+                  </div>
+                  <SearchableCombobox
+                    items={cities.map(c => ({ value: String(c.id), label: c.name }))}
                     value={zoneForm.cityId}
                     onValueChange={v => setZoneForm(p => ({ ...p, cityId: v }))}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue placeholder="Select city" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cities.map(c => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select city..."
+                    searchPlaceholder="Search city name..."
+                    emptyText="No matching city found"
+                    testId="create-zone-city-combobox"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Serving Branch</Label>
-                  <Select
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Serving Branch</Label>
+                    <ContextHelp
+                      title="Serving Branch Mapping"
+                      description="The physical operating hub providing technician dispatch, equipment, and cleaning route management for this zone."
+                      size="xs"
+                    />
+                  </div>
+                  <SearchableCombobox
+                    items={branches
+                      .filter(b => !zoneForm.cityId || !b.cityId || String(b.cityId) === zoneForm.cityId)
+                      .map(b => ({ value: String(b.id), label: b.name }))}
                     value={zoneForm.branchId}
                     onValueChange={v => setZoneForm(p => ({ ...p, branchId: v }))}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue placeholder="Select branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {branches.map(b => (
-                        <SelectItem key={b.id} value={String(b.id)}>
-                          {b.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select branch..."
+                    searchPlaceholder="Search branch name..."
+                    emptyText="No matching branch found"
+                    clearable={true}
+                    testId="create-zone-branch-combobox"
+                  />
                 </div>
               </div>
 
@@ -586,7 +616,18 @@ export default function OperationalZonesPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Radius (Meters)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Radius (Meters)</Label>
+                    <ContextHelp
+                      title="Radial Geofence Boundary"
+                      description="Radial distance in meters from the center coordinates used for serviceability coverage and distance-based slot availability."
+                      technicalDetails={[
+                        { label: "Default Radius", value: "5000m (5km)" },
+                        { label: "Model", value: "Haversine Distance" }
+                      ]}
+                      size="xs"
+                    />
+                  </div>
                   <Input
                     value={zoneForm.radiusMeters}
                     onChange={e => setZoneForm(p => ({ ...p, radiusMeters: e.target.value }))}
@@ -627,7 +668,18 @@ export default function OperationalZonesPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5 text-primary" />
-                Coverage Rules — {activeZoneForRules?.name}
+                <span>Coverage Rules — {activeZoneForRules?.name}</span>
+                <ContextHelp
+                  title="Coverage Rules Evaluation Engine"
+                  description="Coverage rules define fine-grained serviceability controls within an operational zone. The system checks societies, localities, pincodes, and property types against these rules when a customer enters an address."
+                  guidance="Priority numbers determine the order of evaluation (lower number = higher priority). Blocked statuses prevent bookings and trigger friendly waitlist messaging."
+                  technicalDetails={[
+                    { label: "Target Scope", value: "Zone & Branch Bound" },
+                    { label: "Engine Service", value: "CoverageEngine.ts" },
+                    { label: "Cache Policy", value: "CoverageCache.ts (5m TTL)" }
+                  ]}
+                  size="xs"
+                />
               </DialogTitle>
               <DialogDescription>
                 Explicit rules defining which societies, localities, pincodes, or property types are serviceable within this zone.

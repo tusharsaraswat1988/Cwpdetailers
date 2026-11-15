@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
+import { ContextHelp } from "@/components/ui/context-help";
 import { operationsApi, type CommandCenterData, type ImmediateAttentionItem } from "@/lib/operations/api";
 import {
   Activity,
@@ -81,8 +82,18 @@ export default function AdminDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                Operations Command Center
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                <span>Operations Command Center</span>
+                <ContextHelp
+                  title="Operations Command Center"
+                  description="Real-time multi-city operational monitoring dashboard. Aggregates scheduled daily car cleaning (DCMS) visits and on-demand detailing bookings for the active branch."
+                  guidance="Data updates automatically every 30 seconds. Items requiring immediate attention (missed visits, unassigned bookings, overdue SLAs) appear prominently below."
+                  technicalDetails={[
+                    { label: "Polling Cadence", value: "30 seconds" },
+                    { label: "Scope Binding", value: "Bound to active branch & city" }
+                  ]}
+                  size="sm"
+                />
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
@@ -122,7 +133,14 @@ export default function AdminDashboard() {
             <Card className="border-border shadow-sm">
               <CardContent className="p-3.5 space-y-1">
                 <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                  <span>Today's Total</span>
+                  <span className="flex items-center">
+                    <span>Today's Total</span>
+                    <ContextHelp
+                      title="Today's Operational Volume"
+                      description="Sum of all scheduled one-time booking services plus daily recurring subscription washes for today."
+                      size="xs"
+                    />
+                  </span>
                   <Calendar size={14} className="text-primary" />
                 </div>
                 <div className="text-2xl font-bold tracking-tight text-foreground">
@@ -135,7 +153,14 @@ export default function AdminDashboard() {
             <Card className="border-border shadow-sm">
               <CardContent className="p-3.5 space-y-1">
                 <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                  <span>Confirmed</span>
+                  <span className="flex items-center">
+                    <span>Confirmed</span>
+                    <ContextHelp
+                      title="Confirmed Service Bookings"
+                      description="Bookings with verified slot and payment/pre-approval ready for technician dispatch."
+                      size="xs"
+                    />
+                  </span>
                   <CheckCircle2 size={14} className="text-blue-500" />
                 </div>
                 <div className="text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
@@ -148,7 +173,14 @@ export default function AdminDashboard() {
             <Card className="border-border shadow-sm">
               <CardContent className="p-3.5 space-y-1">
                 <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                  <span>Completed</span>
+                  <span className="flex items-center">
+                    <span>Completed</span>
+                    <ContextHelp
+                      title="Completed Services Today"
+                      description="Jobs and visits completed by field technicians with geo-tagged completion proofs uploaded."
+                      size="xs"
+                    />
+                  </span>
                   <CheckCircle2 size={14} className="text-emerald-500" />
                 </div>
                 <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
@@ -161,7 +193,15 @@ export default function AdminDashboard() {
             <Card className={`border shadow-sm ${(metrics?.delayedServicesToday ?? 0) > 0 ? "border-amber-500/50 bg-amber-500/5" : "border-border"}`}>
               <CardContent className="p-3.5 space-y-1">
                 <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                  <span>Delayed Jobs</span>
+                  <span className="flex items-center">
+                    <span>Delayed Jobs</span>
+                    <ContextHelp
+                      title="Delayed Field Services"
+                      description="Jobs past their scheduled time window without technician arrival ping or started status."
+                      guidance="Contact the assigned cleaner or reassign if the staff member is unavailable."
+                      size="xs"
+                    />
+                  </span>
                   <Clock size={14} className={(metrics?.delayedServicesToday ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground"} />
                 </div>
                 <div className={`text-2xl font-bold tracking-tight ${(metrics?.delayedServicesToday ?? 0) > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
@@ -174,7 +214,15 @@ export default function AdminDashboard() {
             <Card className={`border shadow-sm ${(metrics?.unassignedJobsToday ?? 0) > 0 ? "border-red-500/50 bg-red-500/5" : "border-border"}`}>
               <CardContent className="p-3.5 space-y-1">
                 <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                  <span>Unassigned</span>
+                  <span className="flex items-center">
+                    <span>Unassigned</span>
+                    <ContextHelp
+                      title="Unassigned Field Jobs"
+                      description="Jobs in queue that lack an assigned service technician or route cleaner."
+                      guidance="Assign cleaners immediately to prevent customer delays."
+                      size="xs"
+                    />
+                  </span>
                   <UserX size={14} className={(metrics?.unassignedJobsToday ?? 0) > 0 ? "text-red-500" : "text-muted-foreground"} />
                 </div>
                 <div className={`text-2xl font-bold tracking-tight ${(metrics?.unassignedJobsToday ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-foreground"}`}>
@@ -187,7 +235,14 @@ export default function AdminDashboard() {
             <Card className="border-border shadow-sm">
               <CardContent className="p-3.5 space-y-1">
                 <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-                  <span>Open Issues</span>
+                  <span className="flex items-center">
+                    <span>Open Issues</span>
+                    <ContextHelp
+                      title="Open Exceptions & Tickets"
+                      description="Active support tickets or customer complaints requiring supervisor resolution or credit makeup."
+                      size="xs"
+                    />
+                  </span>
                   <ShieldAlert size={14} className="text-orange-500" />
                 </div>
                 <div className="text-2xl font-bold tracking-tight text-orange-600 dark:text-orange-400">

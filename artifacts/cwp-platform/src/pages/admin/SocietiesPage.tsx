@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
+import { ContextHelp } from "@/components/ui/context-help";
+import { useAppStore } from "@/lib/store";
 import {
   Dialog,
   DialogContent,
@@ -74,6 +77,13 @@ export default function SocietiesPage() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>("operations");
   const [selectedCityId, setSelectedCityId] = useState<string>("all");
+  const activeCityId = useAppStore((s) => s.activeCityId);
+
+  useEffect(() => {
+    if (activeCityId && selectedCityId === "all") {
+      setSelectedCityId(String(activeCityId));
+    }
+  }, [activeCityId]);
   const [search, setSearch] = useState("");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [activeSocietyId, setActiveSocietyId] = useState<number | null>(null);
@@ -278,8 +288,19 @@ export default function SocietiesPage() {
           <div>
             <div className="flex items-center gap-2">
               <Building2 className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold font-display text-foreground tracking-tight">
-                Society Operations & Hierarchy
+              <h1 className="text-2xl font-bold font-display text-foreground tracking-tight flex items-center gap-2">
+                <span>Society Operations & Hierarchy</span>
+                <ContextHelp
+                  title="Residential Society Command Center"
+                  description="Registry of gated residential societies, apartment complexes, and towers mapped across operating cities. Cleaners are routed by society and tower corridors."
+                  guidance="Add societies before onboarding apartment customers so customers can select their society, tower, and parking bay during subscription booking."
+                  technicalDetails={[
+                    { label: "Entity Model", value: "residential_societies" },
+                    { label: "Tower Hierarchy", value: "society_towers" },
+                    { label: "Validation Engine", value: "SocietyValidator.ts" }
+                  ]}
+                  size="sm"
+                />
               </h1>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
@@ -287,19 +308,18 @@ export default function SocietiesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Select value={selectedCityId} onValueChange={setSelectedCityId}>
-              <SelectTrigger className="w-[170px] h-9">
-                <SelectValue placeholder="All Cities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Cities</SelectItem>
-                {citiesQuery.data?.map(c => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="w-48">
+              <SearchableCombobox
+                items={(citiesQuery.data || []).map(c => ({ value: String(c.id), label: c.name }))}
+                value={selectedCityId}
+                onValueChange={setSelectedCityId}
+                allOptionLabel="All Cities"
+                placeholder="Filter by city..."
+                searchPlaceholder="Search city name..."
+                emptyText="No cities found"
+                testId="filter-societies-city"
+              />
+            </div>
 
             <Button
               onClick={() => setCreateDialogOpen(true)}
@@ -909,7 +929,7 @@ export default function SocietiesPage() {
 
         {/* Create Society Dialog */}
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Register Residential Society</DialogTitle>
               <DialogDescription>
@@ -920,19 +940,23 @@ export default function SocietiesPage() {
             <form onSubmit={handleCreateSociety} className="space-y-4 pt-2">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="citySelect" className="text-xs">City *</Label>
-                  <Select value={newCityId} onValueChange={setNewCityId}>
-                    <SelectTrigger id="citySelect" className="h-9">
-                      <SelectValue placeholder="Select City" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {citiesQuery.data?.map(c => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="citySelect" className="text-xs font-semibold">City *</Label>
+                    <ContextHelp
+                      title="Society Municipal Territory"
+                      description="City in which this society is geographically located. Determines branch and cleaner dispatch territory."
+                      size="xs"
+                    />
+                  </div>
+                  <SearchableCombobox
+                    items={(citiesQuery.data || []).map(c => ({ value: String(c.id), label: c.name }))}
+                    value={newCityId}
+                    onValueChange={setNewCityId}
+                    placeholder="Select city..."
+                    searchPlaceholder="Search city name..."
+                    emptyText="No cities found"
+                    testId="create-society-city-combobox"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="societyCode" className="text-xs">Society Code</Label>

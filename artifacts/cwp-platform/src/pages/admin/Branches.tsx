@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,9 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
+import { ContextHelp } from "@/components/ui/context-help";
+import { useAppStore } from "@/lib/store";
 import {
   Plus,
   MapPin,
@@ -203,6 +206,13 @@ export default function BranchesPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedCityId, setSelectedCityId] = useState<string>("all");
+  const activeCityId = useAppStore((s) => s.activeCityId);
+
+  useEffect(() => {
+    if (activeCityId && selectedCityId === "all") {
+      setSelectedCityId(String(activeCityId));
+    }
+  }, [activeCityId]);
 
   const citiesQuery = useMasterList<City>("cities");
   const legalEntitiesQuery = useQuery({ queryKey: ["legal-entities"], queryFn: fetchLegalEntities });
@@ -482,26 +492,38 @@ export default function BranchesPage() {
           <div>
             <div className="flex items-center gap-2">
               <Building2 className="h-6 w-6 text-primary" />
-              <h1 className="font-display font-bold text-2xl">Branches & Service Hubs</h1>
+              <h1 className="font-display font-bold text-2xl flex items-center gap-2">
+                <span>Branches & Service Hubs</span>
+                <ContextHelp
+                  title="Operating Hub & Franchise Architecture"
+                  description="Physical service centers and franchisee hubs. Central Superadmins oversee all branches, whereas Company Branch Admins and Franchise Partners are scoped strictly to authorized branch IDs."
+                  guidance="Branches must pass the 10-point Readiness Checklist (profile, manager, legal entity, operating model, staff allocation) before public activation."
+                  technicalDetails={[
+                    { label: "Entity Table", value: "branches" },
+                    { label: "Operating Models", value: "COCO (Company) vs FOFO (Franchise)" },
+                    { label: "Scope Isolation", value: "Strict HTTP 403 on Cross-Branch Access" }
+                  ]}
+                  size="sm"
+                />
+              </h1>
             </div>
             <p className="text-muted-foreground text-sm mt-0.5">
               Company-Operated (COCO) and Franchise-Operated (FOFO) service centers across cities.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Select value={selectedCityId} onValueChange={setSelectedCityId}>
-              <SelectTrigger className="w-44 h-9">
-                <SelectValue placeholder="All Cities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Cities</SelectItem>
-                {citiesQuery.data?.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="w-48">
+              <SearchableCombobox
+                items={(citiesQuery.data || []).map((c) => ({ value: String(c.id), label: c.name }))}
+                value={selectedCityId}
+                onValueChange={setSelectedCityId}
+                allOptionLabel="All Cities"
+                placeholder="Filter by city..."
+                searchPlaceholder="Search city name..."
+                emptyText="No cities found"
+                testId="filter-branches-city"
+              />
+            </div>
             <Button onClick={() => setCreateOpen(true)} className="h-9">
               <Plus size={15} className="mr-1.5" /> Add Branch
             </Button>
@@ -1072,7 +1094,7 @@ export default function BranchesPage() {
 
         {/* Create Branch Dialog */}
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Register Branch / Service Center</DialogTitle>
               <DialogDescription>
@@ -1109,8 +1131,16 @@ export default function BranchesPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">City Mapping</Label>
-                  <Select
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">City Mapping</Label>
+                    <ContextHelp
+                      title="Municipal City Association"
+                      description="Maps this operational branch to a registered city record in the cities master catalog."
+                      size="xs"
+                    />
+                  </div>
+                  <SearchableCombobox
+                    items={(citiesQuery.data || []).map((c) => ({ value: String(c.id), label: c.name }))}
                     value={createForm.cityId}
                     onValueChange={(val) => {
                       const city = citiesQuery.data?.find((c) => String(c.id) === val);
@@ -1120,18 +1150,11 @@ export default function BranchesPage() {
                         city: city ? city.name : f.city,
                       }));
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select city" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {citiesQuery.data?.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select city..."
+                    searchPlaceholder="Search city name..."
+                    emptyText="No cities found"
+                    testId="create-branch-city-combobox"
+                  />
                 </div>
               </div>
 
@@ -1208,7 +1231,7 @@ export default function BranchesPage() {
 
         {/* Edit Branch Dialog */}
         <Dialog open={editingBranch != null} onOpenChange={(open) => !open && setEditingBranch(null)}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Branch: {editingBranch?.name}</DialogTitle>
               <DialogDescription>Update branch settings, legal entity, and operating model.</DialogDescription>
