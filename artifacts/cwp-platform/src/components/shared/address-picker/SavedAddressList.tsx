@@ -63,9 +63,14 @@ export function SavedAddressList({
               >
                 <MapPin size={16} className="shrink-0 text-primary mt-0.5" aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold truncate">
-                    {loc.label}
-                    {loc.isDefault ? <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Default</span> : null}
+                  <p className="text-sm font-semibold truncate flex items-center gap-1.5 flex-wrap">
+                    <span>{loc.label}</span>
+                    {loc.isDefault ? <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Default</span> : null}
+                    {loc.propertyType && (
+                      <span className="inline-flex items-center rounded-full bg-muted/80 px-2 py-0.2 text-[10px] font-medium text-muted-foreground">
+                        {loc.propertyType === "GATED_SOCIETY" ? "Society" : loc.propertyType === "INDIVIDUAL_HOME" ? "House" : loc.propertyType === "COMMERCIAL_PROPERTY" ? "Office" : "Apartment"}
+                      </span>
+                    )}
                   </p>
                   <FormattedAddressDisplay
                     value={loc.address}

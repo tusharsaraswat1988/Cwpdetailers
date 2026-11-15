@@ -1,5 +1,5 @@
 import {
-  pgTable, serial, integer, text, date, timestamp, pgEnum, doublePrecision, boolean, index,
+  pgTable, serial, integer, text, date, timestamp, pgEnum, doublePrecision, boolean, index, jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -93,6 +93,10 @@ export const bookingsTable = pgTable("bookings", {
   lastLocationUpdateAt: timestamp("last_location_update_at", { withTimezone: true }),
   lastKnownLatitude: doublePrecision("last_known_latitude"),
   lastKnownLongitude: doublePrecision("last_known_longitude"),
+  pricingRuleId: integer("pricing_rule_id"),
+  priceSnapshot: jsonb("price_snapshot"),
+  zoneId: integer("zone_id"),
+  propertyType: text("property_type"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [

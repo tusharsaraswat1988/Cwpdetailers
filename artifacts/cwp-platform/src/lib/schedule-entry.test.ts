@@ -166,4 +166,53 @@ describe("schedule-entry", () => {
     });
     expect(plan.planMode).toBe("one_time");
   });
+
+  it("parses solar service params with tier and tierPrice", () => {
+    const params = parseScheduleEntryParams("?service=solar-cleaning&tier=Residential%201%20kW&tierPrice=399&segment=solar_cleaning&from=product_detail");
+    expect(params.service).toBe("solar-cleaning");
+    expect(params.tier).toBe("Residential 1 kW");
+    expect(params.tierPrice).toBe(399);
+    expect(params.segment).toBe("solar_cleaning");
+    expect(params.from).toBe("product_detail");
+  });
+
+  it("isolates solar service: never auto-resolves vehicle even if customer has 1 vehicle and 0 solar sites", () => {
+    const asset = resolveAssetFromEntry({
+      params: { service: "solar-cleaning", segment: "solar_cleaning" },
+      vehicles: [vehicles[0]], // 1 vehicle
+      solarSites: [], // 0 solar sites
+      subscriptions: [],
+    });
+    // Must be null, NOT the vehicle!
+    expect(asset).toBeNull();
+  });
+
+  it("resolves solar site when customer has 1 solar site and bookings solar service", () => {
+    const asset = resolveAssetFromEntry({
+      params: { service: "solar-cleaning", segment: "solar_cleaning" },
+      vehicles,
+      solarSites, // 1 solar site (id 5)
+      subscriptions: [],
+    });
+    expect(asset?.id).toBe(5);
+    expect(asset?.kind).toBe("solar");
+  });
+
+  it("isolates vehicle service: never auto-resolves solar site even if customer has 0 vehicles and 1 solar site", () => {
+    const asset = resolveAssetFromEntry({
+      params: { service: "doorstep-car-wash" },
+      vehicles: [],
+      solarSites, // 1 solar site
+      subscriptions: [],
+    });
+    expect(asset).toBeNull();
+  });
+
+  it("defaults solar service entry to one_time planMode", () => {
+    const plan = resolvePlanFromEntry({
+      params: { service: "solar-cleaning" },
+      subscriptions: subs,
+    });
+    expect(plan.planMode).toBe("one_time");
+  });
 });

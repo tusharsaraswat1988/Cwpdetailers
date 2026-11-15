@@ -60,6 +60,14 @@ export type SavedLocation = {
   formattedAddress?: string | null;
   googleComponents?: Array<{ long_name: string; short_name: string; types: string[] }> | null;
   isDefault: boolean;
+  propertyType?: string | null;
+  societyId?: number | null;
+  towerId?: number | null;
+  localityId?: number | null;
+  zoneId?: number | null;
+  branchId?: number | null;
+  serviceabilityStatus?: string | null;
+  resolutionStatus?: string | null;
 };
 
 export type LocationValue = {
@@ -84,6 +92,12 @@ export type LocationValue = {
   formattedAddress?: string;
   savedLocationId?: number;
   googleComponents?: Array<{ long_name: string; short_name: string; types: string[] }>;
+  propertyType?: string;
+  localityId?: number;
+  zoneId?: number;
+  branchId?: number;
+  serviceabilityStatus?: string;
+  resolutionStatus?: string;
 };
 
 export type SavedLocationWrite = {
@@ -103,6 +117,14 @@ export type SavedLocationWrite = {
   formattedAddress?: string;
   googleComponents?: LocationValue["googleComponents"];
   isDefault?: boolean;
+  propertyType?: string;
+  societyId?: number | null;
+  towerId?: number | null;
+  localityId?: number | null;
+  zoneId?: number | null;
+  branchId?: number | null;
+  serviceabilityStatus?: string;
+  resolutionStatus?: string;
 };
 export type CatalogService = {
   id: number; name: string; description?: string; category: string;

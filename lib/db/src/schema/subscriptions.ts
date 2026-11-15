@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, date, timestamp, pgEnum, text, check } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, date, timestamp, pgEnum, text, check, jsonb } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -34,6 +34,10 @@ export const subscriptionsTable = pgTable("subscriptions", {
   companyId: integer("company_id"),
   franchiseeId: integer("franchisee_id"),
   branchId: integer("branch_id"),
+  pricingRuleId: integer("pricing_rule_id"),
+  priceSnapshot: jsonb("price_snapshot"),
+  zoneId: integer("zone_id"),
+  propertyType: text("property_type"),
   notes: text("notes"),
   cancelledAt: timestamp("cancelled_at"),
   cancellationRemark: text("cancellation_remark"),

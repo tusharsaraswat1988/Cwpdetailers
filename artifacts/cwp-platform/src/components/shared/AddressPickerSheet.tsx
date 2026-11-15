@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { LocationValue, SavedLocation, SavedLocationWrite } from "@/features/master-data/api";
@@ -40,6 +41,7 @@ export function AddressPickerSheet({
   onSetDefault,
   customerId,
 }: Props) {
+  const { toast } = useToast();
   const isMobile = useIsMobile();
   const hasSaved = Boolean(savedLocations && savedLocations.length > 0);
   const [mode, setMode] = useState<"list" | "new" | "edit">(hasSaved ? "list" : "new");
@@ -63,7 +65,14 @@ export function AddressPickerSheet({
 
   const saveNew = async () => {
     const draft = addressFormToLocation(addressForm);
-    if (!draft || customerId == null) return;
+    if (!draft || customerId == null) {
+      toast({
+        title: "Please complete required address fields",
+        description: "Flat or house number and area/locality are required.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = formToWritePayload(addressForm, customerId, !hasSaved);
@@ -71,7 +80,14 @@ export function AddressPickerSheet({
       const selected = created
         ? savedLocationToLocationValue(created)
         : { ...draft, savedLocationId: undefined };
+      toast({ title: "Address saved successfully" });
       closeWith(selected, addressForm.serviceLocationLabel.trim() || "Home");
+    } catch (err) {
+      toast({
+        title: "Failed to save address",
+        description: (err as Error)?.message || "Please check your inputs and try again.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -80,13 +96,27 @@ export function AddressPickerSheet({
   const saveEdit = async () => {
     if (!editing || customerId == null) return;
     const draft = addressFormToLocation(addressForm);
-    if (!draft) return;
+    if (!draft) {
+      toast({
+        title: "Please complete required address fields",
+        description: "Flat or house number and area/locality are required.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = formToWritePayload(addressForm, customerId, editing.isDefault);
       const updated = await onUpdate?.(editing.id, payload);
       const selected = updated ? savedLocationToLocationValue(updated) : { ...draft, savedLocationId: editing.id };
+      toast({ title: "Address updated successfully" });
       closeWith(selected, addressForm.serviceLocationLabel.trim() || editing.label);
+    } catch (err) {
+      toast({
+        title: "Failed to update address",
+        description: (err as Error)?.message || "Please check your inputs and try again.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }

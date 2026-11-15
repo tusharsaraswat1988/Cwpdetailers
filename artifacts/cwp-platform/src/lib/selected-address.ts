@@ -1,5 +1,6 @@
 import type { Booking } from "@workspace/api-client-react";
 import type { LocationValue } from "@/features/master-data/api";
+export { savedLocationToLocationValue } from "@/components/shared/address-picker/addressForm";
 
 export type SelectedAddress = LocationValue & {
   assetId?: number;

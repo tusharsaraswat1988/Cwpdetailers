@@ -5,13 +5,24 @@ import { cn } from "@/lib/utils";
 import { AppShell, type BottomNavItem } from "@/components/app-shell";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
-import { useBrandingPortal } from "@/lib/branding";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { CustomerThemeRoot, CustomerButton } from "@/features/customer-ds";
 import { CustomerExtraServiceApprovalHost } from "@/features/extra-service/components/CustomerExtraServiceApprovalHost";
 import {
-  LogOut, LayoutDashboard, Calendar, ClipboardList, User, Car, Bell,
+  LogOut,
+  LayoutDashboard,
+  Calendar,
+  ClipboardList,
+  User,
+  Car,
+  MapPin,
+  ChevronDown,
 } from "lucide-react";
+import {
+  CustomerAddressProvider,
+  useCustomerAddress,
+} from "@/context/CustomerAddressContext";
+import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
 
 /** Frozen IA v1.0 — Home · My Plans · Schedule (FAB) · Assets · Account */
 const navItems: BottomNavItem[] = [
@@ -22,42 +33,6 @@ const navItems: BottomNavItem[] = [
   { href: CUSTOMER_ROUTES.account, label: "Account", icon: User },
 ];
 
-const pageTitles: Record<string, string> = {
-  [CUSTOMER_ROUTES.home]: "Home",
-  [CUSTOMER_ROUTES.plans]: "My Plans",
-  [CUSTOMER_ROUTES.schedule]: "Schedule",
-  [CUSTOMER_ROUTES.assets]: "My Vehicles & Solar Sites",
-  [CUSTOMER_ROUTES.account]: "Account",
-  "/customer/wallet": "My Plans",
-  [CUSTOMER_ROUTES.loyalty]: "Rewards & Referrals",
-  [CUSTOMER_ROUTES.rewards]: "Rewards & Referrals",
-  "/customer/services": "My Plans",
-  "/customer/bookings": "Schedule",
-  "/customer/book": "Schedule",
-  "/customer/daily-cleaning": "Daily Cleaning",
-  "/customer/daily-cleaning/history": "Visit History",
-  "/customer/daily-cleaning/gallery": "Photo Gallery",
-  [CUSTOMER_ROUTES.serviceHistory]: "Service History",
-  "/customer/plans/": "Plan Details",
-  [CUSTOMER_ROUTES.invoices]: "Invoices",
-  [CUSTOMER_ROUTES.support]: "Support",
-  "/customer/complaints": "Support",
-};
-
-function resolvePageTitle(location: string, brandingName: string): string {
-  if (pageTitles[location]) return pageTitles[location];
-
-  if (location.startsWith("/customer/schedule/")) return "Scheduled Service";
-  if (location.startsWith("/customer/bookings/")) return "Scheduled Service";
-  if (location.startsWith("/customer/plans/")) return "Plan Details";
-  if (location.startsWith("/customer/services/")) return "Service Details";
-
-  const navMatch = navItems.find(
-    item => location === item.href || location.startsWith(item.href + "/"),
-  );
-  return navMatch?.label ?? brandingName;
-}
-
 type CustomerLayoutProps = {
   children: ReactNode;
   /** Override shell width — Account hub uses `hub` for two-column desktop. */
@@ -65,14 +40,43 @@ type CustomerLayoutProps = {
   headerCenter?: ReactNode;
 };
 
-export default function CustomerLayout({ children, maxWidth = "responsive", headerCenter }: CustomerLayoutProps) {
+function CustomerLayoutInner({
+  children,
+  maxWidth = "responsive",
+  headerCenter,
+}: CustomerLayoutProps) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
-  const branding = useBrandingPortal("customer");
+  const { logout } = useAuth();
+  const {
+    selectedAddress,
+    selectAddress,
+    shortAddressLabel,
+    isAddressPickerOpen,
+    setAddressPickerOpen,
+    openAddressPicker,
+    savedLocations,
+    saveNewAddress,
+    updateAddress,
+    deleteAddress,
+    setDefaultAddress,
+    customerId,
+  } = useCustomerAddress();
 
-  const isHome = location === CUSTOMER_ROUTES.home || location === "/customer/dashboard";
-  const pageTitle = resolvePageTitle(location, branding.brandName);
-  const resolvedHeaderContent = headerCenter !== undefined ? headerCenter : (isHome ? null : pageTitle);
+  const addressCapsule = (
+    <button
+      type="button"
+      onClick={openAddressPicker}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 active:bg-slate-200 text-foreground text-xs font-semibold max-w-[190px] sm:max-w-xs transition-colors cursor-pointer border border-slate-200/80 truncate shadow-2xs"
+      aria-label={`Current service location: ${shortAddressLabel}. Tap to change`}
+      data-testid="header-address-capsule"
+    >
+      <MapPin className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden />
+      <span className="truncate">{shortAddressLabel}</span>
+      <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" aria-hidden />
+    </button>
+  );
+
+  const resolvedHeaderContent = headerCenter !== undefined ? headerCenter : addressCapsule;
 
   return (
     <CustomerThemeRoot>
@@ -112,14 +116,6 @@ export default function CustomerLayout({ children, maxWidth = "responsive", head
           trailing: (
             <div className="flex items-center gap-1.5">
               <SyncStatusIndicator compact className="hidden sm:inline-flex" />
-              <Link
-                href={CUSTOMER_ROUTES.account}
-                className="h-10 w-10 flex items-center justify-center rounded-xl border border-slate-200/90 bg-white text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-blue-50/50 transition-all cursor-pointer shadow-2xs"
-                title="My Account"
-                aria-label="Go to My Account"
-              >
-                <User size={18} />
-              </Link>
               <CustomerButton
                 variant="ghost"
                 size="icon"
@@ -136,7 +132,29 @@ export default function CustomerLayout({ children, maxWidth = "responsive", head
       >
         {children}
         <CustomerExtraServiceApprovalHost />
+
+        {/* Global Address Picker Sheet */}
+        <AddressPickerSheet
+          open={isAddressPickerOpen}
+          onOpenChange={setAddressPickerOpen}
+          value={selectedAddress}
+          savedLocations={savedLocations}
+          customerId={customerId ?? undefined}
+          onSelect={(loc, meta) => selectAddress(loc, meta)}
+          onSaveNew={saveNewAddress}
+          onUpdate={updateAddress}
+          onDelete={deleteAddress}
+          onSetDefault={setDefaultAddress}
+        />
       </AppShell>
     </CustomerThemeRoot>
+  );
+}
+
+export default function CustomerLayout(props: CustomerLayoutProps) {
+  return (
+    <CustomerAddressProvider>
+      <CustomerLayoutInner {...props} />
+    </CustomerAddressProvider>
   );
 }

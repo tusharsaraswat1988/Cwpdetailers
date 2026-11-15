@@ -248,6 +248,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         icon: Package,
         perm: { resource: "services", action: "view" },
       },
+      {
+        id: "location-pricing",
+        href: "/admin/pricing/location-rules",
+        label: "Location Pricing Rules",
+        icon: Percent,
+        perm: { resource: "services", action: "view" },
+      },
     ],
   },
   {
@@ -287,6 +294,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         href: "/admin/branches",
         label: "Branches",
         icon: GitBranch,
+        perm: { resource: "branches", action: "view" },
+      },
+      {
+        id: "operational-zones",
+        href: "/admin/operations/zones",
+        label: "Operational Zones & Coverage",
+        icon: MapPin,
         perm: { resource: "branches", action: "view" },
       },
       {

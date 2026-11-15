@@ -71,6 +71,8 @@ import MarketingCMSPage from "@/pages/admin/MarketingCMSPage";
 import LoyaltyAdminPage from "@/pages/admin/LoyaltyAdminPage";
 import AutomationOpsCenter from "@/pages/admin/AutomationOpsCenter";
 import OperationsCalendarPage from "@/pages/admin/OperationsCalendarPage";
+import OperationalZonesPage from "@/pages/admin/OperationalZonesPage";
+import LocationPricingPage from "@/pages/admin/LocationPricingPage";
 
 import PrivacyPolicy from "@/pages/legal/PrivacyPolicy";
 import TermsAndConditions from "@/pages/legal/TermsAndConditions";
@@ -245,7 +247,11 @@ function Router() {
       <Route path="/admin/service-locations" component={() => <ProtectedRoute component={ServiceLocationsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/cities" component={() => <ProtectedRoute component={AdminCities} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/branches" component={() => <ProtectedRoute component={AdminBranches} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/operations/zones" component={() => <ProtectedRoute component={OperationalZonesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/zones" component={() => <Redirect to="/admin/operations/zones" />} />
       <Route path="/admin/societies" component={() => <ProtectedRoute component={SocietiesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "branches", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/pricing/location-rules" component={() => <ProtectedRoute component={LocationPricingPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "services", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/location-pricing" component={() => <Redirect to="/admin/pricing/location-rules" />} />
       <Route path="/admin/masters" component={() => <ProtectedRoute component={AdminMasterData} roles={["admin", "superadmin", "manager"]} permission={{ resource: "masters", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/services" component={() => <ProtectedRoute component={ProductsAndPlans} roles={["admin", "superadmin", "manager"]} permission={{ resource: "services", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/products" component={() => <RedirectPreserveSearch to="/admin/services" />} />

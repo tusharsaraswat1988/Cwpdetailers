@@ -239,6 +239,13 @@ vi.mock("@workspace/db", () => {
     platformBrandingTable: { _name: "platform_branding" },
     operatingHoursTable: { _name: "operating_hours" },
     operationalClosuresTable: { _name: "operational_closures" },
+    operationalZonesTable: { _name: "operational_zones" },
+    zoneCoverageRulesTable: { _name: "zone_coverage_rules" },
+    locationPricingRulesTable: { _name: "location_pricing_rules" },
+    pricingRuleAuditTable: { _name: "pricing_rule_audit_logs" },
+    geographicLocalitiesTable: { _name: "geographic_localities" },
+    locationAliasesTable: { _name: "location_aliases" },
+    branchZoneMappingsTable: { _name: "branch_zone_mappings" },
   };
 });
 

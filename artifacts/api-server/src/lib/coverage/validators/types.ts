@@ -22,6 +22,21 @@ export type PipelineState = {
   serviceCatalog?: CityServiceCatalog;
   correlation: TraceContext;
   requestSource: string;
+  locality?: { id: number; name: string; slug: string } | null;
+  society?: { id: number; name: string; code?: string; cityId?: number; branchId?: number | null } | null;
+  zone?: { id: number; name: string; code: string; branchId?: number | null } | null;
+  branch?: { id: number; name: string } | null;
+  propertyType?: string | null;
+  resolutionStatus?: "EXACT_MATCH" | "CANDIDATE_MATCH" | "AMBIGUOUS" | "UNRESOLVED";
+  pricingTier?: {
+    ruleId: number;
+    basePrice: number;
+    total: number;
+    gstRate: number;
+    pricingType: "inclusive" | "exclusive";
+    locationType: string;
+    source: string;
+  } | null;
 };
 
 export type PipelineHalt = {

@@ -6,6 +6,13 @@ import {
   parseComposedAddress,
 } from "@workspace/address-model";
 
+export type PropertyTypeOption =
+  | "GATED_SOCIETY"
+  | "APARTMENT"
+  | "INDIVIDUAL_HOME"
+  | "COMMERCIAL_PROPERTY"
+  | "OTHER";
+
 export type CustomerServiceAddressValue = {
   serviceLocationLabel: string;
   houseNumber: string;
@@ -19,6 +26,15 @@ export type CustomerServiceAddressValue = {
   placeId: string;
   formattedAddress?: string;
   googleComponents?: LocationValue["googleComponents"];
+  propertyType?: PropertyTypeOption;
+  societyId?: number | null;
+  societyName?: string;
+  tower?: string;
+  localityId?: number | null;
+  zoneId?: number | null;
+  branchId?: number | null;
+  serviceabilityStatus?: string;
+  resolutionStatus?: string;
 };
 
 export function emptyAddressValue(label = "Home"): CustomerServiceAddressValue {
@@ -35,6 +51,15 @@ export function emptyAddressValue(label = "Home"): CustomerServiceAddressValue {
     placeId: "",
     formattedAddress: "",
     googleComponents: undefined,
+    propertyType: "INDIVIDUAL_HOME",
+    societyId: null,
+    societyName: "",
+    tower: "",
+    localityId: null,
+    zoneId: null,
+    branchId: null,
+    serviceabilityStatus: undefined,
+    resolutionStatus: undefined,
   };
 }
 
@@ -53,6 +78,15 @@ export function savedLocationToForm(loc: SavedLocation): CustomerServiceAddressV
     placeId: loc.placeId ?? "",
     formattedAddress: loc.formattedAddress ?? "",
     googleComponents: loc.googleComponents ?? undefined,
+    propertyType: ((loc as any).propertyType as PropertyTypeOption) || "INDIVIDUAL_HOME",
+    societyId: (loc as any).societyId ?? null,
+    societyName: (loc as any).societyName || "",
+    tower: (loc as any).tower || "",
+    localityId: (loc as any).localityId ?? null,
+    zoneId: (loc as any).zoneId ?? null,
+    branchId: (loc as any).branchId ?? null,
+    serviceabilityStatus: (loc as any).serviceabilityStatus,
+    resolutionStatus: (loc as any).resolutionStatus,
   };
 }
 
@@ -72,6 +106,15 @@ export function locationToAddressForm(loc: LocationValue | null, label: string):
     placeId: loc.placeId ?? "",
     formattedAddress: loc.formattedAddress ?? "",
     googleComponents: loc.googleComponents,
+    propertyType: ((loc as any).propertyType as PropertyTypeOption) || "INDIVIDUAL_HOME",
+    societyId: (loc as any).societyId ?? null,
+    societyName: (loc as any).societyName || "",
+    tower: (loc as any).tower || "",
+    localityId: (loc as any).localityId ?? null,
+    zoneId: (loc as any).zoneId ?? null,
+    branchId: (loc as any).branchId ?? null,
+    serviceabilityStatus: (loc as any).serviceabilityStatus,
+    resolutionStatus: (loc as any).resolutionStatus,
   };
 }
 
@@ -97,6 +140,13 @@ export function addressFormToLocation(form: CustomerServiceAddressValue): Locati
     pincode: form.pincode,
     formattedAddress: form.formattedAddress || undefined,
     googleComponents: form.googleComponents,
+    propertyType: form.propertyType,
+    societyId: form.societyId ?? undefined,
+    localityId: form.localityId ?? undefined,
+    zoneId: form.zoneId ?? undefined,
+    branchId: form.branchId ?? undefined,
+    serviceabilityStatus: form.serviceabilityStatus,
+    resolutionStatus: form.resolutionStatus,
   };
 }
 
@@ -116,6 +166,13 @@ export function savedLocationToLocationValue(loc: SavedLocation): LocationValue 
     formattedAddress: loc.formattedAddress ?? undefined,
     savedLocationId: loc.id,
     googleComponents: loc.googleComponents ?? undefined,
+    propertyType: loc.propertyType ?? undefined,
+    societyId: loc.societyId ?? undefined,
+    localityId: loc.localityId ?? undefined,
+    zoneId: loc.zoneId ?? undefined,
+    branchId: loc.branchId ?? undefined,
+    serviceabilityStatus: loc.serviceabilityStatus ?? undefined,
+    resolutionStatus: loc.resolutionStatus ?? undefined,
   };
 }
 
@@ -142,6 +199,14 @@ export function formToWritePayload(
     placeId: form.placeId.trim() || undefined,
     formattedAddress: form.formattedAddress?.trim() || undefined,
     googleComponents: form.googleComponents,
+    propertyType: form.propertyType || "INDIVIDUAL_HOME",
+    societyId: form.societyId ?? null,
+    tower: form.tower?.trim() || null,
+    localityId: form.localityId ?? null,
+    zoneId: form.zoneId ?? null,
+    branchId: form.branchId ?? null,
+    serviceabilityStatus: form.serviceabilityStatus || null,
+    resolutionStatus: form.resolutionStatus || null,
     isDefault,
   };
 }

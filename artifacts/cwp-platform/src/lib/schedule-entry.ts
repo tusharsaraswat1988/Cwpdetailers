@@ -22,6 +22,10 @@ export type ScheduleEntryParams = {
   planId?: number;
   mode?: "one_time";
   from?: ScheduleEntrySource;
+  service?: string;
+  tier?: string;
+  tierPrice?: number;
+  segment?: string;
 };
 
 type VehicleRow = {
@@ -73,9 +77,15 @@ export function parseScheduleEntryParams(
     );
 
   const from = params.get("from");
-  const validFrom = from === "home" || from === "plans" || from === "assets" || from === "fab"
-    ? from
+  const validFrom = from === "home" || from === "plans" || from === "assets" || from === "fab" || from === "product_detail"
+    ? from as ScheduleEntrySource
     : undefined;
+
+  const service = params.get("service")?.trim() || undefined;
+  const tier = params.get("tier")?.trim() || undefined;
+  const tierPriceStr = params.get("tierPrice");
+  const tierPrice = tierPriceStr ? parseFloat(tierPriceStr) : undefined;
+  const segment = params.get("segment")?.trim() || undefined;
 
   return {
     vehicleId: parsePositiveInt(params.get("vehicleId")),
@@ -83,6 +93,10 @@ export function parseScheduleEntryParams(
     planId: parsePositiveInt(params.get("planId")),
     mode: params.get("mode") === "one_time" ? "one_time" : undefined,
     from: validFrom,
+    service,
+    tier,
+    tierPrice: Number.isFinite(tierPrice) ? tierPrice : undefined,
+    segment,
   };
 }
 
@@ -170,6 +184,36 @@ export function resolveAssetFromEntry(input: {
   singleAssetHint?: { assetId: number; kind: "vehicle" | "solar" } | null;
 }): ScheduleAsset | null {
   const { params, vehicles, solarSites, subscriptions, singleAssetHint } = input;
+  const isSolarService = Boolean(
+    params.service?.toLowerCase().includes("solar") ||
+    params.segment?.toLowerCase().includes("solar")
+  );
+  const isExplicitVehicleService = Boolean(
+    params.service && !isSolarService
+  );
+
+  if (isSolarService) {
+    if (params.solarSiteId) {
+      const s = solarSites.find(row => row.id === params.solarSiteId);
+      if (s) return solarAsset(s, vehicles, solarSites);
+    }
+    if (solarSites.length === 1) {
+      return solarAsset(solarSites[0], vehicles, solarSites);
+    }
+    return null;
+  }
+
+  if (isExplicitVehicleService) {
+    if (params.vehicleId) {
+      const v = vehicles.find(row => row.id === params.vehicleId);
+      if (v) return vehicleAsset(v, vehicles, solarSites);
+    }
+    if (vehicles.length === 1) {
+      return vehicleAsset(vehicles[0], vehicles, solarSites);
+    }
+    return null;
+  }
+
   const total = countAssets(vehicles, solarSites);
 
   if (params.vehicleId) {
@@ -211,7 +255,11 @@ export function resolvePlanFromEntry(input: {
   params: ScheduleEntryParams;
   subscriptions: RawSubscription[];
 }): { planMode: PlanMode | null; selectedPlan: CustomerPlan | null; redirectDailyCleaning: boolean } {
-  if (input.params.mode === "one_time") {
+  const isSolar = Boolean(
+    input.params.service?.toLowerCase().includes("solar") ||
+    input.params.segment?.toLowerCase().includes("solar")
+  );
+  if (isSolar || input.params.mode === "one_time") {
     return { planMode: "one_time", selectedPlan: null, redirectDailyCleaning: false };
   }
 

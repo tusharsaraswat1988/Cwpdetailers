@@ -72,6 +72,11 @@ export type CoverageRequest = {
   addressComponents?: GoogleAddressComponent[];
   postalCode?: string | null;
   pincode?: string | null;
+  propertyType?: string | null;
+  localityId?: number | null;
+  localityName?: string | null;
+  zoneId?: number | null;
+  branchId?: number | null;
 };
 
 /** @deprecated alias */
@@ -118,6 +123,25 @@ export type CoverageResult = {
   societyId?: number;
   societyName?: string;
   serviceId?: number;
+  branchId?: number;
+  branchName?: string;
+  zoneId?: number;
+  zoneName?: string;
+  zoneCode?: string;
+  localityId?: number;
+  localityName?: string;
+  propertyType?: string;
+  resolutionStatus?: "EXACT_MATCH" | "CANDIDATE_MATCH" | "AMBIGUOUS" | "UNRESOLVED";
+  pricingRuleId?: number;
+  applicablePricing?: {
+    ruleId: number;
+    basePrice: number;
+    total: number;
+    gstRate: number;
+    pricingType: "inclusive" | "exclusive";
+    locationType: string;
+    source: string;
+  };
   parsedAddress?: ParsedAddressComponents;
   cityResolutionSource?: "pin" | "google_city" | "city_slug" | "city_id" | "city_name";
   usedCityFallback?: boolean;

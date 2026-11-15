@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { CWP_PRODUCTS } from "@/lib/cwp-products-data";
@@ -20,22 +20,81 @@ import {
 import { Button } from "@/components/ui/button";
 import { CustomerPage } from "@/features/customer-ds";
 
+import serviceSolar from "@/assets/images/service-solar.png";
+import heroSolar from "@/assets/images/landing/hero-solar.jpg";
+import beforeAfterSolar from "@/assets/images/landing/before-after-solar.jpg";
+import serviceWash from "@/assets/images/service-wash.png";
+import heroVehicle from "@/assets/images/landing/hero-vehicle.jpg";
+import beforeAfterCar from "@/assets/images/landing/before-after-car.jpg";
+import serviceCeramic from "@/assets/images/service-ceramic.png";
+import serviceInterior from "@/assets/images/service-interior.png";
+
+const LOCAL_FALLBACKS: Record<string, { hero: string; gallery: string[] }> = {
+  "solar-cleaning": {
+    hero: heroSolar,
+    gallery: [heroSolar, serviceSolar, beforeAfterSolar],
+  },
+  "daily-car-cleaning": {
+    hero: heroVehicle,
+    gallery: [heroVehicle, beforeAfterCar, serviceWash],
+  },
+  "doorstep-car-wash": {
+    hero: serviceWash,
+    gallery: [serviceWash, heroVehicle, beforeAfterCar],
+  },
+  "interior-detailing": {
+    hero: serviceInterior,
+    gallery: [serviceInterior, heroVehicle, beforeAfterCar],
+  },
+  "ceramic-coating": {
+    hero: serviceCeramic,
+    gallery: [serviceCeramic, beforeAfterCar, heroVehicle],
+  },
+  "glass-repellent": {
+    hero: beforeAfterCar,
+    gallery: [beforeAfterCar, heroVehicle, serviceWash],
+  },
+};
+
 export default function CustomerProductDetailPage() {
   const [, params] = useRoute("/customer/services/:slug");
   const [, setLocation] = useLocation();
   const slug = params?.slug ?? "daily-car-cleaning";
   const product = CWP_PRODUCTS[slug] || CWP_PRODUCTS["daily-car-cleaning"];
 
-  const [activeImage, setActiveImage] = useState(product.heroImage);
+  const fallback = LOCAL_FALLBACKS[slug] || LOCAL_FALLBACKS["daily-car-cleaning"];
+  const initialHero = product.heroImage || fallback.hero;
+
+  const [activeImage, setActiveImage] = useState<string>(initialHero);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [selectedTier, setSelectedTier] = useState<number>(0);
 
-  const handleBookNow = () => {
+  const handleImgError = (imgSrc: string) => {
+    setFailedImages((prev) => ({ ...prev, [imgSrc]: true }));
+  };
+
+  const getSafeImage = (imgSrc: string, index?: number): string => {
+    if (failedImages[imgSrc]) {
+      if (index !== undefined && fallback.gallery[index]) {
+        return fallback.gallery[index];
+      }
+      return fallback.hero;
+    }
+    return imgSrc || fallback.hero;
+  };
+
+  const currentMainImage = getSafeImage(activeImage);
+
+  const handleBookNow = (tierOverride?: number) => {
     if (product.slug === "daily-car-cleaning") {
       setLocation(CUSTOMER_ROUTES.plans);
       return;
     }
-    // Navigate directly to schedule flow with context
-    setLocation(`${CUSTOMER_ROUTES.schedule}?service=${encodeURIComponent(product.slug)}&from=product_detail`);
+    const tierIdx = tierOverride ?? selectedTier;
+    const tier = product.pricingTiers[tierIdx];
+    const tierParam = tier ? `&tier=${encodeURIComponent(tier.category)}&tierPrice=${tier.price}` : "";
+    const segmentParam = product.serviceType ? `&segment=${encodeURIComponent(product.serviceType)}` : "";
+    setLocation(`${CUSTOMER_ROUTES.schedule}?service=${encodeURIComponent(product.slug)}${tierParam}${segmentParam}&from=product_detail`);
   };
 
   return (
@@ -89,8 +148,9 @@ export default function CustomerProductDetailPage() {
           <div className="space-y-2.5">
             <div className="w-full h-64 sm:h-80 md:h-96 rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative bg-slate-900">
               <img
-                src={activeImage}
+                src={currentMainImage}
                 alt={product.title}
+                onError={() => handleImgError(activeImage)}
                 className="w-full h-full object-cover transition-all duration-300"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
@@ -109,18 +169,27 @@ export default function CustomerProductDetailPage() {
             {/* Thumbnail selector */}
             {product.galleryImages.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {product.galleryImages.map((img, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setActiveImage(img)}
-                    className={`relative w-20 h-16 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
-                      activeImage === img ? "border-primary ring-2 ring-primary/20 scale-102" : "border-slate-200 opacity-75 hover:opacity-100"
-                    }`}
-                  >
-                    <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
-                  </button>
-                ))}
+                {product.galleryImages.map((img, idx) => {
+                  const safeThumb = getSafeImage(img, idx);
+                  const isCurrent = activeImage === img || (failedImages[activeImage] && currentMainImage === safeThumb);
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveImage(img)}
+                      className={`relative w-20 h-16 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                        isCurrent ? "border-primary ring-2 ring-primary/20 scale-102" : "border-slate-200 opacity-75 hover:opacity-100"
+                      }`}
+                    >
+                      <img
+                        src={safeThumb}
+                        alt={`Thumbnail ${idx + 1}`}
+                        onError={() => handleImgError(img)}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -172,7 +241,7 @@ export default function CustomerProductDetailPage() {
                   <Button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleBookNow();
+                      handleBookNow(idx);
                     }}
                     className={`w-full h-10 text-xs font-bold rounded-xl ${
                       selectedTier === idx ? "bg-primary text-white" : "bg-slate-100 hover:bg-slate-200 text-foreground"

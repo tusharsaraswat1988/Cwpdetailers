@@ -68,4 +68,7 @@ export * from "./service-exceptions";
 export * from "./refunds";
 export * from "./payment-webhook-events";
 export * from "./operational-calendar";
+export * from "./location-hierarchy";
+export * from "./operational-zones";
+export * from "./location-pricing";
 

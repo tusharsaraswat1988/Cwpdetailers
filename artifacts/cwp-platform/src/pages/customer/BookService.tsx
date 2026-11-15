@@ -129,6 +129,21 @@ export default function BookService() {
   const [callbackLeadId, setCallbackLeadId] = useState<number | null>(null);
   const [callbackPending, setCallbackPending] = useState(false);
 
+  const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const serviceParam = searchParams.get("service")?.toLowerCase();
+  const segmentParam = searchParams.get("segment")?.toLowerCase();
+  const tierPriceParam = useMemo(() => {
+    const raw = searchParams.get("tierPrice");
+    if (!raw) return null;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [searchParams]);
+
+  const isSolarIntent = Boolean(
+    serviceParam?.includes("solar") ||
+    segmentParam?.includes("solar")
+  );
+
   const { data: catalogServices, isLoading: servicesLoading, isError: servicesError, refetch: refetchServices } = useCatalogServices();
   const { data: vehicles } = useListVehicles({ customerId: customerId ?? 0 }, {
     query: { queryKey: getListVehiclesQueryKey({ customerId: customerId ?? 0 }), enabled: customerId != null },
@@ -223,9 +238,12 @@ export default function BookService() {
     if (pricingQuote && "amount" in (pricingQuote as object)) {
       return Number((pricingQuote as { amount?: number }).amount ?? 0);
     }
+    if (tierPriceParam) {
+      return tierPriceParam;
+    }
     if (selectedService) return Number(selectedService.basePrice);
     return null;
-  }, [coveredByPlan, solarNeedsSiteVisit, catalogQuote, pricingQuote, selectedService]);
+  }, [coveredByPlan, solarNeedsSiteVisit, catalogQuote, pricingQuote, tierPriceParam, selectedService]);
 
   const { data: serverDates } = useQuery({
     queryKey: ["calendar-days", bookingLocation?.cityId, selectedVehicle?.cityId, asset?.kind],
@@ -366,25 +384,23 @@ export default function BookService() {
 
   // Auto-select single service or match service query param from product detail page
   useEffect(() => {
-    if (step !== "service" || serviceId) return;
+    if (serviceId) return;
 
-    const queryParams = new URLSearchParams(window.location.search);
-    const serviceParam = queryParams.get("service")?.toLowerCase();
-
-    if (serviceParam && availableServices.length > 0) {
-      const byId = availableServices.find(s => String(s.id) === serviceParam);
+    if (serviceParam && catalogServices && (catalogServices as CatalogService[]).length > 0) {
+      const allServices = catalogServices as CatalogService[];
+      const byId = allServices.find(s => String(s.id) === serviceParam);
       if (byId) {
         setServiceId(String(byId.id));
         return;
       }
-      const matched = availableServices.find(s => {
+      const matched = allServices.find(s => {
         const name = s.name.toLowerCase();
         const cat = (s.category || "").toLowerCase();
-        if (serviceParam.includes("wash") && (name.includes("wash") || cat.includes("wash"))) return true;
-        if (serviceParam.includes("interior") && (name.includes("interior") || cat.includes("interior"))) return true;
-        if (serviceParam.includes("ceramic") && (name.includes("ceramic") || cat.includes("ceramic") || name.includes("coating"))) return true;
-        if (serviceParam.includes("solar") && (name.includes("solar") || cat.includes("solar"))) return true;
-        if (serviceParam.includes("glass") && (name.includes("glass") || name.includes("rain") || cat.includes("glass"))) return true;
+        if (serviceParam.includes("solar") && (cat.includes("solar") || name.includes("solar"))) return true;
+        if (serviceParam.includes("wash") && (cat.includes("wash") || name.includes("wash"))) return true;
+        if (serviceParam.includes("ceramic") && (cat.includes("ceramic") || name.includes("ceramic") || name.includes("coating"))) return true;
+        if (serviceParam.includes("interior") && (cat.includes("interior") || name.includes("interior"))) return true;
+        if (serviceParam.includes("glass") && (cat.includes("glass") || name.includes("glass") || name.includes("rain"))) return true;
         return name.includes(serviceParam) || cat.includes(serviceParam);
       });
       if (matched) {
@@ -393,13 +409,15 @@ export default function BookService() {
       }
     }
 
-    if (availableServices.length === 1) {
-      setServiceId(String(availableServices[0].id));
-    } else if (asset?.kind === "solar" && availableServices.length > 0 && !serviceId) {
-      const solarSvc = availableServices.find(s => s.category === "solar_cleaning") ?? availableServices[0];
-      setServiceId(String(solarSvc.id));
+    if (step === "service") {
+      if (availableServices.length === 1) {
+        setServiceId(String(availableServices[0].id));
+      } else if (asset?.kind === "solar" && availableServices.length > 0) {
+        const solarSvc = availableServices.find(s => s.category === "solar_cleaning") ?? availableServices[0];
+        setServiceId(String(solarSvc.id));
+      }
     }
-  }, [step, availableServices, serviceId, asset]);
+  }, [step, availableServices, serviceId, asset, serviceParam, catalogServices]);
 
   // Auto date/time
   useEffect(() => {
@@ -686,6 +704,8 @@ export default function BookService() {
             vehicles={vehicleRows}
             solarSites={solarRows}
             selected={asset}
+            targetKind={isSolarIntent ? "solar" : (serviceParam ? "vehicle" : undefined)}
+            onAddAsset={() => setQuickAddOpen(true)}
             onSelect={handleAssetSelect}
           />
         )}
@@ -816,12 +836,28 @@ export default function BookService() {
         open={quickAddOpen}
         onOpenChange={setQuickAddOpen}
         customerId={customerId}
-        kind={asset?.kind === "solar" ? "solar" : "vehicle"}
+        kind={isSolarIntent ? "solar" : (asset?.kind === "solar" ? "solar" : "vehicle")}
         onCreated={(id) => {
-          if (asset?.kind === "solar") {
-            setAsset(a => a ? { ...a, id } : a);
+          qc.invalidateQueries({ queryKey: getListSolarSitesQueryKey({ customerId: customerId ?? 0 }) });
+          qc.invalidateQueries({ queryKey: getListVehiclesQueryKey({ customerId: customerId ?? 0 }) });
+          if (isSolarIntent || asset?.kind === "solar") {
+            const newSolarAsset: ScheduleAsset = {
+              kind: "solar",
+              id,
+              name: "Rooftop Solar Site",
+              subtitle: "Solar Site",
+              location: null,
+            };
+            setAsset(newSolarAsset);
           } else {
-            setAsset(a => a ? { ...a, id, kind: "vehicle" } : a);
+            const newVehicleAsset: ScheduleAsset = {
+              kind: "vehicle",
+              id,
+              name: "Vehicle",
+              subtitle: "",
+              location: null,
+            };
+            setAsset(newVehicleAsset);
           }
         }}
       />

@@ -62,6 +62,9 @@ import { loyaltyRouter } from "./loyalty";
 import { automationRouter } from "./automation";
 import uxExperimentsRouter from "./ux-experiments";
 import operationalCalendarRouter from "./operational-calendar";
+import zonesRouter from "./zones";
+import locationPricingRouter from "./location-pricing";
+import locationResolutionRouter from "./location-resolution";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -317,6 +320,9 @@ router.use(supportRouter);
 router.use(qualityRouter);
 router.use(citiesRouter);
 router.use(operationalCalendarRouter);
+router.use(locationResolutionRouter);
+router.use(zonesRouter);
+router.use(locationPricingRouter);
 router.use(guardMasterDataRoutes(), masterDataRouter);
 router.use(guardCatalogRoutes(), serviceCatalogRouter);
 

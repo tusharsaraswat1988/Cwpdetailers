@@ -38,6 +38,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCustomerAddress } from "@/context/CustomerAddressContext";
+import { parseComposedAddress, composeSavedAddress } from "@workspace/address-model";
+import { savedLocationToLocationValue } from "@/lib/selected-address";
 
 const LABEL_PRESETS = ["Home", "Office", "Apartment", "Villa", "Farmhouse", "Other"];
 
@@ -48,6 +51,7 @@ interface Props {
 export function SavedAddressesSection({ customerId }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { selectAddress, selectedAddress } = useCustomerAddress();
 
   const { data: locations = [], isLoading } = useSavedLocations(customerId ?? undefined);
   const createMutation = useCreateSavedLocation();
@@ -61,6 +65,10 @@ export function SavedAddressesSection({ customerId }: Props) {
 
   // Form State
   const [label, setLabel] = useState("Home");
+  const [houseNumber, setHouseNumber] = useState("");
+  const [buildingName, setBuildingName] = useState("");
+  const [area, setArea] = useState("");
+  const [landmark, setLandmark] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [pincode, setPincode] = useState("");
@@ -73,6 +81,10 @@ export function SavedAddressesSection({ customerId }: Props) {
   const resetForm = () => {
     setEditingLoc(null);
     setLabel("Home");
+    setHouseNumber("");
+    setBuildingName("");
+    setArea("");
+    setLandmark("");
     setAddress("");
     setCity("");
     setPincode("");
@@ -91,9 +103,14 @@ export function SavedAddressesSection({ customerId }: Props) {
   const openEdit = (loc: SavedLocation) => {
     setEditingLoc(loc);
     setLabel(loc.label);
+    const parsed = parseComposedAddress(loc.address);
+    setHouseNumber(loc.houseNumber ?? parsed.houseNumber ?? "");
+    setBuildingName(loc.buildingName ?? parsed.buildingName ?? "");
+    setArea(loc.area ?? parsed.area ?? "");
+    setLandmark(loc.landmark ?? parsed.landmark ?? "");
     setAddress(loc.address);
-    setCity(loc.cityName ?? loc.city ?? "");
-    setPincode(loc.pincode ?? "");
+    setCity(loc.cityName ?? loc.city ?? parsed.city ?? "");
+    setPincode(loc.pincode ?? parsed.pincode ?? "");
     setLat(loc.latitude != null ? String(loc.latitude) : "");
     setLng(loc.longitude != null ? String(loc.longitude) : "");
     setIsDefault(Boolean(loc.isDefault));
@@ -156,10 +173,25 @@ export function SavedAddressesSection({ customerId }: Props) {
 
   const handleSave = async () => {
     if (!customerId) return;
-    if (!address.trim()) {
-      toast({ title: "Please enter an address", variant: "destructive" });
+    const finalHouse = houseNumber.trim() || address.split(",")[0]?.trim() || "";
+    const finalArea = area.trim() || address.trim();
+    if (!finalHouse && !address.trim()) {
+      toast({ title: "Please enter your flat or house number", variant: "destructive" });
       return;
     }
+    if (!city.trim()) {
+      toast({ title: "Please enter a city", variant: "destructive" });
+      return;
+    }
+
+    const composed = composeSavedAddress({
+      houseNumber: finalHouse,
+      buildingName: buildingName.trim(),
+      area: finalArea,
+      landmark: landmark.trim(),
+      city: city.trim(),
+      pincode: pincode.trim(),
+    });
 
     const parsedLat = lat ? parseFloat(lat) : null;
     const parsedLng = lng ? parseFloat(lng) : null;
@@ -167,7 +199,11 @@ export function SavedAddressesSection({ customerId }: Props) {
     const payload: SavedLocationWrite = {
       customerId,
       label: label.trim() || "Home",
-      address: address.trim(),
+      houseNumber: finalHouse || undefined,
+      buildingName: buildingName.trim() || undefined,
+      area: finalArea || undefined,
+      landmark: landmark.trim() || undefined,
+      address: composed || address.trim(),
       cityName: city.trim() || undefined,
       pincode: pincode.trim() || undefined,
       latitude: parsedLat != null && Number.isFinite(parsedLat) ? parsedLat : null,
@@ -177,14 +213,20 @@ export function SavedAddressesSection({ customerId }: Props) {
 
     try {
       if (editingLoc) {
-        await updateMutation.mutateAsync({
+        const updated = await updateMutation.mutateAsync({
           id: editingLoc.id,
           ...payload,
         });
         toast({ title: "Address updated successfully" });
+        if (selectedAddress?.savedLocationId === editingLoc.id || selectedAddress?.address === editingLoc.address) {
+          selectAddress(savedLocationToLocationValue(updated), { assetLabel: updated.label });
+        }
       } else {
-        await createMutation.mutateAsync(payload);
+        const created = await createMutation.mutateAsync(payload);
         toast({ title: "Address saved successfully" });
+        if (locations.length === 0 || isDefault) {
+          selectAddress(savedLocationToLocationValue(created), { assetLabel: created.label });
+        }
       }
       setModalOpen(false);
       resetForm();
@@ -391,36 +433,73 @@ export function SavedAddressesSection({ customerId }: Props) {
               </div>
             </div>
 
-            {/* Address Text */}
-            <div>
-              <Label className="text-xs font-semibold">Address Details *</Label>
-              <Input
-                className="mt-1"
-                placeholder="House / Flat No., Society / Landmark, Road"
-                value={address}
-                onChange={e => setAddress(e.target.value)}
-                data-testid="input-saved-address"
-              />
+            {/* Structured Address Fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Flat / House No. *</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="e.g. Flat 402, House 12B"
+                  value={houseNumber}
+                  onChange={e => setHouseNumber(e.target.value)}
+                  data-testid="input-saved-house"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Building / Society</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="e.g. Tower B, Paras Tierea"
+                  value={buildingName}
+                  onChange={e => setBuildingName(e.target.value)}
+                  data-testid="input-saved-building"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Area / Locality *</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="e.g. Sector 137, Sigra"
+                  value={area}
+                  onChange={e => setArea(e.target.value)}
+                  data-testid="input-saved-area"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Landmark</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="e.g. Near Metro Station"
+                  value={landmark}
+                  onChange={e => setLandmark(e.target.value)}
+                  data-testid="input-saved-landmark"
+                />
+              </div>
             </div>
 
             {/* City & Pincode */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs font-semibold">City</Label>
+                <Label className="text-xs font-semibold">City *</Label>
                 <Input
                   className="mt-1"
-                  placeholder="e.g. Varanasi"
+                  placeholder="e.g. Noida / Varanasi"
                   value={city}
                   onChange={e => setCity(e.target.value)}
+                  data-testid="input-saved-city"
                 />
               </div>
               <div>
                 <Label className="text-xs font-semibold">Pincode</Label>
                 <Input
                   className="mt-1"
-                  placeholder="e.g. 221005"
+                  placeholder="e.g. 201305"
                   value={pincode}
                   onChange={e => setPincode(e.target.value)}
+                  data-testid="input-saved-pincode"
                 />
               </div>
             </div>

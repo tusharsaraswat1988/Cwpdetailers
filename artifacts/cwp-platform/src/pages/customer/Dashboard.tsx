@@ -30,7 +30,6 @@ import { buildHomeDashboard, pickPrimaryPlan } from "@/lib/home-dashboard";
 import { activePlans, type RawSubscription } from "@/lib/customer-plans";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { useBranding } from "@/lib/branding";
-import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
 import { guessCityFromAddress } from "@workspace/address-model";
 
 import { HomeGreeting } from "@/components/home/HomeGreeting";
@@ -72,7 +71,6 @@ function querySettled(q: { isFetched: boolean; isError: boolean }): boolean {
 export default function CustomerDashboard() {
   const branding = useBranding();
   const { customerId, isLoading: scopeLoading, missingCustomerLink } = useAccountScope();
-  const [addressPickerOpen, setAddressPickerOpen] = useState(false);
 
   const summaryQuery = useGetCustomerSummary(customerId ?? 0, {
     query: {
@@ -218,32 +216,9 @@ export default function CustomerDashboard() {
     return currentCityName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
   }, [currentCityName]);
 
-  const shortAddressLabel = useMemo(() => {
-    if (selected?.assetLabel) return selected.assetLabel;
-    if (selected?.address) {
-      const parts = selected.address.split(",");
-      return parts[0].trim() || currentCityName;
-    }
-    return currentCityName || "Select Location";
-  }, [selected?.assetLabel, selected?.address, currentCityName]);
-
-  const headerAddressPill = (
-    <button
-      type="button"
-      onClick={() => setAddressPickerOpen(true)}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 active:bg-slate-200 text-foreground text-xs font-semibold max-w-[210px] sm:max-w-xs transition-colors cursor-pointer border border-slate-200/80 truncate shadow-2xs"
-      aria-label={`Current service location: ${shortAddressLabel}. Tap to change`}
-      data-testid="home-header-address-pill"
-    >
-      <MapPin size={13} className="text-primary shrink-0" />
-      <span className="truncate">{shortAddressLabel}</span>
-      <ChevronDown size={13} className="text-muted-foreground shrink-0" />
-    </button>
-  );
-
   if (scopeLoading) {
     return (
-      <CustomerLayout headerCenter={headerAddressPill}>
+      <CustomerLayout>
         <CustomerPage>
           <CustomerSkeleton className="h-48 w-full rounded-2xl" />
         </CustomerPage>
@@ -253,7 +228,7 @@ export default function CustomerDashboard() {
 
   if (missingCustomerLink || customerId == null) {
     return (
-      <CustomerLayout headerCenter={headerAddressPill}>
+      <CustomerLayout>
         <CustomerPage>
           <CustomerEmptyState
             title="Account not linked"
@@ -267,7 +242,7 @@ export default function CustomerDashboard() {
   }
 
   return (
-    <CustomerLayout headerCenter={headerAddressPill}>
+    <CustomerLayout>
       <CustomerPage className="space-y-4">
         {loading || !dashboard ? (
           <div className="space-y-4">
@@ -368,23 +343,6 @@ export default function CustomerDashboard() {
           </div>
         )}
       </CustomerPage>
-
-      {/* Global Address Picker Sheet for Quick Action */}
-      <AddressPickerSheet
-        open={addressPickerOpen}
-        onOpenChange={setAddressPickerOpen}
-        value={selected}
-        savedLocations={savedQuery.data}
-        customerId={customerId}
-        onSelect={(loc, meta) => {
-          selectLocation(loc, meta ? { assetLabel: meta.assetLabel } : undefined);
-          setAddressPickerOpen(false);
-        }}
-        onSaveNew={data => createSavedLocation.mutateAsync(data)}
-        onUpdate={(id, data) => updateSavedLocation.mutateAsync({ id, ...data })}
-        onDelete={id => deleteSavedLocation.mutateAsync({ id, customerId })}
-        onSetDefault={id => setDefaultSavedLocation.mutateAsync({ id, customerId })}
-      />
 
       {/* Cashfree Payment Review Dialog */}
       <CustomerPaymentReviewDialog

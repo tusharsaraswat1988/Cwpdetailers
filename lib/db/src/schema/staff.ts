@@ -28,6 +28,7 @@ export const staffTable = pgTable("staff", {
   role: staffRoleEnum("role").notNull(),
   staffCategory: staffCategoryEnum("staff_category").notNull().default("cleaning_staff"),
   branchId: integer("branch_id").notNull(),
+  assignedZoneId: integer("assigned_zone_id"),
   cityId: integer("city_id"),
   city: text("city"),
   reportingManagerId: integer("reporting_manager_id"),

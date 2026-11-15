@@ -1,3 +1,12 @@
+import serviceSolar from "@/assets/images/service-solar.png";
+import heroSolar from "@/assets/images/landing/hero-solar.jpg";
+import beforeAfterSolar from "@/assets/images/landing/before-after-solar.jpg";
+import serviceWash from "@/assets/images/service-wash.png";
+import heroVehicle from "@/assets/images/landing/hero-vehicle.jpg";
+import beforeAfterCar from "@/assets/images/landing/before-after-car.jpg";
+import serviceCeramic from "@/assets/images/service-ceramic.png";
+import serviceInterior from "@/assets/images/service-interior.png";
+
 export interface ProductPricingTier {
   category: string;
   price: number;
@@ -46,11 +55,11 @@ export const CWP_PRODUCTS: Record<string, CwpProduct> = {
     shortDescription: "Morning doorstep exterior microfiber wipe, dust removal & monthly full washes.",
     category: "Car Care",
     badge: "Most Popular Subscription",
-    heroImage: "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=1200&q=80",
+    heroImage: heroVehicle,
     galleryImages: [
-      "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=800&q=80",
+      heroVehicle,
+      beforeAfterCar,
+      serviceWash,
     ],
     startingPrice: 1199,
     priceUnit: "/ month",
@@ -148,11 +157,11 @@ export const CWP_PRODUCTS: Record<string, CwpProduct> = {
     shortDescription: "High-pressure snow foam wash, underbody rinse, interior vacuum & tyre dressing.",
     category: "Car Care",
     badge: "Fast & Convenient",
-    heroImage: "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=1200&q=80",
+    heroImage: serviceWash,
     galleryImages: [
-      "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=800&q=80",
+      serviceWash,
+      heroVehicle,
+      beforeAfterCar,
     ],
     startingPrice: 499,
     priceUnit: "per wash",
@@ -242,11 +251,11 @@ export const CWP_PRODUCTS: Record<string, CwpProduct> = {
     shortDescription: "Antibacterial steam extraction, upholstery shampoo & full cabin sanitization.",
     category: "Detailing",
     badge: "Deep Restoration",
-    heroImage: "https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=1200&q=80",
+    heroImage: serviceInterior,
     galleryImages: [
-      "https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
+      serviceInterior,
+      heroVehicle,
+      beforeAfterCar,
     ],
     startingPrice: 1499,
     priceUnit: "per package",
@@ -335,11 +344,11 @@ export const CWP_PRODUCTS: Record<string, CwpProduct> = {
     shortDescription: "Multi-year hydrophobic glass shield, swirl removal & showroom mirror shine.",
     category: "Detailing",
     badge: "Ultimate Protection",
-    heroImage: "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=1200&q=80",
+    heroImage: serviceCeramic,
     galleryImages: [
-      "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=800&q=80",
+      serviceCeramic,
+      beforeAfterCar,
+      heroVehicle,
     ],
     startingPrice: 4999,
     priceUnit: "package",
@@ -429,11 +438,11 @@ export const CWP_PRODUCTS: Record<string, CwpProduct> = {
     shortDescription: "Efficiency restoration, soft-bristle de-dusting & generation output boost.",
     category: "Solar Care",
     badge: "Boost Generation Up to 25%",
-    heroImage: "https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=1200&q=80",
+    heroImage: heroSolar,
     galleryImages: [
-      "https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1508873696983-2df570464756?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
+      heroSolar,
+      serviceSolar,
+      beforeAfterSolar,
     ],
     startingPrice: 399,
     priceUnit: "per visit / AMC",
@@ -522,11 +531,11 @@ export const CWP_PRODUCTS: Record<string, CwpProduct> = {
     shortDescription: "Hydrophobic water beading, anti-glare night treatment & crystal clear vision.",
     category: "Detailing",
     badge: "Monsoon Essential",
-    heroImage: "https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?auto=format&fit=crop&w=1200&q=80",
+    heroImage: beforeAfterCar,
     galleryImages: [
-      "https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
+      beforeAfterCar,
+      heroVehicle,
+      serviceWash,
     ],
     startingPrice: 799,
     priceUnit: "treatment",

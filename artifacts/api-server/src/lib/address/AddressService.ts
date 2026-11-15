@@ -160,6 +160,14 @@ export class AddressService {
       source: input.source ?? prepared.source,
       confidenceScore: validation.locationConfidenceScore ?? null,
       locationContextSnapshot: validation.locationContext ?? null,
+      propertyType: prepared.merged.propertyType ?? "OTHER",
+      localityId: prepared.merged.localityId ?? null,
+      societyId: prepared.merged.societyId ?? null,
+      towerId: prepared.merged.towerId ?? null,
+      zoneId: prepared.merged.zoneId ?? null,
+      branchId: prepared.merged.branchId ?? null,
+      serviceabilityStatus: validation.coverageStatus ?? prepared.merged.serviceabilityStatus ?? null,
+      resolutionStatus: prepared.merged.resolutionStatus ?? null,
       isCurrent: true,
     });
 
@@ -274,6 +282,14 @@ export class AddressService {
       source: input.source ?? prepared.source,
       confidenceScore: locationConfidence,
       locationContextSnapshot,
+      propertyType: prepared.merged.propertyType ?? existing.address.propertyType ?? "OTHER",
+      localityId: prepared.merged.localityId ?? existing.address.localityId ?? null,
+      societyId: prepared.merged.societyId ?? existing.address.societyId ?? null,
+      towerId: prepared.merged.towerId ?? existing.address.towerId ?? null,
+      zoneId: prepared.merged.zoneId ?? existing.address.zoneId ?? null,
+      branchId: prepared.merged.branchId ?? existing.address.branchId ?? null,
+      serviceabilityStatus: validation.coverageStatus ?? prepared.merged.serviceabilityStatus ?? existing.address.serviceabilityStatus ?? null,
+      resolutionStatus: prepared.merged.resolutionStatus ?? existing.address.resolutionStatus ?? null,
       isCurrent: true,
     });
 

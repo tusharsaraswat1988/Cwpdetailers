@@ -60,6 +60,14 @@ function bodyToCreateInput(body: Record<string, unknown>, customerId: number) {
     allowDuplicate: body.allowDuplicate as boolean | undefined,
     validateCoverage: body.validateCoverage as boolean | undefined,
     serviceId: body.serviceId != null ? Number(body.serviceId) : undefined,
+    propertyType: body.propertyType as string | undefined,
+    localityId: body.localityId != null ? Number(body.localityId) : undefined,
+    societyId: body.societyId != null ? Number(body.societyId) : undefined,
+    towerId: body.towerId != null ? Number(body.towerId) : undefined,
+    zoneId: body.zoneId != null ? Number(body.zoneId) : undefined,
+    branchId: body.branchId != null ? Number(body.branchId) : undefined,
+    serviceabilityStatus: body.serviceabilityStatus as string | undefined,
+    resolutionStatus: body.resolutionStatus as string | undefined,
   };
 }
 

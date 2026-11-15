@@ -46,6 +46,12 @@ export type LocationContext = {
   country?: string | null;
   branch?: { id: number; name?: string } | null;
   franchise?: { id: number; name?: string } | null;
+  zone?: { id: number; name: string; code: string } | null;
+  locality?: { id: number; name: string; slug: string } | null;
+  society?: { id: number; name: string; code?: string } | null;
+  propertyType?: string | null;
+  resolutionStatus?: "EXACT_MATCH" | "CANDIDATE_MATCH" | "AMBIGUOUS" | "UNRESOLVED" | null;
+  pricingTier?: { ruleId: number; basePrice: number; total: number; source: string } | null;
   coverageStatus: CoverageStatusLabel;
   confidenceScore: number;
   resolvedBy: LocationResolvedBy;
@@ -69,6 +75,14 @@ export type BuildLocationContextInput = {
   stateName?: string | null;
   stateCode?: string | null;
   country?: string | null;
+  branch?: { id: number; name?: string } | null;
+  franchise?: { id: number; name?: string } | null;
+  zone?: { id: number; name: string; code: string } | null;
+  locality?: { id: number; name: string; slug: string } | null;
+  society?: { id: number; name: string; code?: string } | null;
+  propertyType?: string | null;
+  resolutionStatus?: "EXACT_MATCH" | "CANDIDATE_MATCH" | "AMBIGUOUS" | "UNRESOLVED" | null;
+  pricingTier?: { ruleId: number; basePrice: number; total: number; source: string } | null;
   coverageStatus: CoverageStatusLabel;
   confidenceScore: number;
   resolvedBy: LocationResolvedBy;
@@ -106,8 +120,14 @@ export function buildLocationContext(input: BuildLocationContextInput): Location
         ? { name: input.parsed.state }
         : null,
     country: input.country ?? input.parsed.country ?? null,
-    branch: null,
-    franchise: null,
+    branch: input.branch ?? null,
+    franchise: input.franchise ?? null,
+    zone: input.zone ?? null,
+    locality: input.locality ?? null,
+    society: input.society ?? null,
+    propertyType: input.propertyType ?? null,
+    resolutionStatus: input.resolutionStatus ?? null,
+    pricingTier: input.pricingTier ?? null,
     coverageStatus: input.coverageStatus,
     confidenceScore: input.confidenceScore,
     resolvedBy: input.resolvedBy,

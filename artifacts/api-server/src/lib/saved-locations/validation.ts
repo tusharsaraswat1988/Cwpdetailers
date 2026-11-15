@@ -51,15 +51,23 @@ export function composeFromParts(input: SavedLocationWriteInput, fallbackAddress
 }
 
 export function normalizeWrite(input: SavedLocationWriteInput): SavedLocationWriteInput {
+  const parsed = input.address ? parseComposedAddress(input.address) : null;
+  const houseNumber = trimOrNull(input.houseNumber) || (parsed?.houseNumber?.trim() ? parsed.houseNumber.trim() : null) || (input.address ? input.address.split(",")[0]?.trim() || null : null);
+  const buildingName = trimOrNull(input.buildingName) || (parsed?.buildingName?.trim() ? parsed.buildingName.trim() : null);
+  const area = trimOrNull(input.area) || (parsed?.area?.trim() ? parsed.area.trim() : null);
+  const landmark = trimOrNull(input.landmark) || (parsed?.landmark?.trim() ? parsed.landmark.trim() : null);
+  const cityName = trimOrNull(input.cityName) || (parsed?.city?.trim() ? parsed.city.trim() : null);
+  const pincode = trimOrNull(input.pincode) || (parsed?.pincode?.trim() ? parsed.pincode.trim() : null);
+
   return {
     ...input,
     label: input.label.trim(),
-    houseNumber: trimOrNull(input.houseNumber),
-    buildingName: trimOrNull(input.buildingName),
-    area: trimOrNull(input.area),
-    landmark: trimOrNull(input.landmark),
-    cityName: trimOrNull(input.cityName),
-    pincode: trimOrNull(input.pincode),
+    houseNumber,
+    buildingName,
+    area,
+    landmark,
+    cityName,
+    pincode,
     placeId: trimOrNull(input.placeId),
     formattedAddress: trimOrNull(input.formattedAddress),
     latitude: finiteOrNull(input.latitude),

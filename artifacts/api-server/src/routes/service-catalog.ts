@@ -847,6 +847,7 @@ router.get("/catalog/pricing/quote", async (req, res) => {
   const {
     serviceId, packageId, vehicleModelId, vehicleId, seatCategoryId,
     panelCount, cityId, citySlug, term, manualAmount,
+    branchId, zoneId, societyId, locationType,
   } = req.query as Record<string, string>;
   if (!serviceId && !packageId) {
     return res.status(400).json({ error: "serviceId or packageId is required" });
@@ -882,6 +883,10 @@ router.get("/catalog/pricing/quote", async (req, res) => {
     term: term as SolarPricingTerm | undefined,
     cityId: cityId ? parseInt(cityId) : undefined,
     citySlug,
+    branchId: branchId ? parseInt(branchId) : undefined,
+    zoneId: zoneId ? parseInt(zoneId) : undefined,
+    societyId: societyId ? parseInt(societyId) : undefined,
+    locationType: locationType ?? undefined,
     manualAmount: manualAmount != null && manualAmount !== "" ? parseFloat(manualAmount) : undefined,
   });
   if (!pricing) return res.status(404).json({ error: "Pricing not found" });

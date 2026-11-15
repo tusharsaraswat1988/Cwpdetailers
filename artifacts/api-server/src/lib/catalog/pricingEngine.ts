@@ -348,6 +348,9 @@ export async function resolveCatalogPricing(opts: {
   cityId?: number | null;
   citySlug?: string;
   branchId?: number | null;
+  zoneId?: number | null;
+  societyId?: number | null;
+  locationType?: string | null;
   /** Advisor override after site visit — skips slab math when set. */
   manualAmount?: number;
 }): Promise<CatalogPricingResult | null> {
@@ -533,6 +536,52 @@ export async function resolveCatalogPricing(opts: {
 
   let baseAmount: number | null = null;
   let source: CatalogPricingResult["source"] = "base_price";
+
+  // 0. Check Location-Based Differential Pricing Rule (5-tier deterministic priority)
+  if (cityId && opts.serviceId) {
+    try {
+      const { locationPricingEngine } = await import("../location-intelligence/pricing/LocationPricingEngine");
+      const locPricing = await locationPricingEngine.resolvePrice({
+        serviceId: opts.serviceId,
+        cityId,
+        branchId,
+        zoneId: opts.zoneId ?? null,
+        societyId: opts.societyId ?? null,
+        locationType: opts.locationType ?? null,
+      });
+
+      if (locPricing && locPricing.ruleId > 0) {
+        return {
+          status: "base",
+          amount: locPricing.total,
+          source: (locPricing.priorityName === "society_override"
+            ? "society_override"
+            : locPricing.priorityName === "zone_location_type"
+              ? "zone_override"
+              : locPricing.priorityName === "branch_location_type" || locPricing.priorityName === "branch_default"
+                ? "branch_override"
+                : "city_override") as any,
+          durationMinutes: svc.durationMinutes ?? undefined,
+          gstRate: locPricing.gstRate,
+          pricingType: locPricing.pricingType,
+          breakdown: {
+            baseAmount: locPricing.basePrice,
+            gstRate: locPricing.gstRate,
+            pricingType: locPricing.pricingType,
+            subtotal: locPricing.subtotal,
+            gst: locPricing.gst,
+            total: locPricing.total,
+            displayPrice: locPricing.displayPrice,
+          },
+          cityId,
+          branchId,
+          message: `Location-based differential price (${locPricing.priorityName})`,
+        };
+      }
+    } catch {
+      // Fall through to standard branch/city/base override hierarchy
+    }
+  }
 
   // 1. Check branch-specific price override
   if (branchId) {

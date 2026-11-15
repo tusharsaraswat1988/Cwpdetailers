@@ -46,6 +46,14 @@ export type CreateAddressInput = {
   /** Validate via Location Intelligence Platform */
   validateCoverage?: boolean;
   serviceId?: number | null;
+  propertyType?: string | null;
+  localityId?: number | null;
+  societyId?: number | null;
+  towerId?: number | null;
+  zoneId?: number | null;
+  branchId?: number | null;
+  serviceabilityStatus?: string | null;
+  resolutionStatus?: string | null;
 };
 
 export type UpdateAddressInput = Partial<Omit<CreateAddressInput, "customerId" | "allowDuplicate">> & {

@@ -1,6 +1,6 @@
 import {
 
-  pgTable, serial, integer, numeric, date, timestamp, pgEnum, text, boolean, doublePrecision, json, uniqueIndex, index,
+  pgTable, serial, integer, numeric, date, timestamp, pgEnum, text, boolean, doublePrecision, json, jsonb, uniqueIndex, index,
 
 } from "drizzle-orm/pg-core";
 
@@ -205,6 +205,14 @@ export const dcmsSubscriptionsTable = pgTable("dcms_subscriptions", {
   franchiseeId: integer("franchisee_id"),
 
   branchId: integer("branch_id"),
+
+  pricingRuleId: integer("pricing_rule_id"),
+
+  priceSnapshot: jsonb("price_snapshot"),
+
+  zoneId: integer("zone_id"),
+
+  propertyType: text("property_type"),
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
 
