@@ -15,6 +15,7 @@ import {
   type JobListFilter,
 } from "../lib/job-orchestration/jobOrchestrationService";
 import type { JobOpsStatus, JobPriority } from "@workspace/db";
+import { resolveEffectiveBranchId, BranchAccessDeniedError } from "../middlewares/tenantScope";
 
 const router = Router();
 
@@ -33,6 +34,7 @@ function errorStatus(msg: string): number {
 router.get("/jobs", async (req, res) => {
   if (!isJobOrchestrationEnabled()) return disabled(req, res);
   try {
+    const branchId = resolveEffectiveBranchId(req, typeof req.query.branchId === "string" ? req.query.branchId : undefined);
     const filter: JobListFilter = {
       queue: typeof req.query.queue === "string"
         ? req.query.queue as JobListFilter["queue"]
@@ -44,10 +46,14 @@ router.get("/jobs", async (req, res) => {
         ? req.query.opsStatus as JobOpsStatus
         : undefined,
       limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+      branchId,
     };
     const data = await listJobs(req, filter);
     return res.json({ data, total: data.length });
   } catch (e) {
+    if (e instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: e.message, code: e.code });
+    }
     return res.status(500).json({ error: (e as Error).message });
   }
 });

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 import { Plus, Upload } from "lucide-react";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
@@ -41,11 +42,15 @@ export type CustomersPortalConfig = {
 
 export default function CustomersPage({ Layout, basePath }: CustomersPortalConfig) {
   const qc = useQueryClient();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
 
-  const listParams = search.trim() ? { search: search.trim() } : undefined;
-  const listQueryKey = getListCustomersQueryKey(listParams);
+  const listParams = {
+    ...(search.trim() ? { search: search.trim() } : {}),
+    ...(activeBranchId ? { branchId: activeBranchId } : {}),
+  };
+  const listQueryKey = getListCustomersQueryKey(listParams as any);
 
   const { data, isLoading, refetch } = useListCustomers(listParams, {
     query: {

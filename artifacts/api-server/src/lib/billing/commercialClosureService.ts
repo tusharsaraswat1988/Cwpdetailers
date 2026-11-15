@@ -510,7 +510,7 @@ async function buildCommercialCalculation(job: ServiceExecution): Promise<Commer
 
 export async function listReadyForBillingQueue(
   req: Request,
-  opts?: { limit?: number; offset?: number },
+  opts?: { limit?: number; offset?: number; branchId?: number },
 ): Promise<{ items: ReadyForBillingRow[]; total: number }> {
   assertAdminBillingActor(actorFromReq(req).role);
   const lim = Math.min(opts?.limit ?? 50, 100);
@@ -520,6 +520,9 @@ export async function listReadyForBillingQueue(
     eq(serviceExecutionsTable.opsStatus, "ready_for_billing"),
     ...tenantFilters(req, JOB_SCOPE),
   ];
+  if (opts?.branchId) {
+    conditions.push(eq(serviceExecutionsTable.branchId, opts.branchId));
+  }
 
   const rows = await db.select({
     job: serviceExecutionsTable,
@@ -1078,6 +1081,7 @@ export async function listCommercialInvoices(
     commercialStatus?: InvoiceCommercialStatus | "outstanding" | "all";
     limit?: number;
     offset?: number;
+    branchId?: number;
   },
 ): Promise<{ items: Invoice[]; total: number }> {
   assertAdminBillingActor(actorFromReq(req).role);
@@ -1085,6 +1089,9 @@ export async function listCommercialInvoices(
   const off = opts.offset ?? 0;
 
   const conditions = [...tenantFilters(req, INVOICE_SCOPE), eq(invoicesTable.documentType, "tax_invoice")];
+  if (opts.branchId) {
+    conditions.push(eq(invoicesTable.branchId, opts.branchId));
+  }
 
   if (opts.commercialStatus === "outstanding") {
     conditions.push(inArray(invoicesTable.commercialStatus, ["issued", "payment_pending"]));

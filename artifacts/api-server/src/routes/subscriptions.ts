@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { subscriptionsTable, customersTable, servicesTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope, resolveEffectiveBranchId, BranchAccessDeniedError, assertBranchAccess } from "../middlewares/tenantScope";
 import { getDaysAgoIST, getDaysAheadIST } from "../subscriptions/service";
 import { listUnifiedCustomerSubscriptions } from "../lib/subscriptions/unifiedCustomerSubscriptions";
 
@@ -52,7 +52,7 @@ const subSelect = {
 
 router.get("/subscriptions", async (req, res) => {
   try {
-    const { customerId, status, type, limit = "50", offset = "0" } = req.query as Record<string, string>;
+    const { customerId, status, type, branchId, limit = "50", offset = "0" } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
 
@@ -65,6 +65,8 @@ router.get("/subscriptions", async (req, res) => {
     }
 
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(subscriptionsTable.branchId, effectiveBranchId));
     if (customerId) conditions.push(eq(subscriptionsTable.customerId, parseInt(customerId)));
     if (status) conditions.push(eq(subscriptionsTable.status, status as (typeof subscriptionsTable.status)["_"]["data"]));
     if (type) conditions.push(eq(subscriptionsTable.type, type as (typeof subscriptionsTable.type)["_"]["data"]));
@@ -80,6 +82,9 @@ router.get("/subscriptions", async (req, res) => {
 
     return res.json({ data, total: Number(countResult[0]?.count ?? 0), limit: lim, offset: off });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List subscriptions error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -137,11 +142,14 @@ router.post("/subscriptions", async (req, res) => {
 
 router.get("/subscriptions/expiring-soon", async (req, res) => {
   try {
+    const { branchId } = req.query as Record<string, string>;
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
     const conditions = [
       ...tenantFilters(req, SCOPE_COLS),
       eq(subscriptionsTable.status, "active"),
       sql`${subscriptionsTable.endDate}::date <= ${getDaysAheadIST(7)}`,
     ];
+    if (effectiveBranchId) conditions.push(eq(subscriptionsTable.branchId, effectiveBranchId));
 
     const data = await db.select(subSelect).from(subscriptionsTable)
       .leftJoin(customersTable, eq(subscriptionsTable.customerId, customersTable.id))
@@ -150,6 +158,9 @@ router.get("/subscriptions/expiring-soon", async (req, res) => {
 
     return res.json(data);
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Expiring subscriptions error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -157,7 +168,10 @@ router.get("/subscriptions/expiring-soon", async (req, res) => {
 
 router.get("/subscriptions/health", async (req, res) => {
   try {
+    const { branchId } = req.query as Record<string, string>;
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    if (effectiveBranchId) conditions.push(eq(subscriptionsTable.branchId, effectiveBranchId));
     const where = conditions.length ? and(...conditions) : undefined;
 
     const [active, paused, expiring, expired, missed, missedThisWeek, totalResult, churnedCount, activeThirtyDaysAgo] = await Promise.all([
@@ -202,6 +216,9 @@ router.get("/subscriptions/health", async (req, res) => {
       churnRate,
     });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Subscription health error");
     return res.status(500).json({ error: "Internal server error" });
   }

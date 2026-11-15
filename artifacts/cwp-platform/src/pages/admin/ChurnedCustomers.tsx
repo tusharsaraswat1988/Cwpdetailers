@@ -2,14 +2,16 @@ import { useState, useMemo } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useBranding } from "@/lib/branding";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 import { UserX, Send, Check, MessageSquare, Phone, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHubAdminNav";
 
-async function fetchChurned() {
-  const res = await fetch("/api/churned");
+async function fetchChurned(branchId?: number | null) {
+  const url = branchId ? `/api/churned?branchId=${branchId}` : "/api/churned";
+  const res = await fetch(url);
   return res.json();
 }
 async function sendBulkMessage(payload: { subscriptionIds: number[]; message: string }) {
@@ -37,7 +39,11 @@ export default function AdminChurnedCustomers() {
   );
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data: churned = [], isLoading } = useQuery({ queryKey: ["churned"], queryFn: fetchChurned });
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const { data: churned = [], isLoading } = useQuery({
+    queryKey: ["churned", activeBranchId],
+    queryFn: () => fetchChurned(activeBranchId),
+  });
 
   const [selected, setSelected] = useState<number[]>([]);
   const [message, setMessage] = useState(defaultMessage);

@@ -218,6 +218,7 @@ export async function listPendingAssignments(
     staffId?: number;
     dateFrom?: string;
     dateTo?: string;
+    branchId?: number;
   },
 ): Promise<PendingAssignmentView[]> {
   const conditions: SQL[] = [
@@ -225,6 +226,9 @@ export async function listPendingAssignments(
     ...tenantFilters(req, PENDING_SCOPE),
   ];
 
+  if (filters?.branchId) {
+    conditions.push(eq(pendingServiceAssignmentsTable.branchId, filters.branchId));
+  }
   if (filters?.serviceLocationId) {
     conditions.push(eq(pendingServiceAssignmentsTable.serviceLocationId, filters.serviceLocationId));
   }
@@ -910,6 +914,7 @@ export async function listAssignedServices(
     staffId?: number;
     dateFrom?: string;
     dateTo?: string;
+    branchId?: number;
   },
 ): Promise<AssignedServiceView[]> {
   const conditions: SQL[] = [
@@ -917,6 +922,9 @@ export async function listAssignedServices(
     ...tenantFilters(req, ASSIGNED_SCOPE),
   ];
 
+  if (filters?.branchId) {
+    conditions.push(eq(serviceAssignmentsTable.branchId, filters.branchId));
+  }
   if (filters?.serviceLocationId) {
     conditions.push(eq(serviceAssignmentsTable.serviceLocationId, filters.serviceLocationId));
   }

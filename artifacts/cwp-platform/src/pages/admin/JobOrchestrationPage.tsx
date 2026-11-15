@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useAppStore } from "@/lib/store";
 import { Can } from "@/components/Can";
 import {
   PageTemplate, FilterBar, DataTable, StatusBadge, KpiRow, BulkActionBar,
@@ -116,9 +117,11 @@ export default function JobOrchestrationPage() {
   const [bulkApproveConfirm, setBulkApproveConfirm] = useState(false);
   const [bulkReadyConfirm, setBulkReadyConfirm] = useState(false);
 
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+
   const { data: jobs = [], isLoading, isFetching, isError, refetch } = useQuery({
-    queryKey: [...JOBS_QUERY_KEY, "all"],
-    queryFn: () => fetchJobs({ queue: "all", limit: 500 }),
+    queryKey: [...JOBS_QUERY_KEY, "all", activeBranchId],
+    queryFn: () => fetchJobs({ queue: "all", limit: 500, branchId: activeBranchId ?? undefined }),
   });
 
   const dependencyMap = useMemo(() => {

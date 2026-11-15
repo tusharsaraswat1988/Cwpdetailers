@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AlertCircle, Pause, Play, X } from "lucide-react";
 import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
+import { useAppStore } from "@/lib/store";
 
 const statusColors: Record<string, string> = {
   active: "bg-green-500/10 text-green-600 border-green-500/20",
@@ -44,11 +45,35 @@ function ProgressBar({ used, total }: { used: number; total: number }) {
 export default function AdminSubscriptions() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
   const [detailId, setDetailId] = useState<number | null>(null);
 
-  const { data, isLoading } = useListSubscriptions({}, { query: { queryKey: getListSubscriptionsQueryKey({}) } });
-  const { data: expiring } = useGetExpiringSoonSubscriptions({ query: { queryKey: getGetExpiringSoonSubscriptionsQueryKey() } });
-  const { data: health } = useGetSubscriptionHealth();
+  const subParams = activeBranchId ? { branchId: activeBranchId } : {};
+  const { data, isLoading } = useListSubscriptions(subParams as any, {
+    query: { queryKey: ["/api/subscriptions", activeBranchId] },
+  });
+  const { data: expiring } = useGetExpiringSoonSubscriptions({
+    query: {
+      queryKey: ["/api/subscriptions/expiring-soon", activeBranchId],
+      queryFn: async () => {
+        const url = activeBranchId ? `/api/subscriptions/expiring-soon?branchId=${activeBranchId}` : "/api/subscriptions/expiring-soon";
+        const res = await fetch(url, { credentials: "include" });
+        if (!res.ok) return [];
+        return res.json();
+      },
+    },
+  });
+  const { data: health } = useGetSubscriptionHealth({
+    query: {
+      queryKey: ["/api/subscriptions/health", activeBranchId],
+      queryFn: async () => {
+        const url = activeBranchId ? `/api/subscriptions/health?branchId=${activeBranchId}` : "/api/subscriptions/health";
+        const res = await fetch(url, { credentials: "include" });
+        if (!res.ok) return {};
+        return res.json();
+      },
+    },
+  });
 
   const updateMutation = useUpdateSubscription({
     mutation: {

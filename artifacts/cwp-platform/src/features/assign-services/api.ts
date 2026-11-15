@@ -94,10 +94,12 @@ export type AssignmentFilters = {
   staffId?: number;
   dateFrom?: string;
   dateTo?: string;
+  branchId?: number;
 };
 
 function buildQuery(filters?: AssignmentFilters): string {
   const params = new URLSearchParams();
+  if (filters?.branchId) params.set("branchId", String(filters.branchId));
   if (filters?.serviceType) params.set("serviceType", filters.serviceType);
   if (filters?.serviceLocationId) params.set("serviceLocationId", String(filters.serviceLocationId));
   if (filters?.staffId) params.set("staffId", String(filters.staffId));

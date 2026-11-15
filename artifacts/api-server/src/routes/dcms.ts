@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth, requirePermission } from "../middlewares/auth";
-import { tenantStamp } from "../middlewares/tenantScope";
+import { tenantStamp, resolveEffectiveBranchId, BranchAccessDeniedError } from "../middlewares/tenantScope";
 import {
   listPlans, getPlanById, createPlans, updatePlan, setPlanActive, deletePlan, planHasSubscriptions,
 } from "../lib/dcms/planService";
@@ -57,6 +57,9 @@ const router = Router();
 
 function handleError(req: Request, res: Response, err: unknown, fallback = "Request failed"): Response {
   req.log.error({ err }, "DCMS error");
+  if (err instanceof BranchAccessDeniedError) {
+    return res.status(err.statusCode).json({ error: err.message, code: err.code });
+  }
   const msg = err instanceof Error ? err.message : fallback;
   if (msg === "Outside Service Area") return res.status(422).json({ error: msg });
   if (err instanceof ImageValidationError) return res.status(422).json({ error: msg });
@@ -74,7 +77,8 @@ router.get(
   requirePermission("daily_cleaning", "view_reports"),
   async (req, res) => {
     try {
-      const stats = await getAdminDashboardStats();
+      const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
+      const stats = await getAdminDashboardStats(branchId);
       return res.json(stats);
     } catch (err) {
       return handleError(req, res, err);
@@ -359,7 +363,7 @@ router.get(
   async (req, res) => {
     try {
       const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
-      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
       const societyId = req.query.societyId ? Number(req.query.societyId) : undefined;
       const status = req.query.status as string | undefined;
       const unassignedOnly = req.query.unassignedOnly === "true";
@@ -418,7 +422,7 @@ router.get(
       const hasRemainingWashes = req.query.hasRemainingWashes === "true";
       const scheduledDate = req.query.scheduledDate as string | undefined;
       const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
-      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
       const search = req.query.search as string | undefined;
 
       const data = await listDcmsPackageWashes({
@@ -471,7 +475,7 @@ router.get(
   async (req, res) => {
     try {
       const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
-      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
 
       const conditions = [
         eq(staffTable.isActive, true),
@@ -947,7 +951,8 @@ router.get("/daily-cleaning/admin/feedback-stats", requireAuth, requirePermissio
 
 router.get("/daily-cleaning/admin/staff-performance", requireAuth, requirePermission("daily_cleaning", "view_reports"), async (req, res) => {
   try {
-    return res.json(await getStaffPerformanceMetrics());
+    const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
+    return res.json(await getStaffPerformanceMetrics(branchId));
   } catch (err) { return handleError(req, res, err); }
 });
 

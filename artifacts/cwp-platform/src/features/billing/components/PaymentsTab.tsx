@@ -1,4 +1,5 @@
 import { useListPayments, getListPaymentsQueryKey } from "@workspace/api-client-react";
+import { useAppStore } from "@/lib/store";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ArrowRight, Receipt } from "lucide-react";
@@ -9,7 +10,11 @@ type Props = {
 };
 
 export function PaymentsTab({ customerId }: Props) {
-  const paymentQueryParams = customerId ? { customerId } : {};
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const paymentQueryParams = {
+    ...(customerId ? { customerId } : {}),
+    ...(activeBranchId ? { branchId: activeBranchId } : {}),
+  };
   const { data: payments, isLoading } = useListPayments(paymentQueryParams as any, {
     query: { queryKey: getListPaymentsQueryKey(paymentQueryParams as any) },
   });

@@ -24,7 +24,7 @@ export type StaffPerformanceRow = {
   customerRating: number;
 };
 
-export async function getStaffPerformanceMetrics(): Promise<{
+export async function getStaffPerformanceMetrics(branchId?: number): Promise<{
   staff: StaffPerformanceRow[];
   topPerformers: StaffPerformanceRow[];
   lowestPerformers: StaffPerformanceRow[];
@@ -32,6 +32,16 @@ export async function getStaffPerformanceMetrics(): Promise<{
   const dailyCleanerIds = await getStaffIdsWithOperationalRole(OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
   if (dailyCleanerIds.length === 0) {
     return { staff: [], topPerformers: [], lowestPerformers: [] };
+  }
+
+  const assignmentConditions = [
+    eq(dcmsStaffAssignmentsTable.isActive, true),
+    eq(dcmsSubscriptionsTable.status, "active"),
+    inArray(dcmsStaffAssignmentsTable.staffId, dailyCleanerIds),
+  ];
+  if (branchId) {
+    assignmentConditions.push(eq(dcmsSubscriptionsTable.branchId, branchId));
+    assignmentConditions.push(eq(staffTable.branchId, branchId));
   }
 
   const assignments = await db
@@ -43,11 +53,7 @@ export async function getStaffPerformanceMetrics(): Promise<{
     .from(dcmsStaffAssignmentsTable)
     .innerJoin(staffTable, eq(dcmsStaffAssignmentsTable.staffId, staffTable.id))
     .innerJoin(dcmsSubscriptionsTable, eq(dcmsStaffAssignmentsTable.subscriptionId, dcmsSubscriptionsTable.id))
-    .where(and(
-      eq(dcmsStaffAssignmentsTable.isActive, true),
-      eq(dcmsSubscriptionsTable.status, "active"),
-      inArray(dcmsStaffAssignmentsTable.staffId, dailyCleanerIds),
-    ))
+    .where(and(...assignmentConditions))
     .groupBy(dcmsStaffAssignmentsTable.staffId, staffTable.name);
 
   const visitStats = await db

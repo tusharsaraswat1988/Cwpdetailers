@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useGetCustomer } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -146,6 +147,7 @@ function PaymentProgress({ status }: { status: InvoiceCommercialStatus | null | 
 export function CommercialOperationsCenter() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
 
   const queue1Ref = useRef<HTMLDivElement>(null);
 
@@ -172,22 +174,22 @@ export function CommercialOperationsCenter() {
 
   // ---- Ready for Billing (Queue 1) -----------------------------------------
   const readyQuery = useQuery({
-    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "ready"],
-    queryFn: () => fetchReadyForBilling(AGGREGATE_LIMIT, 0),
+    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "ready", activeBranchId],
+    queryFn: () => fetchReadyForBilling(AGGREGATE_LIMIT, 0, activeBranchId ?? undefined),
   });
 
   // ---- Aggregate counts for KPIs + Commercial Handoff (best-effort, capped at 100 rows per status — see AGGREGATE_LIMIT) ----
   const draftAggQuery = useQuery({
-    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "agg", "draft"],
-    queryFn: () => fetchCommercialInvoices("draft", AGGREGATE_LIMIT, 0),
+    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "agg", "draft", activeBranchId],
+    queryFn: () => fetchCommercialInvoices("draft", AGGREGATE_LIMIT, 0, activeBranchId ?? undefined),
   });
   const outstandingAggQuery = useQuery({
-    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "agg", "outstanding"],
-    queryFn: () => fetchCommercialInvoices("outstanding", AGGREGATE_LIMIT, 0),
+    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "agg", "outstanding", activeBranchId],
+    queryFn: () => fetchCommercialInvoices("outstanding", AGGREGATE_LIMIT, 0, activeBranchId ?? undefined),
   });
   const closedAggQuery = useQuery({
-    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "agg", "closed"],
-    queryFn: () => fetchCommercialInvoices("commercially_closed", AGGREGATE_LIMIT, 0),
+    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "agg", "closed", activeBranchId],
+    queryFn: () => fetchCommercialInvoices("commercially_closed", AGGREGATE_LIMIT, 0, activeBranchId ?? undefined),
   });
 
   const overdueItems = useMemo(
@@ -207,8 +209,8 @@ export function CommercialOperationsCenter() {
 
   // ---- Queue 2 — Invoice & Collections list --------------------------------
   const listQuery = useQuery({
-    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "list", statusValue, page],
-    queryFn: () => fetchCommercialInvoices(statusValue, PAGE_SIZE, (page - 1) * PAGE_SIZE),
+    queryKey: [...COMMERCIAL_BILLING_QUERY_KEY, "list", statusValue, page, activeBranchId],
+    queryFn: () => fetchCommercialInvoices(statusValue, PAGE_SIZE, (page - 1) * PAGE_SIZE, activeBranchId ?? undefined),
   });
 
   const rows = useMemo(() => {

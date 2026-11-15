@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { db } from "@workspace/db";
 import { staffTable, attendanceTable, bookingsTable, branchesTable, usersTable, staffRoleMasterTable, staffLocationLogsTable, sessionsTable, serviceExecutionsTable, invoicesTable, dcmsVisitFeedbackTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, resolveEffectiveBranchId, BranchAccessDeniedError, assertBranchAccess } from "../middlewares/tenantScope";
 import { generateEmployeeCode } from "../lib/staffEcosystem/profileCompletion";
 import { recalculateStaffProfile } from "../lib/staffEcosystem/recalculate";
 import { syncStaffLoginUser, setStaffPortalPassword, findStaffLoginUser } from "../lib/staffLoginSync";
@@ -53,12 +53,13 @@ router.get("/staff", async (req, res) => {
   try {
     const { branchId, role, isActive, verificationStatus, franchiseeId, forAssignment, roleSlug, staffCategory } = req.query as Record<string, string>;
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(staffTable.branchId, effectiveBranchId));
 
     // Field staff may only see their own profile via list endpoint
     if (req.user?.role === "staff" && req.user.staffId) {
       conditions.push(eq(staffTable.id, req.user.staffId));
     }
-    if (branchId) conditions.push(eq(staffTable.branchId, parseInt(branchId)));
     if (role) conditions.push(eq(staffTable.role, role as (typeof staffTable.role)["_"]["data"]));
     if (staffCategory) conditions.push(eq(staffTable.staffCategory, staffCategory as (typeof staffTable.staffCategory)["_"]["data"]));
     if (isActive !== undefined) conditions.push(eq(staffTable.isActive, isActive === "true"));
@@ -115,6 +116,9 @@ router.get("/staff", async (req, res) => {
     const withRoles = await attachOperationalRoles(data);
     return res.json(projectStaffList(withRoles, req.user));
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List staff error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -156,6 +160,7 @@ router.post("/staff", async (req, res) => {
     if (!name || !branchId) {
       return res.status(400).json({ error: "name and branchId are required" });
     }
+    assertBranchAccess(req, Number(branchId));
 
     let resolvedRole = role;
     const roleIds: number[] = Array.isArray(operationalRoleIds)

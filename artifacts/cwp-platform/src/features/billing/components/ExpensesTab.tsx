@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,9 +42,10 @@ export function ExpensesTab() {
     "admin-expense-form",
     defaultExpenseForm,
   );
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
   const { data: expenses, isLoading, isError, refetch } = useQuery({
-    queryKey: ["expenses"],
-    queryFn: () => fetchExpenses({ limit: "50" }),
+    queryKey: ["expenses", activeBranchId],
+    queryFn: () => fetchExpenses({ limit: "50", ...(activeBranchId ? { branchId: String(activeBranchId) } : {}) }),
   });
 
   const save = async () => {
@@ -58,6 +60,7 @@ export function ExpensesTab() {
       vendor: form.vendor || undefined,
       paidBy: form.paidBy || undefined,
       expenseDate: form.expenseDate,
+      branchId: activeBranchId ?? undefined,
     };
 
     const result = await queuedFetch(

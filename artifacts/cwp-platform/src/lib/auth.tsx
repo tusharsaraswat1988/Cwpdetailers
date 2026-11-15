@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { setBaseUrl as setApiClientBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 import { getApiBaseUrl, isNativeApp, isTrustedApiUrl, resolveApiUrl } from "./apiConfig";
+import { useAppStore } from "./store";
 import {
   authPortalHeaders,
   migrateLegacySession,
@@ -395,6 +396,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setScope(null);
     setSessionReady(false);
     clearStoredSession(portal);
+    useAppStore.getState().clearScope();
   };
 
   const hasPermission = (resource: string, action: string) => {

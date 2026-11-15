@@ -79,12 +79,14 @@ export async function fetchJobs(filters: {
   priority?: JobPriority;
   opsStatus?: JobOpsStatus;
   limit?: number;
+  branchId?: number;
 } = {}): Promise<Job[]> {
   const params = new URLSearchParams();
   if (filters.queue) params.set("queue", filters.queue);
   if (filters.priority) params.set("priority", filters.priority);
   if (filters.opsStatus) params.set("opsStatus", filters.opsStatus);
   if (filters.limit != null) params.set("limit", String(filters.limit));
+  if (filters.branchId != null) params.set("branchId", String(filters.branchId));
   const qs = params.toString();
   const res = await apiFetch<{ data: Job[] }>(`/jobs${qs ? `?${qs}` : ""}`);
   return res.data;

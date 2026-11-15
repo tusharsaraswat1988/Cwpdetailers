@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 import { PageTemplate } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,8 @@ export default function PaymentLedgerPage() {
   // Auto-refresh configuration (in ms, default 30000)
   const [refreshInterval, setRefreshInterval] = useState<number>(30000);
 
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+
   // Filter States for Ledger
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -95,6 +98,8 @@ export default function PaymentLedgerPage() {
   const [endDate, setEndDate] = useState("");
   const [page, setPage] = useState(1);
   const limit = 25;
+
+  const effectiveBranchId = branch !== "all" ? branch : (activeBranchId ? String(activeBranchId) : undefined);
 
   // Drawer & Selection
   const [selectedTx, setSelectedTx] = useState<LedgerRowData | null>(null);
@@ -173,12 +178,12 @@ export default function PaymentLedgerPage() {
     if (refundStatus !== "all") p.set("refundStatus", refundStatus);
     if (method !== "all") p.set("method", method);
     if (city !== "all") p.set("city", city);
-    if (branch !== "all") p.set("branchId", branch);
+    if (effectiveBranchId) p.set("branchId", effectiveBranchId);
     if (serviceType !== "all") p.set("serviceType", serviceType);
     if (startDate) p.set("startDate", startDate);
     if (endDate) p.set("endDate", endDate);
     return p.toString();
-  }, [page, limit, debouncedSearch, status, refundStatus, method, city, branch, serviceType, startDate, endDate]);
+  }, [page, limit, debouncedSearch, status, refundStatus, method, city, effectiveBranchId, serviceType, startDate, endDate]);
 
   // Summary Metrics Query
   const {
@@ -187,9 +192,12 @@ export default function PaymentLedgerPage() {
     refetch: refetchSummary,
     isFetching: isSummaryFetching,
   } = useQuery<LedgerSummaryData>({
-    queryKey: ["admin", "payments", "ledger", "summary"],
+    queryKey: ["admin", "payments", "ledger", "summary", effectiveBranchId],
     queryFn: async () => {
-      const res = await fetch("/api/admin/payments/ledger/summary", {
+      const url = effectiveBranchId
+        ? `/api/admin/payments/ledger/summary?branchId=${effectiveBranchId}`
+        : "/api/admin/payments/ledger/summary";
+      const res = await fetch(url, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to load ledger summary");

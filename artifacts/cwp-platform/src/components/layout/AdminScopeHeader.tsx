@@ -1,14 +1,14 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { switchActiveBranch } from "@/lib/branchScopeBridge";
 import {
   Building2,
-  Globe,
   Search,
-  X,
   User,
   Shield,
+  Loader2,
 } from "lucide-react";
 import {
   Select,
@@ -31,17 +31,16 @@ type Branch = {
 
 export function AdminScopeHeader() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const activeBranchId = useAppStore((s) => s.activeBranchId);
-  const setActiveBranch = useAppStore((s) => s.setActiveBranch);
-  const setActiveCity = useAppStore((s) => s.setActiveCity);
-  const clearScope = useAppStore((s) => s.clearScope);
+  const [isSwitching, setIsSwitching] = useState(false);
 
-  // Fetch Branches
-  const { data: branchesData = [] } = useQuery<Branch[]>({
-    queryKey: ["/api/branches"],
+  // Fetch Authorized Branches for logged-in user
+  const { data: branchesData = [], isLoading: isLoadingBranches } = useQuery<Branch[]>({
+    queryKey: ["/api/branch-assignments/my-branches"],
     queryFn: async () => {
       try {
-        const res = await fetch("/api/branches", { credentials: "include" });
+        const res = await fetch("/api/branch-assignments/my-branches", { credentials: "include" });
         if (!res.ok) return [];
         const json = await res.json();
         return Array.isArray(json) ? json : json?.data ?? [];
@@ -52,25 +51,40 @@ export function AdminScopeHeader() {
     staleTime: 60_000,
   });
 
-  // Dynamic operational branches
   const branches: Branch[] = useMemo(() => {
     return branchesData;
   }, [branchesData]);
+
+  // Auto-select valid branch if current activeBranchId is missing or unauthorized
+  useEffect(() => {
+    if (branches.length > 0) {
+      const isCurrentValid = activeBranchId !== null && branches.some((b) => b.id === activeBranchId);
+      if (!isCurrentValid) {
+        const first = branches[0];
+        switchActiveBranch(queryClient, first.id, first.cityId ?? null, {
+          silent: true,
+          branchName: first.name,
+          cityName: first.city,
+        });
+      }
+    }
+  }, [branches, activeBranchId, queryClient]);
 
   const selectedBranchObj = useMemo(
     () => branches.find((b) => b.id === activeBranchId),
     [branches, activeBranchId],
   );
 
-  const hasActiveFilter = activeBranchId !== null;
-
   const handleBranchChange = (val: string) => {
-    if (val === "all") {
-      clearScope();
-    } else {
-      const branchId = Number(val);
-      const branch = branches.find((b) => b.id === branchId);
-      setActiveBranch(branchId, branch?.cityId ?? null);
+    const branchId = Number(val);
+    const branch = branches.find((b) => b.id === branchId);
+    if (branch && branch.id !== activeBranchId) {
+      setIsSwitching(true);
+      switchActiveBranch(queryClient, branch.id, branch.cityId ?? null, {
+        branchName: branch.name,
+        cityName: branch.city,
+      });
+      setTimeout(() => setIsSwitching(false), 400);
     }
   };
 
@@ -83,72 +97,62 @@ export function AdminScopeHeader() {
       data-testid="admin-scope-header"
       className="sticky top-0 z-20 w-full mb-4 pb-3 pt-1 border-b border-border/60 bg-background/95 backdrop-blur flex flex-wrap items-center justify-between gap-3 text-sm"
     >
-      {/* Left: Single Unified Branch Selector */}
+      {/* Left: Primary Operational Branch Selector */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
         <div className="flex items-center gap-1.5 bg-card border border-border/80 rounded-lg px-2.5 py-1 shadow-sm">
           <Building2 size={14} className="text-primary shrink-0" />
           <span className="text-xs font-semibold text-muted-foreground hidden sm:inline">Branch:</span>
-          <Select
-            value={activeBranchId ? String(activeBranchId) : "all"}
-            onValueChange={handleBranchChange}
-          >
-            <SelectTrigger
-              className="h-7 w-[160px] sm:w-[190px] text-xs font-medium border-0 shadow-none px-1.5 focus:ring-0 focus:ring-offset-0 bg-transparent"
-              data-testid="scope-branch-select"
+          {isLoadingBranches ? (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 text-xs text-muted-foreground">
+              <Loader2 size={12} className="animate-spin text-primary" />
+              <span>Loading branches...</span>
+            </div>
+          ) : branches.length === 0 ? (
+            <span className="text-xs text-muted-foreground px-1 italic">No authorized branch</span>
+          ) : (
+            <Select
+              value={activeBranchId ? String(activeBranchId) : String(branches[0]?.id)}
+              onValueChange={handleBranchChange}
             >
-              <SelectValue placeholder="All Branches" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">
-                <span className="font-semibold text-foreground">🏢 All Branches (Global)</span>
-              </SelectItem>
-              {branches.map((branch) => (
-                <SelectItem key={branch.id} value={String(branch.id)}>
-                  {branch.name} {branch.city && branch.city !== branch.name ? `(${branch.city})` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                className="h-7 w-[210px] sm:w-[250px] md:w-[280px] text-xs font-medium border-0 shadow-none px-1.5 focus:ring-0 focus:ring-offset-0 bg-transparent"
+                data-testid="scope-branch-select"
+              >
+                <SelectValue placeholder="Select Branch" />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((branch) => (
+                  <SelectItem key={branch.id} value={String(branch.id)}>
+                    <span className="font-medium text-foreground">{branch.name}</span>
+                    {branch.city && branch.city !== branch.name && (
+                      <span className="text-muted-foreground ml-1.5 text-[11px]">({branch.city})</span>
+                    )}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {isSwitching && (
+            <Loader2 size={12} className="animate-spin text-primary shrink-0 ml-1" />
+          )}
         </div>
 
-        {/* Clear Filter Button */}
-        {hasActiveFilter && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearScope}
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted gap-1"
-            title="Reset to All Branches"
-            data-testid="scope-clear-btn"
-          >
-            <X size={12} />
-            <span className="hidden sm:inline">Reset</span>
-          </Button>
-        )}
-
-        {/* Active Scope Badge */}
-        <div className="hidden md:flex items-center">
-          {!hasActiveFilter ? (
-            <Badge
-              variant="outline"
-              className="h-6 text-[11px] font-normal gap-1 bg-muted/30 border-dashed text-muted-foreground"
-            >
-              <Globe size={11} className="text-primary" />
-              All Branches (Company View)
-            </Badge>
-          ) : (
+        {/* Active Scope Badge (Explicit Branch & City context) */}
+        {selectedBranchObj && (
+          <div className="hidden md:flex items-center">
             <Badge
               variant="secondary"
               className="h-6 text-[11px] font-semibold gap-1.5 bg-primary/10 text-primary border border-primary/20"
+              data-testid="scope-active-branch-badge"
             >
               <Building2 size={11} />
-              <span>{selectedBranchObj?.name ?? "Selected Branch"}</span>
-              {selectedBranchObj?.city && (
+              <span>{selectedBranchObj.name}</span>
+              {selectedBranchObj.city && (
                 <span className="text-foreground/70 font-normal">· {selectedBranchObj.city}</span>
               )}
             </Badge>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Right: Search & User Identity */}

@@ -1,6 +1,7 @@
 import AdminLayout from "@/components/layout/AdminLayout";
 import { DcmsAdminNav } from "../components/DcmsAdminNav";
 import { useStaffPerformance } from "../api";
+import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +40,8 @@ function StaffTable({ title, rows }: { title: string; rows: StaffPerformanceRow[
 }
 
 export default function DcmsStaffPerformancePage() {
-  const { data, isLoading, error } = useStaffPerformance();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const { data, isLoading, error } = useStaffPerformance(activeBranchId);
 
   return (
     <AdminLayout>

@@ -1,18 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 
-async function fetchBillingHealth() {
-  const res = await fetch("/api/billing/health", { credentials: "include" });
+async function fetchBillingHealth(branchId?: number | null) {
+  const url = branchId ? `/api/billing/health?branchId=${branchId}` : "/api/billing/health";
+  const res = await fetch(url, { credentials: "include" });
   if (!res.ok) throw new Error("Failed");
   return res.json();
 }
 
-async function fetchDues(customerId?: string) {
+async function fetchDues(customerId?: string, branchId?: number | null) {
   const url = new URL("/api/billing/dues", window.location.origin);
   url.searchParams.set("limit", "50");
   if (customerId) url.searchParams.set("customerId", customerId);
+  if (branchId) url.searchParams.set("branchId", String(branchId));
   const res = await fetch(url, { credentials: "include" });
   if (!res.ok) throw new Error("Failed");
   return res.json();
@@ -23,13 +26,14 @@ type Props = {
 };
 
 export function DuesTab({ customerId }: Props) {
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
   const { data: health, isLoading: hLoading } = useQuery({
-    queryKey: ["billingHealth"],
-    queryFn: fetchBillingHealth,
+    queryKey: ["billingHealth", activeBranchId],
+    queryFn: () => fetchBillingHealth(activeBranchId),
   });
   const { data: dues, isLoading: dLoading } = useQuery({
-    queryKey: ["billingDues", customerId],
-    queryFn: () => fetchDues(customerId),
+    queryKey: ["billingDues", customerId, activeBranchId],
+    queryFn: () => fetchDues(customerId, activeBranchId),
   });
 
   const fmt = (n: number) =>

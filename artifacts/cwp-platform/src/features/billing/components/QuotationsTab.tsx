@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared";
@@ -25,17 +26,19 @@ type Props = {
 export function QuotationsTab({ customerId, prefillCustomerId }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
   const [createOpen, setCreateOpen] = useState(false);
   const [filter, setFilter] = useState<QuotationFilter>("all");
   const [convertingId, setConvertingId] = useState<number | null>(null);
 
   const queryParams: Record<string, string> = { limit: "50" };
   if (customerId) queryParams.customerId = customerId;
+  if (activeBranchId) queryParams.branchId = String(activeBranchId);
   if (filter === "converted") queryParams.status = "converted";
   else if (filter === "expired") queryParams.status = "expired";
 
   const { data: quotations, isLoading } = useQuery({
-    queryKey: ["quotations", customerId, filter],
+    queryKey: ["quotations", customerId, filter, activeBranchId],
     queryFn: () => fetchQuotations(queryParams),
   });
 

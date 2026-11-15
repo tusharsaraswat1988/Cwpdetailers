@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { useAppStore } from "@/lib/store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,8 +78,16 @@ export default function OperationsCalendarPage() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState("hours");
 
-  const [selectedCityId, setSelectedCityId] = useState<string>("all");
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const activeCityId = useAppStore((s) => s.activeCityId);
+
+  const [selectedCityId, setSelectedCityId] = useState<string>(activeCityId ? String(activeCityId) : "all");
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(activeBranchId ? String(activeBranchId) : "all");
+
+  useEffect(() => {
+    if (activeBranchId) setSelectedBranchId(String(activeBranchId));
+    if (activeCityId) setSelectedCityId(String(activeCityId));
+  }, [activeBranchId, activeCityId]);
 
   const { data: cities } = useMasterList<City>("cities");
 

@@ -27,6 +27,7 @@ import { CustomerHubAdminNav } from "@/features/customers/components/CustomerHub
 import { CustomerProfileLink } from "@/features/customers/components/CustomerProfileLink";
 import { format, parseISO } from "date-fns";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useAppStore } from "@/lib/store";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCities } from "@/features/master-data/api";
 import { useSocieties } from "@/features/societies/api";
@@ -96,37 +97,34 @@ export default function AdminBookings() {
     setCustomerFilter(id ?? undefined);
   }, []);
 
-  const params = {
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+
+  const params: ListBookingsParams = {
     status: statusFilter !== "all" ? (statusFilter as ListBookingsStatus) : undefined,
     date: dateValue,
     limit,
     offset: (page - 1) * limit,
+    branchId: activeBranchId ?? undefined,
     ...(customerFilter ? { customerId: Number(customerFilter) } : {}),
     ...(cityFilter !== "all" ? { cityId: Number(cityFilter) } : {}),
     ...(societyFilter !== "all" ? { societyId: Number(societyFilter) } : {}),
     ...(search.trim() ? { search: search.trim() } : {}),
-  } as ListBookingsParams;
+  };
 
   const { data, isLoading, isError, refetch } = useListBookings(params, {
     query: { queryKey: getListBookingsQueryKey(params) },
   });
 
-  // Lightweight counts for the KPI row — reuses the same list endpoint with limit:1,
-  // since there's no dedicated bookings-stats endpoint (no backend change allowed).
-  const { data: totalCount } = useListBookings({ limit: 1 }, { query: { queryKey: getListBookingsQueryKey({ limit: 1 }) } });
-  const { data: waitingCount } = useListBookings(
-    { status: "waiting_assignment" as ListBookingsStatus, limit: 1 },
-    { query: { queryKey: getListBookingsQueryKey({ status: "waiting_assignment" as ListBookingsStatus, limit: 1 }) } },
-  );
+  // Lightweight counts for the KPI row — reuses the same list endpoint with limit:1 scoped to active branch
+  const kpiBaseParams: ListBookingsParams = { limit: 1, branchId: activeBranchId ?? undefined };
+  const { data: totalCount } = useListBookings(kpiBaseParams, { query: { queryKey: getListBookingsQueryKey(kpiBaseParams) } });
+  const waitingParams: ListBookingsParams = { status: "waiting_assignment" as ListBookingsStatus, limit: 1, branchId: activeBranchId ?? undefined };
+  const { data: waitingCount } = useListBookings(waitingParams, { query: { queryKey: getListBookingsQueryKey(waitingParams) } });
   const todayStr = new Date().toISOString().slice(0, 10);
-  const { data: todayCount } = useListBookings(
-    { date: todayStr, limit: 1 },
-    { query: { queryKey: getListBookingsQueryKey({ date: todayStr, limit: 1 }) } },
-  );
-  const { data: cancelledCount } = useListBookings(
-    { status: "cancelled" as ListBookingsStatus, limit: 1 },
-    { query: { queryKey: getListBookingsQueryKey({ status: "cancelled" as ListBookingsStatus, limit: 1 }) } },
-  );
+  const todayParams: ListBookingsParams = { date: todayStr, limit: 1, branchId: activeBranchId ?? undefined };
+  const { data: todayCount } = useListBookings(todayParams, { query: { queryKey: getListBookingsQueryKey(todayParams) } });
+  const cancelledParams: ListBookingsParams = { status: "cancelled" as ListBookingsStatus, limit: 1, branchId: activeBranchId ?? undefined };
+  const { data: cancelledCount } = useListBookings(cancelledParams, { query: { queryKey: getListBookingsQueryKey(cancelledParams) } });
 
   const drawerBooking = useMemo(
     () => data?.data.find((b: Booking) => b.id === drawerBookingId) ?? null,

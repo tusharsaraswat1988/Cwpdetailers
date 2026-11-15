@@ -13,6 +13,7 @@ import {
   purgeOldGpsLocationLogs,
 } from "../lib/tracking/gpsRetentionWorker";
 import { BookingValidationError } from "../lib/booking/types";
+import { resolveEffectiveBranchId, BranchAccessDeniedError } from "../middlewares/tenantScope";
 
 const router = Router();
 
@@ -20,15 +21,19 @@ const router = Router();
 router.get("/admin/makeup-approvals", async (req, res) => {
   try {
     const { status, cityId, branchId, limit, offset } = req.query;
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId ? String(branchId) : undefined);
     const result = await listMakeupApprovals(req, {
       status: status ? String(status) : undefined,
       cityId: cityId ? parseInt(String(cityId), 10) : undefined,
-      branchId: branchId ? parseInt(String(branchId), 10) : undefined,
+      branchId: effectiveBranchId,
       limit: limit ? parseInt(String(limit), 10) : undefined,
       offset: offset ? parseInt(String(offset), 10) : undefined,
     });
     return res.json(result);
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List makeup approvals error");
     return res.status(500).json({ error: "Failed to list makeup approvals" });
   }

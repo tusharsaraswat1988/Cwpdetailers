@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 import {
   CheckCircle,
   XCircle,
@@ -77,12 +78,15 @@ export default function ApprovalsPage() {
   const [rejectModal, setRejectModal] = useState<MakeupApprovalRequest | null>(null);
   const [rejectReason, setRejectReason] = useState<string>("");
 
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+
   // Fetch Approval Requests
   const { data, isLoading, refetch } = useQuery<{ requests: MakeupApprovalRequest[]; total: number }>({
-    queryKey: ["makeup-approvals", statusFilter],
+    queryKey: ["makeup-approvals", statusFilter, activeBranchId],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.append("status", statusFilter);
+      if (activeBranchId) params.append("branchId", String(activeBranchId));
       const res = await fetch(`/api/admin/makeup-approvals?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load approval requests");
       return res.json();

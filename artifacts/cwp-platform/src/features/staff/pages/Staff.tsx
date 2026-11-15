@@ -19,6 +19,7 @@ import { PageHeader, EmptyState } from "@/components/shared";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { EmailInput } from "@/components/ui/email-input";
 import { submitEmail, submitMobile } from "@/lib/contactForm";
+import { useAppStore } from "@/lib/store";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, STAFF_CATEGORY_OPTIONS, type RoleMaster, type StaffCategory } from "@/lib/staff-ecosystem/api";
 
 type StaffForm = {
@@ -72,19 +73,21 @@ function staffCategoryHeaderStyles(category: StaffCategory) {
 export default function AdminStaff() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<StaffForm>({
     name: "", phone: "", email: "", staffCategory: "cleaning_staff",
-    operationalRoleIds: [], reportingManagerId: "", branchId: "", monthlySalary: "", initialPassword: "",
+    operationalRoleIds: [], reportingManagerId: "", branchId: activeBranchId ? String(activeBranchId) : "", monthlySalary: "", initialPassword: "",
   });
   const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
 
   const [categoryFilter, setCategoryFilter] = useState<"" | StaffCategory>("");
 
   const { data: staff, isLoading } = useQuery({
-    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "admin-list"],
+    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "admin-list", activeBranchId],
     queryFn: async () => {
-      const res = await fetch("/api/staff", { credentials: "include" });
+      const url = activeBranchId ? `/api/staff?branchId=${activeBranchId}` : "/api/staff";
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load staff");
       return res.json() as Promise<StaffListRow[]>;
     },

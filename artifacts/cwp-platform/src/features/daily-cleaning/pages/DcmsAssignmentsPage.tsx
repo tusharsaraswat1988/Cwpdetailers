@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { DcmsAdminNav } from "../components/DcmsAdminNav";
+import { useAppStore } from "@/lib/store";
 import {
   useDcmsMonthlyAssignments,
   useAssignMonthlyCleaner,
@@ -61,6 +62,7 @@ const REASSIGNMENT_REASONS = [
 
 export default function DcmsAssignmentsPage() {
   const { toast } = useToast();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
   const [activeTab, setActiveTab] = useState<"monthly" | "washes">("monthly");
   const [searchTerm, setSearchTerm] = useState("");
   const [monthlyFilter, setMonthlyFilter] = useState<"all" | "unassigned" | "assigned">("all");
@@ -72,6 +74,7 @@ export default function DcmsAssignmentsPage() {
     isLoading: isMonthlyLoading,
     refetch: refetchMonthly,
   } = useDcmsMonthlyAssignments({
+    branchId: activeBranchId ?? undefined,
     unassignedOnly: monthlyFilter === "unassigned",
     search: searchTerm,
   });
@@ -81,11 +84,14 @@ export default function DcmsAssignmentsPage() {
     isLoading: isWashesLoading,
     refetch: refetchWashes,
   } = useDcmsPackageWashes({
+    branchId: activeBranchId ?? undefined,
     hasRemainingWashes: washFilter === "remaining",
     search: searchTerm,
   });
 
-  const { data: staffList = [] } = useDcmsStaffOptions();
+  const { data: staffList = [] } = useDcmsStaffOptions({
+    branchId: activeBranchId ?? undefined,
+  });
 
   // Mutations
   const assignCleanerMutation = useAssignMonthlyCleaner();

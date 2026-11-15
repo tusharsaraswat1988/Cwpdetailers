@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { subscriptionsTable, customersTable } from "@workspace/db";
 import { eq, and, inArray, desc } from "drizzle-orm";
-import { tenantFilters } from "../middlewares/tenantScope";
+import { tenantFilters, resolveEffectiveBranchId, BranchAccessDeniedError } from "../middlewares/tenantScope";
 
 const router = Router();
 
@@ -16,11 +16,12 @@ const SCOPE_COLS = {
 router.get("/churned", async (req, res) => {
   try {
     const { branchId } = req.query as Record<string, string>;
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
     const conditions = [
       ...tenantFilters(req, SCOPE_COLS),
       eq(subscriptionsTable.status, "cancelled" as (typeof subscriptionsTable.status)["_"]["data"]),
     ];
-    if (branchId) conditions.push(eq(subscriptionsTable.branchId, parseInt(branchId)));
+    if (effectiveBranchId) conditions.push(eq(subscriptionsTable.branchId, effectiveBranchId));
 
     const data = await db.select({
       id: subscriptionsTable.id,
@@ -44,6 +45,9 @@ router.get("/churned", async (req, res) => {
 
     return res.json(data);
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List churned customers error");
     return res.status(500).json({ error: "Internal server error" });
   }

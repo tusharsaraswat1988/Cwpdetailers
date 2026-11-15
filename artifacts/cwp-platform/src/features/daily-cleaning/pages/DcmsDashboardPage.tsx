@@ -1,6 +1,7 @@
 import AdminLayout from "@/components/layout/AdminLayout";
 import { DcmsAdminNav } from "../components/DcmsAdminNav";
 import { useDcmsDashboard } from "../api";
+import { useAppStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, CheckCircle, Clock, PauseCircle, RefreshCw, ThumbsDown, Users, Car } from "lucide-react";
@@ -21,7 +22,8 @@ function StatCard({ title, value, icon: Icon, sub }: { title: string; value: num
 }
 
 export default function DcmsDashboardPage() {
-  const { data, isLoading, error } = useDcmsDashboard();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const { data, isLoading, error } = useDcmsDashboard(activeBranchId);
   const ops = data?.renewalOps;
   const feedback = data?.feedback;
 

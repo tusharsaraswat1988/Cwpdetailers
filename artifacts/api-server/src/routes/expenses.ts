@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { expensesTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, resolveEffectiveBranchId, BranchAccessDeniedError, assertBranchAccess } from "../middlewares/tenantScope";
 
 const router = Router();
 
@@ -14,10 +14,12 @@ const SCOPE_COLS = {
 
 router.get("/expenses", async (req, res) => {
   try {
-    const { category, limit = "50", offset = "0" } = req.query as Record<string, string>;
+    const { category, branchId, limit = "50", offset = "0" } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(expensesTable.branchId, effectiveBranchId));
     if (category) conditions.push(eq(expensesTable.category, category as (typeof expensesTable.category)["_"]["data"]));
     const where = conditions.length ? and(...conditions) : undefined;
 
@@ -27,6 +29,9 @@ router.get("/expenses", async (req, res) => {
     ]);
     return res.json({ data, total: Number(countResult[0]?.count ?? 0), limit: lim, offset: off });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List expenses error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -34,14 +39,20 @@ router.get("/expenses", async (req, res) => {
 
 router.post("/expenses", async (req, res) => {
   try {
-    const { category, amount, description, vendor, receiptUrl, paidBy, expenseDate } = req.body;
+    const { category, amount, description, vendor, receiptUrl, paidBy, expenseDate, branchId } = req.body;
     if (!category || !amount || !expenseDate) {
       return res.status(400).json({ error: "category, amount, expenseDate are required" });
     }
-    const values = tenantStamp(req, { category, amount: amount.toString(), description, vendor, receiptUrl, paidBy, expenseDate });
+    if (branchId) {
+      assertBranchAccess(req, Number(branchId));
+    }
+    const values = tenantStamp(req, { category, amount: amount.toString(), description, vendor, receiptUrl, paidBy, expenseDate, branchId: branchId ? Number(branchId) : undefined });
     const [exp] = await db.insert(expensesTable).values(values as typeof expensesTable.$inferInsert).returning();
     return res.status(201).json(exp);
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Create expense error");
     return res.status(500).json({ error: "Internal server error" });
   }

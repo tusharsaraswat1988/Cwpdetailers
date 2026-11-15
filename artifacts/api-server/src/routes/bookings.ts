@@ -20,7 +20,7 @@ import {
   type BookingStatus,
 } from "@workspace/db";
 import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope, resolveEffectiveBranchId, BranchAccessDeniedError, assertBranchAccess } from "../middlewares/tenantScope";
 import { getTodayIST } from "../subscriptions/service";
 import { isDailyCleanCatalogServiceName } from "../lib/dcms/dailyCleanCatalogGuard";
 import { savedLocationService } from "../lib/saved-locations/SavedLocationService";
@@ -307,12 +307,13 @@ router.get("/bookings", async (req, res) => {
     const off = parseInt(offset, 10);
 
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(bookingsTable.branchId, effectiveBranchId));
     if (customerId) conditions.push(eq(bookingsTable.customerId, parseInt(customerId, 10)));
     if (date) conditions.push(sql`${bookingsTable.scheduledDate}::text = ${date}`);
     if (status) conditions.push(eq(bookingsTable.status, status as BookingStatus));
     if (serviceType) conditions.push(eq(bookingsTable.serviceType, serviceType as never));
     if (cityId) conditions.push(eq(bookingsTable.cityId, parseInt(cityId, 10)));
-    if (branchId) conditions.push(eq(bookingsTable.branchId, parseInt(branchId, 10)));
     if (serviceId) conditions.push(eq(bookingsTable.serviceId, parseInt(serviceId, 10)));
     if (societyId) conditions.push(eq(serviceLocationsTable.societyId, parseInt(societyId, 10)));
 
@@ -358,6 +359,9 @@ router.get("/bookings", async (req, res) => {
 
     return res.json({ data, total: Number(countResult[0]?.count ?? 0), limit: lim, offset: off });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List bookings error");
     return res.status(500).json({ error: "Internal server error" });
   }

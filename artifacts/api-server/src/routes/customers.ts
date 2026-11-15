@@ -21,7 +21,7 @@ import {
   serviceExceptionsTable,
 } from "@workspace/db";
 import { eq, ilike, or, and, sql, desc } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope, resolveEffectiveBranchId, BranchAccessDeniedError, assertBranchAccess } from "../middlewares/tenantScope";
 import { getLedgerBalance } from "../lib/wallet/service";
 import { getCustomerOutstandingDues } from "../lib/billing/invoiceService";
 import {
@@ -105,6 +105,8 @@ router.get("/customers", async (req, res) => {
     const off = parseInt(offset);
 
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(customersTable.branchId, effectiveBranchId));
     if (search) {
       conditions.push(or(
         ilike(customersTable.name, `%${search}%`),
@@ -112,7 +114,6 @@ router.get("/customers", async (req, res) => {
         ilike(customersTable.email, `%${search}%`),
       )!);
     }
-    if (branchId) conditions.push(eq(customersTable.branchId, parseInt(branchId)));
     if (status) conditions.push(eq(customersTable.status, status as "active" | "inactive" | "suspended"));
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -128,6 +129,9 @@ router.get("/customers", async (req, res) => {
 
     return res.json({ data, total: Number(countResult[0]?.count ?? 0), limit: lim, offset: off });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List customers error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -217,6 +221,9 @@ router.post("/customers", async (req, res) => {
       houseNumber, buildingName, area, landmark, pincode, postalCode,
     } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
+    if (branchId) {
+      assertBranchAccess(req, parseInt(branchId, 10));
+    }
 
     const phoneResult = parseRequiredMobile(phone);
     if (!phoneResult.ok) return res.status(400).json({ error: phoneResult.error });

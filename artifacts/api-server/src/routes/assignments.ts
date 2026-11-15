@@ -12,16 +12,19 @@ import {
   type ServiceTaskType,
 } from "../lib/assignments/assignmentService";
 import { getAssignmentTimeline } from "../lib/assignments/assignmentTimeline";
+import { resolveEffectiveBranchId, BranchAccessDeniedError } from "../middlewares/tenantScope";
 
 const router = Router();
 
-function parseFilters(query: Record<string, string | undefined>) {
+function parseFilters(req: any, query: Record<string, string | undefined>) {
+  const branchId = resolveEffectiveBranchId(req, query.branchId);
   return {
     serviceType: query.serviceType,
     serviceLocationId: query.serviceLocationId ? parseInt(query.serviceLocationId, 10) : undefined,
     staffId: query.staffId ? parseInt(query.staffId, 10) : undefined,
     dateFrom: query.dateFrom,
     dateTo: query.dateTo,
+    branchId,
   };
 }
 
@@ -37,9 +40,12 @@ router.get("/assignments/pending", async (req, res) => {
     return res.status(503).json({ error: "Service assignments are disabled" });
   }
   try {
-    const data = await listPendingAssignments(req, parseFilters(req.query as Record<string, string>));
+    const data = await listPendingAssignments(req, parseFilters(req, req.query as Record<string, string>));
     return res.json(data);
   } catch (e) {
+    if (e instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: e.message, code: e.code });
+    }
     return res.status(500).json({ error: (e as Error).message });
   }
 });
@@ -49,9 +55,12 @@ router.get("/assignments/assigned", async (req, res) => {
     return res.status(503).json({ error: "Service assignments are disabled" });
   }
   try {
-    const data = await listAssignedServices(req, parseFilters(req.query as Record<string, string>));
+    const data = await listAssignedServices(req, parseFilters(req, req.query as Record<string, string>));
     return res.json(data);
   } catch (e) {
+    if (e instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: e.message, code: e.code });
+    }
     return res.status(500).json({ error: (e as Error).message });
   }
 });

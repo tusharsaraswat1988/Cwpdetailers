@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { quotationsTable, customersTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope, resolveEffectiveBranchId, BranchAccessDeniedError, assertBranchAccess } from "../middlewares/tenantScope";
 import { getDefaultGstRate } from "../lib/catalog/pricingEngine";
 import { computeInvoiceGst, resolvePlaceOfSupply } from "../lib/billing/invoiceGstEngine";
 import { createInvoiceFromQuotation, buildCustomerSnapshot } from "../lib/billing/invoiceService";
@@ -73,10 +73,12 @@ async function computeQuotationTotals(items: InvoiceItem[], discount = 0) {
 
 router.get("/quotations", async (req, res) => {
   try {
-    const { customerId, status, limit = "50", offset = "0" } = req.query as Record<string, string>;
+    const { customerId, status, branchId, limit = "50", offset = "0" } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(quotationsTable.branchId, effectiveBranchId));
     if (customerId) conditions.push(eq(quotationsTable.customerId, parseInt(customerId)));
     if (status) conditions.push(eq(quotationsTable.status, status as (typeof quotationsTable.status)["_"]["data"]));
     const where = conditions.length ? and(...conditions) : undefined;
@@ -90,6 +92,9 @@ router.get("/quotations", async (req, res) => {
 
     return res.json({ data, total: Number(countResult[0]?.count ?? 0), limit: lim, offset: off });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List quotations error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -100,9 +105,13 @@ router.post("/quotations", async (req, res) => {
     const {
       customerId, leadId, bookingId, contractRegistryId,
       serviceLocationId, assetId, serviceId, paymentTerms,
-      items, discount, validUntil, notes,
+      items, discount, validUntil, notes, branchId,
     } = req.body;
     if (!customerId || !items?.length) return res.status(400).json({ error: "customerId and items required" });
+
+    if (branchId) {
+      assertBranchAccess(req, Number(branchId));
+    }
 
     const customer = await loadIfInScope(req,
       () => db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1).then(r => r[0]),
@@ -132,6 +141,7 @@ router.post("/quotations", async (req, res) => {
     const values = tenantStamp(req, {
       quotationNumber: generateQuotationNumber(),
       customerId, leadId, bookingId,
+      branchId: branchId ? Number(branchId) : undefined,
       contractRegistryId: contractRegistryId ?? null,
       serviceLocationId: serviceLocationId ?? null,
       assetId: assetId ?? null,
@@ -152,6 +162,9 @@ router.post("/quotations", async (req, res) => {
     const [q] = await db.insert(quotationsTable).values(values as typeof quotationsTable.$inferInsert).returning();
     return res.status(201).json(q);
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Create quotation error");
     return res.status(500).json({ error: "Internal server error" });
   }

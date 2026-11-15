@@ -124,9 +124,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const COMMERCIAL_BILLING_QUERY_KEY = ["commercial-billing"] as const;
 
-export async function fetchReadyForBilling(limit = 50, offset = 0) {
+export async function fetchReadyForBilling(limit = 50, offset = 0, branchId?: number) {
+  const branchParam = branchId ? `&branchId=${branchId}` : "";
   return api<{ items: ReadyForBillingRow[]; total: number }>(
-    `/api/billing/ready-for-billing?limit=${limit}&offset=${offset}`,
+    `/api/billing/ready-for-billing?limit=${limit}&offset=${offset}${branchParam}`,
   );
 }
 
@@ -142,9 +143,11 @@ export async function fetchCommercialInvoices(
   status: InvoiceCommercialStatus | "outstanding" | "all" = "all",
   limit = 50,
   offset = 0,
+  branchId?: number,
 ) {
+  const branchParam = branchId ? `&branchId=${branchId}` : "";
   return api<{ items: CommercialInvoice[]; total: number }>(
-    `/api/billing/commercial?status=${status}&limit=${limit}&offset=${offset}`,
+    `/api/billing/commercial?status=${status}&limit=${limit}&offset=${offset}${branchParam}`,
   );
 }
 

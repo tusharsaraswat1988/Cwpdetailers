@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,14 +141,16 @@ async function convertLead(id: number, body: Record<string, unknown>) {
   }>;
 }
 
-async function fetchLeadStats(): Promise<LeadStats> {
-  const res = await fetch("/api/leads/stats");
+async function fetchLeadStats(branchId?: number | null): Promise<LeadStats> {
+  const url = branchId ? `/api/leads/stats?branchId=${branchId}` : "/api/leads/stats";
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch stats");
   return res.json();
 }
 
-async function fetchFollowUps(): Promise<Lead[]> {
-  const res = await fetch("/api/leads/follow-ups");
+async function fetchFollowUps(branchId?: number | null): Promise<Lead[]> {
+  const url = branchId ? `/api/leads/follow-ups?branchId=${branchId}` : "/api/leads/follow-ups";
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch follow-ups");
   return res.json();
 }
@@ -235,13 +238,27 @@ export default function AdminLeads() {
   const [showStats, setShowStats] = useState(false);
   const [showFollowUps, setShowFollowUps] = useState(false);
 
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+
   const { data: leadsData, isLoading } = useQuery({
-    queryKey: ["leads", search, filterStatus, filterSource],
-    queryFn: () => fetchLeads({ search: search || "", status: filterStatus, source: filterSource, limit: "100" }),
+    queryKey: ["leads", search, filterStatus, filterSource, activeBranchId],
+    queryFn: () => fetchLeads({
+      search: search || "",
+      status: filterStatus,
+      source: filterSource,
+      limit: "100",
+      ...(activeBranchId ? { branchId: String(activeBranchId) } : {}),
+    }),
   });
 
-  const { data: stats } = useQuery({ queryKey: ["leadStats"], queryFn: fetchLeadStats });
-  const { data: followUps } = useQuery({ queryKey: ["leadFollowUps"], queryFn: fetchFollowUps });
+  const { data: stats } = useQuery({
+    queryKey: ["leadStats", activeBranchId],
+    queryFn: () => fetchLeadStats(activeBranchId),
+  });
+  const { data: followUps } = useQuery({
+    queryKey: ["leadFollowUps", activeBranchId],
+    queryFn: () => fetchFollowUps(activeBranchId),
+  });
   const { data: detail } = useQuery({
     queryKey: ["leadDetail", detailId],
     queryFn: () => (detailId ? fetchLeadDetail(detailId) : null),

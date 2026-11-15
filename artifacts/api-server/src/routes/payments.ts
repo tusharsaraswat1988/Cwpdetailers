@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { invoicesTable, paymentsTable, customersTable, serviceLocationsTable, assetsTable } from "@workspace/db";
 import { eq, and, sql, desc, gt } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope, resolveEffectiveBranchId, BranchAccessDeniedError, assertBranchAccess } from "../middlewares/tenantScope";
 import {
   createInvoice as createInvoiceRecord,
   createCreditNote,
@@ -94,12 +94,14 @@ router.post("/invoices/gst-preview", async (req, res) => {
 router.get("/invoices", async (req, res) => {
   try {
     const {
-      customerId, status, documentType, hasBalance,
+      customerId, status, documentType, hasBalance, branchId,
       limit = "50", offset = "0",
     } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
     const conditions = [...tenantFilters(req, INVOICE_SCOPE)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(invoicesTable.branchId, effectiveBranchId));
     if (customerId) conditions.push(eq(invoicesTable.customerId, parseInt(customerId)));
     if (status) conditions.push(eq(invoicesTable.status, status as (typeof invoicesTable.status)["_"]["data"]));
     if (documentType) {
@@ -146,6 +148,9 @@ router.get("/invoices", async (req, res) => {
 
     return res.json({ data, total: Number(countResult[0]?.count ?? 0), limit: lim, offset: off });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List invoices error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -284,10 +289,12 @@ router.patch("/invoices/:id", async (req, res) => {
 
 router.get("/payments", async (req, res) => {
   try {
-    const { customerId, limit = "50", offset = "0" } = req.query as Record<string, string>;
+    const { customerId, branchId, limit = "50", offset = "0" } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
     const conditions = [...tenantFilters(req, PAYMENT_SCOPE)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(paymentsTable.branchId, effectiveBranchId));
     if (customerId) conditions.push(eq(paymentsTable.customerId, parseInt(customerId)));
     const where = conditions.length ? and(...conditions) : undefined;
 
@@ -307,6 +314,9 @@ router.get("/payments", async (req, res) => {
 
     return res.json({ data, total: Number(countResult[0]?.count ?? 0), limit: lim, offset: off });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List payments error");
     return res.status(500).json({ error: "Internal server error" });
   }

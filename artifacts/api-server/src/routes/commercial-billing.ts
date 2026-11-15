@@ -17,6 +17,7 @@ import {
 } from "../lib/billing/commercialClosureService";
 import { mapBillingError } from "../lib/billing/billingErrors";
 import type { InvoiceCommercialStatus } from "@workspace/db";
+import { resolveEffectiveBranchId, BranchAccessDeniedError } from "../middlewares/tenantScope";
 
 const router = Router();
 
@@ -24,9 +25,13 @@ router.get("/billing/ready-for-billing", async (req, res) => {
   try {
     const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
     const offset = req.query.offset ? parseInt(String(req.query.offset), 10) : 0;
-    const result = await listReadyForBillingQueue(req, { limit, offset });
+    const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
+    const result = await listReadyForBillingQueue(req, { limit, offset, branchId });
     return res.json(result);
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     const mapped = mapBillingError(err);
     if (mapped.status >= 500) req.log.error({ err }, "ready-for-billing queue failed");
     return res.status(mapped.status).json({ error: mapped.message });
@@ -64,13 +69,18 @@ router.get("/billing/commercial", async (req, res) => {
     const status = (req.query.status as string | undefined) ?? "all";
     const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
     const offset = req.query.offset ? parseInt(String(req.query.offset), 10) : 0;
+    const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
     const result = await listCommercialInvoices(req, {
       commercialStatus: status as InvoiceCommercialStatus | "outstanding" | "all",
       limit,
       offset,
+      branchId,
     });
     return res.json(result);
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     const mapped = mapBillingError(err);
     if (mapped.status >= 500) req.log.error({ err }, "list commercial invoices failed");
     return res.status(mapped.status).json({ error: mapped.message });

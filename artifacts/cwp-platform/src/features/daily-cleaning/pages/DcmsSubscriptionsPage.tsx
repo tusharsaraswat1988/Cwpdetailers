@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { DcmsAdminNav } from "../components/DcmsAdminNav";
 import { useDcmsSubscriptions, useDcmsSubscriptionMutations, usePauseMutations } from "../api";
+import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { RefreshCw, Pause, Play, CalendarCheck, XCircle, AlertTriangle, Search, UserCheck } from "lucide-react";
 
 export default function DcmsSubscriptionsPage() {
-  const { data: subs, isLoading } = useDcmsSubscriptions();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
+  const { data: subs, isLoading } = useDcmsSubscriptions(undefined, activeBranchId);
   const { renew, cancel } = useDcmsSubscriptionMutations();
   const { pause, resume } = usePauseMutations();
   const { toast } = useToast();

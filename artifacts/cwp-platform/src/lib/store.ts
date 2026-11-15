@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+
+const fallbackStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
 
 type UiSlice = {
   sidebarCollapsed: boolean;
@@ -38,6 +44,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "cwp_app_store",
+      storage: createJSONStorage(() => (typeof window !== "undefined" && window.localStorage ? window.localStorage : fallbackStorage)),
       partialize: (s) => ({
         sidebarCollapsed: s.sidebarCollapsed,
         activeCityId: s.activeCityId,

@@ -39,32 +39,9 @@ import {
 export default function AdminDashboard() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { activeCityId, activeBranchId, setActiveCity, setActiveBranch, clearScope } = useAppStore();
+  const { activeCityId, activeBranchId } = useAppStore();
 
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
-
-  // Fetch Cities and Branches for dynamic filter
-  const { data: cities = [] } = useQuery<{ id: number; name: string }[]>({
-    queryKey: ["/api/masters/cities"],
-    queryFn: async () => {
-      const res = await fetch("/api/masters/cities", { credentials: "include" });
-      if (!res.ok) return [];
-      const json = await res.json();
-      return Array.isArray(json) ? json : json?.data ?? [];
-    },
-    staleTime: 60_000,
-  });
-
-  const { data: branches = [] } = useQuery<{ id: number; name: string; cityId?: number | null }[]>({
-    queryKey: ["/api/branches"],
-    queryFn: async () => {
-      const res = await fetch("/api/branches", { credentials: "include" });
-      if (!res.ok) return [];
-      const json = await res.json();
-      return Array.isArray(json) ? json : json?.data ?? [];
-    },
-    staleTime: 60_000,
-  });
 
   // Query authoritative Operations Command Center data
   const {
@@ -84,29 +61,6 @@ export default function AdminDashboard() {
       }),
     refetchInterval: 30_000, // Resilient 30s background polling
   });
-
-  const handleCityChange = (val: string) => {
-    if (val === "all") {
-      clearScope();
-    } else {
-      setActiveCity(Number(val));
-    }
-  };
-
-  const handleBranchChange = (val: string) => {
-    if (val === "all") {
-      setActiveBranch(null);
-    } else {
-      const branch = branches.find((b) => b.id === Number(val));
-      setActiveBranch(Number(val), branch?.cityId ?? null);
-    }
-  };
-
-  // Filter branches based on selected city if any
-  const availableBranches = useMemo(() => {
-    if (!activeCityId) return branches;
-    return branches.filter((b) => b.cityId === activeCityId);
-  }, [branches, activeCityId]);
 
   const metrics = ops?.metrics;
   const immediateAttention = ops?.immediateAttention ?? [];
@@ -137,44 +91,6 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-            {/* Dynamic City Filter */}
-            <div className="flex items-center gap-1.5 bg-card border border-border rounded-lg px-2.5 py-1 shadow-sm">
-              <MapPin size={13} className="text-primary shrink-0" />
-              <span className="text-xs font-semibold text-muted-foreground hidden sm:inline">City:</span>
-              <Select value={activeCityId ? String(activeCityId) : "all"} onValueChange={handleCityChange}>
-                <SelectTrigger className="h-7 w-[120px] sm:w-[140px] text-xs font-medium border-0 shadow-none px-1 bg-transparent">
-                  <SelectValue placeholder="All Cities" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Cities</SelectItem>
-                  {cities.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Dynamic Branch Filter */}
-            <div className="flex items-center gap-1.5 bg-card border border-border rounded-lg px-2.5 py-1 shadow-sm">
-              <Building2 size={13} className="text-primary shrink-0" />
-              <span className="text-xs font-semibold text-muted-foreground hidden sm:inline">Branch:</span>
-              <Select value={activeBranchId ? String(activeBranchId) : "all"} onValueChange={handleBranchChange}>
-                <SelectTrigger className="h-7 w-[130px] sm:w-[150px] text-xs font-medium border-0 shadow-none px-1 bg-transparent">
-                  <SelectValue placeholder="All Branches" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Branches</SelectItem>
-                  {availableBranches.map((b) => (
-                    <SelectItem key={b.id} value={String(b.id)}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Refresh & Live Timestamp */}
             <div className="flex items-center gap-2 pl-1">
               <span className="text-[11px] text-muted-foreground hidden lg:inline">

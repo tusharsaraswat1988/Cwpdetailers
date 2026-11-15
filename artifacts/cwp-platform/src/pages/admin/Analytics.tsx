@@ -53,8 +53,9 @@ import { Link } from "wouter";
 
 const COLORS = [...ADMIN_CHART_COLORS];
 
-async function fetchCancelledPlans() {
-  const res = await fetch("/api/churned", { credentials: "include" });
+async function fetchCancelledPlans(branchId?: number | null) {
+  const url = branchId ? `/api/churned?branchId=${branchId}` : "/api/churned";
+  const res = await fetch(url, { credentials: "include" });
   if (!res.ok) return [];
   return res.json() as Promise<
     Array<{ id: number; customerName: string; planName?: string; cancelledAt?: string }>
@@ -131,8 +132,8 @@ export default function AdminAnalytics() {
     { query: { queryKey: getGetOutstandingDuesQueryKey({}) } },
   );
   const { data: cancelledPlans = [], isLoading: plansLoading } = useQuery({
-    queryKey: ["analytics", "cancelled-plans"],
-    queryFn: fetchCancelledPlans,
+    queryKey: ["analytics", "cancelled-plans", activeBranchId],
+    queryFn: () => fetchCancelledPlans(activeBranchId),
   });
 
   return (

@@ -162,3 +162,64 @@ export function rowInScope(req: Request, row: {
   if (s.staffId && row.staffId != null && row.staffId !== s.staffId) return false;
   return true;
 }
+
+export class BranchAccessDeniedError extends Error {
+  statusCode: number;
+  code: string;
+  constructor(message = "Access denied to branch") {
+    super(message);
+    this.name = "BranchAccessDeniedError";
+    this.statusCode = 403;
+    this.code = "BRANCH_UNAUTHORIZED";
+  }
+}
+
+/**
+ * Checks whether the current caller is authorized to view/mutate data for the given branchId.
+ * If user is superadmin, returns true.
+ * If user has branchIds restriction (e.g. branch manager, city admin, scoped admin):
+ *   checks whether branchId is included in req.scope.branchIds.
+ */
+export function isBranchAuthorized(req: Request, branchId: number): boolean {
+  const s = req.scope;
+  if (!s) return false;
+  if (s.isSuperAdmin) return true;
+  if (s.branchIds === null) return true;
+  return s.branchIds.includes(branchId);
+}
+
+/**
+ * Asserts that the caller is authorized for the given branchId.
+ * Throws BranchAccessDeniedError (HTTP 403) if not authorized.
+ */
+export function assertBranchAccess(req: Request, branchId: number): void {
+  if (!isBranchAuthorized(req, branchId)) {
+    throw new BranchAccessDeniedError(`Access denied to branch ${branchId}`);
+  }
+}
+
+/**
+ * Resolves the effective branchId for a query.
+ * 1. If explicit requestedBranchId is provided, validates caller authorization and returns it.
+ * 2. If no requestedBranchId is provided, and the user has a single scoped branch, returns that branch.
+ * 3. If caller is superadmin and no branchId requested, returns undefined (global view).
+ */
+export function resolveEffectiveBranchId(
+  req: Request,
+  requestedBranchId?: number | string | null,
+): number | undefined {
+  if (requestedBranchId !== undefined && requestedBranchId !== null && requestedBranchId !== "" && requestedBranchId !== "all") {
+    const id = typeof requestedBranchId === "string" ? parseInt(requestedBranchId, 10) : requestedBranchId;
+    if (Number.isFinite(id)) {
+      assertBranchAccess(req, id);
+      return id;
+    }
+  }
+
+  const s = req.scope;
+  if (!s?.isSuperAdmin && s?.branchIds && s.branchIds.length === 1) {
+    return s.branchIds[0];
+  }
+  return undefined;
+}
+

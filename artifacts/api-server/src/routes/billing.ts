@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { invoicesTable, paymentsTable, expensesTable, customersTable } from "@workspace/db";
 import { eq, and, sql, gte, desc } from "drizzle-orm";
-import { tenantFilters } from "../middlewares/tenantScope";
+import { tenantFilters, resolveEffectiveBranchId, BranchAccessDeniedError } from "../middlewares/tenantScope";
 
 const router = Router();
 
@@ -27,9 +27,18 @@ const EXPENSE_SCOPE = {
 
 router.get("/billing/health", async (req, res) => {
   try {
-    const invWhere = and(...tenantFilters(req, INVOICE_SCOPE));
-    const payWhere = and(...tenantFilters(req, PAYMENT_SCOPE));
-    const expWhere = and(...tenantFilters(req, EXPENSE_SCOPE));
+    const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
+    const invConditions = [...tenantFilters(req, INVOICE_SCOPE)];
+    const payConditions = [...tenantFilters(req, PAYMENT_SCOPE)];
+    const expConditions = [...tenantFilters(req, EXPENSE_SCOPE)];
+    if (branchId) {
+      invConditions.push(eq(invoicesTable.branchId, branchId));
+      payConditions.push(eq(paymentsTable.branchId, branchId));
+      expConditions.push(eq(expensesTable.branchId, branchId));
+    }
+    const invWhere = and(...invConditions);
+    const payWhere = and(...payConditions);
+    const expWhere = and(...expConditions);
     const firstOfMonth = new Date();
     firstOfMonth.setDate(1);
     firstOfMonth.setHours(0, 0, 0, 0);
@@ -55,6 +64,9 @@ router.get("/billing/health", async (req, res) => {
       net,
     });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Billing health error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -65,10 +77,14 @@ router.get("/billing/dues", async (req, res) => {
     const { limit = "50", offset = "0", customerId } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
+    const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
     const invWhereParts = [
       ...tenantFilters(req, INVOICE_SCOPE),
       sql`${invoicesTable.balanceDue} > 0`,
     ];
+    if (branchId) {
+      invWhereParts.push(eq(invoicesTable.branchId, branchId));
+    }
     if (customerId) {
       invWhereParts.push(eq(invoicesTable.customerId, parseInt(customerId)));
     }
@@ -95,6 +111,9 @@ router.get("/billing/dues", async (req, res) => {
       })),
     });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Billing dues error");
     return res.status(500).json({ error: "Internal server error" });
   }

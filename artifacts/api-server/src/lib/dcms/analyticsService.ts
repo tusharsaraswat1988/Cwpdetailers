@@ -19,9 +19,12 @@ import { isCleaningExpectedToday } from "./missedVisitScheduler";
 import { classifyTodayOutcome, customerVisitHeadline } from "./visitOutcomes";
 import { dayBoundsIST, todayStrInIST } from "./dateUtils";
 
-export async function getTodayOperationalSummary(dateStr?: string) {
+export async function getTodayOperationalSummary(dateStr?: string, branchId?: number) {
   const date = dateStr ?? todayStrInIST();
   const { start, end } = dayBoundsIST(date);
+
+  const subConditions = [eq(dcmsSubscriptionsTable.status, "active")];
+  if (branchId) subConditions.push(eq(dcmsSubscriptionsTable.branchId, branchId));
 
   const rows = await db
     .select({
@@ -30,7 +33,7 @@ export async function getTodayOperationalSummary(dateStr?: string) {
     })
     .from(dcmsSubscriptionsTable)
     .innerJoin(dcmsPlansTable, eq(dcmsSubscriptionsTable.planId, dcmsPlansTable.id))
-    .where(eq(dcmsSubscriptionsTable.status, "active"));
+    .where(and(...subConditions));
 
   const expectedIds: number[] = [];
   for (const row of rows) {
@@ -135,32 +138,40 @@ export async function getRenewalOperationsStats() {
   };
 }
 
-export async function getAdminDashboardStats() {
+export async function getAdminDashboardStats(branchId?: number) {
+  const subConditions = [eq(dcmsSubscriptionsTable.status, "active")];
+  if (branchId) subConditions.push(eq(dcmsSubscriptionsTable.branchId, branchId));
+
   const [activeSubs] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(dcmsSubscriptionsTable)
-    .where(eq(dcmsSubscriptionsTable.status, "active"));
+    .where(and(...subConditions));
 
   const [pendingVisits] = await db
     .select({ total: sql<number>`coalesce(sum(${dcmsSubscriptionsTable.remainingCleanings}), 0)::int` })
     .from(dcmsSubscriptionsTable)
-    .where(eq(dcmsSubscriptionsTable.status, "active"));
+    .where(and(...subConditions));
 
+  const completedWhere = [eq(dcmsVisitsTable.status, "completed")];
+  if (branchId) completedWhere.push(eq(dcmsSubscriptionsTable.branchId, branchId));
   const [completedVisits] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(dcmsVisitsTable)
-    .where(eq(dcmsVisitsTable.status, "completed"));
+    .leftJoin(dcmsSubscriptionsTable, eq(dcmsVisitsTable.subscriptionId, dcmsSubscriptionsTable.id))
+    .where(and(...completedWhere));
 
   const renewalOps = await getRenewalOperationsStats();
   const feedback = await getFeedbackStats();
-  const performance = await getStaffPerformanceMetrics();
+  const performance = await getStaffPerformanceMetrics(branchId);
 
+  const washWhere = branchId ? [eq(dcmsSubscriptionsTable.branchId, branchId)] : [];
   const [washStats] = await db
     .select({
       used: sql<number>`coalesce(sum(${dcmsSubscriptionsTable.usedWashes}), 0)::int`,
       allocated: sql<number>`coalesce(sum(${dcmsSubscriptionsTable.allocatedWashes}), 0)::int`,
     })
-    .from(dcmsSubscriptionsTable);
+    .from(dcmsSubscriptionsTable)
+    .where(washWhere.length ? and(...washWhere) : undefined);
 
   const [allocationTotals] = await db
     .select({
@@ -168,7 +179,7 @@ export async function getAdminDashboardStats() {
       used: sql<number>`coalesce(sum(${dcmsSubscriptionsTable.usedCleanings}), 0)::int`,
     })
     .from(dcmsSubscriptionsTable)
-    .where(eq(dcmsSubscriptionsTable.status, "active"));
+    .where(and(...subConditions));
 
   const allocated = allocationTotals?.allocated ?? 0;
   const used = allocationTotals?.used ?? 0;
@@ -176,22 +187,28 @@ export async function getAdminDashboardStats() {
 
   const fraud = await getFraudMetrics();
 
+  const assignWhere = [eq(dcmsStaffAssignmentsTable.isActive, true)];
+  if (branchId) assignWhere.push(eq(dcmsSubscriptionsTable.branchId, branchId));
   const activeAssignments = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(dcmsStaffAssignmentsTable)
-    .where(eq(dcmsStaffAssignmentsTable.isActive, true));
+    .leftJoin(dcmsSubscriptionsTable, eq(dcmsStaffAssignmentsTable.subscriptionId, dcmsSubscriptionsTable.id))
+    .where(and(...assignWhere));
 
   const [missedTotal] = await db
     .select({ total: sql<number>`coalesce(sum(${dcmsSubscriptionsTable.missedCleanings}), 0)::int` })
     .from(dcmsSubscriptionsTable)
-    .where(eq(dcmsSubscriptionsTable.status, "active"));
+    .where(and(...subConditions));
 
+  const cnaWhere = [eq(dcmsVisitsTable.status, "car_not_available")];
+  if (branchId) cnaWhere.push(eq(dcmsSubscriptionsTable.branchId, branchId));
   const [carNotAvailableVisits] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(dcmsVisitsTable)
-    .where(eq(dcmsVisitsTable.status, "car_not_available"));
+    .leftJoin(dcmsSubscriptionsTable, eq(dcmsVisitsTable.subscriptionId, dcmsSubscriptionsTable.id))
+    .where(and(...cnaWhere));
 
-  const todayOps = await getTodayOperationalSummary();
+  const todayOps = await getTodayOperationalSummary(undefined, branchId);
 
   return {
     activeSubscriptions: activeSubs?.count ?? 0,

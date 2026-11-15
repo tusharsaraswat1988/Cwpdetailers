@@ -5,7 +5,7 @@ import {
   customersTable, bookingsTable, subscriptionsTable, servicesTable, branchesTable, staffTable,
 } from "@workspace/db";
 import { eq, and, or, ilike, sql, desc, gte, lte } from "drizzle-orm";
-import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
+import { tenantFilters, tenantStamp, rowInScope, loadIfInScope, resolveEffectiveBranchId, BranchAccessDeniedError, assertBranchAccess } from "../middlewares/tenantScope";
 import { findCustomerByPhoneInScope } from "../lib/customerAccount";
 import { assertContactIdentityAvailable } from "../lib/contactIdentity";
 import {
@@ -58,13 +58,15 @@ async function changeLeadStatus(
 router.get("/leads", async (req, res) => {
   try {
     const {
-      search, status, source, assignedTo, dueFollowUp, from, to,
+      search, status, source, assignedTo, dueFollowUp, from, to, branchId,
       limit = "50", offset = "0",
     } = req.query as Record<string, string>;
     const lim = Math.min(parseInt(limit), 100);
     const off = parseInt(offset);
 
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(leadsTable.branchId, effectiveBranchId));
     if (search) {
       conditions.push(or(
         ilike(leadsTable.name, `%${search}%`),
@@ -125,6 +127,9 @@ router.get("/leads", async (req, res) => {
       offset: off,
     });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "List leads error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -135,11 +140,15 @@ router.post("/leads", async (req, res) => {
   try {
     const {
       name, phone, secondaryPhone, city, source, serviceInterest,
-      assignedToStaffId, notes, nextFollowUpAt, valueEstimate,
+      assignedToStaffId, notes, nextFollowUpAt, valueEstimate, branchId,
     } = req.body;
 
     if (!name || !source) {
       return res.status(400).json({ error: "Name and source are required" });
+    }
+
+    if (branchId) {
+      assertBranchAccess(req, Number(branchId));
     }
 
     const phoneResult = parseRequiredMobile(phone);
@@ -168,6 +177,7 @@ router.post("/leads", async (req, res) => {
       notes: notes || null,
       nextFollowUpAt: nextFollowUpAt ? new Date(nextFollowUpAt) : null,
       valueEstimate: valueEstimate ? String(valueEstimate) : null,
+      branchId: branchId ? Number(branchId) : undefined,
     });
 
     const [lead] = await db.insert(leadsTable).values(values as typeof leadsTable.$inferInsert).returning();
@@ -181,6 +191,9 @@ router.post("/leads", async (req, res) => {
 
     return res.status(201).json({ ...lead, assignedToName: null });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Create lead error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -189,8 +202,10 @@ router.post("/leads", async (req, res) => {
 /* ── GET /api/leads/stats ─────────────────────────────────────── */
 router.get("/leads/stats", async (req, res) => {
   try {
-    const { from, to } = req.query as Record<string, string>;
+    const { from, to, branchId } = req.query as Record<string, string>;
     const conditions = [...tenantFilters(req, SCOPE_COLS)];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(leadsTable.branchId, effectiveBranchId));
     if (from) conditions.push(gte(leadsTable.createdAt, new Date(from)));
     if (to) conditions.push(lte(leadsTable.createdAt, new Date(to)));
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -224,6 +239,9 @@ router.get("/leads/stats", async (req, res) => {
       byStatus: statusCounts.map(s => ({ status: s.status, count: Number(s.count) })),
     });
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Lead stats error");
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -232,11 +250,14 @@ router.get("/leads/stats", async (req, res) => {
 /* ── GET /api/leads/follow-ups ────────────────────────────────── */
 router.get("/leads/follow-ups", async (req, res) => {
   try {
+    const { branchId } = req.query as Record<string, string>;
     const conditions = [
       ...tenantFilters(req, SCOPE_COLS),
       lte(leadsTable.nextFollowUpAt, sql`CURRENT_DATE + INTERVAL '1 day'`),
       gte(leadsTable.nextFollowUpAt, sql`CURRENT_DATE`),
     ];
+    const effectiveBranchId = resolveEffectiveBranchId(req, branchId);
+    if (effectiveBranchId) conditions.push(eq(leadsTable.branchId, effectiveBranchId));
     const where = and(...conditions);
 
     const data = await db.select({
@@ -256,6 +277,9 @@ router.get("/leads/follow-ups", async (req, res) => {
 
     return res.json(data.map(d => ({ ...d, assignedToName: d.assignedToName ?? null })));
   } catch (err) {
+    if (err instanceof BranchAccessDeniedError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     req.log.error({ err }, "Follow-ups error");
     return res.status(500).json({ error: "Internal server error" });
   }

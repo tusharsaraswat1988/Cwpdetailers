@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useAppStore } from "@/lib/store";
 import {
   AlertTriangle,
   Calendar,
@@ -556,6 +557,7 @@ export default function AssignServicesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isOnline = useOnlineStatus();
+  const activeBranchId = useAppStore((s) => s.activeBranchId);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("waiting_assignment");
@@ -592,6 +594,7 @@ export default function AssignServicesPage() {
 
   const serverFilters: AssignmentFilters = useMemo(() => {
     const f: AssignmentFilters = {};
+    if (activeBranchId) f.branchId = activeBranchId;
     if (serviceTypeFilter) f.serviceType = serviceTypeFilter;
     if (technicianFilter !== "all") f.staffId = parseInt(technicianFilter, 10);
     if (dateValue) {
@@ -599,7 +602,7 @@ export default function AssignServicesPage() {
       f.dateTo = dateValue;
     }
     return f;
-  }, [serviceTypeFilter, technicianFilter, dateValue]);
+  }, [activeBranchId, serviceTypeFilter, technicianFilter, dateValue]);
 
   const {
     data: pending = [],

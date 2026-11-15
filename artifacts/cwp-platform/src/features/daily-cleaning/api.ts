@@ -232,10 +232,11 @@ export type StaffPerformanceRow = {
   customerRating: number;
 };
 
-export function useDcmsDashboard() {
+export function useDcmsDashboard(branchId?: number | null) {
+  const qs = branchId ? `?branchId=${branchId}` : "";
   return useQuery({
-    queryKey: ["dcms", "dashboard"],
-    queryFn: () => dcmsFetch<DashboardStats>("/daily-cleaning/admin/dashboard"),
+    queryKey: ["dcms", "dashboard", branchId],
+    queryFn: () => dcmsFetch<DashboardStats>(`/daily-cleaning/admin/dashboard${qs}`),
   });
 }
 
@@ -252,10 +253,14 @@ export function useDcmsPlans(vehicleId?: number) {
   });
 }
 
-export function useDcmsSubscriptions(status?: string) {
+export function useDcmsSubscriptions(status?: string, branchId?: number | null) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (branchId) params.set("branchId", String(branchId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return useQuery({
-    queryKey: ["dcms", "subscriptions", status],
-    queryFn: () => dcmsFetch<DcmsSubscriptionRow[]>(`/daily-cleaning/subscriptions${status ? `?status=${status}` : ""}`),
+    queryKey: ["dcms", "subscriptions", status, branchId],
+    queryFn: () => dcmsFetch<DcmsSubscriptionRow[]>(`/daily-cleaning/subscriptions${qs}`),
   });
 }
 
@@ -421,11 +426,12 @@ export function useCustomerDcmsWashes() {
   });
 }
 
-export function useStaffPerformance() {
+export function useStaffPerformance(branchId?: number | null) {
+  const qs = branchId ? `?branchId=${branchId}` : "";
   return useQuery({
-    queryKey: ["dcms", "staff-performance"],
+    queryKey: ["dcms", "staff-performance", branchId],
     queryFn: () => dcmsFetch<{ staff: StaffPerformanceRow[]; topPerformers: StaffPerformanceRow[]; lowestPerformers: StaffPerformanceRow[] }>(
-      "/daily-cleaning/admin/staff-performance",
+      `/daily-cleaning/admin/staff-performance${qs}`,
     ),
   });
 }

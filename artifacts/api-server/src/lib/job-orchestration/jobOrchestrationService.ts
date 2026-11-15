@@ -89,6 +89,7 @@ export type JobListFilter = {
   priority?: JobPriority;
   opsStatus?: JobOpsStatus;
   limit?: number;
+  branchId?: number;
 };
 
 const jobSelect = {
@@ -416,6 +417,9 @@ export async function listJobs(req: Request, filter: JobListFilter = {}): Promis
 
   if (filter.priority) {
     conditions.push(eq(serviceExecutionsTable.priority, filter.priority));
+  }
+  if (filter.branchId) {
+    conditions.push(eq(serviceExecutionsTable.branchId, filter.branchId));
   }
   if (filter.opsStatus) {
     conditions.push(eq(serviceExecutionsTable.opsStatus, filter.opsStatus));
