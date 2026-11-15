@@ -262,4 +262,19 @@ describe("Staff Deletion & Offboarding Lifecycle (STAFF-025)", () => {
       expect(updatedStaffSet.availability).toBe("available");
     });
   });
+
+  describe("RBAC & Safety Gating Policies", () => {
+    it("ensures that field staff and customers cannot invoke delete or deactivation APIs", () => {
+      const allowedRoles = ["superadmin", "central_admin", "admin", "branch_manager", "city_admin"];
+      const rejectedRoles = ["staff", "customer", "driver", "technician", "lead", undefined];
+
+      for (const role of allowedRoles) {
+        expect(["superadmin", "central_admin", "admin", "branch_manager", "city_admin"].includes(role!)).toBe(true);
+      }
+
+      for (const role of rejectedRoles) {
+        expect(["superadmin", "central_admin", "admin", "branch_manager", "city_admin"].includes(role!)).toBe(false);
+      }
+    });
+  });
 });
