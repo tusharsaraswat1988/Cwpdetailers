@@ -247,8 +247,8 @@ export async function seedCatalogMigration() {
       isHighlighted: true,
       features: ["30 Daily Cleanings", "2 Full Washes", "Wednesday Weekly Off"],
       entitlements: [
-        { serviceSlug: "single-wash", type: "wash_credit" as const, credits: 2 },
-        { serviceSlug: "premium-wash", type: "cleaning_credit" as const, credits: 30 },
+        { serviceSlug: "doorstep-car-wash", type: "wash_credit" as const, credits: 2 },
+        { serviceSlug: "daily-car-cleaning", type: "cleaning_credit" as const, credits: 30 },
       ],
     },
     {
@@ -258,7 +258,7 @@ export async function seedCatalogMigration() {
       validityDays: 180,
       tag: "FLEXIBLE",
       features: ["4 Full Washes", "180 Days Validity"],
-      entitlements: [{ serviceSlug: "premium-wash", type: "wash_credit" as const, credits: 4 }],
+      entitlements: [{ serviceSlug: "doorstep-car-wash", type: "wash_credit" as const, credits: 4 }],
     },
     {
       name: "12 Month Solar AMC",
@@ -269,7 +269,7 @@ export async function seedCatalogMigration() {
       solarTerm: "amc_12" as const,
       validityDays: 365,
       features: ["12 Cleaning Visits", "365 Days Validity", "Quoted from panel count"],
-      entitlements: [{ serviceSlug: "one-time-solar-cleaning", type: "solar_visit" as const, credits: 12 }],
+      entitlements: [{ serviceSlug: "solar-cleaning", type: "solar_visit" as const, credits: 12 }],
     },
     {
       name: "6 Month Solar AMC",
@@ -279,7 +279,7 @@ export async function seedCatalogMigration() {
       solarTerm: "amc_6" as const,
       validityDays: 180,
       features: ["6 Cleaning Visits", "180 Days Validity", "Quoted from panel count"],
-      entitlements: [{ serviceSlug: "one-time-solar-cleaning", type: "solar_visit" as const, credits: 6 }],
+      entitlements: [{ serviceSlug: "solar-cleaning", type: "solar_visit" as const, credits: 6 }],
     },
   ];
 

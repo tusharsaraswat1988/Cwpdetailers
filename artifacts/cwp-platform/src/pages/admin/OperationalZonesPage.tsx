@@ -32,7 +32,11 @@ import {
   ArrowRight,
   Globe,
   Radio,
+  LayoutGrid,
+  Map,
 } from "lucide-react";
+import { ZoneMapPicker, getCityCenterCoordinates } from "@/components/admin/ZoneMapPicker";
+import { ZonesOverviewMap } from "@/components/admin/ZonesOverviewMap";
 
 type OperationalZone = {
   id: number;
@@ -76,6 +80,7 @@ export default function OperationalZonesPage() {
   const [selectedCityId, setSelectedCityId] = useState<string>("all");
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
 
   // Automatically sync with global active city / branch scope
   useEffect(() => {
@@ -277,19 +282,34 @@ export default function OperationalZonesPage() {
     setEditingZone(null);
     const defaultCityId = activeCityId ? String(activeCityId) : cities[0] ? String(cities[0].id) : "";
     const defaultBranchId = activeBranchId ? String(activeBranchId) : branches[0] ? String(branches[0].id) : "";
+    const cityName = cities.find(c => String(c.id) === defaultCityId)?.name;
+    const defaultCoords = getCityCenterCoordinates(cityName);
+
     setZoneForm({
       cityId: defaultCityId,
       branchId: defaultBranchId,
       name: "",
       code: "",
       description: "",
-      centerLatitude: "",
-      centerLongitude: "",
+      centerLatitude: String(defaultCoords[0]),
+      centerLongitude: String(defaultCoords[1]),
       radiusMeters: "5000",
       status: "active",
     });
     setZoneModalOpen(true);
   };
+
+  const selectedZoneCityName =
+    cities.find((c) => String(c.id) === zoneForm.cityId)?.name ||
+    cities.find((c) => String(c.id) === selectedCityId)?.name ||
+    (activeCityId ? cities.find((c) => c.id === activeCityId)?.name : undefined);
+
+  const activeFilteredCityName =
+    selectedCityId !== "all"
+      ? cities.find((c) => String(c.id) === selectedCityId)?.name
+      : activeCityId
+      ? cities.find((c) => c.id === activeCityId)?.name
+      : undefined;
 
   const openEditZone = (z: OperationalZone) => {
     setEditingZone(z);
@@ -349,7 +369,7 @@ export default function OperationalZonesPage() {
           </Button>
         </div>
 
-        {/* Filters */}
+        {/* Filters & View Mode */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -386,9 +406,33 @@ export default function OperationalZonesPage() {
               testId="combobox-filter-branch"
             />
           </div>
+
+          {/* View Mode Switcher */}
+          <div className="flex items-center rounded-lg border bg-muted/40 p-0.5 shrink-0 self-start sm:self-auto">
+            <Button
+              type="button"
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("grid")}
+              className="h-8 px-2.5 text-xs gap-1.5"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span>Cards</span>
+            </Button>
+            <Button
+              type="button"
+              variant={viewMode === "map" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("map")}
+              className="h-8 px-2.5 text-xs gap-1.5"
+            >
+              <Map className="h-3.5 w-3.5 text-primary" />
+              <span>Map View</span>
+            </Button>
+          </div>
         </div>
 
-        {/* Zones List */}
+        {/* Zones List or Map */}
         {zonesLoading ? (
           <div className="p-12 text-center text-sm text-muted-foreground">Loading operational zones…</div>
         ) : filteredZones.length === 0 ? (
@@ -403,6 +447,15 @@ export default function OperationalZonesPage() {
               Create First Zone
             </Button>
           </div>
+        ) : viewMode === "map" ? (
+          <ZonesOverviewMap
+            zones={filteredZones}
+            cities={cities}
+            branches={branches}
+            activeCityName={activeFilteredCityName}
+            onEditZone={openEditZone}
+            onManageRules={openManageRules}
+          />
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredZones.map(z => {
@@ -501,16 +554,16 @@ export default function OperationalZonesPage() {
 
         {/* Zone Create / Edit Modal */}
         <Dialog open={zoneModalOpen} onOpenChange={setZoneModalOpen}>
-          <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-3xl lg:max-w-4xl max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingZone ? "Edit Operational Zone" : "Create Operational Zone"}</DialogTitle>
               <DialogDescription>
-                Define operational boundaries and map the zone to its primary serving branch.
+                Define operational boundaries visually on the interactive map and map the zone to its primary serving branch.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-semibold">City *</Label>
@@ -523,7 +576,16 @@ export default function OperationalZonesPage() {
                   <SearchableCombobox
                     items={cities.map(c => ({ value: String(c.id), label: c.name }))}
                     value={zoneForm.cityId}
-                    onValueChange={v => setZoneForm(p => ({ ...p, cityId: v }))}
+                    onValueChange={v => {
+                      const cName = cities.find(c => String(c.id) === v)?.name;
+                      const cCoords = getCityCenterCoordinates(cName);
+                      setZoneForm(p => ({
+                        ...p,
+                        cityId: v,
+                        centerLatitude: editingZone ? p.centerLatitude : String(cCoords[0]),
+                        centerLongitude: editingZone ? p.centerLongitude : String(cCoords[1]),
+                      }));
+                    }}
                     placeholder="Select city..."
                     searchPlaceholder="Search city name..."
                     emptyText="No matching city found"
@@ -555,24 +617,77 @@ export default function OperationalZonesPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Zone Name *</Label>
-                <Input
-                  value={zoneForm.name}
-                  onChange={e => setZoneForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Noida Expressway Zone, Sigra Zone"
-                  className="h-10"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs font-semibold">Zone Name *</Label>
+                  <Input
+                    value={zoneForm.name}
+                    onChange={e => setZoneForm(p => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g. Noida Expressway Zone, Sigra Zone"
+                    className="h-10"
+                  />
+                </div>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Zone Code *</Label>
+                  <Label className="text-xs font-semibold">Zone Code *</Label>
                   <Input
                     value={zoneForm.code}
                     onChange={e => setZoneForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
                     placeholder="NOIDA-EXP-01"
                     className="h-10 font-mono uppercase"
+                  />
+                </div>
+              </div>
+
+              {/* Professional Interactive Geofence Map */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs font-semibold">Interactive Geofence & Operational Map *</Label>
+                    <Badge variant="secondary" className="text-[10px] font-medium py-0 px-1.5 text-primary bg-primary/10">
+                      Visual Geofence
+                    </Badge>
+                  </div>
+                  <ContextHelp
+                    title="Radial Geofence Boundary & Visual Mapping"
+                    description="Drag the map pin, search landmarks, or click on the map to set the zone centroid. Adjust the radius slider or presets to calibrate serviceability coverage."
+                    guidance="All residential societies within this geofence circle will be resolved to this operational zone."
+                    technicalDetails={[
+                      { label: "Engine", value: "Leaflet + OpenStreetMap" },
+                      { label: "Resolution Model", value: "Haversine Distance Boundary" },
+                      { label: "Default Radius", value: "5,000m (5 km)" },
+                    ]}
+                    size="xs"
+                  />
+                </div>
+
+                <ZoneMapPicker
+                  latitude={zoneForm.centerLatitude ? parseFloat(zoneForm.centerLatitude) : null}
+                  longitude={zoneForm.centerLongitude ? parseFloat(zoneForm.centerLongitude) : null}
+                  radiusMeters={zoneForm.radiusMeters ? parseInt(zoneForm.radiusMeters, 10) : 5000}
+                  cityName={selectedZoneCityName}
+                  onChange={(loc) => {
+                    setZoneForm((prev) => ({
+                      ...prev,
+                      centerLatitude: String(loc.latitude),
+                      centerLongitude: String(loc.longitude),
+                      radiusMeters: String(loc.radiusMeters),
+                      name: !prev.name && loc.suggestedName ? loc.suggestedName : prev.name,
+                      description: !prev.description && loc.suggestedDescription ? loc.suggestedDescription : prev.description,
+                    }));
+                  }}
+                  heightClass="h-[280px] sm:h-[320px]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs">Description / Covered Landmarks</Label>
+                  <Input
+                    value={zoneForm.description}
+                    onChange={e => setZoneForm(p => ({ ...p, description: e.target.value }))}
+                    placeholder="e.g. Covers Sectors 128 to 137, Jaypee Wish Town and surroundings"
+                    className="h-10 text-xs"
                   />
                 </div>
 
@@ -592,59 +707,6 @@ export default function OperationalZonesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Center Lat</Label>
-                  <Input
-                    value={zoneForm.centerLatitude}
-                    onChange={e => setZoneForm(p => ({ ...p, centerLatitude: e.target.value }))}
-                    placeholder="28.5355"
-                    className="h-10 font-mono text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Center Lng</Label>
-                  <Input
-                    value={zoneForm.centerLongitude}
-                    onChange={e => setZoneForm(p => ({ ...p, centerLongitude: e.target.value }))}
-                    placeholder="77.3910"
-                    className="h-10 font-mono text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Radius (Meters)</Label>
-                    <ContextHelp
-                      title="Radial Geofence Boundary"
-                      description="Radial distance in meters from the center coordinates used for serviceability coverage and distance-based slot availability."
-                      technicalDetails={[
-                        { label: "Default Radius", value: "5000m (5km)" },
-                        { label: "Model", value: "Haversine Distance" }
-                      ]}
-                      size="xs"
-                    />
-                  </div>
-                  <Input
-                    value={zoneForm.radiusMeters}
-                    onChange={e => setZoneForm(p => ({ ...p, radiusMeters: e.target.value }))}
-                    placeholder="5000"
-                    className="h-10 font-mono text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Description / Landmarks</Label>
-                <Input
-                  value={zoneForm.description}
-                  onChange={e => setZoneForm(p => ({ ...p, description: e.target.value }))}
-                  placeholder="Covers Sectors 128 to 137, Jaypee Wish Town and surroundings"
-                  className="h-10 text-xs"
-                />
               </div>
             </div>
 

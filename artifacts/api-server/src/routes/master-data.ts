@@ -65,6 +65,7 @@ async function genericCreate(table: any, req: any, res: any, required: string[],
 async function genericUpdate(table: any, req: any, res: any, onMutated?: () => void) {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
     const updateData = { ...req.body, updatedAt: new Date() };
     delete updateData.id;
     delete updateData.createdAt;
@@ -81,7 +82,9 @@ async function genericUpdate(table: any, req: any, res: any, onMutated?: () => v
 async function genericDelete(table: any, req: any, res: any, onMutated?: () => void) {
   try {
     const id = parseInt(req.params.id);
-    await db.update(table).set({ isActive: false, updatedAt: new Date() }).where(eq(table.id, id));
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+    const [row] = await db.update(table).set({ isActive: false, updatedAt: new Date() }).where(eq(table.id, id)).returning();
+    if (!row) return res.status(404).json({ error: "Not found" });
     onMutated?.();
     return res.status(204).send();
   } catch (err) {

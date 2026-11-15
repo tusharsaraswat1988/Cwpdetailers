@@ -19,7 +19,7 @@ import {
   citiesTable,
   branchesTable,
 } from "@workspace/db";
-import { eq, and, asc, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, or, asc, desc, inArray, sql } from "drizzle-orm";
 import { listHomepagePlans } from "../lib/catalog/homepagePlans";
 import { getSolarRateCard, resolveCatalogPricing, resolveCityId } from "../lib/catalog/pricingEngine";
 import {
@@ -592,7 +592,7 @@ router.get("/catalog/packages/:id", async (req, res) => {
 
 router.post("/catalog/packages", async (req, res) => {
   try {
-    const { addons: rawAddons, solarVisitCredits, entitlements: rawEntitlements, ...rest } = req.body;
+    const { addons: rawAddons, solarVisitCredits, washCredits, entitlements: rawEntitlements, ...rest } = req.body;
     if (!rest.name) return res.status(400).json({ error: "Package name is required" });
     if (rest.price != null && Number(rest.price) <= 0) {
       return res.status(400).json({ error: "Package price must be greater than 0" });
@@ -604,34 +604,76 @@ router.post("/catalog/packages", async (req, res) => {
     const addons = normalizePackageAddons(rawAddons);
     const addonPrice = await resolvePackageAddonPrice(addons);
     const basePrice = Number(rest.price ?? 0);
+
+    // Collision-free slug generation
+    let baseSlug = rest.slug ?? slugify(rest.name);
+    let candidateSlug = baseSlug;
+    let counter = 1;
+    while (true) {
+      const [existing] = await db.select({ id: catalogPackagesTable.id })
+        .from(catalogPackagesTable)
+        .where(eq(catalogPackagesTable.slug, candidateSlug))
+        .limit(1);
+      if (!existing) break;
+      counter++;
+      candidateSlug = `${baseSlug}-${counter}`;
+    }
+
     const body = {
       ...rest,
-      slug: rest.slug ?? slugify(rest.name),
+      slug: candidateSlug,
       price: (basePrice + addonPrice).toFixed(2),
       version: rest.version ?? 1,
     };
     // Drop non-column fields
     delete (body as { solarVisitCredits?: unknown }).solarVisitCredits;
+    delete (body as { washCredits?: unknown }).washCredits;
     delete (body as { entitlements?: unknown }).entitlements;
     const [row] = await db.insert(catalogPackagesTable).values(body).returning();
     if (addons.length) await replacePackageAddons(row.id, addons);
 
     // Auto-attach solar_visit entitlements when creating AMC packages
-    const credits = solarVisitCredits != null ? parseInt(String(solarVisitCredits), 10) : NaN;
-    if (row.solarTerm && Number.isFinite(credits) && credits > 0) {
+    const solarCredits = solarVisitCredits != null ? parseInt(String(solarVisitCredits), 10) : NaN;
+    if (row.solarTerm && Number.isFinite(solarCredits) && solarCredits > 0) {
       const [solarSvc] = await db.select({ id: servicesTable.id })
         .from(servicesTable)
-        .where(eq(servicesTable.pricingModel, "solar_slab"))
+        .where(or(
+          eq(servicesTable.pricingModel, "solar_slab"),
+          eq(servicesTable.category, "solar_cleaning"),
+          eq(servicesTable.slug, "solar-cleaning")
+        ))
         .limit(1);
       if (solarSvc) {
         await db.insert(catalogPackageEntitlementsTable).values({
           packageId: row.id,
           serviceId: solarSvc.id,
           entitlementType: "solar_visit",
-          creditCount: credits,
+          creditCount: solarCredits,
         });
       }
-    } else if (Array.isArray(rawEntitlements)) {
+    }
+
+    // Auto-attach wash_credit entitlements when creating wash packages
+    const washCount = washCredits != null ? parseInt(String(washCredits), 10) : NaN;
+    if (Number.isFinite(washCount) && washCount > 0) {
+      const [washSvc] = await db.select({ id: servicesTable.id })
+        .from(servicesTable)
+        .where(or(
+          eq(servicesTable.slug, "doorstep-car-wash"),
+          eq(servicesTable.category, "car_wash")
+        ))
+        .limit(1);
+      if (washSvc) {
+        await db.insert(catalogPackageEntitlementsTable).values({
+          packageId: row.id,
+          serviceId: washSvc.id,
+          entitlementType: "wash_credit",
+          creditCount: washCount,
+        });
+      }
+    }
+
+    if (Array.isArray(rawEntitlements)) {
       for (const ent of rawEntitlements) {
         if (!ent?.serviceId || !ent?.entitlementType || !ent?.creditCount) continue;
         await db.insert(catalogPackageEntitlementsTable).values({
@@ -656,7 +698,7 @@ router.post("/catalog/packages", async (req, res) => {
 router.patch("/catalog/packages/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { addons: rawAddons, solarVisitCredits: _svc, entitlements: _ents, ...rest } = req.body;
+    const { addons: rawAddons, solarVisitCredits, washCredits, entitlements: _ents, ...rest } = req.body;
     if (rest.price != null && Number(rest.price) <= 0) {
       return res.status(400).json({ error: "Package price must be greater than 0" });
     }
@@ -672,6 +714,7 @@ router.patch("/catalog/packages/:id", async (req, res) => {
     delete updateData.id;
     delete updateData.createdAt;
     delete updateData.solarVisitCredits;
+    delete updateData.washCredits;
     delete updateData.entitlements;
 
     if (rawAddons !== undefined) {
@@ -687,8 +730,80 @@ router.patch("/catalog/packages/:id", async (req, res) => {
       .where(eq(catalogPackagesTable.id, id))
       .returning();
     if (!row) return res.status(404).json({ error: "Not found" });
+
+    // Handle wash credits update
+    if (washCredits != null) {
+      const washCount = parseInt(String(washCredits), 10);
+      if (Number.isFinite(washCount) && washCount > 0) {
+        const [existingWash] = await db.select()
+          .from(catalogPackageEntitlementsTable)
+          .where(and(
+            eq(catalogPackageEntitlementsTable.packageId, id),
+            eq(catalogPackageEntitlementsTable.entitlementType, "wash_credit")
+          )).limit(1);
+        if (existingWash) {
+          await db.update(catalogPackageEntitlementsTable)
+            .set({ creditCount: washCount })
+            .where(eq(catalogPackageEntitlementsTable.id, existingWash.id));
+        } else {
+          const [washSvc] = await db.select({ id: servicesTable.id })
+            .from(servicesTable)
+            .where(or(
+              eq(servicesTable.slug, "doorstep-car-wash"),
+              eq(servicesTable.category, "car_wash")
+            ))
+            .limit(1);
+          if (washSvc) {
+            await db.insert(catalogPackageEntitlementsTable).values({
+              packageId: id,
+              serviceId: washSvc.id,
+              entitlementType: "wash_credit",
+              creditCount: washCount,
+            });
+          }
+        }
+      }
+    }
+
+    // Handle solar credits update
+    if (solarVisitCredits != null) {
+      const credits = parseInt(String(solarVisitCredits), 10);
+      if (Number.isFinite(credits) && credits > 0) {
+        const [existingSolar] = await db.select()
+          .from(catalogPackageEntitlementsTable)
+          .where(and(
+            eq(catalogPackageEntitlementsTable.packageId, id),
+            eq(catalogPackageEntitlementsTable.entitlementType, "solar_visit")
+          )).limit(1);
+        if (existingSolar) {
+          await db.update(catalogPackageEntitlementsTable)
+            .set({ creditCount: credits })
+            .where(eq(catalogPackageEntitlementsTable.id, existingSolar.id));
+        } else {
+          const [solarSvc] = await db.select({ id: servicesTable.id })
+            .from(servicesTable)
+            .where(or(
+              eq(servicesTable.pricingModel, "solar_slab"),
+              eq(servicesTable.category, "solar_cleaning"),
+              eq(servicesTable.slug, "solar-cleaning")
+            ))
+            .limit(1);
+          if (solarSvc) {
+            await db.insert(catalogPackageEntitlementsTable).values({
+              packageId: id,
+              serviceId: solarSvc.id,
+              entitlementType: "solar_visit",
+              creditCount: credits,
+            });
+          }
+        }
+      }
+    }
+
+    const items = await db.select().from(catalogPackageEntitlementsTable)
+      .where(eq(catalogPackageEntitlementsTable.packageId, id));
     const addons = await getPackageAddons(id);
-    return res.json({ ...row, addons });
+    return res.json({ ...row, entitlements: items, addons });
   } catch (err: any) {
     req.log.error({ err }, "Update package error");
     return res.status(400).json({ error: err.message || "Internal server error" });

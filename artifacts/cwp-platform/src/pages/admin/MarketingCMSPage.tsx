@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
   Pencil,
   Trash2,
   MapPin,
+  Building2,
   Calendar,
   MousePointerClick,
   Eye,
@@ -44,12 +45,13 @@ import {
   Search,
   FlaskConical,
   TrendingDown,
+  AlertTriangle,
 } from "lucide-react";
 import { BookingFunnelDashboard } from "@/components/admin/BookingFunnelDashboard";
 import { UxExperimentsDashboard } from "@/components/admin/UxExperimentsDashboard";
 
-type City = { id: number; name: string; slug: string };
-type Branch = { id: number; name: string; cityId: number };
+type City = { id: number; name: string; slug: string; status?: string; isActive?: boolean };
+type Branch = { id: number; name: string; cityId?: number | null; city?: string | null; status?: string; isActive?: boolean };
 
 type Section = {
   id: number;
@@ -104,30 +106,62 @@ type MediaAsset = {
   cityId?: number | null;
 };
 
+const STANDARD_SECTION_PRESETS = [
+  { key: "hero_banner", label: "Hero Banner Carousel" },
+  { key: "promotional_offers", label: "Promotional Offers & Coupons" },
+  { key: "service_highlights", label: "Service Highlights Catalog" },
+  { key: "why_choose_us", label: "Why Choose Us (Trust Pillars)" },
+  { key: "customer_testimonials", label: "Customer Testimonials & Reviews" },
+  { key: "faqs", label: "Frequently Asked Questions (FAQs)" },
+  { key: "custom", label: "Custom Component / Section" },
+];
+
 export default function MarketingCMSPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState("sections");
   const [selectedCityId, setSelectedCityId] = useState<string>("all");
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
-  // Queries
-  const { data: citiesData } = useQuery<{ cities: City[] }>({
+  // Queries for Cities and Branches
+  const { data: cities = [] } = useQuery<City[]>({
     queryKey: ["cities-list"],
     queryFn: async () => {
-      const res = await fetch("/api/cities");
-      if (!res.ok) return { cities: [] };
-      return res.json();
+      const res = await fetch("/api/cities", { credentials: "include" });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : json.cities || json.items || [];
     },
   });
-  const cities = citiesData?.cities || [];
 
-  const { data: sectionsData, isLoading: sectionsLoading } = useQuery<{ sections: Section[] }>({
-    queryKey: ["marketing-sections", selectedCityId],
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ["branches-list"],
     queryFn: async () => {
-      const url = selectedCityId !== "all" ? `/api/marketing/sections?cityId=${selectedCityId}` : "/api/marketing/sections";
+      const res = await fetch("/api/branches", { credentials: "include" });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : json.branches || json.items || [];
+    },
+  });
+
+  // Filtered branches for current city selection
+  const filteredBranches = useMemo(() => {
+    if (selectedCityId === "all") return branches;
+    return branches.filter((b) => String(b.cityId) === selectedCityId);
+  }, [branches, selectedCityId]);
+
+  // Sections Query
+  const { data: sectionsData, isLoading: sectionsLoading } = useQuery<{ sections: Section[] }>({
+    queryKey: ["marketing-sections", selectedCityId, selectedBranchId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedCityId !== "all") params.append("cityId", selectedCityId);
+      if (selectedBranchId !== "all") params.append("branchId", selectedBranchId);
+      const qs = params.toString();
+      const url = qs ? `/api/marketing/sections?${qs}` : "/api/marketing/sections";
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return { sections: [] };
       return res.json();
@@ -135,10 +169,15 @@ export default function MarketingCMSPage() {
   });
   const sections = sectionsData?.sections || [];
 
+  // Campaigns Query
   const { data: campaignsData, isLoading: campaignsLoading } = useQuery<{ campaigns: Campaign[] }>({
-    queryKey: ["marketing-campaigns", selectedCityId],
+    queryKey: ["marketing-campaigns", selectedCityId, selectedBranchId],
     queryFn: async () => {
-      const url = selectedCityId !== "all" ? `/api/marketing/campaigns?cityId=${selectedCityId}` : "/api/marketing/campaigns";
+      const params = new URLSearchParams();
+      if (selectedCityId !== "all") params.append("cityId", selectedCityId);
+      if (selectedBranchId !== "all") params.append("branchId", selectedBranchId);
+      const qs = params.toString();
+      const url = qs ? `/api/marketing/campaigns?${qs}` : "/api/marketing/campaigns";
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return { campaigns: [] };
       return res.json();
@@ -146,6 +185,7 @@ export default function MarketingCMSPage() {
   });
   const campaigns = campaignsData?.campaigns || [];
 
+  // Media Assets Query
   const { data: mediaData } = useQuery<{ mediaAssets: MediaAsset[] }>({
     queryKey: ["marketing-media", selectedCityId],
     queryFn: async () => {
@@ -157,6 +197,7 @@ export default function MarketingCMSPage() {
   });
   const mediaAssets = mediaData?.mediaAssets || [];
 
+  // Analytics Query
   const { data: analyticsData } = useQuery<{
     overview: {
       totalImpressions: number;
@@ -168,9 +209,13 @@ export default function MarketingCMSPage() {
     };
     topCampaigns: Array<{ id: number; code: string; name: string; usedCount: number }>;
   }>({
-    queryKey: ["marketing-analytics", selectedCityId],
+    queryKey: ["marketing-analytics", selectedCityId, selectedBranchId],
     queryFn: async () => {
-      const url = selectedCityId !== "all" ? `/api/marketing/analytics?cityId=${selectedCityId}` : "/api/marketing/analytics";
+      const params = new URLSearchParams();
+      if (selectedCityId !== "all") params.append("cityId", selectedCityId);
+      if (selectedBranchId !== "all") params.append("branchId", selectedBranchId);
+      const qs = params.toString();
+      const url = qs ? `/api/marketing/analytics?${qs}` : "/api/marketing/analytics";
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return { overview: { totalImpressions: 0, totalClicks: 0, ctrPercent: 0, totalCouponsApplied: 0, totalConversions: 0, attributedRevenue: 0 }, topCampaigns: [] };
       return res.json();
@@ -222,15 +267,165 @@ export default function MarketingCMSPage() {
     reorderMutation.mutate(reordered.map((s) => s.id));
   };
 
-  // Section Create/Edit Dialog state
+  // Section Create/Edit Dialog State
   const [sectionDialogOpen, setSectionDialogOpen] = useState(false);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
+  const [deleteConfirmSection, setDeleteConfirmSection] = useState<Section | null>(null);
+  const [isCustomPresetKey, setIsCustomPresetKey] = useState(false);
   const [sectionForm, setSectionForm] = useState({
-    sectionKey: "promotional_offers",
+    presetKey: "promotional_offers",
+    customKey: "",
     title: "",
     subtitle: "",
     cityId: "global",
+    branchId: "all",
     isEnabled: true,
+    contentJson: "{}",
+  });
+
+  const openCreateSectionDialog = () => {
+    setEditingSection(null);
+    setIsCustomPresetKey(false);
+    setSectionForm({
+      presetKey: "promotional_offers",
+      customKey: "",
+      title: "",
+      subtitle: "",
+      cityId: selectedCityId !== "all" ? selectedCityId : "global",
+      branchId: selectedBranchId !== "all" ? selectedBranchId : "all",
+      isEnabled: true,
+      contentJson: "{}",
+    });
+    setSectionDialogOpen(true);
+  };
+
+  const openEditSectionDialog = (section: Section) => {
+    setEditingSection(section);
+    const isStandard = STANDARD_SECTION_PRESETS.some((p) => p.key === section.sectionKey && p.key !== "custom");
+    setIsCustomPresetKey(!isStandard);
+    setSectionForm({
+      presetKey: isStandard ? section.sectionKey : "custom",
+      customKey: isStandard ? "" : section.sectionKey,
+      title: section.title || "",
+      subtitle: section.subtitle || "",
+      cityId: section.cityId ? String(section.cityId) : "global",
+      branchId: section.branchId ? String(section.branchId) : "all",
+      isEnabled: section.isEnabled,
+      contentJson: JSON.stringify(section.content || {}, null, 2),
+    });
+    setSectionDialogOpen(true);
+  };
+
+  // Create Section Mutation
+  const createSectionMutation = useMutation({
+    mutationFn: async (payload: typeof sectionForm) => {
+      let content = {};
+      if (payload.contentJson.trim()) {
+        try {
+          content = JSON.parse(payload.contentJson);
+        } catch {
+          throw new Error("Invalid JSON in Section Content. Please provide valid JSON or {}");
+        }
+      }
+      const sectionKey = payload.presetKey === "custom" ? payload.customKey.trim() : payload.presetKey;
+      if (!sectionKey) throw new Error("Section Key is required");
+
+      const res = await fetch("/api/marketing/sections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionKey,
+          title: payload.title.trim(),
+          subtitle: payload.subtitle ? payload.subtitle.trim() : null,
+          cityId: payload.cityId === "global" ? null : parseInt(payload.cityId, 10),
+          branchId: payload.branchId === "all" ? null : parseInt(payload.branchId, 10),
+          isEnabled: payload.isEnabled,
+          content,
+        }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to create section");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing-sections"] });
+      setSectionDialogOpen(false);
+      toast({ title: "Section Created", description: `Homepage section "${sectionForm.title}" is now active.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to Create Section", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Update Section Mutation
+  const updateSectionMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: typeof sectionForm }) => {
+      let content = {};
+      if (payload.contentJson.trim()) {
+        try {
+          content = JSON.parse(payload.contentJson);
+        } catch {
+          throw new Error("Invalid JSON in Section Content. Please provide valid JSON or {}");
+        }
+      }
+      const sectionKey = payload.presetKey === "custom" ? payload.customKey.trim() : payload.presetKey;
+      if (!sectionKey) throw new Error("Section Key is required");
+
+      const res = await fetch(`/api/marketing/sections/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionKey,
+          title: payload.title.trim(),
+          subtitle: payload.subtitle ? payload.subtitle.trim() : null,
+          cityId: payload.cityId === "global" ? null : parseInt(payload.cityId, 10),
+          branchId: payload.branchId === "all" ? null : parseInt(payload.branchId, 10),
+          isEnabled: payload.isEnabled,
+          content,
+        }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to update section");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing-sections"] });
+      setSectionDialogOpen(false);
+      setEditingSection(null);
+      toast({ title: "Section Updated", description: "Homepage section has been updated successfully." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to Update Section", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Delete Section Mutation
+  const deleteSectionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/marketing/sections/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to delete section");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing-sections"] });
+      setDeleteConfirmSection(null);
+      toast({ title: "Section Removed", description: "Homepage section deleted successfully." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to Delete", description: err.message, variant: "destructive" });
+    },
   });
 
   // Campaign Create Dialog state
@@ -240,6 +435,7 @@ export default function MarketingCMSPage() {
     name: "",
     description: "",
     cityId: "global",
+    branchId: "all",
     offerType: "percentage_discount",
     discountValue: "15",
     minOrderAmount: "499",
@@ -254,12 +450,17 @@ export default function MarketingCMSPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...payload,
+          code: payload.code,
+          name: payload.name,
+          description: payload.description,
           cityId: payload.cityId === "global" ? null : parseInt(payload.cityId, 10),
+          branchId: payload.branchId === "all" ? null : parseInt(payload.branchId, 10),
+          offerType: payload.offerType,
           discountValue: Number(payload.discountValue),
           minOrderAmount: Number(payload.minOrderAmount),
           maxDiscountAmount: payload.maxDiscountAmount ? Number(payload.maxDiscountAmount) : null,
           usageLimit: payload.usageLimit ? parseInt(payload.usageLimit, 10) : null,
+          termsAndConditions: payload.terms,
         }),
         credentials: "include",
       });
@@ -318,31 +519,52 @@ export default function MarketingCMSPage() {
     toast({ title: "Copied", description: "Image URL copied to clipboard." });
   };
 
+  // Human readable label for current filter scope
+  const currentScopeDescription = useMemo(() => {
+    const c = cities.find((city) => String(city.id) === selectedCityId);
+    const b = branches.find((branch) => String(branch.id) === selectedBranchId);
+    if (b) return `Branch: ${b.name}${c ? ` (${c.name})` : ""}`;
+    if (c) return `City: ${c.name}`;
+    return "All India (Global)";
+  }, [cities, branches, selectedCityId, selectedBranchId]);
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-border">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-border">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-1.5 rounded-lg bg-primary/10 text-primary">
               <Megaphone size={18} />
             </span>
-            <span className="text-xs font-bold uppercase tracking-wider text-primary">Marketing & CMS Hub</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">Marketing &amp; CMS Hub</span>
           </div>
           <h1 className="font-display font-extrabold text-2xl text-foreground">
-            City/Branch-Wise Marketing & Campaigns
+            City/Branch-Wise Marketing &amp; Campaigns
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Manage dynamic homepage sections, hero banners, coupons, localized SEO, and campaign performance without code deployment.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* City Scope Filter */}
-          <div className="flex items-center gap-2">
-            <MapPin size={14} className="text-muted-foreground" />
-            <Select value={selectedCityId} onValueChange={setSelectedCityId}>
-              <SelectTrigger className="w-44 h-9 text-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* City Scope Selector */}
+          <div className="flex items-center gap-1.5 bg-muted/30 px-2 py-1 rounded-lg border border-border">
+            <MapPin size={13} className="text-primary shrink-0" />
+            <Select
+              value={selectedCityId}
+              onValueChange={(val) => {
+                setSelectedCityId(val);
+                // If branch does not belong to newly selected city, reset branch
+                if (val !== "all" && selectedBranchId !== "all") {
+                  const b = branches.find((item) => String(item.id) === selectedBranchId);
+                  if (b && b.cityId && String(b.cityId) !== val) {
+                    setSelectedBranchId("all");
+                  }
+                }
+              }}
+            >
+              <SelectTrigger className="w-36 sm:w-40 h-8 text-xs border-0 bg-transparent shadow-none focus:ring-0">
                 <SelectValue placeholder="All India (Global)" />
               </SelectTrigger>
               <SelectContent>
@@ -350,6 +572,35 @@ export default function MarketingCMSPage() {
                 {cities.map((city) => (
                   <SelectItem key={city.id} value={String(city.id)}>
                     📍 {city.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Branch Scope Selector */}
+          <div className="flex items-center gap-1.5 bg-muted/30 px-2 py-1 rounded-lg border border-border">
+            <Building2 size={13} className="text-indigo-500 shrink-0" />
+            <Select
+              value={selectedBranchId}
+              onValueChange={(val) => {
+                setSelectedBranchId(val);
+                if (val !== "all") {
+                  const b = branches.find((item) => String(item.id) === val);
+                  if (b?.cityId) {
+                    setSelectedCityId(String(b.cityId));
+                  }
+                }
+              }}
+            >
+              <SelectTrigger className="w-40 sm:w-48 h-8 text-xs border-0 bg-transparent shadow-none focus:ring-0">
+                <SelectValue placeholder="All Branches" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">🏬 All Branches</SelectItem>
+                {filteredBranches.map((branch) => (
+                  <SelectItem key={branch.id} value={String(branch.id)}>
+                    🏬 {branch.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -368,6 +619,32 @@ export default function MarketingCMSPage() {
           </Button>
         </div>
       </div>
+
+      {/* Scope Status Ribbon */}
+      {(selectedCityId !== "all" || selectedBranchId !== "all") && (
+        <div className="flex items-center justify-between p-2.5 px-4 rounded-xl bg-primary/5 border border-primary/20 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-primary">Active Filter Scope:</span>
+            <Badge variant="secondary" className="text-xs font-medium">
+              {currentScopeDescription}
+            </Badge>
+            <span className="text-muted-foreground text-[11px]">
+              Showing homepage sections, promotions, and metrics for this location.
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              setSelectedCityId("all");
+              setSelectedBranchId("all");
+            }}
+          >
+            Reset to Global
+          </Button>
+        </div>
+      )}
 
       {/* KPI Highlight Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -416,10 +693,10 @@ export default function MarketingCMSPage() {
             <Layers size={14} /> Homepage Sections
           </TabsTrigger>
           <TabsTrigger value="campaigns" className="text-xs font-semibold gap-1.5">
-            <Tag size={14} /> Campaigns & Coupons
+            <Tag size={14} /> Campaigns &amp; Coupons
           </TabsTrigger>
           <TabsTrigger value="landing" className="text-xs font-semibold gap-1.5">
-            <Globe size={14} /> City Landing & SEO
+            <Globe size={14} /> City Landing &amp; SEO
           </TabsTrigger>
           <TabsTrigger value="media" className="text-xs font-semibold gap-1.5">
             <FileText size={14} /> Media Library
@@ -446,29 +723,38 @@ export default function MarketingCMSPage() {
             </div>
             <Button
               size="sm"
-              className="h-8 gap-1.5 text-xs font-semibold"
-              onClick={() => {
-                setEditingSection(null);
-                setSectionForm({
-                  sectionKey: "promotional_offers",
-                  title: "",
-                  subtitle: "",
-                  cityId: selectedCityId,
-                  isEnabled: true,
-                });
-                setSectionDialogOpen(true);
-              }}
+              className="h-8 gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+              onClick={openCreateSectionDialog}
+              data-testid="add-custom-section-btn"
             >
               <Plus size={13} /> Add Custom Section
             </Button>
           </div>
 
           {sectionsLoading ? (
-            <div className="p-12 text-center text-xs text-muted-foreground">Loading sections...</div>
+            <div className="p-12 text-center text-xs text-muted-foreground flex flex-col items-center gap-2">
+              <Loader2 size={18} className="animate-spin text-primary" />
+              Loading sections...
+            </div>
           ) : sections.length === 0 ? (
-            <div className="p-12 text-center border border-dashed rounded-2xl bg-card">
-              <p className="text-sm font-semibold text-foreground">No custom sections configured</p>
-              <p className="text-xs text-muted-foreground mt-1">Default global layout applies automatically.</p>
+            <div className="p-12 text-center border border-dashed rounded-2xl bg-card space-y-3">
+              <div className="p-3 w-12 h-12 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                <Layers size={22} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">No custom sections configured for this scope</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                  Default global layout applies automatically. Click &quot;Add Custom Section&quot; to configure a custom section, promotion or override for {currentScopeDescription}.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs font-semibold mt-2"
+                onClick={openCreateSectionDialog}
+              >
+                <Plus size={13} /> Add Custom Section Now
+              </Button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -478,22 +764,26 @@ export default function MarketingCMSPage() {
                   className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-card shadow-2xs hover:border-primary/40 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-md bg-muted text-muted-foreground text-xs font-bold flex items-center justify-center">
+                    <span className="w-6 h-6 rounded-md bg-muted text-muted-foreground text-xs font-bold flex items-center justify-center shrink-0">
                       {idx + 1}
                     </span>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-foreground">{section.title || section.sectionKey}</span>
                         <Badge variant="outline" className="text-[10px] font-mono">
                           {section.sectionKey}
                         </Badge>
-                        {section.cityName ? (
-                          <Badge variant="secondary" className="text-[10px]">
+                        {section.branchName ? (
+                          <Badge variant="secondary" className="text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                            🏬 {section.branchName}
+                          </Badge>
+                        ) : section.cityName ? (
+                          <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                             📍 {section.cityName}
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                            🌐 Global
+                            🌐 Global Default
                           </Badge>
                         )}
                       </div>
@@ -504,13 +794,15 @@ export default function MarketingCMSPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 mr-2">
+                    {/* Reordering Controls */}
+                    <div className="flex items-center gap-1 mr-1">
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
                         disabled={idx === 0}
                         onClick={() => handleMove(idx, "up")}
+                        title="Move Up"
                       >
                         <ArrowUp size={13} />
                       </Button>
@@ -520,11 +812,35 @@ export default function MarketingCMSPage() {
                         className="h-7 w-7"
                         disabled={idx === sections.length - 1}
                         onClick={() => handleMove(idx, "down")}
+                        title="Move Down"
                       >
                         <ArrowDown size={13} />
                       </Button>
                     </div>
 
+                    {/* Edit & Delete Action Buttons */}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        onClick={() => openEditSectionDialog(section)}
+                        title="Edit Section"
+                      >
+                        <Pencil size={13} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteConfirmSection(section)}
+                        title="Delete Section"
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    </div>
+
+                    {/* Toggle Switch */}
                     <div className="flex items-center gap-1.5 pl-2 border-l border-border">
                       <Switch
                         checked={section.isEnabled}
@@ -547,7 +863,7 @@ export default function MarketingCMSPage() {
         <TabsContent value="campaigns" className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-sm text-foreground">Marketing Campaigns & Promotional Coupons</h3>
+              <h3 className="font-bold text-sm text-foreground">Marketing Campaigns &amp; Promotional Coupons</h3>
               <p className="text-xs text-muted-foreground">
                 Authoritative backend coupon codes, discount percentage/flat limits, and scope restrictions.
               </p>
@@ -555,7 +871,22 @@ export default function MarketingCMSPage() {
             <Button
               size="sm"
               className="h-8 gap-1.5 text-xs font-semibold"
-              onClick={() => setCampaignDialogOpen(true)}
+              onClick={() => {
+                setCampaignForm({
+                  code: "",
+                  name: "",
+                  description: "",
+                  cityId: selectedCityId !== "all" ? selectedCityId : "global",
+                  branchId: selectedBranchId !== "all" ? selectedBranchId : "all",
+                  offerType: "percentage_discount",
+                  discountValue: "15",
+                  minOrderAmount: "499",
+                  maxDiscountAmount: "200",
+                  usageLimit: "500",
+                  terms: "Valid on online booking only.",
+                });
+                setCampaignDialogOpen(true);
+              }}
             >
               <Plus size={13} /> Create New Campaign
             </Button>
@@ -564,9 +895,9 @@ export default function MarketingCMSPage() {
           {campaignsLoading ? (
             <div className="p-12 text-center text-xs text-muted-foreground">Loading campaigns...</div>
           ) : campaigns.length === 0 ? (
-            <div className="p-12 text-center border border-dashed rounded-2xl bg-card">
-              <p className="text-sm font-semibold text-foreground">No active campaigns</p>
-              <p className="text-xs text-muted-foreground mt-1">Create a coupon code (e.g. WELCOME50) to start promotions.</p>
+            <div className="p-12 text-center border border-dashed rounded-2xl bg-card space-y-2">
+              <p className="text-sm font-semibold text-foreground">No active campaigns for this scope</p>
+              <p className="text-xs text-muted-foreground mt-1">Create a coupon code (e.g. FESTIVE25) to start promotions.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -610,7 +941,13 @@ export default function MarketingCMSPage() {
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border">
-                    <span>{camp.cityName ? `📍 ${camp.cityName}` : "🌐 All Cities"}</span>
+                    <span>
+                      {camp.branchName
+                        ? `🏬 ${camp.branchName}`
+                        : camp.cityName
+                        ? `📍 ${camp.cityName}`
+                        : "🌐 All Cities"}
+                    </span>
                     <span>{camp.endDate ? `Ends ${new Date(camp.endDate).toLocaleDateString()}` : "Ongoing"}</span>
                   </div>
                 </Card>
@@ -623,7 +960,7 @@ export default function MarketingCMSPage() {
         <TabsContent value="landing" className="space-y-4">
           <Card className="p-5 shadow-2xs space-y-4">
             <div>
-              <h3 className="font-bold text-sm text-foreground">City Landing Page Directory & SEO</h3>
+              <h3 className="font-bold text-sm text-foreground">City Landing Page Directory &amp; SEO</h3>
               <p className="text-xs text-muted-foreground">
                 Public landing pages live at <code>/:citySlug</code> with dynamic meta tags, localized FAQs, and Phase 19 service catalogs.
               </p>
@@ -638,6 +975,11 @@ export default function MarketingCMSPage() {
                   <div>
                     <h4 className="font-bold text-sm text-foreground">{city.name} Landing Page</h4>
                     <p className="text-xs text-muted-foreground font-mono mt-0.5">/{city.slug}</p>
+                    <span className="inline-block mt-1">
+                      <Badge variant={city.isActive ? "default" : "secondary"} className="text-[10px]">
+                        {city.status || "active"}
+                      </Badge>
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <a
@@ -707,7 +1049,7 @@ export default function MarketingCMSPage() {
             <h3 className="font-bold text-sm text-foreground">Campaign Conversion Analytics</h3>
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                Lightweight, non-invasive event telemetry tracking impressions, clicks, coupon validations, and completed bookings.
+                Lightweight, non-invasive event telemetry tracking impressions, clicks, coupon validations, and completed bookings for {currentScopeDescription}.
               </p>
             </div>
           </Card>
@@ -724,6 +1066,245 @@ export default function MarketingCMSPage() {
         </TabsContent>
       </Tabs>
 
+      {/* SECTION CREATE & EDIT MODAL DIALOG */}
+      <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers size={18} className="text-primary" />
+              {editingSection ? "Edit Homepage Section" : "Add Custom Homepage Section"}
+            </DialogTitle>
+            <DialogDescription>
+              Configure display title, section type, scope hierarchy, and layout parameters.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            {/* Title */}
+            <div>
+              <Label className="text-xs font-semibold">Section Title *</Label>
+              <Input
+                value={sectionForm.title}
+                onChange={(e) => setSectionForm({ ...sectionForm, title: e.target.value })}
+                placeholder="e.g. Special Doorstep Car Care Offers"
+                className="text-xs h-9 mt-1"
+                data-testid="input-section-title"
+              />
+            </div>
+
+            {/* Subtitle */}
+            <div>
+              <Label className="text-xs font-semibold">Subtitle / Caption (Optional)</Label>
+              <Input
+                value={sectionForm.subtitle}
+                onChange={(e) => setSectionForm({ ...sectionForm, subtitle: e.target.value })}
+                placeholder="e.g. Handcrafted detailing and daily care at your apartment"
+                className="text-xs h-9 mt-1"
+              />
+            </div>
+
+            {/* Section Preset / Key */}
+            <div>
+              <Label className="text-xs font-semibold">Section Type / Key *</Label>
+              <Select
+                value={sectionForm.presetKey}
+                onValueChange={(val) => {
+                  const isCustom = val === "custom";
+                  setIsCustomPresetKey(isCustom);
+                  setSectionForm((prev) => ({
+                    ...prev,
+                    presetKey: val,
+                    customKey: isCustom ? prev.customKey : val,
+                  }));
+                }}
+              >
+                <SelectTrigger className="h-9 text-xs mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STANDARD_SECTION_PRESETS.map((preset) => (
+                    <SelectItem key={preset.key} value={preset.key}>
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Custom Section Key (if selected custom) */}
+            {isCustomPresetKey && (
+              <div>
+                <Label className="text-xs font-semibold">Custom Key Identifier * (lowercase, letters/dashes/underscores)</Label>
+                <Input
+                  value={sectionForm.customKey}
+                  onChange={(e) =>
+                    setSectionForm({
+                      ...sectionForm,
+                      customKey: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "_"),
+                    })
+                  }
+                  placeholder="e.g. society_bulk_discount"
+                  className="text-xs h-9 mt-1 font-mono"
+                />
+              </div>
+            )}
+
+            {/* Hierarchy Scope: City and Branch */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-muted/40 border border-border">
+              <div>
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <MapPin size={12} className="text-primary" /> City Scope
+                </Label>
+                <Select
+                  value={sectionForm.cityId}
+                  onValueChange={(val) => {
+                    setSectionForm((prev) => ({
+                      ...prev,
+                      cityId: val,
+                      branchId: "all", // Reset branch if city changes
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs mt-1 bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="global">🌐 All India (Global)</SelectItem>
+                    {cities.map((city) => (
+                      <SelectItem key={city.id} value={String(city.id)}>
+                        📍 {city.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <Building2 size={12} className="text-indigo-500" /> Branch Scope
+                </Label>
+                <Select
+                  value={sectionForm.branchId}
+                  onValueChange={(val) => {
+                    setSectionForm((prev) => {
+                      if (val !== "all") {
+                        const b = branches.find((branch) => String(branch.id) === val);
+                        return {
+                          ...prev,
+                          branchId: val,
+                          cityId: b?.cityId ? String(b.cityId) : prev.cityId,
+                        };
+                      }
+                      return { ...prev, branchId: val };
+                    });
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs mt-1 bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">🏬 All Branches in Scope</SelectItem>
+                    {branches
+                      .filter((b) => sectionForm.cityId === "global" || String(b.cityId) === sectionForm.cityId)
+                      .map((branch) => (
+                        <SelectItem key={branch.id} value={String(branch.id)}>
+                          🏬 {branch.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Status Switch */}
+            <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-card">
+              <div>
+                <p className="font-semibold text-xs text-foreground">Section Visibility</p>
+                <p className="text-[11px] text-muted-foreground">Enabled sections render immediately to customers in scope.</p>
+              </div>
+              <Switch
+                checked={sectionForm.isEnabled}
+                onCheckedChange={(checked) => setSectionForm({ ...sectionForm, isEnabled: checked })}
+              />
+            </div>
+
+            {/* Content JSON */}
+            <div>
+              <Label className="text-xs font-semibold">Custom Content / Payload (JSON format)</Label>
+              <Textarea
+                value={sectionForm.contentJson}
+                onChange={(e) => setSectionForm({ ...sectionForm, contentJson: e.target.value })}
+                rows={4}
+                className="font-mono text-xs mt-1"
+                placeholder='{ "badge": "Exclusive", "ctaText": "Book Now" }'
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Optional JSON configuration passed directly to the section component renderer.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button size="sm" variant="outline" onClick={() => setSectionDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={
+                createSectionMutation.isPending ||
+                updateSectionMutation.isPending ||
+                !sectionForm.title.trim() ||
+                (sectionForm.presetKey === "custom" && !sectionForm.customKey.trim())
+              }
+              onClick={() => {
+                if (editingSection) {
+                  updateSectionMutation.mutate({ id: editingSection.id, payload: sectionForm });
+                } else {
+                  createSectionMutation.mutate(sectionForm);
+                }
+              }}
+              data-testid="save-section-btn"
+            >
+              {createSectionMutation.isPending || updateSectionMutation.isPending ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : editingSection ? (
+                "Save Changes"
+              ) : (
+                "Create Section"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* SECTION DELETE CONFIRMATION DIALOG */}
+      <Dialog open={!!deleteConfirmSection} onOpenChange={(open) => !open && setDeleteConfirmSection(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle size={18} /> Delete Homepage Section
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove &quot;{deleteConfirmSection?.title || deleteConfirmSection?.sectionKey}&quot;?
+              This will remove the section configuration for its scoped city or branch.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button size="sm" variant="outline" onClick={() => setDeleteConfirmSection(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={deleteSectionMutation.isPending}
+              onClick={() => deleteConfirmSection && deleteSectionMutation.mutate(deleteConfirmSection.id)}
+            >
+              {deleteSectionMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : "Delete Section"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Customer Simulation Preview Modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -732,15 +1313,20 @@ export default function MarketingCMSPage() {
               <Smartphone size={18} className="text-primary" /> Live Customer Experience Simulation
             </DialogTitle>
             <DialogDescription>
-              Preview how customer homepage, services, and banners render for {selectedCityId === "all" ? "All India" : "the selected city"}.
+              Preview how customer homepage, services, and banners render for {currentScopeDescription}.
             </DialogDescription>
           </DialogHeader>
 
           <div className="rounded-2xl border border-border p-4 bg-muted/20 space-y-4">
             <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0B1D36] to-[#123668] text-white space-y-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/30 text-blue-200">
-                Simulated Hero Banner
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/30 text-blue-200">
+                  Simulated Hero Banner
+                </span>
+                <span className="text-[10px] text-blue-200 font-mono">
+                  Scope: {currentScopeDescription}
+                </span>
+              </div>
               <h3 className="font-bold text-lg">Showroom Shine at Your Doorstep</h3>
               <p className="text-xs text-slate-300">
                 Doorstep vehicle care and daily cleaning by verified technicians.
@@ -752,11 +1338,18 @@ export default function MarketingCMSPage() {
                 Active Sections in Scope:
               </h4>
               <div className="flex flex-wrap gap-1.5">
-                {sections.filter((s) => s.isEnabled).map((s) => (
-                  <Badge key={s.id} variant="secondary" className="text-xs">
-                    {s.title || s.sectionKey}
-                  </Badge>
-                ))}
+                {sections.filter((s) => s.isEnabled).length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No custom sections active. Standard defaults apply.</p>
+                ) : (
+                  sections
+                    .filter((s) => s.isEnabled)
+                    .map((s) => (
+                      <Badge key={s.id} variant="secondary" className="text-xs">
+                        {s.title || s.sectionKey}
+                        {s.branchName ? ` (${s.branchName})` : s.cityName ? ` (${s.cityName})` : " (Global)"}
+                      </Badge>
+                    ))
+                )}
               </div>
             </div>
           </div>
@@ -771,7 +1364,7 @@ export default function MarketingCMSPage() {
 
       {/* Campaign Create Dialog */}
       <Dialog open={campaignDialogOpen} onOpenChange={setCampaignDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Marketing Campaign</DialogTitle>
             <DialogDescription>Configure a new coupon code and discount rules.</DialogDescription>
@@ -779,7 +1372,7 @@ export default function MarketingCMSPage() {
 
           <div className="space-y-3 py-2 text-xs">
             <div>
-              <Label className="text-xs">Coupon Code (e.g. FESTIVE25)</Label>
+              <Label className="text-xs">Coupon Code (e.g. FESTIVE25) *</Label>
               <Input
                 value={campaignForm.code}
                 onChange={(e) => setCampaignForm({ ...campaignForm, code: e.target.value.toUpperCase() })}
@@ -789,7 +1382,7 @@ export default function MarketingCMSPage() {
             </div>
 
             <div>
-              <Label className="text-xs">Campaign Name</Label>
+              <Label className="text-xs">Campaign Name *</Label>
               <Input
                 value={campaignForm.name}
                 onChange={(e) => setCampaignForm({ ...campaignForm, name: e.target.value })}
@@ -849,24 +1442,51 @@ export default function MarketingCMSPage() {
               </div>
             </div>
 
-            <div>
-              <Label className="text-xs">City Scope</Label>
-              <Select
-                value={campaignForm.cityId}
-                onValueChange={(val) => setCampaignForm({ ...campaignForm, cityId: val })}
-              >
-                <SelectTrigger className="h-8 text-xs mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="global">🌐 All India (Global)</SelectItem>
-                  {cities.map((city) => (
-                    <SelectItem key={city.id} value={String(city.id)}>
-                      📍 {city.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* City and Branch Scope for Campaigns */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">City Scope</Label>
+                <Select
+                  value={campaignForm.cityId}
+                  onValueChange={(val) => {
+                    setCampaignForm((f) => ({ ...f, cityId: val, branchId: "all" }));
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="global">🌐 All India (Global)</SelectItem>
+                    {cities.map((city) => (
+                      <SelectItem key={city.id} value={String(city.id)}>
+                        📍 {city.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs">Branch Scope</Label>
+                <Select
+                  value={campaignForm.branchId}
+                  onValueChange={(val) => setCampaignForm((f) => ({ ...f, branchId: val }))}
+                >
+                  <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">🏬 All Branches</SelectItem>
+                    {branches
+                      .filter((b) => campaignForm.cityId === "global" || String(b.cityId) === campaignForm.cityId)
+                      .map((branch) => (
+                        <SelectItem key={branch.id} value={String(branch.id)}>
+                          🏬 {branch.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 

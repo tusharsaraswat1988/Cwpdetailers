@@ -397,8 +397,17 @@ router.post("/marketing/sections", requireAuth, async (req: Request, res: Respon
       return res.status(400).json({ error: "sectionKey and title are required" });
     }
 
-    const targetCityId = body.cityId ? parseInt(body.cityId, 10) : null;
+    let targetCityId = body.cityId ? parseInt(body.cityId, 10) : null;
     const targetBranchId = body.branchId ? parseInt(body.branchId, 10) : null;
+
+    if (targetBranchId && !targetCityId) {
+      const [b] = await db
+        .select({ cityId: branchesTable.cityId })
+        .from(branchesTable)
+        .where(eq(branchesTable.id, targetBranchId))
+        .limit(1);
+      if (b?.cityId) targetCityId = b.cityId;
+    }
 
     if (!checkScopePermission(req, targetCityId, targetBranchId)) {
       return res.status(403).json({ error: "Unauthorized scope modification" });
@@ -465,6 +474,12 @@ router.patch("/marketing/sections/:id", requireAuth, async (req: Request, res: R
       updateData.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
     }
     if (body.metadata !== undefined) updateData.metadata = body.metadata;
+    if (body.cityId !== undefined) {
+      updateData.cityId = body.cityId && body.cityId !== "global" ? parseInt(body.cityId, 10) : null;
+    }
+    if (body.branchId !== undefined) {
+      updateData.branchId = body.branchId && body.branchId !== "all" ? parseInt(body.branchId, 10) : null;
+    }
 
     const [updated] = await db
       .update(homepageSectionsTable)
@@ -601,8 +616,17 @@ router.post("/marketing/campaigns", requireAuth, async (req: Request, res: Respo
       return res.status(400).json({ error: "code, name, and discountValue are required" });
     }
 
-    const targetCityId = body.cityId ? parseInt(body.cityId, 10) : null;
+    let targetCityId = body.cityId ? parseInt(body.cityId, 10) : null;
     const targetBranchId = body.branchId ? parseInt(body.branchId, 10) : null;
+
+    if (targetBranchId && !targetCityId) {
+      const [b] = await db
+        .select({ cityId: branchesTable.cityId })
+        .from(branchesTable)
+        .where(eq(branchesTable.id, targetBranchId))
+        .limit(1);
+      if (b?.cityId) targetCityId = b.cityId;
+    }
 
     if (!checkScopePermission(req, targetCityId, targetBranchId)) {
       return res.status(403).json({ error: "Unauthorized scope modification" });
@@ -702,6 +726,12 @@ router.patch("/marketing/campaigns/:id", requireAuth, async (req: Request, res: 
     if (body.termsAndConditions !== undefined) updateData.termsAndConditions = body.termsAndConditions;
     if (body.bannerId !== undefined) updateData.bannerId = body.bannerId ? parseInt(body.bannerId, 10) : null;
     if (body.metadata !== undefined) updateData.metadata = body.metadata;
+    if (body.cityId !== undefined) {
+      updateData.cityId = body.cityId && body.cityId !== "global" ? parseInt(body.cityId, 10) : null;
+    }
+    if (body.branchId !== undefined) {
+      updateData.branchId = body.branchId && body.branchId !== "all" ? parseInt(body.branchId, 10) : null;
+    }
 
     const [updated] = await db
       .update(marketingCampaignsTable)

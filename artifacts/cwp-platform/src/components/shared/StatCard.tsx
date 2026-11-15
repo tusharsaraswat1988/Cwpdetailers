@@ -14,7 +14,7 @@ export interface StatCardProps {
   icon?: LucideIcon;
   /** e.g. "+12% vs last month" */
   delta?: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   trend?: StatCardTrend;
   /** Tints the value + icon chip — use for "needs attention" style KPIs (e.g. overdue counts). */
   tone?: StatCardTone;
@@ -145,7 +145,13 @@ export function StatCard({
           {value}
         </p>
       )}
-      {subtitle && !isLoading && <p className="text-muted-foreground text-xs mt-1">{subtitle}</p>}
+      {subtitle && !isLoading && (
+        typeof subtitle === "string" ? (
+          <p className="text-muted-foreground text-xs mt-1">{subtitle}</p>
+        ) : (
+          <div className="text-xs mt-1">{subtitle}</div>
+        )
+      )}
       {delta && !isLoading && (
         <p className={cn("text-xs mt-1 flex items-center gap-1", trendColor[trend])}>
           {TrendIcon && <TrendIcon size={12} />}

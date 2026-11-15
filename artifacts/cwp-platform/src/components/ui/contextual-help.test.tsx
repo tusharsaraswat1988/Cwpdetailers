@@ -203,5 +203,32 @@ describe("ContextualHelp Component & Shared Integrations (M1.2 & M1.3)", () => {
       expect(helpTrigger).toBeTruthy();
       expect(helpTrigger?.getAttribute("aria-label")).toBe("Worker Threads");
     });
+
+    it("renders StatCard with custom ReactNode subtitle badge (M4 Cluster Status)", () => {
+      render(
+        <StatCard
+          label="Active Workers"
+          value={2}
+          tone="success"
+          subtitle={
+            <span data-testid="cluster-status-badge">
+              <span className="animate-ping" /> Cluster Healthy
+            </span>
+          }
+        />
+      );
+
+      const badge = container.querySelector('[data-testid="cluster-status-badge"]');
+      expect(badge).toBeTruthy();
+      expect(badge?.textContent).toContain("Cluster Healthy");
+    });
+
+    it("renders StatCard with semantic tones (warning, destructive, success)", () => {
+      render(
+        <StatCard label="Pending / Overdue" value={5} tone="warning" />
+      );
+      expect(container.textContent).toContain("Pending / Overdue");
+      expect(container.textContent).toContain("5");
+    });
   });
 });

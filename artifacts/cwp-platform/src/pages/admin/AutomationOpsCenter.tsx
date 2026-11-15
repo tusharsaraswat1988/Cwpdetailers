@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { ContextHelp } from "@/components/ui/context-help";
 import { SearchableCombobox } from "@/components/ui/searchable-combobox";
+import { StatCard } from "@/components/shared/StatCard";
 import {
   Activity,
   Play,
@@ -346,139 +347,96 @@ export default function AutomationOpsCenter() {
 
         {/* KPI Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          <Card className="bg-card shadow-xs">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Total Schedulers</span>
-                <ContextHelp
-                  title="Total Registered Schedulers"
-                  description="All scheduled background tasks configured in scheduled_jobs. These trigger autonomous DCMS route planning, customer reactivation campaigns, and system audits."
-                  technicalDetails={[
-                    { label: "Storage Table", value: "scheduled_jobs" },
-                    { label: "Trigger Types", value: "Cron (5-part) & Interval Seconds" }
-                  ]}
-                  size="xs"
-                />
-              </div>
-              <p className="text-2xl font-bold mt-1 text-foreground">{kpis?.totalJobs ?? 0}</p>
-              <span className="text-xs text-emerald-600 font-medium mt-1 inline-block">
-                {kpis?.activeJobs ?? 0} active
-              </span>
-            </CardContent>
-          </Card>
+          <StatCard
+            label="Total Schedulers"
+            value={kpis?.totalJobs ?? 0}
+            icon={Calendar}
+            tone="default"
+            subtitle={`${kpis?.activeJobs ?? 0} active`}
+            help={{
+              title: "Total Registered Schedulers",
+              content: "All scheduled background tasks configured in scheduled_jobs. These trigger autonomous DCMS route planning, customer reactivation campaigns, and system audits.",
+            }}
+          />
 
-          <Card className="bg-card shadow-xs">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Active Workers</span>
-                <ContextHelp
-                  title="Distributed Worker Fleet"
-                  description="Node.js worker instances actively reporting heartbeats. If a worker goes silent for >45 seconds, its leases are marked stale and re-assigned by the stale sweeper."
-                  technicalDetails={[
-                    { label: "Heartbeat Cadence", value: "15 seconds" },
-                    { label: "Stale Threshold", value: "45 seconds" },
-                    { label: "Table", value: "worker_nodes" }
-                  ]}
-                  size="xs"
-                />
-              </div>
-              <p className="text-2xl font-bold mt-1 text-foreground">{kpis?.activeWorkersCount ?? 0}</p>
-              <span className="text-xs text-blue-600 font-medium mt-1 inline-flex items-center">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-ping" />
-                Cluster Healthy
-              </span>
-            </CardContent>
-          </Card>
+          <StatCard
+            label="Active Workers"
+            value={kpis?.activeWorkersCount ?? 0}
+            icon={Server}
+            tone={(kpis?.activeWorkersCount ?? 0) > 0 ? "success" : "warning"}
+            subtitle={
+              (kpis?.activeWorkersCount ?? 0) > 0 ? (
+                <span className="text-xs text-blue-600 font-medium inline-flex items-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-ping" /> Cluster Healthy
+                </span>
+              ) : (
+                <span className="text-xs text-amber-600 font-medium inline-flex items-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" /> 0 Active Workers (Idle)
+                </span>
+              )
+            }
+            help={{
+              title: "Distributed Worker Fleet",
+              content: "Node.js worker instances actively reporting heartbeats. If a worker goes silent for >45 seconds, its leases are marked stale and re-assigned by the stale sweeper.",
+            }}
+          />
 
-          <Card className="bg-card shadow-xs">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">24h Successes</span>
-                <ContextHelp
-                  title="24h Successful Executions"
-                  description="Total tasks completed successfully in the past 24 hours without throwing uncaught errors."
-                  technicalDetails={[
-                    { label: "Logged In", value: "job_executions" },
-                    { label: "Payload Sanitization", value: "Sensitive credentials scrubbed" }
-                  ]}
-                  size="xs"
-                />
-              </div>
-              <p className="text-2xl font-bold mt-1 text-emerald-600">{kpis?.successJobs24h ?? 0}</p>
-              <span className="text-xs text-muted-foreground mt-1 inline-block">
-                Avg {kpis?.avgExecutionDurationMs ?? 0}ms
-              </span>
-            </CardContent>
-          </Card>
+          <StatCard
+            label="24h Completed"
+            value={kpis?.successJobs24h ?? 0}
+            icon={CheckCircle2}
+            tone="success"
+            subtitle={`Avg ${kpis?.avgExecutionDurationMs ?? 0}ms`}
+            help={{
+              title: "24h Completed Executions",
+              content: "Total tasks completed successfully in the past 24 hours without throwing uncaught errors.",
+            }}
+          />
 
-          <Card className="bg-card shadow-xs">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">24h Failures</span>
-                <ContextHelp
-                  title="24h Job Failures & Retries"
-                  description="Executions that threw unhandled errors or exceeded worker lease timeouts. Failed jobs enter retry backoff before administrative notification."
-                  technicalDetails={[
-                    { label: "Retry Algorithm", value: "Exponential backoff with jitter" },
-                    { label: "Max Retries", value: "Default 3 attempts" }
-                  ]}
-                  size="xs"
-                />
-              </div>
-              <p className="text-2xl font-bold mt-1 text-rose-600">{kpis?.failedJobs24h ?? 0}</p>
-              <span className="text-xs text-muted-foreground mt-1 inline-block">
-                {kpis?.retryQueueCount ?? 0} in retry backoff
-              </span>
-            </CardContent>
-          </Card>
+          <StatCard
+            label="24h Failed"
+            value={kpis?.failedJobs24h ?? 0}
+            icon={AlertCircle}
+            tone={(kpis?.failedJobs24h ?? 0) > 0 ? "destructive" : "default"}
+            subtitle={`${kpis?.retryQueueCount ?? 0} in retry backoff`}
+            help={{
+              title: "24h Job Failures & Retries",
+              content: "Executions that threw unhandled errors or exceeded worker lease timeouts. Failed jobs enter retry backoff before administrative notification.",
+            }}
+          />
 
-          <Card className="bg-card shadow-xs">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Pending / Overdue</span>
-                <ContextHelp
-                  title="Pending & Overdue Schedulers"
-                  description="Jobs whose next scheduled execution is more than 5 minutes overdue and have not yet been acquired by an available worker."
-                  guidance="If this number is non-zero, check that at least one worker node is healthy and not starved of database connection pool slots."
-                  size="xs"
-                />
-              </div>
-              <p className="text-2xl font-bold mt-1 text-amber-600">{kpis?.overdueJobs ?? 0}</p>
-              <span className="text-xs text-muted-foreground mt-1 inline-block">
-                Tolerance: 5 min
-              </span>
-            </CardContent>
-          </Card>
+          <StatCard
+            label="Pending / Overdue"
+            value={kpis?.overdueJobs ?? 0}
+            icon={Clock}
+            tone={(kpis?.overdueJobs ?? 0) > 0 ? "warning" : "default"}
+            subtitle="Tolerance: 5 min"
+            help={{
+              title: "Pending & Overdue Schedulers",
+              content: "Jobs whose next scheduled execution is more than 5 minutes overdue and have not yet been acquired by an available worker.",
+            }}
+          />
 
-          <Card className="bg-card shadow-xs">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Running Now</span>
-                <ContextHelp
-                  title="In-Flight Leases"
-                  description="Background jobs actively claimed and executing under row-level PostgreSQL SKIP LOCKED leases."
-                  technicalDetails={[
-                    { label: "Lock Strategy", value: "FOR UPDATE SKIP LOCKED" },
-                    { label: "Max Lease Duration", value: "5 minutes" }
-                  ]}
-                  size="xs"
-                />
-              </div>
-              <p className="text-2xl font-bold mt-1 text-blue-600">{kpis?.runningJobs ?? 0}</p>
-              <span className="text-xs text-muted-foreground mt-1 inline-block">
-                Skip-Locked Leased
-              </span>
-            </CardContent>
-          </Card>
+          <StatCard
+            label="Running Now"
+            value={kpis?.runningJobs ?? 0}
+            icon={Zap}
+            tone="default"
+            subtitle="Skip-Locked Leased"
+            help={{
+              title: "In-Flight Leases",
+              content: "Background jobs actively claimed and executing under row-level PostgreSQL SKIP LOCKED leases.",
+            }}
+          />
         </div>
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-4 w-full md:w-[600px]">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="jobs">Job Directory ({totalJobsCount})</TabsTrigger>
-            <TabsTrigger value="history">Run Logs</TabsTrigger>
-            <TabsTrigger value="workers">Worker Health</TabsTrigger>
+          <TabsList className="flex w-full overflow-x-auto no-scrollbar gap-1 p-1 md:w-auto md:inline-flex">
+            <TabsTrigger value="overview" className="shrink-0">Overview</TabsTrigger>
+            <TabsTrigger value="jobs" className="shrink-0">Job Directory ({totalJobsCount})</TabsTrigger>
+            <TabsTrigger value="history" className="shrink-0">Run Logs</TabsTrigger>
+            <TabsTrigger value="workers" className="shrink-0">Worker Health</TabsTrigger>
           </TabsList>
 
           {/* TAB 1: OVERVIEW */}

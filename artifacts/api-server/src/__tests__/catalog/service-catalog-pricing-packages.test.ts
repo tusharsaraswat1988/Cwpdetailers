@@ -416,4 +416,143 @@ describe("Phase 19: Universal Service Catalog, Matrix Availability & Pricing Eng
       expect(getCityServices("LKO")).toEqual([2, 3]); // Zero-code expansion to future cities
     });
   });
+
+  describe("Workstream 5b: Wash Package Lifecycle & Filter Robustness", () => {
+    it("ensures wash packages are correctly classified and filtered without being swallowed", () => {
+      type Entitlement = { entitlementType: string; creditCount: number };
+      type MockPackage = {
+        id: number;
+        name: string;
+        slug?: string;
+        solarTerm?: string | null;
+        serviceCategoryId?: number;
+        packageType?: string;
+        validityDays: number;
+        status: string;
+        entitlements?: Entitlement[];
+      };
+
+      function filterPackages(list: MockPackage[], filter?: "wash" | "solar_6" | "solar_12") {
+        if (!filter) return list;
+        return list.filter(pkg => {
+          if (pkg.status === "archived") return false;
+          const ents = pkg.entitlements ?? [];
+          const hasSolar = ents.some(e => e.entitlementType === "solar_visit")
+            || !!pkg.solarTerm
+            || (pkg.slug ?? "").includes("solar")
+            || (pkg.name ?? "").toLowerCase().includes("solar");
+          const hasWash = ents.some(e => e.entitlementType === "wash_credit");
+          const hasCleaning = ents.some(e => e.entitlementType === "cleaning_credit")
+            || (pkg.slug ?? "").includes("daily-cleaning");
+
+          if (filter === "wash") {
+            if (hasSolar || hasCleaning) return false;
+            if (hasWash) return true;
+            const name = pkg.name.toLowerCase();
+            const slug = (pkg.slug ?? "").toLowerCase();
+            return name.includes("wash") || slug.includes("wash") || pkg.packageType === "wash" || (!hasSolar && !hasCleaning && !pkg.solarTerm);
+          }
+          if (!hasSolar && !pkg.solarTerm) return false;
+          if (pkg.solarTerm === "amc_6") return filter === "solar_6";
+          if (pkg.solarTerm === "amc_12") return filter === "solar_12";
+          const name = pkg.name.toLowerCase();
+          const slug = (pkg.slug ?? "").toLowerCase();
+          if (filter === "solar_6") {
+            return name.includes("6") || slug.includes("6-month") || slug.includes("6mo") || (pkg.validityDays >= 150 && pkg.validityDays <= 210);
+          }
+          return name.includes("12") || slug.includes("12-month") || slug.includes("12mo") || pkg.validityDays >= 300;
+        });
+      }
+
+      const sampleCatalog: MockPackage[] = [
+        {
+          id: 10,
+          name: "Daily Cleaning + 2 Washes",
+          slug: "daily-cleaning-2-washes",
+          validityDays: 30,
+          status: "active",
+          entitlements: [
+            { entitlementType: "wash_credit", creditCount: 2 },
+            { entitlementType: "cleaning_credit", creditCount: 30 },
+          ],
+        },
+        {
+          id: 11,
+          name: "4 Wash Package",
+          slug: "4-wash-package",
+          validityDays: 180,
+          status: "active",
+          entitlements: [
+            { entitlementType: "wash_credit", creditCount: 4 },
+          ],
+        },
+        {
+          id: 12,
+          name: "12 Month Solar AMC",
+          slug: "12-month-solar-amc-package",
+          solarTerm: "amc_12",
+          validityDays: 365,
+          status: "active",
+          entitlements: [
+            { entitlementType: "solar_visit", creditCount: 12 },
+          ],
+        },
+        {
+          id: 13,
+          name: "6 Month Solar AMC",
+          slug: "6-month-solar-amc-package",
+          solarTerm: "amc_6",
+          validityDays: 180,
+          status: "active",
+          entitlements: [
+            { entitlementType: "solar_visit", creditCount: 6 },
+          ],
+        },
+        {
+          // Newly created package before entitlement load completes
+          id: 14,
+          name: "8 Wash Package",
+          slug: "8-wash-package",
+          packageType: "wash",
+          validityDays: 180,
+          status: "active",
+          entitlements: [],
+        },
+      ];
+
+      // Wash filter returns both 4 Wash Package and newly created 8 Wash Package
+      const washResults = filterPackages(sampleCatalog, "wash");
+      expect(washResults.map(p => p.id)).toEqual([11, 14]);
+
+      // Daily cleaning (id 10) is excluded because it has cleaning_credit
+      expect(washResults.some(p => p.id === 10)).toBe(false);
+
+      // Solar packages (id 12, 13) are excluded from wash
+      expect(washResults.some(p => p.id === 12 || p.id === 13)).toBe(false);
+
+      // Solar filters return their respective packages
+      const solar6 = filterPackages(sampleCatalog, "solar_6");
+      expect(solar6.map(p => p.id)).toEqual([13]);
+
+      const solar12 = filterPackages(sampleCatalog, "solar_12");
+      expect(solar12.map(p => p.id)).toEqual([12]);
+    });
+
+    it("generates collision-free slugs when packages share names", () => {
+      const existingSlugs = new Set(["4-wash-package", "4-wash-package-2"]);
+
+      function generateUniqueSlug(base: string): string {
+        let candidate = base;
+        let counter = 1;
+        while (existingSlugs.has(candidate)) {
+          counter++;
+          candidate = `${base}-${counter}`;
+        }
+        return candidate;
+      }
+
+      expect(generateUniqueSlug("4-wash-package")).toBe("4-wash-package-3");
+      expect(generateUniqueSlug("8-wash-package")).toBe("8-wash-package");
+    });
+  });
 });

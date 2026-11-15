@@ -42,6 +42,8 @@ const LEGACY_TAB_MAP: Record<string, TabValue> = {
   "catalog-gst": "advanced",
   "city-matrix": "city-matrix",
   "city-availability": "city-matrix",
+  "city matrix": "city-matrix",
+  "city_matrix": "city-matrix",
   matrix: "city-matrix",
   homepage: "homepage",
   "homepage-cms": "homepage",
@@ -58,8 +60,10 @@ function getSearchString(location: string): string {
 function tabFromSearch(search: string): TabValue {
   const raw = new URLSearchParams(search).get("tab");
   if (!raw) return "wash-services";
+  const normalized = raw.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  if (TAB_VALUES.includes(normalized as TabValue)) return normalized as TabValue;
   if (TAB_VALUES.includes(raw as TabValue)) return raw as TabValue;
-  return LEGACY_TAB_MAP[raw] ?? "wash-services";
+  return LEGACY_TAB_MAP[normalized] ?? LEGACY_TAB_MAP[raw.toLowerCase().trim()] ?? "wash-services";
 }
 
 function isCarWashTab(tab: TabValue) {

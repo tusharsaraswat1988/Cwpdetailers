@@ -33,7 +33,7 @@ export function AdminThemeRoot({ children, className }: AdminThemeRootProps) {
         else root.style.removeProperty(key);
       }
       // Restore CMS branding for customer/staff after leaving admin
-      for (const [key, value] of Object.entries(branding.cssVariables)) {
+      for (const [key, value] of Object.entries(branding.cssVariables ?? {})) {
         root.style.setProperty(key, value);
       }
     };

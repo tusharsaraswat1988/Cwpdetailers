@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -153,7 +154,7 @@ export function CityAvailabilityMatrix() {
       const res = await fetch("/api/masters/cities", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load cities");
       const list = await res.json();
-      return list.filter((c: City) => c.isActive);
+      return Array.isArray(list) ? list.filter((c: City) => c.isActive) : [];
     },
   });
 
@@ -163,7 +164,8 @@ export function CityAvailabilityMatrix() {
     queryFn: async () => {
       const res = await fetch("/api/branches", { credentials: "include" });
       if (!res.ok) return [];
-      return res.json();
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data?.data ?? []);
     },
   });
 
@@ -173,7 +175,8 @@ export function CityAvailabilityMatrix() {
     queryFn: async () => {
       const res = await fetch("/api/services?includeInactive=true", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load services");
-      return res.json();
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data?.services ?? []);
     },
   });
 
@@ -186,9 +189,11 @@ export function CityAvailabilityMatrix() {
         // Fallback to legacy endpoint if needed
         const fallback = await fetch("/api/catalog/city-availability", { credentials: "include" });
         if (!fallback.ok) return [];
-        return fallback.json();
+        const fallbackData = await fallback.json();
+        return Array.isArray(fallbackData) ? fallbackData : [];
       }
-      return res.json();
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -201,7 +206,8 @@ export function CityAvailabilityMatrix() {
       if (previewBranchId && previewBranchId !== "all") qs.append("branchId", previewBranchId);
       const res = await fetch(`/api/catalog/preview?${qs.toString()}`, { credentials: "include" });
       if (!res.ok) return [];
-      return res.json();
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     },
     enabled: previewOpen && Boolean(previewCityId),
   });
@@ -209,7 +215,8 @@ export function CityAvailabilityMatrix() {
   // Build availability lookup map
   const availabilityMap = useMemo(() => {
     const map = new Map<string, CityAvailabilityRecord>();
-    for (const record of availabilityRecords) {
+    const list = Array.isArray(availabilityRecords) ? availabilityRecords : [];
+    for (const record of list) {
       if (record.branchId) {
         map.set(`${record.serviceId}-${record.cityId}-b${record.branchId}`, record);
       } else {
@@ -362,7 +369,8 @@ export function CityAvailabilityMatrix() {
   // Categories list
   const categories = useMemo(() => {
     const set = new Set<string>();
-    for (const s of services) {
+    const list = Array.isArray(services) ? services : [];
+    for (const s of list) {
       if (s.category) set.add(s.category);
     }
     return Array.from(set).sort();
@@ -370,18 +378,20 @@ export function CityAvailabilityMatrix() {
 
   // Filtered Cities to show as columns
   const visibleCities = useMemo(() => {
-    if (selectedCityFilter === "all") return cities;
-    return cities.filter(c => String(c.id) === selectedCityFilter);
+    const list = Array.isArray(cities) ? cities : [];
+    if (selectedCityFilter === "all") return list;
+    return list.filter(c => String(c.id) === selectedCityFilter);
   }, [cities, selectedCityFilter]);
 
   // Filtered Services to show as rows
   const filteredServices = useMemo(() => {
-    return services.filter(service => {
+    const list = Array.isArray(services) ? services : [];
+    return list.filter(service => {
       if (selectedCategory !== "all" && service.category !== selectedCategory) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchesName = service.name.toLowerCase().includes(q);
-        const matchesSlug = service.slug.toLowerCase().includes(q);
+        const matchesName = (service.name || "").toLowerCase().includes(q);
+        const matchesSlug = (service.slug || "").toLowerCase().includes(q);
         const matchesCat = (service.category || "").toLowerCase().includes(q);
         if (!matchesName && !matchesSlug && !matchesCat) return false;
       }

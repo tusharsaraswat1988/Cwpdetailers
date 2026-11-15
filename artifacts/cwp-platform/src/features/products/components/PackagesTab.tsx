@@ -32,6 +32,7 @@ type PackageForm = {
   name: string;
   price: string;
   validityDays: string;
+  washCredits: string;
   description: string;
   tag: string;
   features: string;
@@ -44,6 +45,7 @@ const emptyForm = (): PackageForm => ({
   name: "",
   price: "",
   validityDays: "30",
+  washCredits: "4",
   description: "",
   tag: "",
   features: "",
@@ -71,11 +73,21 @@ function filterPackages(list: CatalogPackage[], filter?: PackageFilter): Catalog
   return list.filter(pkg => {
     if (pkg.status === "archived") return false;
     const ents = pkg.entitlements ?? [];
-    const hasSolar = ents.some(e => e.entitlementType === "solar_visit") || !!pkg.solarTerm;
+    const hasSolar = ents.some(e => e.entitlementType === "solar_visit")
+      || !!pkg.solarTerm
+      || (pkg.slug ?? "").includes("solar")
+      || (pkg.name ?? "").toLowerCase().includes("solar");
     const hasWash = ents.some(e => e.entitlementType === "wash_credit");
-    const hasCleaning = ents.some(e => e.entitlementType === "cleaning_credit");
+    const hasCleaning = ents.some(e => e.entitlementType === "cleaning_credit")
+      || (pkg.slug ?? "").includes("daily-cleaning");
+
     if (filter === "wash") {
-      return hasWash && !hasSolar && !hasCleaning;
+      if (hasSolar || hasCleaning) return false;
+      if (hasWash) return true;
+      // Resilient fallback: match wash package if entitlements row is absent or loading
+      const name = pkg.name.toLowerCase();
+      const slug = (pkg.slug ?? "").toLowerCase();
+      return name.includes("wash") || slug.includes("wash") || pkg.packageType === "wash" || (!hasSolar && !hasCleaning && !pkg.solarTerm);
     }
     if (!hasSolar && !pkg.solarTerm) return false;
     if (pkg.solarTerm === "amc_6") return filter === "solar_6";
@@ -158,14 +170,16 @@ export function PackagesTab({ packageFilter }: Props = {}) {
   const openCreate = () => {
     setEditing(null);
     const defaults = solarDefaults(packageFilter);
+    const isWash = !packageFilter || packageFilter === "wash";
     setForm({
       ...emptyForm(),
       ...defaults,
       name: defaults.name ?? "",
       price: defaults.price ?? "",
-      validityDays: defaults.validityDays ?? "30",
-      description: defaults.description ?? "",
-      features: defaults.features ?? "",
+      validityDays: defaults.validityDays ?? (isWash ? "180" : "30"),
+      washCredits: isWash ? "4" : "",
+      description: defaults.description ?? (isWash ? "Prepaid multi-wash package." : ""),
+      features: defaults.features ?? (isWash ? "4 Full Washes\n180 Days Validity" : ""),
       addons: buildAddonForms(),
     });
     setDialogOpen(true);
@@ -175,11 +189,13 @@ export function PackagesTab({ packageFilter }: Props = {}) {
     const addonForms = buildAddonForms(pkg);
     const addonPrice = addonPriceTotal(addonForms);
     const basePrice = Math.max(0, Number(pkg.price) - addonPrice);
+    const washEnt = (pkg.entitlements ?? []).find(e => e.entitlementType === "wash_credit");
     setEditing(pkg);
     setForm({
       name: pkg.name,
       price: String(basePrice),
       validityDays: String(pkg.validityDays),
+      washCredits: washEnt ? String(washEnt.creditCount) : String(pkg.includedVisits ?? 4),
       description: pkg.description ?? "",
       tag: pkg.tag ?? "",
       features: (pkg.features ?? []).join("\n"),
@@ -206,6 +222,7 @@ export function PackagesTab({ packageFilter }: Props = {}) {
 
   const handleSave = () => {
     const isSolar = packageFilter === "solar_6" || packageFilter === "solar_12";
+    const isWash = !packageFilter || packageFilter === "wash";
     if (!form.name.trim()) {
       toast({ title: "Name is required", variant: "destructive" });
       return;
@@ -235,6 +252,12 @@ export function PackagesTab({ packageFilter }: Props = {}) {
       status: "active",
       addons: addonsPayload,
     };
+    if (isWash) {
+      payload.packageType = "wash";
+      const credits = parseInt(form.washCredits, 10) || 4;
+      payload.washCredits = credits;
+      payload.includedVisits = credits;
+    }
     if (isSolar) {
       payload.pricingType = "exclusive";
       payload.solarTerm = defaults.solarTerm;
@@ -312,6 +335,31 @@ export function PackagesTab({ packageFilter }: Props = {}) {
               </div>
               <div><Label>Validity (days)</Label><Input type="number" className="mt-1" value={form.validityDays} onChange={e => setForm(f => ({ ...f, validityDays: e.target.value }))} /></div>
             </div>
+            {!isSolarFilter && (
+              <div>
+                <Label>Included Washes</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  className="mt-1"
+                  placeholder="4"
+                  value={form.washCredits}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setForm(f => {
+                      const next = { ...f, washCredits: val };
+                      if (!editing && (!f.features || f.features.includes("Full Washes"))) {
+                        next.features = `${val || 4} Full Washes\n${f.validityDays || 180} Days Validity`;
+                      }
+                      return next;
+                    });
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Wash credits granted to customer on purchase (e.g. 4, 8, 12).
+                </p>
+              </div>
+            )}
             <div><Label>Description</Label><Textarea className="mt-1" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
             <div><Label>Tag (e.g. POPULAR)</Label><Input className="mt-1" value={form.tag} onChange={e => setForm(f => ({ ...f, tag: e.target.value }))} /></div>
             <div><Label>Features (one per line)</Label><Textarea className="mt-1" rows={4} value={form.features} onChange={e => setForm(f => ({ ...f, features: e.target.value }))} /></div>
@@ -405,6 +453,11 @@ export function PackagesTab({ packageFilter }: Props = {}) {
                       {inclusionLabel(e.entitlementType, e.creditCount)}
                     </Badge>
                   ))}
+                  {(!pkg.entitlements || pkg.entitlements.length === 0) && pkg.includedVisits ? (
+                    <Badge variant="outline" className="text-xs">
+                      {pkg.includedVisits} wash{pkg.includedVisits === 1 ? "" : "es"} included
+                    </Badge>
+                  ) : null}
                 </div>
                 {pkg.addons && pkg.addons.length > 0 && (
                   <p className="text-xs text-muted-foreground">

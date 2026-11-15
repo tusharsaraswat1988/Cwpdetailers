@@ -1533,6 +1533,61 @@ export async function ensureStartupMigrations(): Promise<void> {
     await execStep("089_saved_loc_zone_id", `ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS zone_id INTEGER;`);
     await execStep("089_saved_loc_branch_id", `ALTER TABLE saved_locations ADD COLUMN IF NOT EXISTS branch_id INTEGER;`);
 
+    // Ensure seed package entitlements exist
+    await execStep("ensure_package_entitlements", `
+      DO $$
+      DECLARE
+        v_wash_svc_id INTEGER;
+        v_dcms_svc_id INTEGER;
+        v_solar_svc_id INTEGER;
+        v_pkg_id INTEGER;
+      BEGIN
+        SELECT id INTO v_wash_svc_id FROM services WHERE slug = 'doorstep-car-wash' OR category = 'car_wash' LIMIT 1;
+        SELECT id INTO v_dcms_svc_id FROM services WHERE slug = 'daily-car-cleaning' OR category = 'subscription' LIMIT 1;
+        SELECT id INTO v_solar_svc_id FROM services WHERE slug = 'solar-cleaning' OR category = 'solar_cleaning' LIMIT 1;
+
+        -- 4 Wash Package
+        SELECT id INTO v_pkg_id FROM catalog_packages WHERE slug = '4-wash-package' LIMIT 1;
+        IF v_pkg_id IS NOT NULL AND v_wash_svc_id IS NOT NULL THEN
+          IF NOT EXISTS (SELECT 1 FROM catalog_package_entitlements WHERE package_id = v_pkg_id AND entitlement_type = 'wash_credit') THEN
+            INSERT INTO catalog_package_entitlements (package_id, service_id, entitlement_type, credit_count, sort_order)
+            VALUES (v_pkg_id, v_wash_svc_id, 'wash_credit', 4, 1);
+          END IF;
+        END IF;
+
+        -- Daily Cleaning + 2 Washes
+        SELECT id INTO v_pkg_id FROM catalog_packages WHERE slug = 'daily-cleaning-2-washes' LIMIT 1;
+        IF v_pkg_id IS NOT NULL THEN
+          IF v_wash_svc_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM catalog_package_entitlements WHERE package_id = v_pkg_id AND entitlement_type = 'wash_credit') THEN
+            INSERT INTO catalog_package_entitlements (package_id, service_id, entitlement_type, credit_count, sort_order)
+            VALUES (v_pkg_id, v_wash_svc_id, 'wash_credit', 2, 1);
+          END IF;
+          IF v_dcms_svc_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM catalog_package_entitlements WHERE package_id = v_pkg_id AND entitlement_type = 'cleaning_credit') THEN
+            INSERT INTO catalog_package_entitlements (package_id, service_id, entitlement_type, credit_count, sort_order)
+            VALUES (v_pkg_id, v_dcms_svc_id, 'cleaning_credit', 30, 2);
+          END IF;
+        END IF;
+
+        -- 12 Month Solar AMC
+        SELECT id INTO v_pkg_id FROM catalog_packages WHERE slug = '12-month-solar-amc-package' OR solar_term = 'amc_12' LIMIT 1;
+        IF v_pkg_id IS NOT NULL AND v_solar_svc_id IS NOT NULL THEN
+          IF NOT EXISTS (SELECT 1 FROM catalog_package_entitlements WHERE package_id = v_pkg_id AND entitlement_type = 'solar_visit') THEN
+            INSERT INTO catalog_package_entitlements (package_id, service_id, entitlement_type, credit_count, sort_order)
+            VALUES (v_pkg_id, v_solar_svc_id, 'solar_visit', 12, 1);
+          END IF;
+        END IF;
+
+        -- 6 Month Solar AMC
+        SELECT id INTO v_pkg_id FROM catalog_packages WHERE slug = '6-month-solar-amc-package' OR solar_term = 'amc_6' LIMIT 1;
+        IF v_pkg_id IS NOT NULL AND v_solar_svc_id IS NOT NULL THEN
+          IF NOT EXISTS (SELECT 1 FROM catalog_package_entitlements WHERE package_id = v_pkg_id AND entitlement_type = 'solar_visit') THEN
+            INSERT INTO catalog_package_entitlements (package_id, service_id, entitlement_type, credit_count, sort_order)
+            VALUES (v_pkg_id, v_solar_svc_id, 'solar_visit', 6, 1);
+          END IF;
+        END IF;
+      END $$;
+    `);
+
 
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {
