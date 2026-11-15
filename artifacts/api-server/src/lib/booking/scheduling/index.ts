@@ -17,6 +17,7 @@ import {
   DOMAIN_DEFAULT_DURATION_MINUTES,
 } from "./TimeWindow";
 import { getCapacityProvider } from "./CapacityProvider";
+import { operationalCalendarService } from "./operationalCalendarService";
 import { and, eq, inArray, sql, ne } from "drizzle-orm";
 import { db, bookingsTable, type BookingStatus } from "@workspace/db";
 import { SLOT_OCCUPYING_STATUSES } from "../domain/stateMachine";
@@ -55,17 +56,39 @@ export class SchedulingDomainService {
       return { valid: false, error: err instanceof Error ? err.message : "Invalid time window" };
     }
 
-    const date = new Date(`${window.scheduledDate}T00:00:00`);
-    if (Number.isNaN(date.getTime())) {
-      return { valid: false, error: "Invalid scheduledDate" };
-    }
-    if (date.getDay() === 0) {
-      return { valid: false, error: "CWP is closed on Sundays" };
+    const dateEval = await operationalCalendarService.evaluateDate({
+      date: window.scheduledDate,
+      cityId: input.cityId,
+      branchId: input.branchId,
+      segment: "catalog_services",
+    });
+
+    if (dateEval.isClosed) {
+      return { valid: false, error: dateEval.reason ?? "CWP operations are closed on this date" };
     }
 
+    if (dateEval.closure && !dateEval.closure.isFullDay && dateEval.closure.startTime && dateEval.closure.endTime) {
+      const startParts = dateEval.closure.startTime.split(":").map(Number);
+      const endParts = dateEval.closure.endTime.split(":").map(Number);
+      const closureStart = startParts[0]! * 60 + startParts[1]!;
+      const closureEnd = endParts[0]! * 60 + endParts[1]!;
+      const bHour = window.scheduledStartAt.getHours();
+      const bMinute = window.scheduledStartAt.getMinutes();
+      const bMinutes = bHour * 60 + bMinute;
+      if (bMinutes >= closureStart && bMinutes < closureEnd) {
+        return { valid: false, error: dateEval.closure.customerReason };
+      }
+    }
+
+    const opHours = dateEval.operatingHours ?? {
+      openTime: "08:00",
+      closeTime: "18:00",
+    };
+    const openH = parseInt(opHours.openTime.split(":")[0] ?? "8", 10);
+    const closeH = parseInt(opHours.closeTime.split(":")[0] ?? "18", 10);
     const hour = window.scheduledStartAt.getHours();
-    if (hour < 6 || hour >= 22) {
-      return { valid: false, error: "Booking time must be between 06:00 and 22:00" };
+    if (hour < openH || hour >= closeH) {
+      return { valid: false, error: `Booking time must be within operating hours (${opHours.openTime} to ${opHours.closeTime})` };
     }
 
     try {
@@ -207,6 +230,8 @@ export {
 export type { CapacityProvider, CapacityContext } from "./CapacityProvider";
 export { getAvailableSlots, BOOKING_TIME_SLOTS, bookingSlotProvider } from "./SlotService";
 export type { SlotQuery, AvailableSlot } from "./SlotService";
+export { operationalCalendarService } from "./operationalCalendarService";
+export type { DayOperatingProfile, DayClosureInfo, DateEvaluation } from "./operationalCalendarService";
 export {
   resolveTimeWindow,
   windowsOverlap,

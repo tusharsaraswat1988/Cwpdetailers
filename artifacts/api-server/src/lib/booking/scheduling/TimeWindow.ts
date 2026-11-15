@@ -104,17 +104,24 @@ export function windowsOverlap(
 /** Generate candidate start times for discovery UI (not a capacity assumption). */
 export function generateCandidateStarts(
   date: string,
-  opts?: { fromHour?: number; toHour?: number; stepMinutes?: number },
+  opts?: {
+    fromHour?: number;
+    toHour?: number;
+    fromMinute?: number;
+    toMinute?: number;
+    stepMinutes?: number;
+    skipLunchGap?: boolean;
+  },
 ): string[] {
-  const fromHour = opts?.fromHour ?? 8;
-  const toHour = opts?.toHour ?? 18;
-  const step = opts?.stepMinutes ?? 60;
+  const fromMinutes = (opts?.fromHour ?? 8) * 60 + (opts?.fromMinute ?? 0);
+  const toMinutes = (opts?.toHour ?? 18) * 60 + (opts?.toMinute ?? 0);
+  const step = opts?.stepMinutes ?? 15;
+  const skipLunch = opts?.skipLunchGap ?? false;
   const slots: string[] = [];
-  for (let minutes = fromHour * 60; minutes < toHour * 60; minutes += step) {
+  for (let minutes = fromMinutes; minutes < toMinutes; minutes += step) {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
-    // Skip typical lunch gap 12:00–14:00 for discovery UX; duration still variable.
-    if (h >= 12 && h < 14) continue;
+    if (skipLunch && h >= 12 && h < 14) continue;
     slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
   }
   return slots;

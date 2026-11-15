@@ -1298,6 +1298,80 @@ export async function ensureStartupMigrations(): Promise<void> {
       logger.warn({ err: mig87Err }, "Phase 26 payment webhook events DDL check failed (non-fatal, continuing)");
     }
 
+    // Phase 28 — Dynamic Operational Calendar & Working Hours (Migration 088 / OPS-006)
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS operating_hours (
+          id SERIAL PRIMARY KEY,
+          scope_type TEXT NOT NULL DEFAULT 'global',
+          city_id INTEGER REFERENCES cities(id) ON DELETE CASCADE,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE,
+          day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+          is_working_day BOOLEAN NOT NULL DEFAULT TRUE,
+          open_time TEXT NOT NULL DEFAULT '08:00',
+          close_time TEXT NOT NULL DEFAULT '18:00',
+          slot_step_minutes INTEGER NOT NULL DEFAULT 15,
+          max_concurrent_slots INTEGER NOT NULL DEFAULT 8,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_operating_hours_scope_global 
+          ON operating_hours (day_of_week) 
+          WHERE scope_type = 'global';
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_operating_hours_scope_city 
+          ON operating_hours (city_id, day_of_week) 
+          WHERE scope_type = 'city';
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_operating_hours_scope_branch 
+          ON operating_hours (branch_id, day_of_week) 
+          WHERE scope_type = 'branch';
+
+        CREATE INDEX IF NOT EXISTS idx_operating_hours_lookup 
+          ON operating_hours (scope_type, city_id, branch_id, day_of_week);
+
+        INSERT INTO operating_hours (scope_type, day_of_week, is_working_day, open_time, close_time, slot_step_minutes, max_concurrent_slots)
+        VALUES
+          ('global', 0, FALSE, '08:00', '18:00', 15, 8),
+          ('global', 1, TRUE,  '08:00', '18:00', 15, 8),
+          ('global', 2, TRUE,  '08:00', '18:00', 15, 8),
+          ('global', 3, TRUE,  '08:00', '18:00', 15, 8),
+          ('global', 4, TRUE,  '08:00', '18:00', 15, 8),
+          ('global', 5, TRUE,  '08:00', '18:00', 15, 8),
+          ('global', 6, TRUE,  '08:00', '18:00', 15, 8)
+        ON CONFLICT DO NOTHING;
+
+        CREATE TABLE IF NOT EXISTS operational_closures (
+          id SERIAL PRIMARY KEY,
+          title TEXT NOT NULL,
+          category TEXT NOT NULL CHECK (category IN (
+            'govt_holiday', 'casual_holiday', 'natural_calamity',
+            'staff_absenteeism', 'operational_issue', 'overbooking_freeze', 'other'
+          )),
+          customer_reason TEXT NOT NULL,
+          start_date DATE NOT NULL,
+          end_date DATE NOT NULL,
+          is_full_day BOOLEAN NOT NULL DEFAULT TRUE,
+          start_time TEXT,
+          end_time TEXT,
+          scope_type TEXT NOT NULL DEFAULT 'global',
+          city_id INTEGER REFERENCES cities(id) ON DELETE CASCADE,
+          branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE,
+          exempt_segments JSONB NOT NULL DEFAULT '["daily_cleaning"]'::jsonb,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_operational_closures_dates ON operational_closures(start_date, end_date, is_active);
+        CREATE INDEX IF NOT EXISTS idx_operational_closures_scope ON operational_closures(scope_type, city_id, branch_id);
+      `);
+    } catch (mig88Err) {
+      logger.warn({ err: mig88Err }, "Phase 28 operational calendar DDL check failed (non-fatal, continuing)");
+    }
+
 
     logger.info("Startup schema migrations verified successfully.");
   } catch (err) {

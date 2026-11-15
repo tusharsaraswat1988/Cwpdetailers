@@ -1,7 +1,8 @@
 /**
  * Capacity provider — Booking Engine reads capacity from here, never hardcodes
- * limits inside conflict/slot algorithms. Later backed by Business Settings.
+ * limits inside conflict/slot algorithms. Dynamically backed by operational calendar / operating hours.
  */
+import { operationalCalendarService } from "./operationalCalendarService";
 
 export type CapacityContext = {
   branchId?: number | null;
@@ -17,17 +18,36 @@ export type CapacityProvider = {
   getMaxConcurrentBookings(context: CapacityContext): Promise<number> | number;
 };
 
-/**
- * Default provider used until Business Settings owns capacity.
- * Value lives here — not inside ConflictDetector / SlotService algorithms.
- */
 export class DefaultCapacityProvider implements CapacityProvider {
-  readonly providerId = "default-capacity-v1";
+  readonly providerId = "operational-calendar-capacity-v1";
+  private readonly explicitMax?: number;
 
-  constructor(private readonly defaultMax = 8) {}
+  constructor(fallbackMax?: number) {
+    if (fallbackMax !== undefined && fallbackMax !== 8) {
+      this.explicitMax = fallbackMax;
+    }
+  }
 
-  getMaxConcurrentBookings(_context: CapacityContext): number {
-    return this.defaultMax;
+  async getMaxConcurrentBookings(context: CapacityContext): Promise<number> {
+    if (this.explicitMax !== undefined) {
+      return this.explicitMax;
+    }
+
+    try {
+      const [y, m, d] = context.scheduledDate.split("-").map((v) => parseInt(v, 10));
+      const dateObj = new Date(y!, m! - 1, d!);
+      const dayOfWeek = dateObj.getDay();
+
+      const profile = await operationalCalendarService.getOperatingHoursForDay({
+        dayOfWeek,
+        cityId: context.cityId,
+        branchId: context.branchId,
+      });
+
+      return profile.maxConcurrentSlots ?? 8;
+    } catch {
+      return 8;
+    }
   }
 }
 

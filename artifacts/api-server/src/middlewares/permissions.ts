@@ -32,6 +32,7 @@ const CATALOG_PUBLIC_GET_PREFIXES = [
   "/catalog/city-content",
   "/catalog/services",
   "/catalog/plans",
+  "/catalog/self-booking/check",
 ];
 
 function emptyPublicScope(req: Request) {
@@ -130,8 +131,8 @@ export function guardMasterDataRoutes() {
     const action = METHOD_TO_ACTION[method] ?? "view";
 
     if (method === "GET" && path.startsWith("/pricing/")) {
-      if (!req.user) {
-        emptyPublicScope(req);
+      if (!req.user || req.user.role === "customer") {
+        if (!req.user) emptyPublicScope(req);
         return next();
       }
       return requirePermission("pricing", "view")(req, res, next);

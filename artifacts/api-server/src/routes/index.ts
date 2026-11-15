@@ -61,6 +61,7 @@ import marketingRouter from "./marketing";
 import { loyaltyRouter } from "./loyalty";
 import { automationRouter } from "./automation";
 import uxExperimentsRouter from "./ux-experiments";
+import operationalCalendarRouter from "./operational-calendar";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -315,6 +316,7 @@ router.use(uxExperimentsRouter);
 router.use(supportRouter);
 router.use(qualityRouter);
 router.use(citiesRouter);
+router.use(operationalCalendarRouter);
 router.use(guardMasterDataRoutes(), masterDataRouter);
 router.use(guardCatalogRoutes(), serviceCatalogRouter);
 

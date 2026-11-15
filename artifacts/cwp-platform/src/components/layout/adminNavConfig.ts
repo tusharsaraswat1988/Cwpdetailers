@@ -173,6 +173,13 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
         icon: Star,
         perm: { resource: "analytics", action: "view" },
       },
+      {
+        id: "operational-calendar",
+        href: "/admin/operations/calendar",
+        label: "Operations Calendar & Hours",
+        icon: CalendarCheck,
+        perm: { resource: "bookings", action: "view" },
+      },
     ],
   },
   {

@@ -186,9 +186,69 @@ async function getBookingWithScope(req: Parameters<typeof rowInScope>[0], id: nu
   }
 }
 
+router.get("/bookings/calendar-days", async (req, res) => {
+  try {
+    const { count = "14", cityId, branchId, segment = "catalog_services" } = req.query as Record<string, string>;
+    const dayCount = Math.min(Math.max(parseInt(count, 10) || 14, 1), 60);
+
+    const formatter = new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const parts = formatter.formatToParts(new Date());
+    const p: Record<string, string> = {};
+    for (const part of parts) p[part.type] = part.value;
+    const startIso = `${p.year}-${p.month}-${p.day}`;
+
+    const [startYear, startMonth, startDay] = startIso.split("-").map(Number);
+    const startDate = new Date(startYear!, startMonth! - 1, startDay!);
+
+    const days = [];
+    const { operationalCalendarService } = await import("../lib/booking/scheduling/operationalCalendarService");
+
+    for (let i = 0; i < dayCount; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const isoYear = d.getFullYear();
+      const isoMonth = String(d.getMonth() + 1).padStart(2, "0");
+      const isoDay = String(d.getDate()).padStart(2, "0");
+      const dateStr = `${isoYear}-${isoMonth}-${isoDay}`;
+
+      const evalResult = await operationalCalendarService.evaluateDate({
+        date: dateStr,
+        cityId: cityId ? parseInt(cityId, 10) : undefined,
+        branchId: branchId ? parseInt(branchId, 10) : undefined,
+        segment,
+      });
+
+      let label = d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+      if (i === 0) label = "Today";
+      else if (i === 1) label = "Tomorrow";
+
+      days.push({
+        date: dateStr,
+        label,
+        dayOfWeek: d.getDay(),
+        isClosed: evalResult.isClosed,
+        disabled: evalResult.isClosed,
+        reason: evalResult.reason,
+        category: evalResult.category,
+        operatingHours: evalResult.operatingHours,
+      });
+    }
+
+    return res.json({ days });
+  } catch (err) {
+    req.log.error({ err }, "Get booking calendar days error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/bookings/slots", async (req, res) => {
   try {
-    const { date, branchId, assetId, serviceLocationId, customerId, durationMinutes } = req.query as Record<string, string>;
+    const { date, branchId, assetId, serviceLocationId, customerId, durationMinutes, cityId, segment, stepMinutes } = req.query as Record<string, string>;
     if (!date) return res.status(400).json({ error: "date is required (YYYY-MM-DD)" });
 
     const slots = await bookingCapability.getSlots({
@@ -198,6 +258,9 @@ router.get("/bookings/slots", async (req, res) => {
       serviceLocationId: serviceLocationId ? parseInt(serviceLocationId, 10) : undefined,
       customerId: customerId ? parseInt(customerId, 10) : undefined,
       durationMinutes: durationMinutes ? parseInt(durationMinutes, 10) : undefined,
+      cityId: cityId ? parseInt(cityId, 10) : undefined,
+      segment: segment || undefined,
+      stepMinutes: stepMinutes ? parseInt(stepMinutes, 10) : undefined,
     });
     return res.json({ date, slots });
   } catch (err) {

@@ -28,7 +28,7 @@ import {
   type CustomerPlan, type RawSubscription,
 } from "@/lib/customer-plans";
 import { checkCoverage } from "@/lib/coverage-client";
-import { buildAvailableDates, firstAvailableDate, fetchAvailableSlots, availableTimesFromSlots } from "@/lib/schedule-slots";
+import { buildAvailableDates, fetchCalendarDays, firstAvailableDate, fetchAvailableSlots, availableTimesFromSlots } from "@/lib/schedule-slots";
 import {
   parseScheduleEntryParams,
   resolveBookingAddressForEntry,
@@ -227,13 +227,34 @@ export default function BookService() {
     return null;
   }, [coveredByPlan, solarNeedsSiteVisit, catalogQuote, pricingQuote, selectedService]);
 
-  const dateOptions = useMemo(() => buildAvailableDates(14), []);
+  const { data: serverDates } = useQuery({
+    queryKey: ["calendar-days", bookingLocation?.cityId, selectedVehicle?.cityId, asset?.kind],
+    queryFn: () => fetchCalendarDays({
+      count: 14,
+      cityId: bookingLocation?.cityId ?? selectedVehicle?.cityId ?? null,
+      segment: asset?.kind === "solar" ? "solar_cleaning" : "catalog_services",
+    }),
+    staleTime: 60_000,
+  });
+  const dateOptions = useMemo(() => serverDates ?? buildAvailableDates(14), [serverDates]);
+
   const { data: slotPayload } = useQuery({
-    queryKey: ["booking-slots", scheduledDate, customerId, asset?.id],
+    queryKey: [
+      "booking-slots",
+      scheduledDate,
+      customerId,
+      asset?.id,
+      selectedService?.id,
+      selectedService?.durationMinutes,
+      bookingLocation?.cityId,
+    ],
     queryFn: () => fetchAvailableSlots({
       date: scheduledDate,
       customerId: customerId ?? null,
+      cityId: bookingLocation?.cityId ?? selectedVehicle?.cityId ?? null,
       assetId: asset?.kind === "vehicle" || asset?.kind === "solar" ? Number(asset.id) || null : null,
+      durationMinutes: selectedService?.durationMinutes ?? 60,
+      segment: asset?.kind === "solar" ? "solar_cleaning" : "catalog_services",
     }),
     enabled: Boolean(scheduledDate),
   });
@@ -249,11 +270,26 @@ export default function BookService() {
         setSuccessId(data.id);
         toast({ title: "Request received" });
       },
-      onError: (err: { response?: { data?: { error?: string; message?: string } } }) =>
+      onError: (err: unknown) => {
+        const apiErr = err as {
+          data?: { error?: string; message?: string };
+          message?: string;
+          response?: { data?: { error?: string; message?: string } };
+        };
+        const errorMessage =
+          apiErr?.data?.message ??
+          apiErr?.data?.error ??
+          apiErr?.response?.data?.message ??
+          apiErr?.response?.data?.error ??
+          (typeof apiErr?.message === "string" && !apiErr.message.includes("object")
+            ? apiErr.message
+            : null) ??
+          moduleError("bookings", "save");
         toast({
-          title: err?.response?.data?.message ?? err?.response?.data?.error ?? moduleError("bookings", "save"),
+          title: errorMessage,
           variant: "destructive",
-        }),
+        });
+      },
     },
   });
 
@@ -687,7 +723,10 @@ export default function BookService() {
         {step === "time" && (
           <ScheduleTimeStep
             slots={timeSlots}
+            slotDetails={slotPayload}
             selected={scheduledTime}
+            durationMinutes={selectedService?.durationMinutes ?? 60}
+            dateReason={dateOptions.find((d) => d.date === scheduledDate)?.reason}
             onSelect={setScheduledTime}
           />
         )}

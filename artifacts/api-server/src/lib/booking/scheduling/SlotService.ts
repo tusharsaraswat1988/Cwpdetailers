@@ -10,6 +10,7 @@ import {
 } from "./TimeWindow";
 import type { SlotProvider } from "../extensions/interfaces";
 import type { BookingContext } from "../BookingContext";
+import { operationalCalendarService } from "./operationalCalendarService";
 
 export type SlotQuery = {
   date: string;
@@ -18,9 +19,11 @@ export type SlotQuery = {
   serviceLocationId?: number | null;
   customerId?: number | null;
   cityId?: number | null;
-  /** Requested service duration for candidate evaluation. */
+  /** Service segment, e.g. 'daily_cleaning' or 'catalog_services' */
+  segment?: string;
+  /** Requested service duration for candidate evaluation (multiples of 15 min). */
   durationMinutes?: number | null;
-  /** Discovery grid step — not a domain duration assumption. */
+  /** Discovery grid step (e.g. 15, 30, 60 minutes). */
   stepMinutes?: number;
   now?: Date;
 };
@@ -34,35 +37,80 @@ export type AvailableSlot = {
   endsAt?: string;
 };
 
-function parseLocalDate(dateStr: string): Date {
-  return new Date(`${dateStr}T00:00:00`);
+function parseTimeStr(timeStr: string): { hour: number; minute: number } {
+  const [hStr, mStr] = timeStr.split(":");
+  return {
+    hour: parseInt(hStr ?? "8", 10),
+    minute: parseInt(mStr ?? "0", 10),
+  };
 }
 
-function todayIso(now = new Date()): string {
-  return now.toISOString().split("T")[0];
-}
-
-function isSunday(dateStr: string): boolean {
-  return parseLocalDate(dateStr).getDay() === 0;
+function getTodayIST(now = new Date()): { dateStr: string; hour: number; minute: number } {
+  const formatter = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const p: Record<string, string> = {};
+  for (const part of parts) {
+    p[part.type] = part.value;
+  }
+  const dateStr = `${p.year}-${p.month}-${p.day}`;
+  const hour = parseInt(p.hour ?? "0", 10);
+  const minute = parseInt(p.minute ?? "0", 10);
+  return { dateStr, hour, minute };
 }
 
 /**
- * Server-side slot availability using variable duration windows.
- * Capacity comes from CapacityProvider. Does NOT check staff availability.
+ * Server-side slot availability using dynamic operational calendar,
+ * dynamic operating hours, and variable 15-minute duration windows.
  */
 export async function getAvailableSlots(query: SlotQuery): Promise<AvailableSlot[]> {
   const now = query.now ?? new Date();
-  const durationMinutes = query.durationMinutes ?? DOMAIN_DEFAULT_DURATION_MINUTES;
-  const candidates = generateCandidateStarts(query.date, {
-    stepMinutes: query.stepMinutes ?? 60,
+  const durationMinutes = Math.max(15, query.durationMinutes ?? DOMAIN_DEFAULT_DURATION_MINUTES);
+
+  // Evaluate date in operational calendar (operating hours, govt holidays, weather calamity, closures)
+  const dateEval = await operationalCalendarService.evaluateDate({
+    date: query.date,
+    cityId: query.cityId,
+    branchId: query.branchId,
+    segment: query.segment ?? "catalog_services",
   });
 
-  if (isSunday(query.date)) {
+  const opHours = dateEval.operatingHours ?? {
+    isWorkingDay: true,
+    openTime: "08:00",
+    closeTime: "18:00",
+    slotStepMinutes: 15,
+    maxConcurrentSlots: 8,
+    scopeType: "default" as const,
+  };
+
+  const openTimeParsed = parseTimeStr(opHours.openTime);
+  const closeTimeParsed = parseTimeStr(opHours.closeTime);
+  const step = query.stepMinutes ?? opHours.slotStepMinutes ?? 15;
+
+  const candidates = generateCandidateStarts(query.date, {
+    fromHour: openTimeParsed.hour,
+    fromMinute: openTimeParsed.minute,
+    toHour: closeTimeParsed.hour,
+    toMinute: closeTimeParsed.minute,
+    stepMinutes: step,
+  });
+
+  // If entire day is closed, return all candidate slots with the exact reason
+  if (dateEval.isClosed) {
+    const closureReason = dateEval.reason ?? "CWP operations are closed on this date";
     return candidates.map((time) => ({
       time,
       available: false,
       remaining: 0,
-      reason: "CWP is closed on Sundays",
+      reason: closureReason,
     }));
   }
 
@@ -89,9 +137,12 @@ export async function getAvailableSlots(query: SlotQuery): Promise<AvailableSlot
       ),
     );
 
-  const isToday = query.date === todayIso(now);
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
+  const { dateStr: todayIST, hour: currentHour, minute: currentMinute } = getTodayIST(now);
+  const isToday = query.date === todayIST;
+
+  const partialClosure = dateEval.closure && !dateEval.closure.isFullDay ? dateEval.closure : null;
+  const partialStart = partialClosure?.startTime ? parseTimeStr(partialClosure.startTime) : null;
+  const partialEnd = partialClosure?.endTime ? parseTimeStr(partialClosure.endTime) : null;
 
   const results: AvailableSlot[] = [];
 
@@ -99,9 +150,27 @@ export async function getAvailableSlots(query: SlotQuery): Promise<AvailableSlot
     const [hStr, mStr] = time.split(":");
     const hour = parseInt(hStr ?? "0", 10);
     const minute = parseInt(mStr ?? "0", 10);
+
+    // 1. Past time check (in IST)
     if (isToday && (hour < currentHour || (hour === currentHour && minute <= currentMinute))) {
       results.push({ time, available: false, remaining: 0, reason: "Time slot has passed" });
       continue;
+    }
+
+    // 2. Partial closure check (e.g. weather / equipment maintenance window)
+    if (partialStart && partialEnd) {
+      const slotMinutes = hour * 60 + minute;
+      const startMinutes = partialStart.hour * 60 + partialStart.minute;
+      const endMinutes = partialEnd.hour * 60 + partialEnd.minute;
+      if (slotMinutes >= startMinutes && slotMinutes < endMinutes) {
+        results.push({
+          time,
+          available: false,
+          remaining: 0,
+          reason: partialClosure?.customerReason ?? "Operations temporarily suspended",
+        });
+        continue;
+      }
     }
 
     let candidate;
@@ -113,6 +182,23 @@ export async function getAvailableSlots(query: SlotQuery): Promise<AvailableSlot
       });
     } catch {
       results.push({ time, available: false, remaining: 0, reason: "Invalid time" });
+      continue;
+    }
+
+    // 3. Operating hours boundary check: candidate end time cannot exceed closeTime
+    const closeTotalMinutes = closeTimeParsed.hour * 60 + closeTimeParsed.minute;
+    const endHour = candidate.scheduledEndAt.getHours();
+    const endMinute = candidate.scheduledEndAt.getMinutes();
+    const endTotalMinutes = endHour * 60 + endMinute;
+    // Check if end spills past closing time on same day
+    if (endTotalMinutes > closeTotalMinutes && candidate.scheduledEndAt.getDate() === candidate.scheduledStartAt.getDate()) {
+      results.push({
+        time,
+        available: false,
+        remaining: 0,
+        reason: `Service duration (${durationMinutes}m) exceeds closing time (${opHours.closeTime})`,
+        endsAt: candidate.scheduledEndAt.toISOString(),
+      });
       continue;
     }
 
@@ -141,7 +227,7 @@ export async function getAvailableSlots(query: SlotQuery): Promise<AvailableSlot
         time,
         available: false,
         remaining: 0,
-        reason: "Slot is at capacity",
+        reason: "Fully booked (capacity reached)",
         endsAt: candidate.scheduledEndAt.toISOString(),
       });
       continue;
@@ -152,7 +238,7 @@ export async function getAvailableSlots(query: SlotQuery): Promise<AvailableSlot
         time,
         available: false,
         remaining: capacity.remaining,
-        reason: "Asset already booked in this window",
+        reason: "Vehicle already booked in this window",
         endsAt: candidate.scheduledEndAt.toISOString(),
       });
       continue;

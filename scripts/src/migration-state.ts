@@ -83,6 +83,7 @@ export const PENDING_MIGRATIONS = [
   "085_universal_service_exceptions.sql",
   "086_payment_refunds_and_reconciliation.sql",
   "087_payment_webhook_events.sql",
+  "088_operational_calendar_and_working_hours.sql",
 ] as const;
 
 export type Queryable = {

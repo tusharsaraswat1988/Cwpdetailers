@@ -70,6 +70,7 @@ import QualityHub from "@/pages/admin/QualityHub";
 import MarketingCMSPage from "@/pages/admin/MarketingCMSPage";
 import LoyaltyAdminPage from "@/pages/admin/LoyaltyAdminPage";
 import AutomationOpsCenter from "@/pages/admin/AutomationOpsCenter";
+import OperationsCalendarPage from "@/pages/admin/OperationsCalendarPage";
 
 import PrivacyPolicy from "@/pages/legal/PrivacyPolicy";
 import TermsAndConditions from "@/pages/legal/TermsAndConditions";
@@ -230,6 +231,8 @@ function Router() {
       <Route path="/admin/expenses" component={() => <Redirect to="/admin/billing?tab=expenses" />} />
       <Route path="/admin/settings/invoice-billing" component={() => <ProtectedRoute component={InvoiceBillingSettingsPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "invoices", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/exceptions" component={() => <ProtectedRoute component={ExceptionsHub} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/operations/calendar" component={() => <ProtectedRoute component={OperationsCalendarPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />
+      <Route path="/admin/calendar" component={() => <Redirect to="/admin/operations/calendar" />} />
       <Route path="/admin/complaints" component={() => <ProtectedRoute component={AdminComplaints} roles={["admin", "superadmin", "manager"]} permission={{ resource: "complaints", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/quality" component={() => <ProtectedRoute component={QualityHub} roles={["admin", "superadmin", "manager"]} permission={{ resource: "analytics", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/book-services" component={() => <ProtectedRoute component={BookServicesPage} roles={["admin", "superadmin", "manager"]} permission={{ resource: "bookings", action: "view" }} loginPath="/admin/login" />} />

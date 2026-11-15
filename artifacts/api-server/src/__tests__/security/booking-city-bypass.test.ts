@@ -236,6 +236,9 @@ vi.mock("@workspace/db", () => {
     residentialSocietiesTable: { _name: "residential_societies" },
     societyTowersTable: { _name: "society_towers" },
     staffTable: { _name: "staff" },
+    platformBrandingTable: { _name: "platform_branding" },
+    operatingHoursTable: { _name: "operating_hours" },
+    operationalClosuresTable: { _name: "operational_closures" },
   };
 });
 
