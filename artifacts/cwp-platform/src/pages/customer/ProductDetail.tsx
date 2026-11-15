@@ -6,19 +6,21 @@ import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import {
   ArrowLeft,
   Star,
-  ShieldCheck,
   CheckCircle2,
-  Calendar,
+  ChevronDown,
+  ChevronUp,
+  FileText,
   Sparkles,
-  Droplets,
-  Wrench,
-  ThumbsUp,
-  Award,
-  ChevronRight,
-  UserCheck,
+  ArrowRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { CustomerPage } from "@/features/customer-ds";
+import { CustomerPage, CustomerButton, CustomerCard } from "@/features/customer-ds";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 import serviceSolar from "@/assets/images/service-solar.png";
 import heroSolar from "@/assets/images/landing/hero-solar.jpg";
@@ -65,350 +67,304 @@ export default function CustomerProductDetailPage() {
   const fallback = LOCAL_FALLBACKS[slug] || LOCAL_FALLBACKS["daily-car-cleaning"];
   const initialHero = product.heroImage || fallback.hero;
 
-  const [activeImage, setActiveImage] = useState<string>(initialHero);
-  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
-  const [selectedTier, setSelectedTier] = useState<number>(0);
+  const [mainImage, setMainImage] = useState<string>(initialHero);
+  const [imgError, setImgError] = useState(false);
+  const [selectedTier, setSelectedTier] = useState<number>(() => {
+    const popularIdx = product.pricingTiers.findIndex((t) => t.popular);
+    return popularIdx >= 0 ? popularIdx : 0;
+  });
+  const [inclusionsExpanded, setInclusionsExpanded] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
 
-  const handleImgError = (imgSrc: string) => {
-    setFailedImages((prev) => ({ ...prev, [imgSrc]: true }));
-  };
+  const displayImage = imgError ? fallback.hero : (mainImage || fallback.hero);
+  const currentTier = product.pricingTiers[selectedTier] || product.pricingTiers[0];
 
-  const getSafeImage = (imgSrc: string, index?: number): string => {
-    if (failedImages[imgSrc]) {
-      if (index !== undefined && fallback.gallery[index]) {
-        return fallback.gallery[index];
-      }
-      return fallback.hero;
-    }
-    return imgSrc || fallback.hero;
-  };
-
-  const currentMainImage = getSafeImage(activeImage);
-
-  const handleBookNow = (tierOverride?: number) => {
-    if (product.slug === "daily-car-cleaning") {
-      setLocation(CUSTOMER_ROUTES.plans);
-      return;
-    }
-    const tierIdx = tierOverride ?? selectedTier;
-    const tier = product.pricingTiers[tierIdx];
+  const handleBookNow = () => {
+    const tier = currentTier;
     const tierParam = tier ? `&tier=${encodeURIComponent(tier.category)}&tierPrice=${tier.price}` : "";
     const segmentParam = product.serviceType ? `&segment=${encodeURIComponent(product.serviceType)}` : "";
-    setLocation(`${CUSTOMER_ROUTES.schedule}?service=${encodeURIComponent(product.slug)}${tierParam}${segmentParam}&from=product_detail`);
+
+    if (product.slug === "daily-car-cleaning") {
+      setLocation(`${CUSTOMER_ROUTES.schedule}?service=daily-car-cleaning${tierParam}&segment=daily_cleaning&from=product_detail`);
+      return;
+    }
+
+    setLocation(
+      `${CUSTOMER_ROUTES.schedule}?service=${encodeURIComponent(product.slug)}${tierParam}${segmentParam}&from=product_detail`
+    );
   };
 
   return (
     <CustomerLayout>
-      <CustomerPage className="space-y-6 pb-[calc(var(--bottom-nav-height)+5.5rem)] md:pb-8">
+      <CustomerPage className="space-y-6 pb-36 md:pb-16 max-w-2xl mx-auto">
         {/* Top Navigation & Back */}
         <div className="flex items-center justify-between gap-3">
           <Link
-            href={CUSTOMER_ROUTES.home}
+            href={CUSTOMER_ROUTES.services}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-lg hover:bg-slate-100"
+            data-testid="service-detail-back-btn"
           >
             <ArrowLeft size={16} />
-            Back to Home
+            Back to Services
           </Link>
-          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 text-primary border border-blue-100">
+          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-100">
             {product.category}
           </span>
         </div>
 
-        {/* Hero Gallery & Header */}
-        <section className="space-y-4">
-          <div className="space-y-2">
-            {product.badge && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-primary/10 text-primary">
-                <Sparkles size={12} />
-                {product.badge}
-              </span>
-            )}
-            <h1 className="font-display font-extrabold text-2xl sm:text-3xl text-foreground tracking-tight leading-tight">
-              {product.title}
-            </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
+        {/* SECTION 1 — SERVICE IDENTITY */}
+        <section className="space-y-3" data-testid="service-identity-section">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <h1 className="font-display font-extrabold text-xl sm:text-2xl text-foreground tracking-tight">
+                {product.title}
+              </h1>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
               {product.shortDescription}
             </p>
 
-            {/* Rating & Trust badge */}
-            <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
-              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-800 font-bold border border-amber-200/60">
-                <Star size={14} className="fill-amber-500 text-amber-500" />
+            {/* Compact verified rating */}
+            <div className="flex items-center gap-2 pt-1 text-xs">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 font-bold border border-amber-200">
+                <Star size={12} className="fill-amber-500 text-amber-500" />
                 <span>{product.rating}</span>
-                <span className="font-normal text-amber-700">({product.totalReviews} reviews)</span>
-              </div>
-              <div className="flex items-center gap-1 text-emerald-700 font-medium">
-                <ShieldCheck size={15} />
-                <span>Verified Doorstep Professionals</span>
-              </div>
+                <span className="font-normal text-amber-700">({product.totalReviews})</span>
+              </span>
+              <span className="text-[11px] text-muted-foreground font-medium">
+                Verified doorstep care
+              </span>
             </div>
           </div>
 
-          {/* Main Visual Image Gallery */}
-          <div className="space-y-2.5">
-            <div className="w-full h-64 sm:h-80 md:h-96 rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative bg-slate-900">
-              <img
-                src={currentMainImage}
-                alt={product.title}
-                onError={() => handleImgError(activeImage)}
-                className="w-full h-full object-cover transition-all duration-300"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-              <div className="absolute bottom-3 left-4 right-4 text-white flex items-end justify-between">
-                <div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-200">Doorstep Service</span>
-                  <p className="font-bold text-lg">{product.title}</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs text-slate-300">Starting from</span>
-                  <p className="font-bold text-xl text-white">₹{product.startingPrice} <span className="text-xs font-normal text-slate-300">{product.priceUnit}</span></p>
-                </div>
-              </div>
+          {/* Compact Visual Image */}
+          <div className="w-full h-48 sm:h-56 rounded-2xl overflow-hidden border border-slate-200 shadow-xs relative bg-slate-100">
+            <img
+              src={displayImage}
+              alt={product.title}
+              onError={() => setImgError(true)}
+              className="w-full h-full object-cover"
+              data-testid="service-detail-hero-image"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+            <div className="absolute bottom-3 left-4 right-4 text-white flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-200">
+                Certified CWP Technician Team
+              </span>
+              <span className="text-xs font-bold text-white bg-black/40 backdrop-blur-xs px-2.5 py-1 rounded-lg">
+                Starts at ₹{product.startingPrice} {product.priceUnit}
+              </span>
             </div>
-
-            {/* Thumbnail selector */}
-            {product.galleryImages.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {product.galleryImages.map((img, idx) => {
-                  const safeThumb = getSafeImage(img, idx);
-                  const isCurrent = activeImage === img || (failedImages[activeImage] && currentMainImage === safeThumb);
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setActiveImage(img)}
-                      className={`relative w-20 h-16 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
-                        isCurrent ? "border-primary ring-2 ring-primary/20 scale-102" : "border-slate-200 opacity-75 hover:opacity-100"
-                      }`}
-                    >
-                      <img
-                        src={safeThumb}
-                        alt={`Thumbnail ${idx + 1}`}
-                        onError={() => handleImgError(img)}
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </section>
 
-        {/* Pricing Matrix */}
-        <section className="space-y-3.5 pt-2" id="pricing">
+        {/* SECTION 2 — PRICING / PLAN SELECTION */}
+        <section className="space-y-3" data-testid="service-pricing-section">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-display font-bold text-lg text-foreground">Transparent Pricing</h2>
-              <p className="text-xs text-muted-foreground">Select your vehicle or solar size to view package</p>
-            </div>
-            <Award className="text-primary hidden sm:block" size={24} />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-            {product.pricingTiers.map((tier, idx) => (
-              <div
-                key={idx}
-                onClick={() => setSelectedTier(idx)}
-                className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative ${
-                  selectedTier === idx
-                    ? "border-primary bg-blue-50/40 ring-2 ring-primary/20 shadow-sm"
-                    : "border-slate-200 bg-white hover:border-slate-300 shadow-2xs"
-                }`}
-              >
-                {tier.popular && (
-                  <span className="absolute -top-2.5 right-4 bg-primary text-white text-[10px] font-bold uppercase tracking-wider py-0.5 px-2 rounded-full shadow-xs">
-                    Recommended
-                  </span>
-                )}
-                <div>
-                  <h3 className="font-display font-bold text-sm text-foreground">{tier.category}</h3>
-                  <div className="mt-2.5 flex items-baseline gap-1">
-                    <span className="font-display font-black text-2xl text-foreground">₹{tier.price}</span>
-                    {tier.period && <span className="text-xs text-muted-foreground">{tier.period}</span>}
-                  </div>
-                  <ul className="mt-4 space-y-2 text-xs text-slate-600">
-                    {tier.features.map((feat, fIdx) => (
-                      <li key={fIdx} className="flex items-center gap-2">
-                        <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                        <span>{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="mt-5 pt-3 border-t border-slate-100">
-                  <Button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleBookNow(idx);
-                    }}
-                    className={`w-full h-10 text-xs font-bold rounded-xl ${
-                      selectedTier === idx ? "bg-primary text-white" : "bg-slate-100 hover:bg-slate-200 text-foreground"
-                    }`}
-                  >
-                    Book This Tier
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Overview & Key Inclusions */}
-        <section className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs space-y-4">
-          <div>
-            <h2 className="font-display font-bold text-base text-foreground">Service Overview</h2>
-            <p className="text-xs text-slate-600 leading-relaxed mt-2">{product.overview}</p>
-          </div>
-
-          <div className="pt-3 border-t border-slate-100 space-y-3">
-            <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-primary" />
-              What's Included
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {product.inclusions.map((item, idx) => (
-                <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-700 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
-                  <span className="w-5 h-5 rounded-full bg-blue-100 text-primary font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
-                    ✓
-                  </span>
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* How It Works: Step-by-Step Process */}
-        <section className="space-y-3 pt-1">
-          <h2 className="font-display font-bold text-base text-foreground">How Our Team Operates</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {product.processSteps.map((step) => (
-              <div key={step.step} className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-2">
-                <span className="w-7 h-7 rounded-xl bg-primary text-white font-bold text-xs flex items-center justify-center shadow-2xs">
-                  {step.step}
-                </span>
-                <h3 className="font-display font-bold text-sm text-foreground">{step.title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">{step.description}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Equipment & Chemicals Used */}
-        <section className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs space-y-3">
-          <h2 className="font-display font-bold text-sm text-foreground flex items-center gap-2">
-            <Wrench size={16} className="text-primary" />
-            Professional Equipment & Certified Chemicals
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {product.equipmentAndChemicals.map((tool, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-xs text-slate-700">
-                <Droplets size={14} className="text-blue-500 shrink-0" />
-                <span>{tool}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Verified Customer Feedback & Reviews */}
-        <section className="space-y-3.5 pt-2" id="reviews">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-display font-bold text-base text-foreground">Customer Feedbacks</h2>
-              <p className="text-xs text-muted-foreground">Real reviews from verified car & solar owners</p>
-            </div>
-            <div className="flex items-center gap-1 text-sm font-bold text-foreground">
-              <Star size={16} className="fill-amber-400 text-amber-400" />
-              <span>{product.rating}</span>
-              <span className="text-xs text-muted-foreground font-normal">/ 5.0</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {product.reviews.map((rev) => (
-              <div
-                key={rev.id}
-                className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-2xs space-y-2.5 text-left"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-sm text-foreground">{rev.author}</p>
-                    <p className="text-[11px] text-muted-foreground">{rev.vehicleOrSite} · {rev.date}</p>
-                  </div>
-                  <div className="flex items-center gap-0.5">
-                    {Array.from({ length: 5 }).map((_, sIdx) => (
-                      <Star
-                        key={sIdx}
-                        size={12}
-                        className={sIdx < Math.floor(rev.rating) ? "fill-amber-400 text-amber-400" : "text-slate-200"}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed italic">
-                  "{rev.comment}"
-                </p>
-                {rev.verified && (
-                  <div className="pt-2 border-t border-slate-100 flex items-center gap-1 text-[11px] text-emerald-700 font-semibold">
-                    <UserCheck size={13} />
-                    <span>Verified Customer</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Guarantees Banner */}
-        <section className="rounded-2xl bg-gradient-to-br from-slate-900 to-blue-950 text-white p-5 sm:p-6 shadow-md space-y-3">
-          <h2 className="font-display font-bold text-base flex items-center gap-2">
-            <ThumbsUp size={18} className="text-blue-400" />
-            The CWP Quality & Satisfaction Guarantee
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-300">
-            {product.guarantees.map((guar, idx) => (
-              <div key={idx} className="flex items-start gap-2 bg-white/5 p-3 rounded-xl border border-white/10">
-                <CheckCircle2 size={14} className="text-emerald-400 shrink-0 mt-0.5" />
-                <span>{guar}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Fixed / Mobile Bottom Booking Bar (Positioned cleanly above bottom nav) */}
-        <div className="fixed bottom-[var(--bottom-nav-height)] inset-x-0 z-30 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] md:hidden">
-          <div className="max-w-md mx-auto flex items-center justify-between gap-3">
-            <div>
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Starts at</span>
-              <p className="font-display font-black text-lg text-foreground">
-                ₹{product.startingPrice} <span className="text-xs font-normal text-muted-foreground">{product.priceUnit}</span>
+              <h2 className="font-display font-bold text-base text-foreground">
+                Select Vehicle / Plan
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Choose the option that fits your vehicle or installation
               </p>
             </div>
-            <Button
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {product.pricingTiers.map((tier, idx) => {
+              const isSelected = selectedTier === idx;
+              return (
+                <div
+                  key={idx}
+                  onClick={() => setSelectedTier(idx)}
+                  className={`p-4 rounded-xl border text-left transition-all cursor-pointer relative flex flex-col justify-between ${
+                    isSelected
+                      ? "border-primary bg-blue-50/50 ring-2 ring-primary/20 shadow-xs"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                  }`}
+                  data-testid={`pricing-tier-card-${idx}`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      setSelectedTier(idx);
+                    }
+                  }}
+                  aria-pressed={isSelected}
+                >
+                  {tier.popular && (
+                    <span className="absolute -top-2.5 right-3 bg-primary text-white text-[10px] font-bold uppercase tracking-wider py-0.5 px-2 rounded-full shadow-2xs">
+                      Recommended
+                    </span>
+                  )}
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-display font-bold text-xs sm:text-sm text-foreground">
+                        {tier.category}
+                      </h3>
+                      {isSelected ? (
+                        <CheckCircle2 size={16} className="text-primary shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />
+                      )}
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className="font-display font-extrabold text-xl text-foreground">
+                        ₹{tier.price}
+                      </span>
+                      {tier.period && (
+                        <span className="text-[11px] text-muted-foreground font-normal">
+                          {tier.period}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Concise 3-5 inclusions */}
+                    <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
+                      {tier.features.slice(0, 4).map((feat, fIdx) => (
+                        <li key={fIdx} className="flex items-start gap-1.5 leading-snug">
+                          <CheckCircle2 size={13} className="text-emerald-600 shrink-0 mt-0.5" />
+                          <span>{feat}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* SECTION 3 — WHAT'S INCLUDED (Expandable Progressive Disclosure) */}
+        <section className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs" data-testid="service-inclusions-section">
+          <button
+            type="button"
+            onClick={() => setInclusionsExpanded((prev) => !prev)}
+            className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-50 transition-colors cursor-pointer"
+            data-testid="toggle-inclusions-btn"
+            aria-expanded={inclusionsExpanded}
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-primary" />
+              <span className="font-semibold text-xs sm:text-sm text-foreground">
+                What's Included in This Service ({product.inclusions.length} items)
+              </span>
+            </div>
+            {inclusionsExpanded ? (
+              <ChevronUp size={16} className="text-muted-foreground" />
+            ) : (
+              <ChevronDown size={16} className="text-muted-foreground" />
+            )}
+          </button>
+
+          {inclusionsExpanded && (
+            <div className="p-4 pt-1 border-t border-slate-100 bg-slate-50/50 space-y-2 text-xs text-slate-700 animate-in fade-in-50 duration-150">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {product.inclusions.map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200/80">
+                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* SECTION 4 — TERMS & CONDITIONS LINK & DIALOG */}
+        <section className="flex items-center justify-between py-1 px-1">
+          <button
+            type="button"
+            onClick={() => setTermsOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline cursor-pointer"
+            data-testid="terms-conditions-btn"
+          >
+            <FileText size={14} />
+            <span>Service Terms & Cancellation Policy</span>
+          </button>
+        </section>
+
+        <Dialog open={termsOpen} onOpenChange={setTermsOpen}>
+          <DialogContent className="max-w-md rounded-2xl p-6" data-testid="terms-dialog">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold">Terms & Conditions</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Clear guidelines for your certified doorstep service
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 pt-2 text-xs text-slate-600 leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
+              <div className="space-y-1">
+                <h4 className="font-bold text-foreground text-xs">1. Free Cancellation & Rescheduling</h4>
+                <p>You can cancel or reschedule any appointment up to 2 hours before the scheduled arrival time without any penalty or fee.</p>
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-foreground text-xs">2. Electricity & Water Access</h4>
+                <p>For high-pressure washes and steam detailing, access to a standard electrical point and water outlet at your parking spot is required.</p>
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-foreground text-xs">3. 100% Scratch-Free Guarantee</h4>
+                <p>We use dedicated separate dual-bucket microfiber mitts (450+ GSM). If any accidental swirl is caused during cleaning, CWP will provide free paint correction.</p>
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-foreground text-xs">4. Weather Delays</h4>
+                <p>In the event of heavy rain or localized storms, services are automatically protected and rescheduled at your convenience.</p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* SECTION 5 — PERSISTENT BOOKING CTA */}
+        {/* Mobile Fixed CTA */}
+        <div
+          className="fixed bottom-[var(--bottom-nav-height)] inset-x-0 z-30 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] md:hidden"
+          data-testid="mobile-sticky-cta"
+        >
+          <div className="max-w-md mx-auto flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block truncate">
+                {currentTier?.category || "Selected Tier"}
+              </span>
+              <p className="font-display font-extrabold text-base text-foreground">
+                ₹{currentTier?.price} <span className="text-xs font-normal text-muted-foreground">{currentTier?.period || product.priceUnit}</span>
+              </p>
+            </div>
+            <CustomerButton
+              variant="default"
+              size="lg"
               onClick={handleBookNow}
-              className="px-6 h-11 bg-primary hover:bg-[#1264db] text-white font-bold text-xs rounded-xl shadow-xs"
+              className="min-h-[48px] px-6 font-bold text-xs rounded-xl shadow-xs gap-1.5 cursor-pointer shrink-0"
+              data-testid="book-plan-cta"
             >
-              {product.slug === "daily-car-cleaning" ? "View Plans" : "Book Service"} <ChevronRight size={14} />
-            </Button>
+              <span>Book This Plan</span>
+              <ArrowRight size={14} />
+            </CustomerButton>
           </div>
         </div>
 
-        {/* Desktop Book Action Banner */}
-        <div className="hidden md:flex items-center justify-between p-6 rounded-2xl bg-blue-50/80 border border-blue-100">
+        {/* Desktop Persistent Card */}
+        <div className="hidden md:flex items-center justify-between p-5 rounded-2xl bg-blue-50/80 border border-blue-100 mt-4">
           <div>
-            <h3 className="font-display font-bold text-lg text-foreground">Ready to experience doorstep care?</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Book now and get doorstep service at your scheduled convenience.</p>
+            <span className="text-[11px] font-bold uppercase text-primary tracking-wider">
+              Selected Option: {currentTier?.category}
+            </span>
+            <p className="font-display font-extrabold text-xl text-foreground mt-0.5">
+              ₹{currentTier?.price}{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                {currentTier?.period || product.priceUnit}
+              </span>
+            </p>
           </div>
-          <Button
-            onClick={handleBookNow}
+          <CustomerButton
+            variant="default"
             size="lg"
-            className="px-8 h-12 bg-primary hover:bg-[#1264db] text-white font-bold text-sm rounded-xl shadow-sm gap-2"
+            onClick={handleBookNow}
+            className="min-h-[48px] px-8 font-bold text-sm rounded-xl shadow-xs gap-2 cursor-pointer"
+            data-testid="desktop-book-plan-cta"
           >
-            <Calendar size={16} />
-            {product.slug === "daily-car-cleaning" ? "View Plans & Pricing" : "Schedule This Service"}
-          </Button>
+            <span>Book This Plan</span>
+            <ArrowRight size={16} />
+          </CustomerButton>
         </div>
       </CustomerPage>
     </CustomerLayout>

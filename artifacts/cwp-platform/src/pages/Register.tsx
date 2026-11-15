@@ -31,6 +31,7 @@ import {
   authLandingRingClass,
   authLinkClass,
 } from "@/components/auth/authStyles";
+import { isCustomerNativeApp, isAnyNativeApp } from "@/lib/native/portalNative";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +47,10 @@ export default function Register() {
   const { toast } = useToast();
   const queryPhone = usePhoneFromQuery();
 
-  const [authStep, setAuthStep] = useState<"chooser" | "credentials">("chooser");
+  const isNative = isCustomerNativeApp() || isAnyNativeApp();
+  const [authStep, setAuthStep] = useState<"chooser" | "credentials">(
+    isNative ? "credentials" : "chooser",
+  );
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);

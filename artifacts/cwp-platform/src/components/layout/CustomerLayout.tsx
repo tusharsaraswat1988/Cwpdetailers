@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -60,19 +60,45 @@ function CustomerLayoutInner({
     deleteAddress,
     setDefaultAddress,
     customerId,
+    currentCityName,
   } = useCustomerAddress();
+
+  const addressLabel = useMemo(() => {
+    return selectedAddress?.assetLabel || "Location";
+  }, [selectedAddress?.assetLabel]);
+
+  const addressDetail = useMemo(() => {
+    if (selectedAddress?.area) {
+      return selectedAddress.cityName
+        ? `${selectedAddress.area}, ${selectedAddress.cityName}`
+        : selectedAddress.area;
+    }
+    if (selectedAddress?.address) {
+      const parts = selectedAddress.address.split(/[,\n]/).map(p => p.trim()).filter(Boolean);
+      return parts.length > 2 ? `${parts[0]}, ${parts[1]}` : parts[0];
+    }
+    return currentCityName || "Select Location";
+  }, [selectedAddress?.area, selectedAddress?.cityName, selectedAddress?.address, currentCityName]);
 
   const addressCapsule = (
     <button
       type="button"
       onClick={openAddressPicker}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 active:bg-slate-200 text-foreground text-xs font-semibold max-w-[190px] sm:max-w-xs transition-colors cursor-pointer border border-slate-200/80 truncate shadow-2xs"
-      aria-label={`Current service location: ${shortAddressLabel}. Tap to change`}
+      className="inline-flex items-center justify-between gap-1.5 px-3 py-1 rounded-full bg-slate-100/90 hover:bg-slate-200/90 active:bg-slate-200 text-foreground text-xs font-medium transition-colors cursor-pointer border border-slate-200/90 shadow-2xs h-8.5 w-full max-w-[240px] sm:max-w-xs"
+      aria-label={`Current service location: ${addressLabel} - ${addressDetail}. Tap to change`}
       data-testid="header-address-capsule"
     >
-      <MapPin className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden />
-      <span className="truncate">{shortAddressLabel}</span>
-      <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" aria-hidden />
+      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        <MapPin className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden />
+        <span className="font-semibold text-foreground shrink-0">{addressLabel}</span>
+        {addressDetail && (
+          <>
+            <span className="text-slate-300 shrink-0">·</span>
+            <span className="text-muted-foreground truncate">{addressDetail}</span>
+          </>
+        )}
+      </div>
+      <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0 ml-0.5" aria-hidden />
     </button>
   );
 

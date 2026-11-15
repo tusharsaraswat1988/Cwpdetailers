@@ -72,7 +72,9 @@ export function getSyncNativePortal(): NativePortalType {
     return "staff";
   }
 
-  return "none";
+  // On native platform (Capacitor), if not explicitly on the staff route, default to customer native app
+  cachedPortal = "customer";
+  return "customer";
 }
 
 /**

@@ -15,6 +15,7 @@ export type AccountSummaryMetrics = {
   activePlan: string;
   vehicleCount: number;
   nextWash: string;
+  accountStatus: string;
   outstanding: string;
   outstandingAmount: number;
   loading: boolean;
@@ -95,9 +96,10 @@ export function useAccountSummary(totalDues?: string | null): AccountSummaryMetr
       activePlan: primary?.name ?? "None",
       vehicleCount: (vehicles ?? []).length,
       nextWash,
+      accountStatus: "Verified",
       outstanding,
       outstandingAmount,
       loading: summaryLoading || subsLoading || vehiclesLoading,
     };
-  }, [subs, summary, vehicles, totalDues, summaryLoading, subsLoading, vehiclesLoading]);
+  }, [summary, subs, vehicles, summaryLoading, subsLoading, vehiclesLoading, totalDues]);
 }

@@ -2,6 +2,7 @@ import { MarketingButton } from "@/features/landing/components/marketing/Marketi
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { authFadeUp } from "@/components/auth/authStyles";
+import { isCustomerNativeApp, isAnyNativeApp } from "@/lib/native/portalNative";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,30 +31,36 @@ export function AuthMethodChooser({
   tertiaryLabel,
   onChooseTertiary,
 }: AuthMethodChooserProps) {
+  const isNative = isCustomerNativeApp() || isAnyNativeApp();
+
   return (
     <div className={cn(authFadeUp)} data-testid="auth-method-chooser">
-      <GoogleButton
-        prominent
-        onSuccess={onGoogleSuccess}
-        onError={onGoogleError}
-        disabled={googleDisabled || googlePending}
-      />
+      {!isNative && (
+        <>
+          <GoogleButton
+            prominent
+            onSuccess={onGoogleSuccess}
+            onError={onGoogleError}
+            disabled={googleDisabled || googlePending}
+          />
 
-      {googlePending && (
-        <p
-          className="text-center text-muted-foreground text-xs flex items-center justify-center gap-1.5 mt-2"
-          aria-live="polite"
-        >
-          <Loader2 size={12} className="animate-spin" aria-hidden />
-          {googlePendingLabel}
-        </p>
+          {googlePending && (
+            <p
+              className="text-center text-muted-foreground text-xs flex items-center justify-center gap-1.5 mt-2"
+              aria-live="polite"
+            >
+              <Loader2 size={12} className="animate-spin" aria-hidden />
+              {googlePendingLabel}
+            </p>
+          )}
+
+          <AuthDivider label="OR" />
+        </>
       )}
-
-      <AuthDivider label="OR" />
 
       <MarketingButton
         type="button"
-        variant="outline"
+        variant={isNative ? "default" : "outline"}
         size="lg"
         onClick={onChooseSecondary}
         disabled={googlePending}

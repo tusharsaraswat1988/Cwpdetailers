@@ -201,6 +201,10 @@ export function getActionableAuthDetails(err: unknown, fallback = AUTH_NEUTRAL_E
     actionableStep = "Check your password or reset it.";
     actionUrl = "/forgot-password";
     actionLabel = "Reset password";
+  } else if (code === "ACCOUNT_NOT_ELIGIBLE" || message === AUTH_NEUTRAL_ERROR) {
+    actionableStep = "No registered account found with this number. Please create an account to get started.";
+    actionUrl = "/register";
+    actionLabel = "Create your account";
   }
 
   return {

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { CustomerCard, CustomerButton } from "@/features/customer-ds";
+import { NotificationContextualPrompt } from "@/components/notifications/NotificationContextualPrompt";
 
 interface ScheduleSuccessScreenProps {
   requestId: number;
@@ -155,6 +156,9 @@ export function ScheduleSuccessScreen({
             )}
           </div>
         </CustomerCard>
+
+        {/* Intelligent contextual push notification prompt */}
+        <NotificationContextualPrompt />
 
         {/* Clear Action Buttons */}
         <div className="flex flex-col gap-2.5">

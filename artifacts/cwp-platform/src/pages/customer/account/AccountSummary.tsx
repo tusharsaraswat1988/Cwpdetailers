@@ -30,7 +30,7 @@ function SummaryCell({
       <p
         className={cn(
           "mt-1 truncate font-display text-base font-bold leading-tight tabular-nums text-foreground sm:text-lg",
-          emphasize && "text-amber-600",
+          emphasize && "text-emerald-600",
         )}
       >
         {value}
@@ -40,7 +40,7 @@ function SummaryCell({
 }
 
 export const AccountSummary = memo(function AccountSummary({ metrics, className }: Props) {
-  const { activePlan, vehicleCount, nextWash, outstanding, outstandingAmount, loading } = metrics;
+  const { activePlan, vehicleCount, nextWash, accountStatus, loading } = metrics;
 
   return (
     <section
@@ -80,10 +80,10 @@ export const AccountSummary = memo(function AccountSummary({ metrics, className 
           />
           <SummaryCell label="Next Scheduled" value={nextWash} testId="account-summary-next-wash" />
           <SummaryCell
-            label="Outstanding"
-            value={outstanding}
-            emphasize={outstandingAmount > 0}
-            testId="account-summary-balance"
+            label="Account Status"
+            value={accountStatus || "Active"}
+            emphasize={true}
+            testId="account-summary-status"
           />
         </div>
       )}

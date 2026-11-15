@@ -82,6 +82,40 @@ const SW_TIMEOUT_MS = 8_000;
 const SUBSCRIBE_TIMEOUT_MS = 12_000;
 const API_TIMEOUT_MS = 10_000;
 
+export const PUSH_PROMPT_COOLDOWN_KEY = "cwp:push:prompt_cooldown";
+export const COOLDOWN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function isPromptInCooldown(): boolean {
+  try {
+    const raw = typeof window !== "undefined" && window.localStorage ? localStorage.getItem(PUSH_PROMPT_COOLDOWN_KEY) : null;
+    if (!raw) return false;
+    const ts = parseInt(raw, 10);
+    return !Number.isNaN(ts) && Date.now() - ts < COOLDOWN_DAYS_MS;
+  } catch {
+    return false;
+  }
+}
+
+export function setPromptCooldown(): void {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem(PUSH_PROMPT_COOLDOWN_KEY, Date.now().toString());
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function clearPromptCooldown(): void {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.removeItem(PUSH_PROMPT_COOLDOWN_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 let vapidPublicKeyCache: string | null | undefined;
 let pwaRegistrationPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 let subscribeInflight: Promise<PushSubscribeResult> | null = null;

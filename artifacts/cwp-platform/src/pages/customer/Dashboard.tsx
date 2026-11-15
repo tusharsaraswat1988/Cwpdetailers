@@ -243,16 +243,15 @@ export default function CustomerDashboard() {
 
   return (
     <CustomerLayout>
-      <CustomerPage className="space-y-4">
+      <CustomerPage className="space-y-3.5">
         {loading || !dashboard ? (
-          <div className="space-y-4">
-            {/* Greeting Skeleton */}
-            <div className="space-y-1 py-1">
-              <CustomerSkeleton className="h-3.5 w-24 rounded-md" />
-              <CustomerSkeleton className="h-7 w-40 rounded-md" />
+          <div className="space-y-3.5">
+            {/* Greeting Skeleton (Single line) */}
+            <div className="py-0.5">
+              <CustomerSkeleton className="h-6 w-44 rounded-md" />
             </div>
             {/* Hero Skeleton */}
-            <CustomerSkeleton className="h-36 w-full rounded-2xl" />
+            <CustomerSkeleton className="h-24 w-full rounded-2xl" />
             {/* Services Skeleton */}
             <div className="space-y-3 pt-2">
               <CustomerSkeleton className="h-5 w-32 rounded-md" />
@@ -264,11 +263,11 @@ export default function CustomerDashboard() {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* 1. Personalized Greeting */}
+          <div className="space-y-3.5">
+            {/* 1. Compact Single-Line Greeting */}
             <HomeGreeting customerName={customerQuery.data?.name} />
 
-            {/* 2. Outstanding Balance Reminder — Only displayed when dues > 0; suppressed when all clear */}
+            {/* 2. Outstanding Balance Reminder — Only displayed when dues > 0; 100% suppressed when all clear */}
             {pendingDues > 0 && (
               <div
                 className="rounded-2xl border border-amber-300 bg-amber-50/80 p-3.5 flex items-center justify-between gap-3 shadow-xs cursor-pointer hover:bg-amber-100/70 transition-colors"
@@ -294,7 +293,7 @@ export default function CustomerDashboard() {
                     e.stopPropagation();
                     setPaymentDialogOpen(true);
                   }}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold shrink-0 cursor-pointer shadow-2xs"
+                  className="inline-flex items-center justify-center gap-1 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold shrink-0 cursor-pointer shadow-2xs min-h-[44px] touch-manipulation"
                   data-testid="pay-now-button"
                 >
                   Pay Now <ArrowRight size={13} />
@@ -305,7 +304,7 @@ export default function CustomerDashboard() {
             {/* 3. Compact Active Membership Strip — Only displayed if an active plan exists */}
             {dashboard.primaryPlan && (
               <div
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-white border border-slate-200/90 text-xs text-foreground shadow-2xs"
+                className="flex items-center justify-between p-3.5 rounded-2xl bg-white border border-slate-200/90 text-xs text-foreground shadow-2xs min-h-[48px]"
                 data-testid="home-membership-strip"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -324,14 +323,14 @@ export default function CustomerDashboard() {
                 </div>
                 <Link
                   href={CUSTOMER_ROUTES.plans}
-                  className="text-xs font-semibold text-primary hover:underline shrink-0 flex items-center gap-1 pl-2"
+                  className="text-xs font-semibold text-primary hover:underline shrink-0 inline-flex items-center gap-1 pl-2 min-h-[44px]"
                 >
                   View My Plan <ArrowRight size={13} />
                 </Link>
               </div>
             )}
 
-            {/* 4. Compact 18% Height Marketing Banner */}
+            {/* 4. Compact Marketing Banner */}
             <MarketingHero cityName={currentCityName} />
 
             {/* 5. CWP Signature Services Showcase — Available immediately without scrolling past unrelated blocks */}

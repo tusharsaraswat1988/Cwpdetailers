@@ -1,5 +1,6 @@
+import { memo } from "react";
 import { Link } from "wouter";
-import { Car, Sun, MapPin, Calendar, ClipboardList, History, Pencil, ShieldCheck } from "lucide-react";
+import { Car, Sun, MapPin, Calendar, History, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { resolveMediaUrl } from "@/lib/media-url";
 import type { AssetCardModel } from "@/lib/asset-dashboard";
@@ -17,25 +18,34 @@ interface AssetCardProps {
   className?: string;
 }
 
-export function AssetCard({ asset, onEdit, className }: AssetCardProps) {
+export const AssetCard = memo(function AssetCard({ asset, onEdit, className }: AssetCardProps) {
   const isVehicle = asset.kind === "vehicle";
   const typeLabel = isVehicle ? "Vehicle" : "Solar Site";
   const health = healthBadgeStyles[asset.healthStatus];
 
+  const statusLabel =
+    asset.healthStatus === "protected"
+      ? isVehicle
+        ? "Active Plan"
+        : "Active AMC"
+      : asset.healthStatus === "due_soon"
+      ? "Renewal Due"
+      : "No Active Plan";
+
   return (
     <article
       className={cn(
-        "rounded-2xl border border-slate-200/90 bg-white shadow-[0_2px_8px_rgba(11,29,54,0.04)] hover:shadow-[0_4px_14px_rgba(11,29,54,0.08)] hover:border-primary/40 transition-all duration-200 overflow-hidden flex flex-col justify-between",
+        "rounded-2xl border border-slate-200/90 bg-white shadow-[0_2px_8px_rgba(11,29,54,0.04)] hover:shadow-[0_4px_14px_rgba(11,29,54,0.08)] hover:border-primary/40 transition-all duration-200 flex flex-col justify-between overflow-hidden",
         className,
       )}
       data-testid={`asset-card-${asset.kind}-${asset.id}`}
       aria-label={`${typeLabel}: ${asset.name}`}
     >
-      <div className="p-5 space-y-4">
+      <div className="p-4 sm:p-5 space-y-3.5">
         {/* Top Header Row */}
-        <div className="flex items-start gap-3.5">
+        <div className="flex items-start gap-3">
           {/* Avatar / Thumbnail */}
-          <div className="shrink-0 w-14 h-14 rounded-xl border border-slate-200/80 bg-slate-50 overflow-hidden flex items-center justify-center">
+          <div className="shrink-0 w-13 h-13 sm:w-14 sm:h-14 rounded-xl border border-slate-200/80 bg-slate-50 overflow-hidden flex items-center justify-center">
             {asset.imageUrl ? (
               <img
                 src={resolveMediaUrl(asset.imageUrl)}
@@ -68,13 +78,14 @@ export function AssetCard({ asset, onEdit, className }: AssetCardProps) {
 
               <span
                 className={cn(
-                  "text-[10px] font-bold px-2.5 py-0.5 rounded-full border shrink-0 uppercase tracking-wider",
+                  "text-[10px] font-bold px-2.5 py-0.5 rounded-full border shrink-0 tracking-wide",
                   health.bg,
                   health.text,
                   health.border,
                 )}
+                data-testid={`asset-status-badge-${asset.id}`}
               >
-                {asset.healthLabel}
+                {statusLabel}
               </span>
             </div>
 
@@ -86,7 +97,7 @@ export function AssetCard({ asset, onEdit, className }: AssetCardProps) {
                     {asset.subtitle}
                   </span>
                 ) : (
-                  <span className="text-xs text-muted-foreground font-medium">
+                  <span className="inline-block px-2 py-0.5 rounded-md bg-amber-50/80 text-amber-800 text-xs font-medium border border-amber-200/60">
                     {asset.subtitle}
                   </span>
                 )}
@@ -102,39 +113,45 @@ export function AssetCard({ asset, onEdit, className }: AssetCardProps) {
             <span className="text-muted-foreground font-medium">Associated Plan:</span>
             <Link
               href={asset.planHref}
-              className="font-semibold text-primary hover:underline truncate max-w-[60%] text-right inline-flex items-center gap-1 cursor-pointer"
+              className="font-semibold text-primary hover:underline truncate max-w-[65%] text-right inline-flex items-center gap-1 cursor-pointer"
               data-testid={`asset-plans-${asset.id}`}
             >
-              {asset.plan ? asset.planLabel : "Purchase Plan"}
+              {asset.plan ? asset.planLabel : isVehicle ? "Purchase Plan" : "Purchase AMC"}
             </Link>
           </div>
 
-          {/* Service Address */}
+          {/* Address (Service Address for vehicle, Installation Address for solar) */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-1.5 min-w-0 flex-1">
               <MapPin size={13} className="shrink-0 text-primary mt-0.5" />
-              <span className={cn("truncate text-muted-foreground", !asset.addressComplete && "text-amber-700 font-medium")}>
-                {asset.serviceAddress || "No address set"}
-              </span>
+              <div className="min-w-0">
+                <span className="text-[10px] font-medium text-muted-foreground block">
+                  {isVehicle ? "Service Address" : "Installation Address"}
+                </span>
+                <p className={cn("text-xs text-foreground truncate", !asset.addressComplete && "text-amber-700 font-medium")}>
+                  {asset.serviceAddress || "No address set"}
+                </p>
+              </div>
             </div>
             <button
               type="button"
               className="text-xs font-semibold text-primary hover:underline shrink-0 p-1 -m-1 cursor-pointer"
               onClick={() => onEdit(asset)}
               data-testid={`asset-change-address-${asset.id}`}
-              aria-label={`Change address for ${asset.name}`}
+              aria-label={`Change ${isVehicle ? "service" : "installation"} address for ${asset.name}`}
             >
               Change
             </button>
           </div>
 
-          {/* Last / Next Service Dates */}
+          {/* Next / Last Service or Cleaning Dates */}
           {(asset.nextServiceLabel || asset.lastServiceLabel) && (
-            <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground">
+            <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground border-t border-slate-50">
               {asset.nextServiceLabel && (
                 <span className="flex items-center gap-1 truncate">
                   <Calendar size={11} className="text-primary" />
-                  Next: <strong className="text-foreground font-medium">{asset.nextServiceLabel}</strong>
+                  {isVehicle ? "Next Service: " : "Next Cleaning: "}
+                  <strong className="text-foreground font-medium">{asset.nextServiceLabel}</strong>
                 </span>
               )}
               {asset.lastServiceLabel && (
@@ -148,32 +165,32 @@ export function AssetCard({ asset, onEdit, className }: AssetCardProps) {
       </div>
 
       {/* Action Footer */}
-      <div className="px-5 py-3.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2">
+      <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <Link href={asset.scheduleHref} className="cursor-pointer">
             <Button
               size="sm"
-              className="h-10 min-h-10 px-3.5 rounded-xl bg-primary hover:bg-[#1264db] text-white font-semibold text-xs shadow-xs gap-1.5 cursor-pointer"
+              className="h-11 min-h-[44px] px-3.5 sm:px-4 rounded-xl bg-primary hover:bg-[#1264db] text-white font-semibold text-xs shadow-xs gap-1.5 cursor-pointer flex items-center"
               data-testid={`asset-schedule-${asset.id}`}
             >
-              <Calendar size={13} /> Schedule
+              <Calendar size={14} /> Schedule
             </Button>
           </Link>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-10 min-h-10 px-3.5 rounded-xl border-slate-200 hover:bg-white font-semibold text-xs text-foreground gap-1.5 cursor-pointer"
+            className="h-11 min-h-[44px] px-3.5 sm:px-4 rounded-xl border-slate-200 hover:bg-white font-semibold text-xs text-foreground gap-1.5 cursor-pointer flex items-center"
             onClick={() => onEdit(asset)}
             data-testid={`asset-edit-${asset.id}`}
           >
-            <Pencil size={12} /> Edit
+            <Pencil size={13} /> Edit
           </Button>
         </div>
 
         <Link
           href={asset.historyHref}
-          className="text-xs font-semibold text-muted-foreground hover:text-primary inline-flex items-center gap-1 cursor-pointer"
+          className="min-h-[44px] inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary px-2 cursor-pointer"
           data-testid={`asset-history-${asset.id}`}
         >
           <History size={13} /> History
@@ -181,6 +198,6 @@ export function AssetCard({ asset, onEdit, className }: AssetCardProps) {
       </div>
     </article>
   );
-}
+});
 
 export default AssetCard;

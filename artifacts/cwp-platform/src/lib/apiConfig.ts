@@ -19,7 +19,7 @@ declare global {
   }
 }
 
-export const DEFAULT_PRODUCTION_API_URL = "https://cwpdetailers-production.up.railway.app";
+export const DEFAULT_PRODUCTION_API_URL = "https://cwpdetailers.in";
 
 export function isNativeApp(): boolean {
   try {

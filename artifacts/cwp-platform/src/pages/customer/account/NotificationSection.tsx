@@ -1,8 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, BellRing, CheckCircle2, Loader2, Send } from "lucide-react";
+import { Bell, BellRing, Loader2, Send } from "lucide-react";
 import {
   getPushStatus,
   subscribeToPush,
@@ -11,6 +10,9 @@ import {
   isPushSupported,
   getBrowserNotificationPermission,
   ensureServiceWorkerRegistration,
+  isPromptInCooldown,
+  setPromptCooldown,
+  clearPromptCooldown,
   type PushStatus,
 } from "@/lib/pushNotifications";
 import { AccountSection } from "./AccountSection";
@@ -47,7 +49,7 @@ export const NotificationSection = memo(function NotificationSection() {
     void refresh();
   }, [refresh]);
 
-  // Listen for permission changes or tab refocussing (e.g. user allowed notifications in browser bar)
+  // Listen for permission changes or tab refocussing
   useEffect(() => {
     const onFocusOrVisible = () => {
       checkPermission();
@@ -80,8 +82,7 @@ export const NotificationSection = memo(function NotificationSection() {
     };
   }, [checkPermission, refresh]);
 
-  // If the user already allowed permission in their browser and status is configured but not yet subscribed,
-  // automatically sync device subscription seamlessly.
+  // If already granted, sync device subscription silently without showing any prompt
   useEffect(() => {
     if (
       permission === "granted" &&
@@ -89,17 +90,15 @@ export const NotificationSection = memo(function NotificationSection() {
       !status.subscribed &&
       status.pushConfigured &&
       !autoRegisteredRef.current &&
-      !toggling
+      !toggling &&
+      !isPromptInCooldown()
     ) {
       autoRegisteredRef.current = true;
       void (async () => {
         try {
           const result = await subscribeToPush({ skipPermissionRequest: true });
           if (result.ok) {
-            toast({
-              title: "Push notifications connected",
-              description: "This device is registered for real-time service updates.",
-            });
+            clearPromptCooldown();
             await refresh();
           }
         } catch {
@@ -107,7 +106,7 @@ export const NotificationSection = memo(function NotificationSection() {
         }
       })();
     }
-  }, [permission, status, toggling, refresh, toast]);
+  }, [permission, status, toggling, refresh]);
 
   const handleToggle = async (enabled: boolean) => {
     setToggling(true);
@@ -115,6 +114,7 @@ export const NotificationSection = memo(function NotificationSection() {
       if (enabled) {
         const result = await subscribeToPush({ forceResync: true });
         if (!result.ok) {
+          setPromptCooldown();
           toast({
             title: "Could not enable notifications",
             description: result.error,
@@ -123,6 +123,7 @@ export const NotificationSection = memo(function NotificationSection() {
           checkPermission();
           return;
         }
+        clearPromptCooldown();
         checkPermission();
         toast({ title: "Notifications enabled" });
       } else {
@@ -142,11 +143,10 @@ export const NotificationSection = memo(function NotificationSection() {
       const res = await sendTestPush();
       if (res.ok) {
         toast({
-          title: "Test notification sent!",
+          title: "Test notification sent",
           description: "Check your screen or notification drawer.",
         });
       } else {
-        // Fallback to local notification via Service Worker if server push is queued or unavailable
         const reg = await ensureServiceWorkerRegistration().catch(() => null);
         if (reg && "showNotification" in reg) {
           await reg.showNotification("CWP Detailers", {
@@ -197,92 +197,77 @@ export const NotificationSection = memo(function NotificationSection() {
 
   return (
     <AccountSection title="Notifications" testId="account-notifications-section">
-      <div className="p-4 sm:p-5 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
-              {isSubscribed ? <BellRing className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
+      <div className="px-4 py-3 sm:px-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              {isSubscribed ? <BellRing className="h-4.5 w-4.5" /> : <Bell className="h-4.5 w-4.5" />}
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
                 <label
                   htmlFor="account-push-enabled"
-                  className="text-sm font-semibold text-foreground cursor-pointer"
+                  className="text-sm font-semibold text-foreground cursor-pointer select-none"
                 >
                   Push Notifications
                 </label>
                 {isSubscribed ? (
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     Active
                   </span>
-                ) : null}
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
+                    Off
+                  </span>
+                )}
               </div>
-              <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
-                Instant alerts for technician arrival, cleaning progress & wash completion
+              <p className="text-xs text-muted-foreground truncate">
+                Service updates and completion alerts
               </p>
-
-              {permission === "denied" ? (
-                <p className="mt-1.5 text-xs text-destructive font-medium">
-                  Blocked in browser settings — click the lock/settings icon in your address bar and set Notifications to Allow.
-                </p>
-              ) : null}
-
-              {permission === "granted" && !isSubscribed && !loading ? (
-                <p className="mt-1.5 text-xs text-emerald-600 font-medium flex items-center gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                  Browser permission allowed. Toggle on to receive alerts on this device.
-                </p>
-              ) : null}
-
-              {!loading && supported && !status?.pushConfigured ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Push notification service is initializing.
-                </p>
-              ) : null}
-
-              {!supported ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Push notifications are not supported on this device/browser.
-                </p>
-              ) : null}
             </div>
           </div>
 
-          <Switch
-            id="account-push-enabled"
-            checked={isSubscribed}
-            disabled={disabled}
-            onCheckedChange={v => void handleToggle(Boolean(v))}
-            aria-label="Push notifications toggle"
-            data-testid="account-push-toggle"
-            className="shrink-0 cursor-pointer mt-1"
-          />
+          <div className="flex items-center gap-2 shrink-0">
+            {isSubscribed ? (
+              <button
+                type="button"
+                onClick={() => void handleSendTest()}
+                disabled={testingPush || toggling}
+                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-slate-100 transition-colors"
+                title="Send test alert"
+                aria-label="Send test alert"
+                data-testid="account-push-test-btn"
+              >
+                {testingPush ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </button>
+            ) : null}
+            <Switch
+              id="account-push-enabled"
+              checked={isSubscribed}
+              disabled={disabled}
+              onCheckedChange={v => void handleToggle(Boolean(v))}
+              aria-label="Push notifications toggle"
+              data-testid="account-push-toggle"
+              className="cursor-pointer"
+            />
+          </div>
         </div>
 
-        {/* Action button to test notifications when active or permitted */}
-        {isSubscribed || permission === "granted" ? (
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">
-              Verify notifications are working on this device
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleSendTest()}
-              disabled={testingPush || toggling}
-              className="h-8 px-3 text-xs font-medium gap-1.5 shrink-0 hover:bg-slate-50"
-            >
-              {testingPush ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-              ) : (
-                <Send className="h-3.5 w-3.5 text-primary" />
-              )}
-              Send Test Alert
-            </Button>
-          </div>
-        ) : null}
+        {permission === "denied" && (
+          <p className="mt-2 text-xs text-destructive font-medium">
+            Notifications are blocked in browser settings. Please enable them in your address bar to receive alerts.
+          </p>
+        )}
+        {!supported && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Push notifications are not supported on this browser.
+          </p>
+        )}
       </div>
     </AccountSection>
   );

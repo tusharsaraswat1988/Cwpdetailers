@@ -1,17 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Sparkles,
-  ShieldCheck,
-  Droplet,
-  Sun,
-  ArrowRight,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "wouter";
-import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 
 interface MarketingHeroProps {
   cityName?: string;
@@ -47,21 +37,29 @@ export function MarketingHero({ cityName, branchId }: MarketingHeroProps = {}) {
       if (cityName) params.set("citySlug", cityName);
       if (branchId) params.set("branchId", String(branchId));
 
-      const res = await fetch(`/api/marketing/hero-banners?${params.toString()}`, {
-        credentials: "include",
-      });
-      if (res.ok) {
-        const json = await res.json();
-        return { banners: json.banners || [] };
+      try {
+        const res = await fetch(`/api/marketing/hero-banners?${params.toString()}`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const json = await res.json();
+          return { banners: json.banners || [] };
+        }
+      } catch {
+        // Fallback below
       }
 
       // Fallback to legacy promotions endpoint if marketing endpoint fails
-      const fallbackRes = await fetch(`/api/promotions?${params.toString()}`, {
-        credentials: "include",
-      });
-      if (!fallbackRes.ok) return { banners: [] };
-      const fallbackJson = await fallbackRes.json();
-      return { banners: fallbackJson.promotions || [] };
+      try {
+        const fallbackRes = await fetch(`/api/promotions?${params.toString()}`, {
+          credentials: "include",
+        });
+        if (!fallbackRes.ok) return { banners: [] };
+        const fallbackJson = await fallbackRes.json();
+        return { banners: fallbackJson.promotions || [] };
+      } catch {
+        return { banners: [] };
+      }
     },
     staleTime: 60000,
   });
@@ -95,86 +93,83 @@ export function MarketingHero({ cityName, branchId }: MarketingHeroProps = {}) {
     }
   };
 
-  const handlePrev = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentIndex((prev) => (prev === 0 ? banners.length - 1 : prev - 1));
-  };
-
-  const handleNext = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentIndex((prev) => (prev + 1) % banners.length);
-  };
-
-  // Content resolution: dynamic promo first, then smart city-driven fallback
   const headlineCity = cityName || "Your City";
-  const badgeText = activeBanner?.badgeText || `${headlineCity}'s #1 Doorstep Detailing & Auto Care`;
-  const title = activeBanner?.title || "Showroom Shine at Your Doorstep, Every Single Morning.";
+  const title = activeBanner?.title || "Showroom Shine at Your Doorstep";
   const subtitle =
     activeBanner?.subtitle ||
-    `Professional automotive care and doorstep cleaning in ${headlineCity}. We bring certified detailers, 100% RO water, and premium microfiber care right to your parking bay.`;
-
-  const highlights =
-    activeBanner?.highlights && activeBanner.highlights.length > 0
-      ? activeBanner.highlights
-      : ["Zero Scratches", "100% RO Water", "+25% Solar Power", "Certified Techs"];
+    `Certified detailers, 100% RO water, and doorstep vehicle care in ${headlineCity}.`;
 
   const ctaText = activeBanner?.ctaText || "Explore Services & Book";
   const ctaLink = activeBanner?.ctaLink || "#cwp-services-heading";
-
   const bannerImage = activeBanner?.desktopImageUrl || activeBanner?.imageUrl;
+
+  const scrollToServices = (e: React.MouseEvent) => {
+    handleCtaClick();
+    if (ctaLink.startsWith("#")) {
+      e.preventDefault();
+      const targetId = ctaLink.replace("#", "");
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  };
 
   return (
     <div
-      className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1D36] via-[#0E274D] to-[#123668] text-white p-4 sm:p-5 shadow-xs"
+      className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1D36] via-[#0E274D] to-[#123668] text-white p-3.5 sm:p-4 shadow-xs"
       data-testid="home-marketing-hero"
     >
-      <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5">
-        <div className="space-y-1.5 max-w-xl min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 text-blue-200 border border-white/15 text-[10px] font-semibold backdrop-blur-xs">
-              <Sparkles size={11} className="text-blue-300" />
-              <span>{badgeText}</span>
-            </span>
-
-            {activeBanner?.bannerType === "third_party" && (
-              <span className="text-[10px] text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
-                Sponsored by {activeBanner.advertiserName || "Partner"}
-              </span>
-            )}
-          </div>
-
-          <h2 className="font-display font-semibold text-base sm:text-lg text-white tracking-tight leading-snug">
+      <div className="relative z-10 flex items-center justify-between gap-3">
+        <div className="space-y-1 min-w-0 flex-1">
+          <h2 className="font-display font-semibold text-sm sm:text-base text-white tracking-tight leading-tight truncate">
             {title}
           </h2>
 
-          <p className="text-xs text-slate-300 leading-normal line-clamp-1 sm:line-clamp-2">
+          <p className="text-xs text-slate-300 leading-normal line-clamp-1">
             {subtitle}
           </p>
 
-          <div className="pt-1">
+          <div className="pt-1.5 flex items-center gap-2">
             {ctaLink.startsWith("/") ? (
               <Link
                 href={ctaLink}
                 onClick={handleCtaClick}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-[#1264db] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary hover:bg-[#1264db] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer min-h-[38px] touch-manipulation"
               >
                 {ctaText} <ArrowRight size={13} />
               </Link>
             ) : (
               <a
                 href={ctaLink}
-                onClick={handleCtaClick}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-[#1264db] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                onClick={scrollToServices}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary hover:bg-[#1264db] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer min-h-[38px] touch-manipulation"
               >
                 {ctaText} <ArrowRight size={13} />
               </a>
             )}
+
+            {banners.length > 1 && (
+              <div className="flex items-center gap-1 ml-2">
+                {banners.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                      idx === currentIndex ? "w-4 bg-white" : "w-1.5 bg-white/30 hover:bg-white/50"
+                    }`}
+                    aria-label={`Go to banner ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Optional Banner Image / Media Preview (compact on desktop) */}
+        {/* Compact Media Preview on tablet/desktop */}
         {bannerImage && (
-          <div className="relative shrink-0 hidden sm:block w-36 h-24 lg:w-44 lg:h-28 rounded-xl overflow-hidden border border-white/10 shadow-sm">
+          <div className="relative shrink-0 hidden sm:block w-28 h-20 rounded-xl overflow-hidden border border-white/10 shadow-xs">
             <img
               src={bannerImage}
               alt={activeBanner?.altText || title}
@@ -184,44 +179,6 @@ export function MarketingHero({ cityName, branchId }: MarketingHeroProps = {}) {
           </div>
         )}
       </div>
-
-      {/* Multi-banner Navigation Controls */}
-      {banners.length > 1 && (
-        <div className="relative z-10 flex items-center justify-between pt-2.5 mt-2 border-t border-white/10">
-          <div className="flex items-center gap-1">
-            {banners.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => setCurrentIndex(idx)}
-                className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  idx === currentIndex ? "w-5 bg-white" : "w-1.5 bg-white/30 hover:bg-white/50"
-                }`}
-                aria-label={`Go to banner ${idx + 1}`}
-              />
-            ))}
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handlePrev}
-              className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-              aria-label="Previous banner"
-            >
-              <ChevronLeft size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-              aria-label="Next banner"
-            >
-              <ChevronRight size={13} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

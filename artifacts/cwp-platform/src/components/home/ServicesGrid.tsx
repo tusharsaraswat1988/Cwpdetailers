@@ -1,18 +1,24 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   Sparkles,
   Droplets,
   ShieldCheck,
   SunMedium,
+  Shield,
   ArrowRight,
   Star,
-  Shield,
-  Eye,
 } from "lucide-react";
 import { CWP_PRODUCT_LIST } from "@/lib/cwp-products-data";
 import { useCityCatalogServices } from "@/features/master-data/api";
+import { CustomerCard, CustomerButton } from "@/features/customer-ds";
 import { cn } from "@/lib/utils";
+
+import heroVehicle from "@/assets/images/landing/hero-vehicle.jpg";
+import serviceWash from "@/assets/images/service-wash.png";
+import serviceInterior from "@/assets/images/service-interior.png";
+import serviceCeramic from "@/assets/images/service-ceramic.png";
+import serviceSolar from "@/assets/images/service-solar.png";
 
 interface ServicesGridProps {
   hasDailyCleaningPlan?: boolean;
@@ -21,26 +27,27 @@ interface ServicesGridProps {
   cityName?: string;
 }
 
-const serviceIcons: Record<string, any> = {
-  "daily-car-cleaning": Sparkles,
-  "doorstep-car-wash": Droplets,
-  "interior-detailing": ShieldCheck,
-  "ceramic-coating": Shield,
-  "solar-cleaning": SunMedium,
-  "glass-repellent": Eye,
+const SERVICE_IMAGES: Record<string, string> = {
+  "daily-car-cleaning": heroVehicle,
+  "doorstep-car-wash": serviceWash,
+  "interior-detailing": serviceInterior,
+  "ceramic-coating": serviceCeramic,
+  "solar-cleaning": serviceSolar,
+  "glass-repellent": heroVehicle,
 };
 
-const serviceAccents: Record<string, { bg: string; text: string; border: string }> = {
-  "daily-car-cleaning": { bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-100" },
-  "doorstep-car-wash": { bg: "bg-cyan-50", text: "text-cyan-600", border: "border-cyan-100" },
-  "interior-detailing": { bg: "bg-indigo-50", text: "text-indigo-600", border: "border-indigo-100" },
-  "ceramic-coating": { bg: "bg-purple-50", text: "text-purple-600", border: "border-purple-100" },
-  "solar-cleaning": { bg: "bg-amber-50", text: "text-amber-600", border: "border-amber-100" },
-  "glass-repellent": { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-100" },
+const SERVICE_BENEFITS: Record<string, string> = {
+  "daily-car-cleaning": "Morning doorstep microfiber dust removal with monthly deep foam washes.",
+  "doorstep-car-wash": "100% RO water snow foam exterior wash, rim shine & cabin vacuum.",
+  "interior-detailing": "Deep steam extraction, seat shampooing & AC ozone sanitization.",
+  "ceramic-coating": "9H German ceramic shield with multi-stage paint swirl correction.",
+  "solar-cleaning": "Deionized soft-brush rooftop wash restoring up to 25% power generation.",
+  "glass-repellent": "Hydrophobic windshield & glass rain repellent coating.",
 };
 
 export function ServicesGrid({ className, citySlug, cityName }: ServicesGridProps) {
   const cityCatalogQuery = useCityCatalogServices(citySlug);
+  const [activeCategory, setActiveCategory] = useState<string>("all");
 
   const availableServices = useMemo(() => {
     if (!citySlug) {
@@ -54,18 +61,28 @@ export function ServicesGrid({ className, citySlug, cityName }: ServicesGridProp
     }
 
     const catalogData = cityCatalogQuery.data;
-    const activeCategories = new Set(catalogData.map(s => s.category?.toLowerCase()).filter(Boolean));
-    const activeSlugs = new Set(catalogData.map(s => s.slug?.toLowerCase()).filter(Boolean));
-    const priceBySlug = new Map(catalogData.map(s => [s.slug?.toLowerCase(), s.basePrice || (s as any).cityBaseOverride]));
+    const activeCategories = new Set(catalogData.map((s) => s.category?.toLowerCase()).filter(Boolean));
+    const activeSlugs = new Set(catalogData.map((s) => s.slug?.toLowerCase()).filter(Boolean));
+    const priceBySlug = new Map(
+      catalogData.map((s) => [s.slug?.toLowerCase(), s.basePrice || (s as any).cityBaseOverride])
+    );
 
-    return CWP_PRODUCT_LIST.filter(prod => {
+    return CWP_PRODUCT_LIST.filter((prod) => {
       if (activeSlugs.has(prod.slug.toLowerCase())) return true;
-      if (prod.serviceType === "daily_cleaning" && (activeCategories.has("subscription") || activeCategories.has("daily_cleaning"))) return true;
+      if (
+        prod.serviceType === "daily_cleaning" &&
+        (activeCategories.has("subscription") || activeCategories.has("daily_cleaning"))
+      )
+        return true;
       if (prod.serviceType === "car_wash" && activeCategories.has("car_wash")) return true;
       if (prod.serviceType === "detailing" && activeCategories.has("detailing")) return true;
-      if (prod.serviceType === "solar_cleaning" && (activeCategories.has("solar_cleaning") || activeCategories.has("amc"))) return true;
+      if (
+        prod.serviceType === "solar_cleaning" &&
+        (activeCategories.has("solar_cleaning") || activeCategories.has("amc"))
+      )
+        return true;
       return false;
-    }).map(prod => {
+    }).map((prod) => {
       const customPrice = priceBySlug.get(prod.slug.toLowerCase());
       if (customPrice && Number(customPrice) > 0) {
         return { ...prod, startingPrice: Number(customPrice) };
@@ -74,106 +91,160 @@ export function ServicesGrid({ className, citySlug, cityName }: ServicesGridProp
     });
   }, [citySlug, cityCatalogQuery.data, cityCatalogQuery.isLoading]);
 
+  // Dynamic categories based on available services
+  const dynamicCategories = useMemo(() => {
+    const cats: Array<{ id: string; label: string; icon: any }> = [
+      { id: "all", label: "All Services", icon: Sparkles },
+    ];
+    if (availableServices.some((s) => s.serviceType === "daily_cleaning")) {
+      cats.push({ id: "daily_cleaning", label: "Daily Cleaning", icon: Sparkles });
+    }
+    if (availableServices.some((s) => s.serviceType === "car_wash")) {
+      cats.push({ id: "car_wash", label: "Car Wash", icon: Droplets });
+    }
+    if (availableServices.some((s) => s.serviceType === "detailing")) {
+      cats.push({ id: "detailing", label: "Detailing", icon: ShieldCheck });
+    }
+    if (availableServices.some((s) => s.serviceType === "solar_cleaning")) {
+      cats.push({ id: "solar_cleaning", label: "Solar Care", icon: SunMedium });
+    }
+    return cats;
+  }, [availableServices]);
+
+  const filteredServices = useMemo(() => {
+    if (activeCategory === "all") return availableServices;
+    return availableServices.filter((s) => s.serviceType === activeCategory);
+  }, [availableServices, activeCategory]);
+
   return (
-    <section className={cn("space-y-4", className)} aria-labelledby="cwp-services-heading">
+    <section className={cn("space-y-4", className)} aria-labelledby="cwp-services-heading" data-testid="cwp-services-showcase">
       <div className="flex items-center justify-between">
         <div>
-          <h2 id="cwp-services-heading" className="font-display font-bold text-lg text-foreground">
-            {cityName ? `Services in ${cityName}` : "CWP Signature Services"}
+          <h2 id="cwp-services-heading" className="font-display font-extrabold text-lg text-foreground">
+            {cityName ? `Services in ${cityName}` : "CWP Certified Services"}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {cityName
-              ? `Doorstep vehicle care and cleaning services available in ${cityName}`
-              : "Doorstep vehicle detailing & rooftop solar care with guaranteed results"}
+            Doorstep vehicle care and rooftop solar cleaning
           </p>
         </div>
+        <Link
+          href="/customer/services"
+          className="text-xs font-bold text-primary hover:underline inline-flex items-center gap-1"
+        >
+          View All <ArrowRight size={13} />
+        </Link>
       </div>
 
+      {/* Dynamic Category Chips */}
+      {dynamicCategories.length > 2 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {dynamicCategories.map((cat) => {
+            const Icon = cat.icon;
+            const active = activeCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCategory(cat.id)}
+                className={cn(
+                  "min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border select-none",
+                  active
+                    ? "bg-primary text-white border-primary shadow-2xs"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                )}
+                data-testid={`grid-cat-${cat.id}`}
+              >
+                <Icon size={13} className={active ? "text-white" : "text-primary"} />
+                <span>{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {availableServices.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center" data-testid="services-unavailable-banner">
+        <div
+          className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center"
+          data-testid="services-unavailable-banner"
+        >
           <Sparkles className="mx-auto h-8 w-8 text-slate-400 mb-2" />
           <h3 className="font-semibold text-sm text-foreground">Services Launching Soon</h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-            {cityName ? `Services in ${cityName} are currently being onboarded.` : "No services currently available for this selection."}
+            {cityName
+              ? `Services in ${cityName} are currently being onboarded.`
+              : "No services currently available for this selection."}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-          {availableServices.map((prod) => {
-            const Icon = serviceIcons[prod.slug] || Sparkles;
-            const accent = serviceAccents[prod.slug] || {
-              bg: "bg-blue-50",
-              text: "text-primary",
-              border: "border-blue-100",
-            };
+          {filteredServices.map((prod) => {
+            const imageSrc = SERVICE_IMAGES[prod.slug] || heroVehicle;
+            const shortBenefit = SERVICE_BENEFITS[prod.slug] || prod.shortDescription;
 
             return (
-              <Link
+              <CustomerCard
                 key={prod.slug}
-                href={`/customer/services/${prod.slug}`}
-                className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-[0_2px_8px_rgba(11,29,54,0.04)] hover:shadow-[0_6px_20px_rgba(11,29,54,0.08)] hover:border-primary/50 active:scale-[0.985] transition-all duration-200 flex flex-col justify-between group text-left relative overflow-hidden cursor-pointer"
+                className="overflow-hidden flex flex-col justify-between hover:border-primary/50 hover:shadow-md transition-all duration-200 group bg-white border border-slate-200 rounded-2xl"
                 data-testid={`service-card-${prod.slug}`}
               >
-                {/* Product Card Top: Icon, Category & Rating */}
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div
-                      className={cn(
-                        "w-12 h-12 rounded-2xl flex items-center justify-center border transition-transform duration-200 group-hover:scale-105 shadow-2xs",
-                        accent.bg,
-                        accent.text,
-                        accent.border
-                      )}
-                    >
-                      <Icon size={22} />
-                    </div>
-
-                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-slate-700">
-                      <Star size={11} className="fill-amber-400 text-amber-400" />
-                      <span>{prod.rating}</span>
-                      <span className="text-slate-400 font-normal">({prod.totalReviews})</span>
-                    </div>
+                {/* Visual Thumbnail */}
+                <Link
+                  href={`/customer/services/${prod.slug}`}
+                  className="block relative aspect-[16/10] overflow-hidden bg-slate-100 cursor-pointer"
+                >
+                  <img
+                    src={imageSrc}
+                    alt={prod.title}
+                    className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                    loading="lazy"
+                  />
+                  <div className="absolute top-2.5 right-2.5 bg-white/90 backdrop-blur-xs px-2 py-0.5 rounded-md flex items-center gap-1 text-[11px] font-bold text-slate-800 shadow-2xs">
+                    <Star size={11} className="fill-amber-400 text-amber-400" />
+                    <span>{prod.rating}</span>
                   </div>
+                </Link>
 
+                {/* Content */}
+                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                   <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                      {prod.category}
-                    </span>
-                    <h3 className="font-display font-bold text-base text-foreground group-hover:text-primary transition-colors leading-snug">
-                      {prod.title}
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-                      {prod.shortDescription}
+                    <Link href={`/customer/services/${prod.slug}`} className="block">
+                      <h3 className="font-display font-bold text-base text-foreground group-hover:text-primary transition-colors leading-snug">
+                        {prod.title}
+                      </h3>
+                    </Link>
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                      {shortBenefit}
                     </p>
                   </div>
 
-                  {/* Micro tags */}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {prod.features.slice(0, 2).map((feat, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center text-[10px] text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded-md"
-                      >
-                        {feat}
+                  {/* Footer */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">
+                        Starts from
                       </span>
-                    ))}
+                      <p className="font-display font-black text-base text-foreground">
+                        ₹{prod.startingPrice}{" "}
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {prod.priceUnit}
+                        </span>
+                      </p>
+                    </div>
+
+                    <Link href={`/customer/services/${prod.slug}`}>
+                      <CustomerButton
+                        variant="default"
+                        size="sm"
+                        className="min-h-[40px] px-3.5 text-xs font-bold gap-1 rounded-xl shadow-2xs cursor-pointer"
+                        data-testid={`view-service-btn-${prod.slug}`}
+                      >
+                        <span>View Service</span>
+                        <ArrowRight size={13} />
+                      </CustomerButton>
+                    </Link>
                   </div>
                 </div>
-
-                {/* Product Card Footer: Price & Direct Page CTA */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-muted-foreground block font-medium">Starts from</span>
-                    <p className="font-display font-bold text-sm text-foreground">
-                      ₹{prod.startingPrice} <span className="text-[10px] font-normal text-muted-foreground">{prod.priceUnit}</span>
-                    </p>
-                  </div>
-
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-primary group-hover:translate-x-0.5 transition-transform">
-                    View & Book <ArrowRight size={13} />
-                  </span>
-                </div>
-              </Link>
+              </CustomerCard>
             );
           })}
         </div>

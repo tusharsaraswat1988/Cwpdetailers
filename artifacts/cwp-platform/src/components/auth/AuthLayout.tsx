@@ -6,6 +6,8 @@ import { MarketingPageShell } from "@/features/landing/components/marketing/Mark
 import { MarketingCard } from "@/features/landing/components/marketing/MarketingCard";
 import { MARKETING_SITE_LINKS } from "@/features/landing/components/marketing/siteLinks";
 
+import { isCustomerNativeApp, isAnyNativeApp } from "@/lib/native/portalNative";
+
 export type AuthPortalChrome = "customer" | "staff" | "admin";
 
 type AuthLayoutProps = {
@@ -33,6 +35,21 @@ export function AuthLayout({
   portal = "customer",
 }: AuthLayoutProps) {
   if (portal === "customer") {
+    // Inside native mobile app (Capacitor), do NOT render marketing website shell/navbar
+    if (isCustomerNativeApp() || isAnyNativeApp()) {
+      return (
+        <main
+          className={cn(
+            "min-h-[100dvh] bg-background flex items-center justify-center px-4 py-8",
+            className,
+          )}
+          data-testid={testId}
+        >
+          <div className="w-full max-w-[22rem] sm:max-w-md">{children}</div>
+        </main>
+      );
+    }
+
     const path =
       testId === "register-page"
         ? "/register"

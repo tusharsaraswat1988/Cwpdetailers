@@ -27,7 +27,7 @@ import {
   authLinkClass,
   authMutedLinkClass,
 } from "@/components/auth/authStyles";
-import { isCustomerNativeApp } from "@/lib/native/portalNative";
+import { isCustomerNativeApp, isAnyNativeApp } from "@/lib/native/portalNative";
 import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +43,10 @@ export default function Login() {
   const { toast } = useToast();
   const queryPhone = usePhoneFromQuery();
 
-  const [authStep, setAuthStep] = useState<"chooser" | "credentials">("chooser");
+  const isNative = isCustomerNativeApp() || isAnyNativeApp();
+  const [authStep, setAuthStep] = useState<"chooser" | "credentials">(
+    isNative ? "credentials" : "chooser",
+  );
   const [authMode, setAuthMode] = useState<"otp" | "password">("otp");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
@@ -91,7 +94,7 @@ export default function Login() {
         const details = getActionableAuthDetails(err);
         setOtpError(details.message);
         setOtpRecoveryStep(details.actionableStep ?? null);
-        stateMachine.failWithError(err);
+        stateMachine.setIdle();
       },
     },
   });
@@ -149,7 +152,7 @@ export default function Login() {
       />
 
       <AuthPanel>
-      {authError && (
+      {authError && authStep === "chooser" && (
         <div
           className={cn("rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 flex flex-col gap-2 mb-4", authFadeUp)}
           role="alert"
@@ -287,7 +290,7 @@ export default function Login() {
               <form onSubmit={handleOtpContinue} className="space-y-3 pt-1">
                 {otpError && (
                   <div
-                    className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 flex flex-col gap-1"
+                    className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 flex flex-col gap-1.5"
                     role="alert"
                     aria-live="assertive"
                     data-testid="login-otp-error"
@@ -299,6 +302,14 @@ export default function Login() {
                     {otpRecoveryStep ? (
                       <p className="text-destructive/85 text-xs pl-5 leading-normal">{otpRecoveryStep}</p>
                     ) : null}
+                    <div className="pl-5 pt-0.5">
+                      <Link
+                        href={phone ? `/register?phone=${phone}` : "/register"}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-primary underline underline-offset-4 hover:opacity-80"
+                      >
+                        Create account with this number <ArrowRight size={12} />
+                      </Link>
+                    </div>
                   </div>
                 )}
                 <MarketingButton
@@ -369,7 +380,7 @@ export default function Login() {
       <div className={cn("mt-5 text-center space-y-2", authFadeUp, "delay-[400ms]")}>
         <p className="text-sm text-muted-foreground">
           New to {branding.brandName}?{" "}
-          <Link href="/register" className={cn(authLinkClass, "inline-flex items-center gap-1")}>
+          <Link href={phone ? `/register?phone=${phone}` : "/register"} className={cn(authLinkClass, "inline-flex items-center gap-1")}>
             Create your account
             <ArrowRight size={14} className="opacity-50" aria-hidden />
           </Link>

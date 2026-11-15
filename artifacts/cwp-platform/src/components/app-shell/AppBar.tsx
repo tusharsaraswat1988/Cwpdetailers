@@ -24,24 +24,27 @@ export function AppBar({
   return (
     <header
       className={cn(
-        "sticky top-0 z-30 flex items-center gap-3 px-4 bg-card/95 backdrop-blur border-b border-border shrink-0 safe-area-top",
-        "min-h-[calc(var(--app-bar-height)+env(safe-area-inset-top,0px))] h-auto py-2",
+        "sticky top-0 z-30 flex items-center justify-between gap-2.5 px-3 sm:px-4 bg-card/95 backdrop-blur border-b border-border shrink-0 safe-area-top",
+        "h-14 min-h-[calc(var(--app-bar-height,3.5rem)+env(safe-area-inset-top,0px))]",
         className,
       )}
       data-testid="app-bar"
     >
-      {showBack && onBack && (
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex items-center justify-center w-10 h-10 -ml-2 rounded-full text-foreground hover:bg-muted transition-colors shrink-0"
-          aria-label="Go back"
-        >
-          <ArrowLeft size={20} />
-        </button>
-      )}
-      {leading}
-      <div className="flex-1 min-w-0">
+      <div className="flex items-center gap-2 shrink-0">
+        {showBack && onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex items-center justify-center w-8 h-8 rounded-full text-foreground hover:bg-muted transition-colors shrink-0"
+            aria-label="Go back"
+          >
+            <ArrowLeft size={18} />
+          </button>
+        )}
+        {leading}
+      </div>
+
+      <div className="flex-1 flex items-center justify-center min-w-0 px-1">
         {title && (
           typeof title === "string" ? (
             <h1 className="font-display font-semibold text-base truncate leading-tight text-foreground">{title}</h1>
@@ -57,7 +60,10 @@ export function AppBar({
           )
         )}
       </div>
-      {trailing && <div className="flex items-center gap-2 shrink-0">{trailing}</div>}
+
+      <div className="flex items-center justify-end shrink-0 gap-1.5 min-w-[28px] sm:min-w-[40px]">
+        {trailing}
+      </div>
     </header>
   );
 }
