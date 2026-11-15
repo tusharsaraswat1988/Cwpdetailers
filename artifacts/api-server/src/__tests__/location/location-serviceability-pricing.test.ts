@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { locationResolver } from "../../lib/location-intelligence/resolver/LocationResolver";
+import {
+  locationResolver,
+  isPointInPolygon,
+  isPointInGeoJson,
+} from "../../lib/location-intelligence/resolver/LocationResolver";
 import { serviceabilityEngine } from "../../lib/location-intelligence/serviceability/ServiceabilityEngine";
 import { locationPricingEngine } from "../../lib/location-intelligence/pricing/LocationPricingEngine";
 import { computeScope } from "../../middlewares/auth";
@@ -520,6 +524,87 @@ describe("Location, Serviceability, & Location-Based Differential Pricing Framew
       expect(staffScope.branchIds).toEqual([20]);
       expect(staffScope.branchIds?.includes(20)).toBe(true);
       expect(staffScope.branchIds?.includes(10)).toBe(false);
+    });
+  });
+
+  describe("5. Point-In-Polygon (PIP) & GeoJSON Spatial Boundary Matching", () => {
+    // Square polygon in Noida: [ [lng, lat], ... ]
+    // Min Lat: 28.50, Max Lat: 28.60, Min Lng: 77.30, Max Lng: 77.40
+    const testPolygon = [
+      [77.30, 28.50],
+      [77.40, 28.50],
+      [77.40, 28.60],
+      [77.30, 28.60],
+      [77.30, 28.50],
+    ];
+
+    it("correctly identifies point inside polygon", () => {
+      // (28.55, 77.35) is right inside
+      const inside = isPointInPolygon(28.55, 77.35, testPolygon);
+      expect(inside).toBe(true);
+    });
+
+    it("correctly identifies point outside polygon", () => {
+      // (28.70, 77.50) is well outside
+      const outside = isPointInPolygon(28.70, 77.50, testPolygon);
+      expect(outside).toBe(false);
+    });
+
+    it("correctly verifies GeoJSON Polygon object", () => {
+      const geoJson = {
+        type: "Polygon",
+        coordinates: [testPolygon],
+      };
+      expect(isPointInGeoJson(28.55, 77.35, geoJson)).toBe(true);
+      expect(isPointInGeoJson(28.70, 77.50, geoJson)).toBe(false);
+    });
+
+    it("handles invalid or empty GeoJSON gracefully", () => {
+      expect(isPointInGeoJson(28.55, 77.35, null)).toBe(false);
+      expect(isPointInGeoJson(28.55, 77.35, {})).toBe(false);
+      expect(isPointInGeoJson(28.55, 77.35, { type: "Point", coordinates: [77.35, 28.55] })).toBe(false);
+    });
+  });
+
+  describe("6. Customer Address Edit Regression & Differential Pricing Transition (Workflow D)", () => {
+    it("recalculates pricing tier when customer edits address from Gated Society to Individual Home", async () => {
+      // 1. Initial State: Gated Society customer at Jaypee Greens Wish Town
+      const societyPrice = await locationPricingEngine.resolvePrice({
+        serviceId: 1,
+        cityId: 2,
+        zoneId: 100,
+        societyId: 201,
+        locationType: "GATED_SOCIETY",
+      });
+      expect(societyPrice.priorityName).toBe("society_override");
+      expect(societyPrice.basePrice).toBe(1200);
+      expect(societyPrice.total).toBe(1416);
+
+      // 2. Customer edits address: switches property type to Individual Home in same zone
+      // Old societyId (201) must be cleared so it no longer receives the society cluster discount!
+      const individualPrice = await locationPricingEngine.resolvePrice({
+        serviceId: 1,
+        cityId: 2,
+        zoneId: 100,
+        societyId: null, // cleared on switch to individual home
+        locationType: "INDIVIDUAL_HOME",
+      });
+      expect(individualPrice.priorityName).toBe("zone_location_type");
+      expect(individualPrice.basePrice).toBe(1500);
+      expect(individualPrice.total).toBe(1770);
+    });
+
+    it("clears stale society and resets to city default pricing if edited to uncovered locality outside zones", async () => {
+      const cityDefaultPrice = await locationPricingEngine.resolvePrice({
+        serviceId: 1,
+        cityId: 2,
+        zoneId: null,
+        societyId: null,
+        locationType: "ALL",
+      });
+      expect(cityDefaultPrice.priorityName).toBe("city_default");
+      expect(cityDefaultPrice.basePrice).toBe(1350);
+      expect(cityDefaultPrice.total).toBe(1593);
     });
   });
 });

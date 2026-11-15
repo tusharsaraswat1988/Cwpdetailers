@@ -127,6 +127,59 @@ export class AddressService {
       await addressRepository.clearDefaultForCustomer(input.customerId);
     }
 
+    let createZoneId = prepared.merged.zoneId ?? null;
+    let createBranchId = prepared.merged.branchId ?? null;
+    let createResolutionStatus = prepared.merged.resolutionStatus ?? null;
+    let createServiceabilityStatus = validation.coverageStatus ?? prepared.merged.serviceabilityStatus ?? null;
+    let createLocationContextSnapshot = validation.locationContext ?? null;
+    let createConfidenceScore = validation.locationConfidenceScore ?? null;
+
+    if (!createZoneId || !createBranchId) {
+      try {
+        const { locationResolver } = await import("../location-intelligence/resolver/LocationResolver");
+        const { serviceabilityEngine } = await import("../location-intelligence/serviceability/ServiceabilityEngine");
+
+        const resolved = await locationResolver.resolve({
+          cityId: prepared.merged.cityId ?? undefined,
+          societyId: prepared.merged.societyId ?? undefined,
+          localityId: prepared.merged.localityId ?? undefined,
+          propertyType: prepared.merged.propertyType ?? undefined,
+          pincode: prepared.normalized.postalCode ?? undefined,
+          locality: prepared.normalized.locality ?? undefined,
+          sector: prepared.normalized.area ?? undefined,
+          latitude: prepared.merged.latitude ?? undefined,
+          longitude: prepared.merged.longitude ?? undefined,
+          placeId: prepared.merged.placeId ?? undefined,
+          formattedAddress: prepared.formattedAddress,
+        });
+
+        createZoneId = resolved.zoneId ?? createZoneId;
+        createBranchId = resolved.branchId ?? createBranchId;
+        createResolutionStatus = resolved.status;
+        createConfidenceScore = resolved.confidence;
+
+        const serv = await serviceabilityEngine.evaluate({
+          cityId: resolved.cityId,
+          branchId: resolved.branchId,
+          zoneId: resolved.zoneId,
+          societyId: resolved.societyId,
+          localityId: resolved.localityId,
+          pincode: prepared.normalized.postalCode ?? undefined,
+          propertyType: resolved.propertyType,
+          serviceId: input.serviceId,
+          resolvedLocation: resolved,
+        });
+
+        createServiceabilityStatus = serv.status;
+        createLocationContextSnapshot = {
+          resolution: resolved,
+          serviceability: serv,
+        };
+      } catch {
+        // Fallback gracefully
+      }
+    }
+
     const address = await addressRepository.create({
       identityId: identity.id,
       customerId: input.customerId,
@@ -158,16 +211,16 @@ export class AddressService {
       isDefault: input.isDefault ?? false,
       verificationStatus: input.verificationStatus ?? prepared.verification,
       source: input.source ?? prepared.source,
-      confidenceScore: validation.locationConfidenceScore ?? null,
-      locationContextSnapshot: validation.locationContext ?? null,
+      confidenceScore: createConfidenceScore,
+      locationContextSnapshot: createLocationContextSnapshot,
       propertyType: prepared.merged.propertyType ?? "OTHER",
       localityId: prepared.merged.localityId ?? null,
       societyId: prepared.merged.societyId ?? null,
       towerId: prepared.merged.towerId ?? null,
-      zoneId: prepared.merged.zoneId ?? null,
-      branchId: prepared.merged.branchId ?? null,
-      serviceabilityStatus: validation.coverageStatus ?? prepared.merged.serviceabilityStatus ?? null,
-      resolutionStatus: prepared.merged.resolutionStatus ?? null,
+      zoneId: createZoneId,
+      branchId: createBranchId,
+      serviceabilityStatus: createServiceabilityStatus,
+      resolutionStatus: createResolutionStatus,
       isCurrent: true,
     });
 
@@ -184,38 +237,71 @@ export class AddressService {
       throw new Error("Address not found");
     }
 
+    const cityIdChanged = input.cityId !== undefined && input.cityId !== existing.address.cityId;
+    const effectivePropertyType = input.propertyType !== undefined
+      ? (input.propertyType as any)
+      : (existing.address.propertyType ?? "OTHER");
+    const propertyTypeSwitchedToIndividual =
+      effectivePropertyType === "INDIVIDUAL_HOME" || effectivePropertyType === "COMMERCIAL_PROPERTY";
+
+    // Clear stale society/tower/zone when switching property type or city
+    let effectiveSocietyId: number | null = input.societyId !== undefined
+      ? input.societyId
+      : propertyTypeSwitchedToIndividual || cityIdChanged
+        ? null
+        : (existing.address.societyId ?? null);
+
+    let effectiveTowerId: number | null = input.towerId !== undefined
+      ? input.towerId
+      : propertyTypeSwitchedToIndividual || cityIdChanged
+        ? null
+        : (existing.address.towerId ?? null);
+
+    let effectiveLocalityId: number | null = input.localityId !== undefined
+      ? input.localityId
+      : cityIdChanged
+        ? null
+        : (existing.address.localityId ?? null);
+
     const mergedInput: CreateAddressInput = {
       customerId: existing.address.customerId,
-      nickname: input.nickname ?? existing.address.nickname,
-      addressType: input.addressType ?? existing.address.addressType,
-      houseNumber: input.houseNumber ?? existing.address.houseNumber,
-      buildingName: input.buildingName ?? existing.address.buildingName,
-      floor: input.floor ?? existing.address.floor,
-      apartment: input.apartment ?? existing.address.apartment,
-      street: input.street ?? existing.address.street,
-      landmark: input.landmark ?? existing.address.landmark,
-      area: input.area ?? existing.address.area,
-      locality: input.locality ?? existing.address.locality,
-      subLocality: input.subLocality ?? existing.address.subLocality,
-      cityId: input.cityId ?? existing.address.cityId,
-      district: input.district ?? existing.address.district,
-      stateId: input.stateId ?? existing.address.stateId,
-      country: input.country ?? existing.address.country,
-      postalCode: input.postalCode ?? existing.address.postalCode,
-      latitude: input.latitude ?? existing.address.latitude,
-      longitude: input.longitude ?? existing.address.longitude,
-      placeId: input.placeId ?? existing.address.placeId,
-      formattedAddress: input.formattedAddress ?? existing.address.formattedAddress,
-      plusCode: input.plusCode ?? existing.address.plusCode,
+      nickname: input.nickname !== undefined ? input.nickname : existing.address.nickname,
+      addressType: input.addressType !== undefined ? input.addressType : existing.address.addressType,
+      houseNumber: input.houseNumber !== undefined ? input.houseNumber : existing.address.houseNumber,
+      buildingName: input.buildingName !== undefined ? input.buildingName : existing.address.buildingName,
+      floor: input.floor !== undefined ? input.floor : existing.address.floor,
+      apartment: input.apartment !== undefined ? input.apartment : existing.address.apartment,
+      street: input.street !== undefined ? input.street : existing.address.street,
+      landmark: input.landmark !== undefined ? input.landmark : existing.address.landmark,
+      area: input.area !== undefined ? input.area : existing.address.area,
+      locality: input.locality !== undefined ? input.locality : existing.address.locality,
+      subLocality: input.subLocality !== undefined ? input.subLocality : existing.address.subLocality,
+      cityId: input.cityId !== undefined ? input.cityId : existing.address.cityId,
+      district: input.district !== undefined ? input.district : existing.address.district,
+      stateId: input.stateId !== undefined ? input.stateId : existing.address.stateId,
+      country: input.country !== undefined ? input.country : existing.address.country,
+      postalCode: input.postalCode !== undefined ? input.postalCode : existing.address.postalCode,
+      latitude: input.latitude !== undefined ? input.latitude : existing.address.latitude,
+      longitude: input.longitude !== undefined ? input.longitude : existing.address.longitude,
+      placeId: input.placeId !== undefined ? input.placeId : existing.address.placeId,
+      formattedAddress: input.formattedAddress !== undefined ? input.formattedAddress : existing.address.formattedAddress,
+      plusCode: input.plusCode !== undefined ? input.plusCode : existing.address.plusCode,
       addressComponents:
-        input.addressComponents
-        ?? (existing.address.addressComponents as CreateAddressInput["addressComponents"]),
-      instructions: input.instructions ?? existing.address.instructions,
-      isDefault: input.isDefault ?? existing.address.isDefault,
-      verificationStatus: input.verificationStatus ?? existing.address.verificationStatus,
-      source: input.source ?? existing.address.source,
+        input.addressComponents !== undefined
+          ? input.addressComponents
+          : (existing.address.addressComponents as CreateAddressInput["addressComponents"]),
+      instructions: input.instructions !== undefined ? input.instructions : existing.address.instructions,
+      isDefault: input.isDefault !== undefined ? input.isDefault : existing.address.isDefault,
+      verificationStatus: input.verificationStatus !== undefined ? input.verificationStatus : existing.address.verificationStatus,
+      source: input.source !== undefined ? input.source : existing.address.source,
       validateCoverage: input.validateCoverage,
       serviceId: input.serviceId,
+      propertyType: effectivePropertyType,
+      localityId: effectiveLocalityId,
+      societyId: effectiveSocietyId,
+      towerId: effectiveTowerId,
+      zoneId: cityIdChanged ? null : (input.zoneId !== undefined ? input.zoneId : existing.address.zoneId),
+      branchId: cityIdChanged ? null : (input.branchId !== undefined ? input.branchId : existing.address.branchId),
       allowDuplicate: true,
     };
 
@@ -234,11 +320,62 @@ export class AddressService {
       throw new AddressValidationError(validation.message ?? "Address validation failed");
     }
 
+    // Dynamic Location Intelligence Recalculation on Address Edit
+    let resolvedZoneId: number | null = mergedInput.zoneId ?? null;
+    let resolvedBranchId: number | null = mergedInput.branchId ?? null;
+    let resolvedStatus: string | null = input.resolutionStatus ?? existing.address.resolutionStatus ?? null;
+    let resolvedServiceabilityStatus: string | null = input.serviceabilityStatus ?? existing.address.serviceabilityStatus ?? null;
     let locationContextSnapshot = existing.address.locationContextSnapshot as Record<string, unknown> | null;
     let locationConfidence = existing.address.confidenceScore;
+
+    try {
+      const { locationResolver } = await import("../location-intelligence/resolver/LocationResolver");
+      const { serviceabilityEngine } = await import("../location-intelligence/serviceability/ServiceabilityEngine");
+
+      const resolved = await locationResolver.resolve({
+        cityId: mergedInput.cityId ?? undefined,
+        societyId: effectiveSocietyId ?? undefined,
+        localityId: effectiveLocalityId ?? undefined,
+        propertyType: effectivePropertyType,
+        pincode: prepared.normalized.postalCode ?? undefined,
+        locality: prepared.normalized.locality ?? undefined,
+        sector: prepared.normalized.area ?? undefined,
+        latitude: prepared.merged.latitude ?? undefined,
+        longitude: prepared.merged.longitude ?? undefined,
+        placeId: prepared.merged.placeId ?? undefined,
+        formattedAddress: prepared.formattedAddress,
+      });
+
+      resolvedZoneId = resolved.zoneId ?? resolvedZoneId;
+      resolvedBranchId = resolved.branchId ?? resolvedBranchId;
+      resolvedStatus = resolved.status;
+      locationConfidence = resolved.confidence;
+
+      const serv = await serviceabilityEngine.evaluate({
+        cityId: resolved.cityId,
+        branchId: resolved.branchId,
+        zoneId: resolved.zoneId,
+        societyId: resolved.societyId,
+        localityId: resolved.localityId,
+        pincode: prepared.normalized.postalCode ?? undefined,
+        propertyType: resolved.propertyType,
+        serviceId: input.serviceId,
+        resolvedLocation: resolved,
+      });
+
+      resolvedServiceabilityStatus = serv.status;
+      locationContextSnapshot = {
+        resolution: resolved,
+        serviceability: serv,
+        recalculatedAt: new Date().toISOString(),
+      };
+    } catch {
+      // Retain existing if resolution engines fail gracefully
+    }
+
     if (input.validateCoverage && validation && "locationContext" in validation) {
-      locationContextSnapshot = validation.locationContext ?? null;
-      locationConfidence = validation.locationConfidenceScore ?? null;
+      locationContextSnapshot = validation.locationContext ?? locationContextSnapshot;
+      locationConfidence = validation.locationConfidenceScore ?? locationConfidence;
     }
 
     const addressConfidenceScore = calculateAddressConfidenceFromPrepared(prepared);
@@ -282,14 +419,14 @@ export class AddressService {
       source: input.source ?? prepared.source,
       confidenceScore: locationConfidence,
       locationContextSnapshot,
-      propertyType: prepared.merged.propertyType ?? existing.address.propertyType ?? "OTHER",
-      localityId: prepared.merged.localityId ?? existing.address.localityId ?? null,
-      societyId: prepared.merged.societyId ?? existing.address.societyId ?? null,
-      towerId: prepared.merged.towerId ?? existing.address.towerId ?? null,
-      zoneId: prepared.merged.zoneId ?? existing.address.zoneId ?? null,
-      branchId: prepared.merged.branchId ?? existing.address.branchId ?? null,
-      serviceabilityStatus: validation.coverageStatus ?? prepared.merged.serviceabilityStatus ?? existing.address.serviceabilityStatus ?? null,
-      resolutionStatus: prepared.merged.resolutionStatus ?? existing.address.resolutionStatus ?? null,
+      propertyType: effectivePropertyType,
+      localityId: effectiveLocalityId,
+      societyId: effectiveSocietyId,
+      towerId: effectiveTowerId,
+      zoneId: resolvedZoneId,
+      branchId: resolvedBranchId,
+      serviceabilityStatus: resolvedServiceabilityStatus,
+      resolutionStatus: resolvedStatus,
       isCurrent: true,
     });
 

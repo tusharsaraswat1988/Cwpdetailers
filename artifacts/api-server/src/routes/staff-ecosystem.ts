@@ -176,11 +176,24 @@ router.get("/staff/me/context", async (req, res) => {
       // Fallback preserves baseline daily cleaning
     }
 
+    let assignedZoneName: string | null = null;
+    if (staff.assignedZoneId) {
+      try {
+        const { operationalZonesTable } = await import("@workspace/db");
+        const [z] = await db.select({ name: operationalZonesTable.name }).from(operationalZonesTable).where(eq(operationalZonesTable.id, staff.assignedZoneId)).limit(1);
+        if (z?.name) assignedZoneName = z.name;
+      } catch {
+        // Fallback gracefully
+      }
+    }
+
     return res.json({
       staffId: staff.id,
       name: staff.name,
       staffCategory: staff.staffCategory,
       branchId: staff.branchId,
+      assignedZoneId: staff.assignedZoneId ?? null,
+      assignedZoneName,
       cityId: cityId ?? null,
       cityName: cityName ?? null,
       availableServiceCategories,

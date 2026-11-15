@@ -86,8 +86,10 @@ export function BrandingProvider({ children, portal }: BrandingProviderProps) {
 
   useEffect(() => {
     const root = document.documentElement;
-    for (const [key, value] of Object.entries(branding.cssVariables)) {
-      root.style.setProperty(key, value);
+    if (branding.cssVariables && typeof branding.cssVariables === "object") {
+      for (const [key, value] of Object.entries(branding.cssVariables)) {
+        root.style.setProperty(key, value);
+      }
     }
   }, [branding.cssVariables, branding.version]);
 

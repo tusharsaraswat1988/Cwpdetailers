@@ -110,34 +110,38 @@ router.post("/zones", requireAuth, async (req: Request, res: Response) => {
       return res.status(409).json({ error: `Zone with code '${code}' already exists` });
     }
 
-    const [zone] = await db
-      .insert(operationalZonesTable)
-      .values({
-        cityId: parseInt(cityId, 10),
-        branchId: effectiveBranchId,
-        name: name.trim(),
-        code: code.trim().toUpperCase(),
-        description: description?.trim() || null,
-        centerLatitude: centerLatitude ? parseFloat(centerLatitude) : null,
-        centerLongitude: centerLongitude ? parseFloat(centerLongitude) : null,
-        radiusMeters: radiusMeters ? parseInt(radiusMeters, 10) : 5000,
-        status: status || "active",
-        isActive: true,
-      })
-      .returning();
-
-    // If branchId is provided, also create primary branch-zone mapping
-    if (effectiveBranchId) {
-      await db
-        .insert(branchZoneMappingsTable)
+    const zone = await db.transaction(async (tx) => {
+      const [newZone] = await tx
+        .insert(operationalZonesTable)
         .values({
+          cityId: parseInt(cityId, 10),
           branchId: effectiveBranchId,
-          zoneId: zone.id,
-          isPrimary: true,
+          name: name.trim(),
+          code: code.trim().toUpperCase(),
+          description: description?.trim() || null,
+          centerLatitude: centerLatitude ? parseFloat(centerLatitude) : null,
+          centerLongitude: centerLongitude ? parseFloat(centerLongitude) : null,
+          radiusMeters: radiusMeters ? parseInt(radiusMeters, 10) : 5000,
+          status: status || "active",
           isActive: true,
         })
-        .onConflictDoNothing();
-    }
+        .returning();
+
+      // If branchId is provided, also create primary branch-zone mapping within same transaction
+      if (effectiveBranchId) {
+        await tx
+          .insert(branchZoneMappingsTable)
+          .values({
+            branchId: effectiveBranchId,
+            zoneId: newZone.id,
+            isPrimary: true,
+            isActive: true,
+          })
+          .onConflictDoNothing();
+      }
+
+      return newZone;
+    });
 
     return res.status(201).json(zone);
   } catch (err) {

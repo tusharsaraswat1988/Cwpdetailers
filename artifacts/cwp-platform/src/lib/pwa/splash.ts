@@ -12,8 +12,8 @@ export function resolveSplashLogoUrl(branding: PublicBranding): string | null {
     branding.loginLogo ??
     branding.fullLogo ??
     branding.pwaIcon ??
-    branding.generatedAssets.pwaIcon512 ??
-    branding.generatedAssets.androidChrome512 ??
+    branding.generatedAssets?.pwaIcon512 ??
+    branding.generatedAssets?.androidChrome512 ??
     null
   );
 }

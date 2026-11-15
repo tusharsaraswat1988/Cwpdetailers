@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -67,12 +68,12 @@ import BusinessInfoPage from "@/pages/admin/BusinessInfo";
 import ComplianceSettings from "@/pages/admin/ComplianceSettings";
 import SeoSettingsPage from "@/pages/admin/SeoSettings";
 import QualityHub from "@/pages/admin/QualityHub";
-import MarketingCMSPage from "@/pages/admin/MarketingCMSPage";
+const MarketingCMSPage = lazy(() => import("@/pages/admin/MarketingCMSPage"));
 import LoyaltyAdminPage from "@/pages/admin/LoyaltyAdminPage";
-import AutomationOpsCenter from "@/pages/admin/AutomationOpsCenter";
-import OperationsCalendarPage from "@/pages/admin/OperationsCalendarPage";
-import OperationalZonesPage from "@/pages/admin/OperationalZonesPage";
-import LocationPricingPage from "@/pages/admin/LocationPricingPage";
+const AutomationOpsCenter = lazy(() => import("@/pages/admin/AutomationOpsCenter"));
+const OperationsCalendarPage = lazy(() => import("@/pages/admin/OperationsCalendarPage"));
+const OperationalZonesPage = lazy(() => import("@/pages/admin/OperationalZonesPage"));
+const LocationPricingPage = lazy(() => import("@/pages/admin/LocationPricingPage"));
 
 import PrivacyPolicy from "@/pages/legal/PrivacyPolicy";
 import TermsAndConditions from "@/pages/legal/TermsAndConditions";
@@ -148,7 +149,11 @@ function ProtectedRoute({ component: Component, roles, permission, loginPath = "
       </div>
     );
   }
-  return <Component />;
+  return (
+    <Suspense fallback={<BrandLoader fullScreen />}>
+      <Component />
+    </Suspense>
+  );
 }
 
 function AdminRoot() {

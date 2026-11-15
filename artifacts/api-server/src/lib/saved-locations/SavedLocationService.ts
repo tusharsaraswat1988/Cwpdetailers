@@ -95,6 +95,38 @@ export class SavedLocationService {
     const makeDefault = input.isDefault === true || existing.length === 0;
     if (makeDefault) await clearDefault(input.customerId);
 
+    let zoneId = input.zoneId ?? null;
+    let branchId = input.branchId ?? null;
+    let societyId = input.societyId ?? null;
+    let localityId = input.localityId ?? null;
+    let propertyType = input.propertyType ?? "OTHER";
+
+    if (!zoneId || !branchId) {
+      try {
+        const { locationResolver } = await import("../location-intelligence/resolver/LocationResolver");
+        const res = await locationResolver.resolve({
+          cityId: city.cityId ?? undefined,
+          societyId: societyId ?? undefined,
+          localityId: localityId ?? undefined,
+          propertyType: propertyType ?? undefined,
+          pincode: input.pincode ?? undefined,
+          locality: input.area ?? undefined,
+          sector: input.area ?? undefined,
+          latitude: input.latitude ?? undefined,
+          longitude: input.longitude ?? undefined,
+          placeId: input.placeId ?? undefined,
+          formattedAddress: input.formattedAddress ?? address,
+        });
+        zoneId = res.zoneId ?? zoneId;
+        branchId = res.branchId ?? branchId;
+        societyId = res.societyId ?? societyId;
+        localityId = res.localityId ?? localityId;
+        propertyType = res.propertyType ?? propertyType;
+      } catch {
+        // Fallback gracefully
+      }
+    }
+
     const [loc] = await db.insert(savedLocationsTable).values({
       customerId: input.customerId,
       label: input.label,
@@ -111,6 +143,12 @@ export class SavedLocationService {
       placeId: input.placeId,
       formattedAddress: input.formattedAddress ?? address,
       googleComponents: input.googleComponents ?? null,
+      propertyType,
+      localityId,
+      societyId,
+      towerId: input.towerId ?? null,
+      zoneId,
+      branchId,
       isDefault: makeDefault,
     }).returning();
 
@@ -120,6 +158,30 @@ export class SavedLocationService {
   async update(id: number, customerId: number, raw: Partial<SavedLocationWriteInput>): Promise<SavedLocation> {
     const existing = await this.getOwned(id, customerId);
     if (!existing) throw { status: 404, error: "Address not found" } satisfies SavedLocationServiceError;
+
+    const cityIdChanged = raw.cityId !== undefined && raw.cityId !== existing.cityId;
+    const effectivePropertyType = raw.propertyType !== undefined
+      ? raw.propertyType
+      : (existing.propertyType ?? "OTHER");
+    const isIndividual = effectivePropertyType === "INDIVIDUAL_HOME" || effectivePropertyType === "COMMERCIAL_PROPERTY";
+
+    const effectiveSocietyId = raw.societyId !== undefined
+      ? raw.societyId
+      : isIndividual || cityIdChanged
+        ? null
+        : (existing.societyId ?? null);
+
+    const effectiveTowerId = raw.towerId !== undefined
+      ? raw.towerId
+      : isIndividual || cityIdChanged
+        ? null
+        : (existing.towerId ?? null);
+
+    const effectiveLocalityId = raw.localityId !== undefined
+      ? raw.localityId
+      : cityIdChanged
+        ? null
+        : (existing.localityId ?? null);
 
     const merged: SavedLocationWriteInput = normalizeWrite({
       customerId,
@@ -137,6 +199,12 @@ export class SavedLocationService {
       placeId: raw.placeId !== undefined ? raw.placeId : existing.placeId,
       formattedAddress: raw.formattedAddress !== undefined ? raw.formattedAddress : existing.formattedAddress,
       googleComponents: raw.googleComponents !== undefined ? raw.googleComponents : existing.googleComponents,
+      propertyType: effectivePropertyType,
+      localityId: effectiveLocalityId,
+      societyId: effectiveSocietyId,
+      towerId: effectiveTowerId,
+      zoneId: cityIdChanged ? null : (raw.zoneId !== undefined ? raw.zoneId : existing.zoneId),
+      branchId: cityIdChanged ? null : (raw.branchId !== undefined ? raw.branchId : existing.branchId),
       isDefault: raw.isDefault ?? existing.isDefault,
     });
 
@@ -145,6 +213,30 @@ export class SavedLocationService {
 
     const city = await resolveCityId(merged.cityId, merged.cityName);
     if (merged.isDefault) await clearDefault(customerId, id);
+
+    let zoneId = merged.zoneId ?? null;
+    let branchId = merged.branchId ?? null;
+
+    try {
+      const { locationResolver } = await import("../location-intelligence/resolver/LocationResolver");
+      const res = await locationResolver.resolve({
+        cityId: city.cityId ?? undefined,
+        societyId: effectiveSocietyId ?? undefined,
+        localityId: effectiveLocalityId ?? undefined,
+        propertyType: effectivePropertyType ?? undefined,
+        pincode: merged.pincode ?? undefined,
+        locality: merged.area ?? undefined,
+        sector: merged.area ?? undefined,
+        latitude: merged.latitude ?? undefined,
+        longitude: merged.longitude ?? undefined,
+        placeId: merged.placeId ?? undefined,
+        formattedAddress: merged.formattedAddress ?? undefined,
+      });
+      zoneId = res.zoneId ?? zoneId;
+      branchId = res.branchId ?? branchId;
+    } catch {
+      // Fallback gracefully
+    }
 
     const [loc] = await db.update(savedLocationsTable).set({
       label: merged.label,
@@ -161,6 +253,12 @@ export class SavedLocationService {
       placeId: merged.placeId,
       formattedAddress: merged.formattedAddress,
       googleComponents: merged.googleComponents ?? null,
+      propertyType: effectivePropertyType,
+      localityId: effectiveLocalityId,
+      societyId: effectiveSocietyId,
+      towerId: effectiveTowerId,
+      zoneId,
+      branchId,
       isDefault: merged.isDefault ?? existing.isDefault,
       updatedAt: new Date(),
     }).where(eq(savedLocationsTable.id, id)).returning();

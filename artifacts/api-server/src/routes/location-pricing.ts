@@ -160,38 +160,42 @@ router.post("/location-pricing", requireAuth, async (req: Request, res: Response
       else calculatedPriority = 10;
     }
 
-    const [rule] = await db
-      .insert(locationPricingRulesTable)
-      .values({
-        serviceId: parseInt(serviceId, 10),
-        packageId: packageId ? parseInt(packageId, 10) : null,
-        cityId: parseInt(cityId, 10),
-        branchId: effectiveBranchId,
-        zoneId: zoneId ? parseInt(zoneId, 10) : null,
-        societyId: societyId ? parseInt(societyId, 10) : null,
-        locationType: locationType || "ALL",
-        vehicleCategoryId: vehicleCategoryId ? parseInt(vehicleCategoryId, 10) : null,
-        basePrice: String(basePrice),
-        gstRate: gstRate ? String(gstRate) : "18",
-        pricingType: pricingType || "inclusive",
-        effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : new Date(),
-        effectiveUntil: effectiveUntil ? new Date(effectiveUntil) : null,
-        status: status || "active",
-        priority: calculatedPriority,
-        notes: notes?.trim() || null,
-        createdBy: req.user?.id ?? null,
-        isActive: true,
-      })
-      .returning();
+    const rule = await db.transaction(async (tx) => {
+      const [newRule] = await tx
+        .insert(locationPricingRulesTable)
+        .values({
+          serviceId: parseInt(serviceId, 10),
+          packageId: packageId ? parseInt(packageId, 10) : null,
+          cityId: parseInt(cityId, 10),
+          branchId: effectiveBranchId,
+          zoneId: zoneId ? parseInt(zoneId, 10) : null,
+          societyId: societyId ? parseInt(societyId, 10) : null,
+          locationType: locationType || "ALL",
+          vehicleCategoryId: vehicleCategoryId ? parseInt(vehicleCategoryId, 10) : null,
+          basePrice: String(basePrice),
+          gstRate: gstRate ? String(gstRate) : "18",
+          pricingType: pricingType || "inclusive",
+          effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : new Date(),
+          effectiveUntil: effectiveUntil ? new Date(effectiveUntil) : null,
+          status: status || "active",
+          priority: calculatedPriority,
+          notes: notes?.trim() || null,
+          createdBy: req.user?.id ?? null,
+          isActive: true,
+        })
+        .returning();
 
-    // Log Audit
-    await locationPricingEngine.logRuleAudit(
-      rule.id,
-      "created",
-      null,
-      rule as unknown as Record<string, unknown>,
-      req.user?.id ?? null,
-    );
+      // Log Audit within same transaction
+      await tx.insert(pricingRuleAuditTable).values({
+        ruleId: newRule.id,
+        action: "created",
+        oldValues: null,
+        newValues: newRule as unknown as Record<string, unknown>,
+        changedBy: req.user?.id ?? null,
+      });
+
+      return newRule;
+    });
 
     return res.status(201).json(rule);
   } catch (err) {
@@ -228,20 +232,23 @@ router.patch("/location-pricing/:id", requireAuth, async (req: Request, res: Res
     if (req.body.notes !== undefined) updateData.notes = req.body.notes?.trim() || null;
     if (req.body.priority !== undefined) updateData.priority = parseInt(req.body.priority, 10);
 
-    const [updated] = await db
-      .update(locationPricingRulesTable)
-      .set(updateData)
-      .where(eq(locationPricingRulesTable.id, id))
-      .returning();
+    const updated = await db.transaction(async (tx) => {
+      const [res] = await tx
+        .update(locationPricingRulesTable)
+        .set(updateData)
+        .where(eq(locationPricingRulesTable.id, id))
+        .returning();
 
-    // Log Audit
-    await locationPricingEngine.logRuleAudit(
-      id,
-      req.body.basePrice != null ? "price_changed" : "updated",
-      existing as unknown as Record<string, unknown>,
-      updated as unknown as Record<string, unknown>,
-      req.user?.id ?? null,
-    );
+      await tx.insert(pricingRuleAuditTable).values({
+        ruleId: id,
+        action: req.body.basePrice != null ? "price_changed" : "updated",
+        oldValues: existing as unknown as Record<string, unknown>,
+        newValues: res as unknown as Record<string, unknown>,
+        changedBy: req.user?.id ?? null,
+      });
+
+      return res;
+    });
 
     return res.json(updated);
   } catch (err) {
@@ -263,19 +270,21 @@ router.delete("/location-pricing/:id", requireAuth, async (req: Request, res: Re
       return res.status(403).json({ error: "Access denied to pricing rule outside assigned branch" });
     }
 
-    const [updated] = await db
-      .update(locationPricingRulesTable)
-      .set({ isActive: false, status: "archived", updatedAt: new Date() })
-      .where(eq(locationPricingRulesTable.id, id))
-      .returning();
+    await db.transaction(async (tx) => {
+      const [res] = await tx
+        .update(locationPricingRulesTable)
+        .set({ isActive: false, status: "archived", updatedAt: new Date() })
+        .where(eq(locationPricingRulesTable.id, id))
+        .returning();
 
-    await locationPricingEngine.logRuleAudit(
-      id,
-      "deactivated",
-      existing as unknown as Record<string, unknown>,
-      updated as unknown as Record<string, unknown>,
-      req.user?.id ?? null,
-    );
+      await tx.insert(pricingRuleAuditTable).values({
+        ruleId: id,
+        action: "deactivated",
+        oldValues: existing as unknown as Record<string, unknown>,
+        newValues: res as unknown as Record<string, unknown>,
+        changedBy: req.user?.id ?? null,
+      });
+    });
 
     return res.status(204).send();
   } catch (err) {

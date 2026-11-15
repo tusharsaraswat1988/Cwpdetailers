@@ -16,6 +16,12 @@ export type SavedLocationWriteInput = {
   placeId?: string | null;
   formattedAddress?: string | null;
   googleComponents?: Array<{ long_name: string; short_name: string; types: string[] }> | null;
+  propertyType?: string | null;
+  localityId?: number | null;
+  societyId?: number | null;
+  towerId?: number | null;
+  zoneId?: number | null;
+  branchId?: number | null;
   isDefault?: boolean;
 };
 
@@ -72,6 +78,12 @@ export function normalizeWrite(input: SavedLocationWriteInput): SavedLocationWri
     formattedAddress: trimOrNull(input.formattedAddress),
     latitude: finiteOrNull(input.latitude),
     longitude: finiteOrNull(input.longitude),
+    propertyType: trimOrNull(input.propertyType) ?? "OTHER",
+    localityId: finiteOrNull(input.localityId),
+    societyId: finiteOrNull(input.societyId),
+    towerId: finiteOrNull(input.towerId),
+    zoneId: finiteOrNull(input.zoneId),
+    branchId: finiteOrNull(input.branchId),
   };
 }
 

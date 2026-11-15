@@ -153,6 +153,9 @@ export function guardMasterDataRoutes() {
     }
 
     if (path.startsWith("/saved-locations")) {
+      if (req.user?.role === "customer") {
+        return next();
+      }
       const savedAction = method === "DELETE" ? "edit" : action;
       return requirePermission("customers", savedAction)(req, res, next);
     }

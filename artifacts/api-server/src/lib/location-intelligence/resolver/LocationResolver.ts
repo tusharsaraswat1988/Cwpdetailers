@@ -97,6 +97,44 @@ export function calculateDistanceMeters(
   return R * c;
 }
 
+/**
+ * Ray-casting point-in-polygon algorithm for GeoJSON coordinates.
+ * Point: (testLat, testLng)
+ * GeoJSON polygon ring format: [ [lng, lat], ... ]
+ */
+export function isPointInPolygon(testLat: number, testLng: number, polygonRing: number[][]): boolean {
+  let inside = false;
+  if (!polygonRing || polygonRing.length < 3) return false;
+
+  for (let i = 0, j = polygonRing.length - 1; i < polygonRing.length; j = i++) {
+    const xi = polygonRing[i][0]; // longitude
+    const yi = polygonRing[i][1]; // latitude
+    const xj = polygonRing[j][0]; // longitude
+    const yj = polygonRing[j][1]; // latitude
+
+    const intersect = ((yi > testLat) !== (yj > testLat)) &&
+      (testLng < ((xj - xi) * (testLat - yi)) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+export function isPointInGeoJson(testLat: number, testLng: number, geoJson: unknown): boolean {
+  if (!geoJson || typeof geoJson !== "object") return false;
+  const geom = geoJson as { type?: string; coordinates?: any };
+  if (geom.type === "Polygon" && Array.isArray(geom.coordinates) && geom.coordinates.length > 0) {
+    return isPointInPolygon(testLat, testLng, geom.coordinates[0]);
+  }
+  if (geom.type === "MultiPolygon" && Array.isArray(geom.coordinates)) {
+    for (const poly of geom.coordinates) {
+      if (Array.isArray(poly) && poly.length > 0 && isPointInPolygon(testLat, testLng, poly[0])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export class LocationResolver {
   async resolve(input: LocationResolveInput): Promise<LocationResolveOutput> {
     const rawAddress = input.formattedAddress || input.address || "";
@@ -186,7 +224,7 @@ export class LocationResolver {
 
     // 4. Match via Alias / Normalized Name
     if (!resolvedSociety && !resolvedLocality && normalizedInput) {
-      const [aliasMatch] = await db
+      const aliasMatches = await db
         .select({
           entityType: locationAliasesTable.entityType,
           entityId: locationAliasesTable.entityId,
@@ -199,9 +237,9 @@ export class LocationResolver {
             sql`${normalizedInput} ILIKE '%' || ${locationAliasesTable.normalizedAlias} || '%'`,
           ),
         )
-        .limit(1);
+        .limit(10);
 
-      if (aliasMatch) {
+      for (const aliasMatch of aliasMatches) {
         if (aliasMatch.entityType === "society") {
           const [soc] = await db
             .select({
@@ -212,7 +250,12 @@ export class LocationResolver {
               branchId: residentialSocietiesTable.branchId,
             })
             .from(residentialSocietiesTable)
-            .where(eq(residentialSocietiesTable.id, aliasMatch.entityId))
+            .where(
+              and(
+                eq(residentialSocietiesTable.id, aliasMatch.entityId),
+                cityId ? eq(residentialSocietiesTable.cityId, cityId) : undefined,
+              ),
+            )
             .limit(1);
           if (soc) {
             resolvedSociety = soc;
@@ -220,6 +263,7 @@ export class LocationResolver {
             status = "EXACT_MATCH";
             confidence = 95;
             matchedBy = "alias";
+            break;
           }
         } else if (aliasMatch.entityType === "locality") {
           const [loc] = await db
@@ -230,7 +274,12 @@ export class LocationResolver {
               cityId: geographicLocalitiesTable.cityId,
             })
             .from(geographicLocalitiesTable)
-            .where(eq(geographicLocalitiesTable.id, aliasMatch.entityId))
+            .where(
+              and(
+                eq(geographicLocalitiesTable.id, aliasMatch.entityId),
+                cityId ? eq(geographicLocalitiesTable.cityId, cityId) : undefined,
+              ),
+            )
             .limit(1);
           if (loc) {
             resolvedLocality = loc;
@@ -238,6 +287,7 @@ export class LocationResolver {
             status = "CANDIDATE_MATCH";
             confidence = 85;
             matchedBy = "alias";
+            break;
           }
         }
       }
@@ -500,30 +550,57 @@ export class LocationResolver {
         }
       }
 
-      // 8d. Fallback: First active zone in the city
-      if (!resolvedZone) {
-        const [defaultZone] = await db
+      // 8d. Spatial containment: Check active zones in the city via polygon or centroid radius
+      if (!resolvedZone && input.latitude != null && input.longitude != null && !Number.isNaN(input.latitude)) {
+        const cityZones = await db
           .select({
             id: operationalZonesTable.id,
             name: operationalZonesTable.name,
             code: operationalZonesTable.code,
             branchId: operationalZonesTable.branchId,
+            boundaryGeoJson: operationalZonesTable.boundaryGeoJson,
+            centerLatitude: operationalZonesTable.centerLatitude,
+            centerLongitude: operationalZonesTable.centerLongitude,
+            radiusMeters: operationalZonesTable.radiusMeters,
           })
           .from(operationalZonesTable)
           .where(
             and(
               eq(operationalZonesTable.cityId, cityId),
               eq(operationalZonesTable.isActive, true),
+              eq(operationalZonesTable.status, "active"),
             ),
-          )
-          .limit(1);
+          );
 
-        if (defaultZone) {
-          resolvedZone = defaultZone;
-          if (status === "UNRESOLVED") {
-            status = "CANDIDATE_MATCH";
-            confidence = 50;
-            matchedBy = "fallback";
+        // 8d-i: Exact match via boundary GeoJSON polygon containment
+        for (const zone of cityZones) {
+          if (zone.boundaryGeoJson && isPointInGeoJson(input.latitude, input.longitude, zone.boundaryGeoJson)) {
+            resolvedZone = zone;
+            status = "EXACT_MATCH";
+            confidence = 95;
+            matchedBy = "coordinates";
+            break;
+          }
+        }
+
+        // 8d-ii: Candidate match via centroid radius proximity
+        if (!resolvedZone) {
+          for (const zone of cityZones) {
+            if (zone.centerLatitude && zone.centerLongitude) {
+              const cLat = parseFloat(zone.centerLatitude);
+              const cLng = parseFloat(zone.centerLongitude);
+              const radius = zone.radiusMeters ?? 5000;
+              const dist = calculateDistanceMeters(input.latitude, input.longitude, cLat, cLng);
+              if (dist <= radius) {
+                resolvedZone = zone;
+                if (status === "UNRESOLVED") {
+                  status = "CANDIDATE_MATCH";
+                  confidence = 75;
+                  matchedBy = "coordinates";
+                }
+                break;
+              }
+            }
           }
         }
       }

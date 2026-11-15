@@ -64,8 +64,8 @@ export function resolveLogoUrl(branding: PublicBranding, variant: BrandLogoVaria
     email: branding.emailLogo,
     invoice: branding.invoiceLogo,
     pdf: branding.pdfLogo,
-    favicon: branding.favicon ?? branding.generatedAssets.favicon32,
-    pwa: branding.pwaIcon ?? branding.generatedAssets.pwaIcon512,
+    favicon: branding.favicon ?? branding.generatedAssets?.favicon32,
+    pwa: branding.pwaIcon ?? branding.generatedAssets?.pwaIcon512,
     splash: branding.splashLogo,
   };
   return map[variant] ?? branding.fullLogo;

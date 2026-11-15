@@ -86,7 +86,7 @@ export function syncPwaHeadTags(branding: PublicBranding, portal: PwaPortal) {
   const statusBarStyle = luminance(branding.backgroundColor) < 0.4 ? "black-translucent" : "default";
   upsertMeta("name", "apple-mobile-web-app-status-bar-style", statusBarStyle);
 
-  const apple = branding.appleTouchIcon ?? branding.generatedAssets.appleTouchIcon;
+  const apple = branding.appleTouchIcon ?? branding.generatedAssets?.appleTouchIcon;
   if (apple) {
     upsertLink("apple-touch-icon", apple);
   }

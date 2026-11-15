@@ -457,6 +457,12 @@ router.post("/saved-locations", async (req, res) => {
       placeId: req.body.placeId,
       formattedAddress: req.body.formattedAddress,
       googleComponents: req.body.googleComponents,
+      propertyType: req.body.propertyType,
+      localityId: req.body.localityId,
+      societyId: req.body.societyId,
+      towerId: req.body.towerId,
+      zoneId: req.body.zoneId,
+      branchId: req.body.branchId,
       isDefault: req.body.isDefault,
     });
     return res.status(reused ? 200 : 201).json(location);
@@ -488,6 +494,12 @@ router.patch("/saved-locations/:id", async (req, res) => {
       placeId: req.body.placeId,
       formattedAddress: req.body.formattedAddress,
       googleComponents: req.body.googleComponents,
+      propertyType: req.body.propertyType,
+      localityId: req.body.localityId,
+      societyId: req.body.societyId,
+      towerId: req.body.towerId,
+      zoneId: req.body.zoneId,
+      branchId: req.body.branchId,
       isDefault: req.body.isDefault,
     });
     return res.json(loc);
