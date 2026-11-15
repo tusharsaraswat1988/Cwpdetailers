@@ -31,7 +31,7 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
   --customer-accent: var(--brand-primary, #1677FF);
   --customer-navy: #0B1D36;
   --customer-surface-tint: var(--brand-accent, #EBF3FF);
-  --customer-icon-surface: color-mix(in srgb, var(--customer-accent) 12%, white);
+  --customer-icon-surface: #EFF6FF;
   font-family: var(--font-sans);
 }
 
@@ -39,26 +39,28 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
   background: linear-gradient(145deg, #0B1D36 0%, #102544 100%);
   color: #FFFFFF;
   border-radius: var(--customer-radius-xl, 1.25rem);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  box-shadow: 0 8px 24px -4px rgba(11, 29, 54, 0.22), 0 2px 6px rgba(11, 29, 54, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 20px -4px rgba(11, 29, 54, 0.16), 0 2px 6px rgba(11, 29, 54, 0.08);
 }
 
 .customer-root .customer-card-premium {
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
-  border-radius: var(--customer-radius-lg, 1.125rem);
-  box-shadow: 0 2px 8px rgba(11, 29, 54, 0.04);
+  border-radius: var(--customer-radius-lg, 1rem);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
   transition: all var(--duration-fast, 160ms) ease;
 }
 
 .customer-root .customer-card-premium:hover {
-  border-color: color-mix(in srgb, var(--customer-accent) 25%, #E2E8F0);
-  box-shadow: 0 4px 14px rgba(11, 29, 54, 0.08);
+  border-color: #BFDBFE;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.07), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
 }
 
 .customer-root .customer-icon-well {
-  background: var(--customer-icon-surface);
-  color: var(--customer-accent);
+  background: var(--customer-icon-surface, #EFF6FF);
+  color: var(--customer-accent, #1677FF);
+  border: 1px solid #DBEAFE;
+  border-radius: var(--customer-radius-sm, 0.625rem);
 }
 
 .customer-root .customer-surface-tint {
@@ -66,12 +68,12 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
 }
 
 .customer-root .customer-elevated {
-  box-shadow: var(--customer-card-shadow, 0 2px 8px rgba(11, 29, 54, 0.04));
-  border-radius: var(--customer-radius-lg, 1.125rem);
+  box-shadow: var(--customer-card-shadow, 0 1px 3px 0 rgba(15, 23, 42, 0.04));
+  border-radius: var(--customer-radius-lg, 1rem);
 }
 
 .customer-root .customer-elevated-md {
-  box-shadow: var(--customer-card-shadow-hover, 0 4px 14px rgba(11, 29, 54, 0.08));
+  box-shadow: var(--customer-card-shadow-hover, 0 4px 12px -2px rgba(15, 23, 42, 0.07));
 }
 
 .customer-root .customer-transition {
@@ -80,10 +82,58 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
   transition-timing-function: var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
+/* ---------- Typography utilities (standardized customer hierarchy) ---------- */
+.customer-root .customer-title-screen {
+  font-family: var(--font-display, inherit);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  color: hsl(var(--foreground));
+}
+
+.customer-root .customer-title-section {
+  font-family: var(--font-display, inherit);
+  font-size: 1.1875rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  color: hsl(var(--foreground));
+}
+
+.customer-root .customer-title-card {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: hsl(var(--foreground));
+}
+
+.customer-root .customer-text-body {
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: hsl(var(--foreground));
+}
+
+.customer-root .customer-text-subtle {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
+
+.customer-root .customer-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
 /* ---------- Large tap targets ---------- */
 .customer-root .customer-tap {
-  min-height: var(--customer-tap-min, 2.75rem);
-  min-width: var(--customer-tap-min, 2.75rem);
+  min-height: var(--customer-tap-min, 3rem);
+  min-width: var(--customer-tap-min, 3rem);
 }
 
 .customer-root button:not([data-size="icon"]):not(.customer-btn-sm),
@@ -95,20 +145,20 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
 .customer-root .customer-card {
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
-  border-radius: var(--customer-radius-lg, 1.125rem);
-  box-shadow: var(--customer-card-shadow, 0 2px 8px rgba(11, 29, 54, 0.04));
+  border-radius: var(--customer-radius-lg, 1rem);
+  box-shadow: var(--customer-card-shadow, 0 1px 3px 0 rgba(15, 23, 42, 0.04));
 }
 
 .customer-root .customer-action-card {
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
-  border-radius: var(--customer-radius-lg, 1.125rem);
-  box-shadow: var(--customer-card-shadow, 0 2px 8px rgba(11, 29, 54, 0.04));
+  border-radius: var(--customer-radius-lg, 1rem);
+  box-shadow: var(--customer-card-shadow, 0 1px 3px 0 rgba(15, 23, 42, 0.04));
   transition: border-color var(--duration-fast), box-shadow var(--duration-fast), transform var(--duration-fast);
 }
 .customer-root .customer-action-card:hover {
-  border-color: color-mix(in srgb, var(--customer-accent) 25%, hsl(var(--border)));
-  box-shadow: var(--customer-card-shadow-hover, 0 4px 14px rgba(11, 29, 54, 0.08));
+  border-color: #BFDBFE;
+  box-shadow: var(--customer-card-shadow-hover, 0 4px 12px -2px rgba(15, 23, 42, 0.07));
 }
 .customer-root .customer-action-card:active {
   transform: scale(0.985);
@@ -127,14 +177,15 @@ html.customer-theme [data-radix-collection-item]:focus-visible {
 
 /* ---------- Hero ---------- */
 .customer-root .customer-hero {
-  border-radius: var(--customer-radius-xl, 1.5rem);
-  border: 1px solid color-mix(in srgb, var(--customer-accent) 22%, hsl(var(--border)));
+  border-radius: var(--customer-radius-xl, 1.25rem);
+  border: 1px solid #DBEAFE;
   background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--customer-accent) 10%, white) 0%,
-    hsl(var(--card)) 58%
+    135deg,
+    #F0F6FF 0%,
+    #FFFFFF 65%,
+    #F8FAFC 100%
   );
-  box-shadow: var(--customer-hero-shadow, var(--shadow-md));
+  box-shadow: var(--customer-hero-shadow, 0 1px 3px 0 rgba(22, 119, 255, 0.06));
 }
 
 /* ---------- States ---------- */

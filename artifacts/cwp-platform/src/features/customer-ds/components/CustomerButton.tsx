@@ -18,22 +18,22 @@ export const CustomerButton = forwardRef<HTMLButtonElement, CustomerButtonProps>
   function CustomerButton({ href, className, children, variant = "default", size, loading = false, disabled, ...props }, ref) {
     const sizeClass =
       size === "icon"
-        ? "h-11 w-11 min-h-11 min-w-11 rounded-xl p-0 flex items-center justify-center"
+        ? "h-11 w-11 min-h-11 min-w-11 rounded-xl p-0 flex items-center justify-center shrink-0"
         : size === "sm"
-          ? "h-10 min-h-10 px-3.5 text-xs font-semibold rounded-xl"
-          : "h-12 min-h-12 px-5 text-sm sm:text-base font-semibold rounded-xl";
+          ? "h-10 min-h-10 px-4 text-xs font-medium rounded-xl"
+          : "h-12 min-h-12 px-5 text-sm sm:text-base font-medium sm:font-semibold rounded-xl";
 
     const variantClass =
       variant === "default"
-        ? "bg-[#1677FF] hover:bg-[#1264db] text-white shadow-xs"
+        ? "bg-[#1677FF] hover:bg-[#1264db] active:bg-[#0e53b8] text-white shadow-xs border border-transparent"
         : variant === "secondary"
-          ? "bg-white hover:bg-slate-50 text-foreground border border-slate-200 shadow-xs"
+          ? "bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 border border-slate-200/90 shadow-2xs"
           : variant === "outline"
-            ? "bg-white hover:bg-slate-50 text-foreground border border-slate-200 shadow-xs"
+            ? "bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 border border-slate-200/90 shadow-2xs"
             : variant === "ghost"
-              ? "text-primary hover:bg-blue-50/60 hover:text-primary font-semibold"
+              ? "text-primary hover:bg-blue-50/70 hover:text-primary active:bg-blue-100/60 font-medium sm:font-semibold border border-transparent shadow-none"
               : variant === "destructive"
-                ? "bg-[#DC2626] hover:bg-red-700 text-white shadow-xs"
+                ? "bg-[#DC2626] hover:bg-red-700 active:bg-red-800 text-white shadow-xs border border-transparent"
                 : undefined;
 
     if (href && !disabled && !loading) {
@@ -83,7 +83,7 @@ export const CustomerInput = forwardRef<HTMLInputElement, CustomerInputProps>(
       <Input
         ref={ref}
         className={cn(
-          "h-12 min-h-12 rounded-[var(--customer-radius-sm,0.75rem)] text-base",
+          "h-12 min-h-12 rounded-xl text-sm border-slate-200 bg-white placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary",
           className,
         )}
         {...props}

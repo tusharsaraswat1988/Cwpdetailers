@@ -73,12 +73,12 @@ export const CUSTOMER_PROGRESS = {
 export const CUSTOMER_SPACE_RAW = {
   pageX: "1rem",
   pageY: "1.25rem",
-  section: "1.75rem",
-  stack: "1rem",
+  section: "1.5rem",
+  stack: "0.875rem",
   cardPad: "1.125rem",
   controlH: "3rem",
-  controlHSm: "2.75rem",
-  tapMin: "2.75rem",
+  controlHSm: "2.5rem",
+  tapMin: "3rem",
   icon: "18px",
   iconLg: "22px",
   bottomActionPad: "1rem",
@@ -86,30 +86,42 @@ export const CUSTOMER_SPACE_RAW = {
 
 /** Tailwind class spacing for CustomerPage / cards. */
 export const CUSTOMER_SPACE = {
-  page: "space-y-6",
-  section: "space-y-4",
+  page: "space-y-5",
+  section: "space-y-3.5",
   stack: "space-y-3",
   cardPad: "p-4 sm:p-5",
-  statePad: "px-6 py-16",
-  tap: "min-h-11 min-w-11",
+  statePad: "px-6 py-14",
+  tap: "min-h-12 min-w-12",
   gap: "gap-3",
 } as const;
 
 export const CUSTOMER_SHADOWS = {
-  card: "0 2px 8px rgba(11, 29, 54, 0.04)",
-  cardHover: "0 4px 14px rgba(11, 29, 54, 0.08)",
-  navy: "0 8px 24px -4px rgba(11, 29, 54, 0.22), 0 2px 6px rgba(11, 29, 54, 0.12)",
-  elevated: "0 4px 12px rgba(11, 29, 54, 0.05)",
+  card: "0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02)",
+  cardHover: "0 4px 12px -2px rgba(15, 23, 42, 0.07), 0 2px 4px -1px rgba(15, 23, 42, 0.04)",
+  navy: "0 8px 20px -4px rgba(11, 29, 54, 0.16), 0 2px 6px rgba(11, 29, 54, 0.08)",
+  elevated: "0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px 0 rgba(15, 23, 42, 0.03)",
 } as const;
 
 export const CUSTOMER_RADIUS = {
-  sm: "0.75rem",
-  md: "1rem",
-  lg: "1.125rem",
+  sm: "0.625rem",
+  md: "0.875rem",
+  lg: "1rem",
   xl: "1.25rem",
   full: "9999px",
   /** CSS var defaults */
   root: "1rem",
+} as const;
+
+/** Standardized typography scale for customer experience. */
+export const CUSTOMER_TYPOGRAPHY = {
+  screenHeading: "font-display text-2xl font-semibold tracking-tight text-foreground",
+  sectionHeading: "font-display text-lg font-semibold tracking-tight text-foreground",
+  cardHeading: "text-base font-semibold leading-snug text-foreground",
+  body: "text-sm font-normal leading-relaxed text-foreground",
+  subtle: "text-xs font-normal text-muted-foreground",
+  caption: "text-[11px] font-medium text-muted-foreground",
+  label: "text-[11px] font-medium uppercase tracking-wider text-muted-foreground",
+  cta: "text-sm sm:text-base font-medium sm:font-semibold",
 } as const;
 
 /** Charts — rare on customer; same palette family as platform. */
@@ -197,7 +209,7 @@ export const CUSTOMER_THEME_CSS_VARS: Record<string, string> = {
   /* Customer component tokens */
   "--customer-accent": CUSTOMER_COLORS.primaryHex,
   "--customer-surface-tint": CUSTOMER_SURFACE.surfaceTintHex,
-  "--customer-icon-surface": "color-mix(in srgb, #1677FF 12%, white)",
+  "--customer-icon-surface": "#EFF6FF",
   "--customer-navy": CUSTOMER_COLORS.secondaryHex,
   "--customer-radius": CUSTOMER_RADIUS.md,
   "--customer-radius-sm": CUSTOMER_RADIUS.sm,
@@ -211,7 +223,7 @@ export const CUSTOMER_THEME_CSS_VARS: Record<string, string> = {
   "--customer-card-shadow": CUSTOMER_SHADOWS.card,
   "--customer-card-shadow-hover": CUSTOMER_SHADOWS.cardHover,
   "--customer-navy-shadow": CUSTOMER_SHADOWS.navy,
-  "--customer-hero-shadow": "var(--shadow-md)",
+  "--customer-hero-shadow": "0 1px 3px 0 rgba(22, 119, 255, 0.06), 0 1px 2px 0 rgba(15, 23, 42, 0.03)",
   "--duration-fast": `${CUSTOMER_MOTION.fastMs}ms`,
   "--duration-base": `${CUSTOMER_MOTION.baseMs}ms`,
 };

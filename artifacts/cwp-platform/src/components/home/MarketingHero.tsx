@@ -125,26 +125,16 @@ export function MarketingHero({ cityName, branchId }: MarketingHeroProps = {}) {
 
   return (
     <div
-      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0B1D36] via-[#0E274D] to-[#123668] text-white p-6 sm:p-8 shadow-md"
+      className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1D36] via-[#0E274D] to-[#123668] text-white p-4 sm:p-5 shadow-xs"
       data-testid="home-marketing-hero"
     >
-      {/* Decorative background glow */}
-      <div
-        className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-blue-500/20 blur-3xl pointer-events-none"
-        aria-hidden
-      />
-      <div
-        className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none"
-        aria-hidden
-      />
-
-      <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-        <div className="space-y-4 max-w-2xl">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-blue-200 border border-white/15 text-xs font-semibold backdrop-blur-xs">
-              <Sparkles size={13} className="text-blue-300" />
+      <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5">
+        <div className="space-y-1.5 max-w-xl min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 text-blue-200 border border-white/15 text-[10px] font-semibold backdrop-blur-xs">
+              <Sparkles size={11} className="text-blue-300" />
               <span>{badgeText}</span>
-            </div>
+            </span>
 
             {activeBanner?.bannerType === "third_party" && (
               <span className="text-[10px] text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
@@ -153,65 +143,38 @@ export function MarketingHero({ cityName, branchId }: MarketingHeroProps = {}) {
             )}
           </div>
 
-          <h1 className="font-display font-extrabold text-2xl sm:text-3xl lg:text-4xl text-white tracking-tight leading-tight">
+          <h2 className="font-display font-semibold text-base sm:text-lg text-white tracking-tight leading-snug">
             {title}
-          </h1>
+          </h2>
 
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-xl">
+          <p className="text-xs text-slate-300 leading-normal line-clamp-1 sm:line-clamp-2">
             {subtitle}
           </p>
 
-          {/* Dynamic Highlight Pillars */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
-            {highlights.slice(0, 4).map((highlight, index) => {
-              const icons = [ShieldCheck, Droplet, Sun, CheckCircle2];
-              const colors = ["text-emerald-400", "text-cyan-400", "text-amber-400", "text-blue-400"];
-              const Icon = icons[index % icons.length];
-              const colorClass = colors[index % colors.length];
-
-              return (
-                <div
-                  key={index}
-                  className="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/10 text-[11px] text-slate-200"
-                >
-                  <Icon size={16} className={`${colorClass} shrink-0`} />
-                  <span>{highlight}</span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="pt-2 flex flex-wrap gap-3 items-center">
+          <div className="pt-1">
             {ctaLink.startsWith("/") ? (
               <Link
                 href={ctaLink}
                 onClick={handleCtaClick}
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-[#1264db] text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-[#1264db] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
               >
-                {ctaText} <ArrowRight size={14} />
+                {ctaText} <ArrowRight size={13} />
               </Link>
             ) : (
               <a
                 href={ctaLink}
                 onClick={handleCtaClick}
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-[#1264db] text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-[#1264db] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
               >
-                {ctaText} <ArrowRight size={14} />
+                {ctaText} <ArrowRight size={13} />
               </a>
             )}
-
-            <Link
-              href={CUSTOMER_ROUTES.plans}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold border border-white/10 transition-all cursor-pointer"
-            >
-              View Monthly Plans
-            </Link>
           </div>
         </div>
 
-        {/* Optional Banner Image / Media Preview */}
+        {/* Optional Banner Image / Media Preview (compact on desktop) */}
         {bannerImage && (
-          <div className="relative shrink-0 hidden lg:block w-72 h-44 rounded-2xl overflow-hidden border border-white/10 shadow-lg">
+          <div className="relative shrink-0 hidden sm:block w-36 h-24 lg:w-44 lg:h-28 rounded-xl overflow-hidden border border-white/10 shadow-sm">
             <img
               src={bannerImage}
               alt={activeBanner?.altText || title}
@@ -224,15 +187,15 @@ export function MarketingHero({ cityName, branchId }: MarketingHeroProps = {}) {
 
       {/* Multi-banner Navigation Controls */}
       {banners.length > 1 && (
-        <div className="relative z-10 flex items-center justify-between pt-4 mt-2 border-t border-white/10">
-          <div className="flex items-center gap-1.5">
+        <div className="relative z-10 flex items-center justify-between pt-2.5 mt-2 border-t border-white/10">
+          <div className="flex items-center gap-1">
             {banners.map((_, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => setCurrentIndex(idx)}
                 className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  idx === currentIndex ? "w-6 bg-white" : "w-1.5 bg-white/30 hover:bg-white/50"
+                  idx === currentIndex ? "w-5 bg-white" : "w-1.5 bg-white/30 hover:bg-white/50"
                 }`}
                 aria-label={`Go to banner ${idx + 1}`}
               />
@@ -243,18 +206,18 @@ export function MarketingHero({ cityName, branchId }: MarketingHeroProps = {}) {
             <button
               type="button"
               onClick={handlePrev}
-              className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
               aria-label="Previous banner"
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={13} />
             </button>
             <button
               type="button"
               onClick={handleNext}
-              className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
               aria-label="Next banner"
             >
-              <ChevronRight size={14} />
+              <ChevronRight size={13} />
             </button>
           </div>
         </div>

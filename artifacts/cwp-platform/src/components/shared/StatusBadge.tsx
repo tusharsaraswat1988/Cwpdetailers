@@ -98,7 +98,7 @@ export function StatusBadge({ status, label, tone, pulse, className }: StatusBad
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium capitalize tracking-tight leading-normal",
         toneStyles[resolvedTone],
         className,
       )}
@@ -106,9 +106,9 @@ export function StatusBadge({ status, label, tone, pulse, className }: StatusBad
       data-status={normalized}
     >
       {pulse && (
-        <span className="relative flex h-2 w-2">
+        <span className="relative flex h-1.5 w-1.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[hsl(var(--tone-success,142_71%_45%))] opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-[hsl(var(--tone-success,142_71%_45%))]" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[hsl(var(--tone-success,142_71%_45%))]" />
         </span>
       )}
       {display}

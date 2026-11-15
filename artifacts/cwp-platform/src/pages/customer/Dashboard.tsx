@@ -25,7 +25,6 @@ import { useSelectedAddress } from "@/hooks/use-selected-address";
 import { useCustomerLocationSources } from "@/hooks/use-customer-location-sources";
 import CustomerLayout from "@/components/layout/CustomerLayout";
 import { NoCustomerProfileMessage } from "@/components/shared/NoCustomerProfileMessage";
-import { PasswordSetupNudge } from "@/components/auth/PasswordSetupNudge";
 import { usePendingFeedback } from "@/features/daily-cleaning/api";
 import { buildHomeDashboard, pickPrimaryPlan } from "@/lib/home-dashboard";
 import { activePlans, type RawSubscription } from "@/lib/customer-plans";
@@ -34,23 +33,16 @@ import { useBranding } from "@/lib/branding";
 import { AddressPickerSheet } from "@/components/shared/AddressPickerSheet";
 import { guessCityFromAddress } from "@workspace/address-model";
 
-import { ServiceAddressSelector } from "@/components/home/ServiceAddressSelector";
 import { HomeGreeting } from "@/components/home/HomeGreeting";
 import { MarketingHero } from "@/components/home/MarketingHero";
-import { PromotionalOffersSection } from "@/components/home/PromotionalOffersSection";
-import { LoyaltyRewardsCard } from "@/components/home/LoyaltyRewardsCard";
 import { ServicesGrid } from "@/components/home/ServicesGrid";
-import { CustomerReviewsSection } from "@/components/home/CustomerReviewsSection";
-import { TodayServiceCard } from "@/components/home/TodayServiceCard";
-import { UpcomingServicePreview } from "@/components/home/UpcomingServicePreview";
-import { AdaptivePrimaryCTA } from "@/components/home/AdaptivePrimaryCta";
 
 import {
   CustomerPage,
   CustomerSkeleton,
   CustomerEmptyState,
 } from "@/features/customer-ds";
-import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { AlertCircle, ArrowRight, ChevronDown, MapPin } from "lucide-react";
 import { CustomerPaymentReviewDialog } from "@/components/payment/CustomerPaymentReviewDialog";
 
 type VehicleRow = {
@@ -226,9 +218,32 @@ export default function CustomerDashboard() {
     return currentCityName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
   }, [currentCityName]);
 
+  const shortAddressLabel = useMemo(() => {
+    if (selected?.assetLabel) return selected.assetLabel;
+    if (selected?.address) {
+      const parts = selected.address.split(",");
+      return parts[0].trim() || currentCityName;
+    }
+    return currentCityName || "Select Location";
+  }, [selected?.assetLabel, selected?.address, currentCityName]);
+
+  const headerAddressPill = (
+    <button
+      type="button"
+      onClick={() => setAddressPickerOpen(true)}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 active:bg-slate-200 text-foreground text-xs font-semibold max-w-[210px] sm:max-w-xs transition-colors cursor-pointer border border-slate-200/80 truncate shadow-2xs"
+      aria-label={`Current service location: ${shortAddressLabel}. Tap to change`}
+      data-testid="home-header-address-pill"
+    >
+      <MapPin size={13} className="text-primary shrink-0" />
+      <span className="truncate">{shortAddressLabel}</span>
+      <ChevronDown size={13} className="text-muted-foreground shrink-0" />
+    </button>
+  );
+
   if (scopeLoading) {
     return (
-      <CustomerLayout>
+      <CustomerLayout headerCenter={headerAddressPill}>
         <CustomerPage>
           <CustomerSkeleton className="h-48 w-full rounded-2xl" />
         </CustomerPage>
@@ -238,7 +253,7 @@ export default function CustomerDashboard() {
 
   if (missingCustomerLink || customerId == null) {
     return (
-      <CustomerLayout>
+      <CustomerLayout headerCenter={headerAddressPill}>
         <CustomerPage>
           <CustomerEmptyState
             title="Account not linked"
@@ -252,27 +267,21 @@ export default function CustomerDashboard() {
   }
 
   return (
-    <CustomerLayout>
-      <CustomerPage className="space-y-6">
+    <CustomerLayout headerCenter={headerAddressPill}>
+      <CustomerPage className="space-y-4">
         {loading || !dashboard ? (
-          <div className="space-y-6">
-            {/* Address Selector Skeleton */}
-            <CustomerSkeleton className="h-14 w-full rounded-2xl" />
+          <div className="space-y-4">
             {/* Greeting Skeleton */}
-            <div className="space-y-1.5 py-1">
+            <div className="space-y-1 py-1">
               <CustomerSkeleton className="h-3.5 w-24 rounded-md" />
-              <CustomerSkeleton className="h-7 w-44 rounded-md" />
+              <CustomerSkeleton className="h-7 w-40 rounded-md" />
             </div>
-            {/* Cards 2-col Skeleton */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-5">
-              <CustomerSkeleton className="h-52 w-full rounded-2xl" />
-              <CustomerSkeleton className="h-52 w-full rounded-2xl" />
-            </div>
-            {/* Services 4-col Skeleton */}
-            <div className="space-y-3">
+            {/* Hero Skeleton */}
+            <CustomerSkeleton className="h-36 w-full rounded-2xl" />
+            {/* Services Skeleton */}
+            <div className="space-y-3 pt-2">
               <CustomerSkeleton className="h-5 w-32 rounded-md" />
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <CustomerSkeleton className="h-40 rounded-2xl" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
                 <CustomerSkeleton className="h-40 rounded-2xl" />
                 <CustomerSkeleton className="h-40 rounded-2xl" />
                 <CustomerSkeleton className="h-40 rounded-2xl" />
@@ -280,33 +289,26 @@ export default function CustomerDashboard() {
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* 1. Service Address Selector (immediately below Application Header, non-sticky, naturally scrolls) */}
-            <ServiceAddressSelector
-              selected={selected}
-              address={dashboard.currentAddress}
-              onClick={() => setAddressPickerOpen(true)}
-            />
-
-            {/* 2. Personalized Greeting */}
+          <div className="space-y-4">
+            {/* 1. Personalized Greeting */}
             <HomeGreeting customerName={customerQuery.data?.name} />
 
-            {/* Outstanding Balance Banner if dues > 0 */}
-            {pendingDues > 0 ? (
+            {/* 2. Outstanding Balance Reminder — Only displayed when dues > 0; suppressed when all clear */}
+            {pendingDues > 0 && (
               <div
-                className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 flex items-center justify-between gap-3 shadow-xs cursor-pointer hover:bg-amber-100/70 transition-colors"
+                className="rounded-2xl border border-amber-300 bg-amber-50/80 p-3.5 flex items-center justify-between gap-3 shadow-xs cursor-pointer hover:bg-amber-100/70 transition-colors"
                 data-testid="home-dues-banner"
                 onClick={() => setPaymentDialogOpen(true)}
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                    <AlertCircle size={20} />
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <AlertCircle size={18} />
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">
                       Payment Due
                     </p>
-                    <p className="font-display font-bold text-base text-foreground">
+                    <p className="font-display font-semibold text-sm sm:text-base text-foreground truncate">
                       ₹{pendingDues.toLocaleString("en-IN")} Outstanding
                     </p>
                   </div>
@@ -317,52 +319,27 @@ export default function CustomerDashboard() {
                     e.stopPropagation();
                     setPaymentDialogOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold transition-colors shrink-0 shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold shrink-0 cursor-pointer shadow-2xs"
                   data-testid="pay-now-button"
                 >
                   Pay Now <ArrowRight size={13} />
                 </button>
               </div>
-            ) : (
-              <div
-                className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 flex items-center justify-between gap-3 shadow-2xs"
-                data-testid="home-all-clear-banner"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                    <CheckCircle2 size={16} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-emerald-800">
-                      All Payments Clear
-                    </p>
-                    <p className="text-[11px] text-emerald-600">
-                      No outstanding dues on your account
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href={CUSTOMER_ROUTES.invoices}
-                  className="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline shrink-0"
-                >
-                  View Invoices
-                </Link>
-              </div>
             )}
 
-            {/* Compact Active Membership Strip (Points to designated My Plans page) */}
+            {/* 3. Compact Active Membership Strip — Only displayed if an active plan exists */}
             {dashboard.primaryPlan && (
               <div
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50/60 border border-blue-100/90 text-xs text-foreground shadow-2xs"
+                className="flex items-center justify-between p-3.5 rounded-2xl bg-white border border-slate-200/90 text-xs text-foreground shadow-2xs"
                 data-testid="home-membership-strip"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 shadow-2xs" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
                   <div className="min-w-0">
-                    <p className="font-bold text-foreground truncate">
+                    <p className="font-semibold text-foreground truncate text-sm">
                       Active: {dashboard.primaryPlan.name}
                     </p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       {dashboard.primaryPlan.totalRemaining > 0
                         ? `${dashboard.primaryPlan.totalRemaining} visits remaining`
                         : "Managed doorstep care"}
@@ -372,65 +349,22 @@ export default function CustomerDashboard() {
                 </div>
                 <Link
                   href={CUSTOMER_ROUTES.plans}
-                  className="text-xs font-bold text-primary hover:underline shrink-0 flex items-center gap-1 pl-2"
+                  className="text-xs font-semibold text-primary hover:underline shrink-0 flex items-center gap-1 pl-2"
                 >
-                  My Plans <ArrowRight size={13} />
+                  View My Plan <ArrowRight size={13} />
                 </Link>
               </div>
             )}
 
-            {/* Adaptive Primary CTA (Personalized & A/B Experiment-Enabled) */}
-            <AdaptivePrimaryCTA
-              vehicleCount={vehicleRows.length}
-              hasActiveSubscription={Boolean(dashboard.primaryPlan?.isDailyCleaning)}
-              activePlanName={dashboard.primaryPlan?.name}
-              upcomingBooking={upcomingFutureBooking ? {
-                id: upcomingFutureBooking.id,
-                scheduledDate: upcomingFutureBooking.scheduledDate,
-                serviceType: upcomingFutureBooking.serviceType,
-                status: upcomingFutureBooking.status,
-              } : null}
-              cityName={currentCityName}
-              customerId={customerId}
-            />
-
-            {/* Core Product Marketing Hero */}
+            {/* 4. Compact 18% Height Marketing Banner */}
             <MarketingHero cityName={currentCityName} />
 
-            {/* Loyalty Rewards & Referral Strip */}
-            <LoyaltyRewardsCard />
-
-            {/* City/Branch-Specific Promotional Offers & Coupon Rewards */}
-            <PromotionalOffersSection citySlug={currentCitySlug} cityName={currentCityName} />
-
-            {/* Today's Service Card (Shown when service is active / scheduled today) */}
-            {(dashboard.hero || dashboard.primaryPlan?.isDailyCleaning) && (
-              <div data-testid="home-today-service">
-                <TodayServiceCard
-                  hero={dashboard.hero}
-                  cta={dashboard.cta}
-                  hasDailyCleaningPlan={Boolean(dashboard.primaryPlan?.isDailyCleaning)}
-                />
-              </div>
-            )}
-
-            {/* CWP Signature Services Showcase: Each card links to dedicated product detail page */}
+            {/* 5. CWP Signature Services Showcase — Available immediately without scrolling past unrelated blocks */}
             <ServicesGrid
               hasDailyCleaningPlan={Boolean(dashboard.primaryPlan?.isDailyCleaning)}
               citySlug={currentCitySlug}
               cityName={currentCityName}
             />
-
-            {/* Customer Testimonials & Verified Reviews */}
-            <CustomerReviewsSection />
-
-            {/* Upcoming Bookings & Utility Reminders */}
-            <div className="space-y-4 pt-1">
-              {upcomingFutureBooking && (
-                <UpcomingServicePreview booking={upcomingFutureBooking} />
-              )}
-              <PasswordSetupNudge />
-            </div>
           </div>
         )}
       </CustomerPage>

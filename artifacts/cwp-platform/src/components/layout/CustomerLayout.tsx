@@ -62,14 +62,17 @@ type CustomerLayoutProps = {
   children: ReactNode;
   /** Override shell width — Account hub uses `hub` for two-column desktop. */
   maxWidth?: "sm" | "md" | "hub" | "full" | "responsive";
+  headerCenter?: ReactNode;
 };
 
-export default function CustomerLayout({ children, maxWidth = "responsive" }: CustomerLayoutProps) {
+export default function CustomerLayout({ children, maxWidth = "responsive", headerCenter }: CustomerLayoutProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const branding = useBrandingPortal("customer");
 
+  const isHome = location === CUSTOMER_ROUTES.home || location === "/customer/dashboard";
   const pageTitle = resolvePageTitle(location, branding.brandName);
+  const resolvedHeaderContent = headerCenter !== undefined ? headerCenter : (isHome ? null : pageTitle);
 
   return (
     <CustomerThemeRoot>
@@ -79,7 +82,7 @@ export default function CustomerLayout({ children, maxWidth = "responsive" }: Cu
         appBar={{
           leading: (
             <div className="flex items-center gap-3 shrink-0">
-              <Link href={CUSTOMER_ROUTES.home} className="flex items-center gap-2 shrink-0">
+              <Link href={CUSTOMER_ROUTES.home} className="flex items-center gap-2 shrink-0" aria-label="Go to Home">
                 <BrandLogo variant="mobile" lazy={false} />
               </Link>
               <nav className="hidden md:flex items-center gap-1 ml-2" aria-label="Desktop navigation">
@@ -104,14 +107,14 @@ export default function CustomerLayout({ children, maxWidth = "responsive" }: Cu
               </nav>
             </div>
           ),
-          title: pageTitle,
-          subtitle: user?.name,
+          title: resolvedHeaderContent,
+          subtitle: undefined,
           trailing: (
             <div className="flex items-center gap-1.5">
               <SyncStatusIndicator compact className="hidden sm:inline-flex" />
               <Link
                 href={CUSTOMER_ROUTES.account}
-                className="h-10 w-10 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-blue-50/50 transition-all cursor-pointer shadow-2xs"
+                className="h-10 w-10 flex items-center justify-center rounded-xl border border-slate-200/90 bg-white text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-blue-50/50 transition-all cursor-pointer shadow-2xs"
                 title="My Account"
                 aria-label="Go to My Account"
               >

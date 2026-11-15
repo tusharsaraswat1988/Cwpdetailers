@@ -19,7 +19,7 @@ export function HomeGreeting({ customerName, className }: HomeGreetingProps) {
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {greeting},
       </p>
-      <h1 className="font-display font-bold text-2xl sm:text-3xl text-foreground tracking-tight mt-0.5">
+      <h1 className="font-display font-semibold text-2xl text-foreground tracking-tight mt-0.5">
         {firstName}
       </h1>
     </div>

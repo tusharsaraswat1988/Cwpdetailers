@@ -3,8 +3,8 @@ import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AppBarProps {
-  title?: string;
-  subtitle?: string;
+  title?: ReactNode;
+  subtitle?: ReactNode;
   showBack?: boolean;
   onBack?: () => void;
   leading?: ReactNode;
@@ -43,10 +43,18 @@ export function AppBar({
       {leading}
       <div className="flex-1 min-w-0">
         {title && (
-          <h1 className="font-display font-bold text-base truncate leading-tight">{title}</h1>
+          typeof title === "string" ? (
+            <h1 className="font-display font-semibold text-base truncate leading-tight text-foreground">{title}</h1>
+          ) : (
+            title
+          )
         )}
         {subtitle && (
-          <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+          typeof subtitle === "string" ? (
+            <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+          ) : (
+            subtitle
+          )
         )}
       </div>
       {trailing && <div className="flex items-center gap-2 shrink-0">{trailing}</div>}

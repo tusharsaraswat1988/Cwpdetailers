@@ -53,8 +53,8 @@ export function CustomerHeader({
       data-testid="customer-header"
     >
       <div className="min-w-0">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">{title}</h1>
-        {subtitle ? <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p> : null}
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
+        {subtitle ? <p className="mt-0.5 text-sm font-normal text-muted-foreground">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </header>
@@ -88,7 +88,7 @@ export function CustomerHero({
     >
       <div className="flex items-start justify-between gap-2">
         {eyebrow ? (
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">{eyebrow}</p>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-primary">{eyebrow}</p>
         ) : (
           <span />
         )}
@@ -96,10 +96,10 @@ export function CustomerHero({
           <CustomerStatusBadge status={status} pulse={pulse} className="shrink-0" />
         ) : null}
       </div>
-      <p className="mt-1.5 font-display text-lg font-bold leading-snug capitalize text-foreground sm:text-xl">
+      <p className="mt-1.5 font-display text-lg font-semibold leading-snug capitalize text-foreground sm:text-xl">
         {title}
       </p>
-      {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+      {subtitle ? <p className="mt-1 text-sm font-normal text-muted-foreground">{subtitle}</p> : null}
       {children}
       {actions ? <div className="mt-3 flex flex-wrap gap-2">{actions}</div> : null}
     </section>
@@ -122,7 +122,7 @@ export function CustomerCard({
   return (
     <Card
       className={cn(
-        "customer-card border-border bg-card shadow-none",
+        "customer-card border-border/80 bg-card shadow-none",
         elevated && "customer-elevated",
         className,
       )}
@@ -166,9 +166,9 @@ export function CustomerActionCard({
         </div>
       ) : null}
       <div className="min-w-0 flex-1">
-        <p className="font-semibold text-foreground leading-snug">{title}</p>
+        <p className="font-medium text-foreground text-sm sm:text-base leading-snug">{title}</p>
         {description ? (
-          <p className="mt-0.5 text-sm text-muted-foreground line-clamp-2">{description}</p>
+          <p className="mt-0.5 text-xs sm:text-sm font-normal text-muted-foreground line-clamp-2">{description}</p>
         ) : null}
       </div>
       {trailing}
@@ -208,12 +208,12 @@ export function CustomerMetric({
 }) {
   return (
     <div
-      className={cn("rounded-[var(--customer-radius,1rem)] border border-border bg-card p-4", className)}
+      className={cn("rounded-2xl border border-border/80 bg-card p-4", className)}
       data-testid="customer-metric"
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 font-display text-2xl font-bold tabular-nums text-foreground">{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-foreground">{value}</p>
+      {hint ? <p className="mt-0.5 text-xs font-normal text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

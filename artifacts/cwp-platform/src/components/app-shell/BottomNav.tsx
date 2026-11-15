@@ -48,7 +48,7 @@ export function BottomNav({ items, testId = "bottom-nav" }: BottomNavProps) {
                 >
                   <Icon size={19} strokeWidth={2.2} />
                 </div>
-                <span className={cn("text-[10px] leading-none mt-1", active ? "font-semibold text-primary" : "font-medium text-muted-foreground")}>
+                <span className={cn("text-[11px] leading-tight mt-0.5", active ? "font-semibold text-primary" : "font-medium text-muted-foreground")}>
                   {label}
                 </span>
               </Link>
@@ -83,7 +83,7 @@ export function BottomNav({ items, testId = "bottom-nav" }: BottomNavProps) {
                 strokeWidth={active ? 2.5 : 2}
                 className="shrink-0"
               />
-              <span className={cn("text-[10px] leading-none truncate max-w-full text-center", active ? "font-semibold text-primary" : "font-medium")}>
+              <span className={cn("text-[11px] leading-tight truncate max-w-full text-center mt-0.5", active ? "font-semibold text-primary" : "font-medium")}>
                 {label}
               </span>
             </Link>
