@@ -234,6 +234,8 @@ export async function isMigrationAlreadyApplied(db: Queryable, filename: string)
     case "084_payment_gateway_multi_provider.sql":
       return (await hasColumn(db, "payment_attempts", "gateway_provider"))
         && (await hasColumn(db, "payment_attempts", "rzp_order_id"));
+    case "085_universal_service_exceptions.sql":
+      return hasTable(db, "service_exceptions");
     case "086_payment_refunds_and_reconciliation.sql":
       return (await hasTable(db, "payment_refunds"))
         && (await hasColumn(db, "payment_attempts", "refund_status"));
