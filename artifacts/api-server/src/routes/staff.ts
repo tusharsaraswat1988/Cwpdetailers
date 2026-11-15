@@ -39,6 +39,12 @@ import {
   disburseStaffPayout,
 } from "../lib/payroll/staffPayoutService";
 import { calculateStaffRevenue } from "../lib/payroll/staffRevenueService";
+import {
+  checkStaffOperationalHistory,
+  permanentlyDeleteStaff,
+  deactivateAndOffboardStaff,
+  reactivateStaff,
+} from "../lib/staffLifecycleService";
 
 const router = Router();
 
@@ -385,6 +391,122 @@ router.patch("/staff/:id", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Update staff error");
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * PRD v6.5.0 (STAFF-025): Staff Deletion Preflight Check
+ * Returns whether staff can be permanently deleted (0 operational records) or must be deactivated.
+ */
+router.get("/staff/:id/deletion-check", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const existing = await loadStaffInScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Staff not found" });
+
+    const history = await checkStaffOperationalHistory(id);
+    return res.json(history);
+  } catch (err) {
+    req.log.error({ err }, "Staff deletion check error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * PRD v6.5.0 (STAFF-025): Safe Staff Deletion & Guarded Deactivation
+ * - Permanently deletes staff strictly if zero operational records exist.
+ * - If history exists, returns HTTP 409 Conflict with operational breakdown.
+ * - If forceDeactivate=true or action="deactivate", executes graceful deactivation.
+ */
+router.delete("/staff/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const userRole = req.user?.role;
+    if (!userRole || !["superadmin", "central_admin", "admin", "branch_manager", "city_admin"].includes(userRole)) {
+      return res.status(403).json({ error: "Only administrators can delete or offboard staff members" });
+    }
+
+    const existing = await loadStaffInScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Staff not found" });
+
+    const forceDeactivate =
+      req.query.forceDeactivate === "true" ||
+      req.body?.forceDeactivate === true ||
+      req.body?.action === "deactivate";
+
+    if (forceDeactivate) {
+      const result = await deactivateAndOffboardStaff(id, {
+        reason: req.body?.reason || (typeof req.query.reason === "string" ? req.query.reason : undefined),
+        actionUserId: req.user?.id,
+      });
+      return res.json(result);
+    }
+
+    const history = await checkStaffOperationalHistory(id);
+    if (!history.canDelete) {
+      return res.status(409).json({
+        error: "Staff member cannot be permanently deleted because operational history exists.",
+        code: "STAFF_HAS_OPERATIONAL_HISTORY",
+        canDeactivate: true,
+        counts: history.counts,
+        totalHistoricalRecords: history.totalHistoricalRecords,
+      });
+    }
+
+    const result = await permanentlyDeleteStaff(id);
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Delete staff error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+/**
+ * PRD v6.5.0 (STAFF-025): Graceful Staff Deactivation & Offboarding
+ */
+router.post("/staff/:id/deactivate", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const userRole = req.user?.role;
+    if (!userRole || !["superadmin", "central_admin", "admin", "branch_manager", "city_admin"].includes(userRole)) {
+      return res.status(403).json({ error: "Only administrators can deactivate staff members" });
+    }
+
+    const existing = await loadStaffInScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Staff not found" });
+
+    const result = await deactivateAndOffboardStaff(id, {
+      reason: req.body?.reason,
+      actionUserId: req.user?.id,
+    });
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Deactivate staff error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+/**
+ * PRD v6.5.0 (STAFF-025): Staff Reactivation
+ */
+router.post("/staff/:id/reactivate", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const userRole = req.user?.role;
+    if (!userRole || !["superadmin", "central_admin", "admin", "branch_manager", "city_admin"].includes(userRole)) {
+      return res.status(403).json({ error: "Only administrators can reactivate staff members" });
+    }
+
+    const existing = await loadStaffInScope(req, id);
+    if (!existing) return res.status(404).json({ error: "Staff not found" });
+
+    const result = await reactivateStaff(id, {
+      actionUserId: req.user?.id,
+    });
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Reactivate staff error");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
   }
 });
 

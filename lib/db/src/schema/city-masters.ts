@@ -26,7 +26,7 @@ export const citiesTable = pgTable("cities", {
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   code: text("code"),
-  status: cityStatusEnum("status").notNull().default("active"),
+  status: cityStatusEnum("status").notNull().default("draft"),
   timezone: text("timezone").notNull().default("Asia/Kolkata"),
   currency: text("currency").notNull().default("INR"),
   locale: text("locale").notNull().default("en-IN"),

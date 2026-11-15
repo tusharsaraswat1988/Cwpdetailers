@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Star, UserCog } from "lucide-react";
+import { Plus, Star, UserCog, MoreVertical, Trash2, UserCheck, UserX, Eye } from "lucide-react";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Link } from "wouter";
 import { Can } from "@/components/Can";
@@ -20,6 +20,14 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { EmailInput } from "@/components/ui/email-input";
 import { submitEmail, submitMobile } from "@/lib/contactForm";
 import { useAppStore } from "@/lib/store";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { StaffDeleteModal } from "@/features/staff/components/StaffDeleteModal";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY, STAFF_CATEGORY_OPTIONS, type RoleMaster, type StaffCategory } from "@/lib/staff-ecosystem/api";
 
 type StaffForm = {
@@ -82,6 +90,20 @@ export default function AdminStaff() {
   const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
 
   const [categoryFilter, setCategoryFilter] = useState<"" | StaffCategory>("");
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">("");
+  const [deleteTargetStaff, setDeleteTargetStaff] = useState<StaffListRow | null>(null);
+
+  const reactivateMutation = useMutation({
+    mutationFn: (id: number) => staffEcosystemApi.reactivateStaff(id),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: getListStaffQueryKey() });
+      qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY] });
+      toast({ title: "Staff member reactivated", description: data.message });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to reactivate staff", description: err.message, variant: "destructive" });
+    },
+  });
 
   const { data: staff, isLoading } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "admin-list", activeBranchId],
@@ -208,16 +230,27 @@ export default function AdminStaff() {
   );
 
   const list = useMemo(() => {
-    if (!categoryFilter) return allStaff;
-    return allStaff.filter(s => s.staffCategory === categoryFilter);
-  }, [allStaff, categoryFilter]);
+    return allStaff.filter(s => {
+      if (categoryFilter && s.staffCategory !== categoryFilter) return false;
+      if (statusFilter === "active" && !s.isActive) return false;
+      if (statusFilter === "inactive" && s.isActive) return false;
+      return true;
+    });
+  }, [allStaff, categoryFilter, statusFilter]);
 
-  const filterDescription = categoryFilter
-    ? `${list.length} ${staffCategoryLabel(categoryFilter).toLowerCase()}`
-    : `${list.length} team members`;
+  const filterDescription = useMemo(() => {
+    const parts: string[] = [];
+    if (categoryFilter) parts.push(staffCategoryLabel(categoryFilter).toLowerCase());
+    if (statusFilter === "active") parts.push("active");
+    if (statusFilter === "inactive") parts.push("inactive/suspended");
+    const label = parts.length > 0 ? parts.join(" · ") : "team members";
+    return `${list.length} ${label}`;
+  }, [list.length, categoryFilter, statusFilter]);
 
-  const categoryCounts = useMemo(() => ({
+  const counts = useMemo(() => ({
     all: allStaff.length,
+    active: allStaff.filter(s => s.isActive).length,
+    inactive: allStaff.filter(s => !s.isActive).length,
     cleaning_staff: allStaff.filter(s => s.staffCategory === "cleaning_staff").length,
     supervisor: allStaff.filter(s => s.staffCategory === "supervisor").length,
   }), [allStaff]);
@@ -375,24 +408,54 @@ export default function AdminStaff() {
           }
         />
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant={categoryFilter === "" ? "default" : "outline"}
-            onClick={() => setCategoryFilter("")}
-          >
-            All ({categoryCounts.all})
-          </Button>
-          {STAFF_CATEGORY_OPTIONS.map(opt => (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
-              key={opt.value}
               size="sm"
-              variant={categoryFilter === opt.value ? "default" : "outline"}
-              onClick={() => setCategoryFilter(opt.value)}
+              variant={categoryFilter === "" ? "default" : "outline"}
+              onClick={() => setCategoryFilter("")}
             >
-              {opt.label} ({categoryCounts[opt.value]})
+              All Roles ({counts.all})
             </Button>
-          ))}
+            {STAFF_CATEGORY_OPTIONS.map(opt => (
+              <Button
+                key={opt.value}
+                size="sm"
+                variant={categoryFilter === opt.value ? "default" : "outline"}
+                onClick={() => setCategoryFilter(opt.value)}
+              >
+                {opt.label} ({counts[opt.value]})
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1 border-t sm:border-t-0 pt-2 sm:pt-0">
+            <span className="text-xs text-muted-foreground mr-1 hidden sm:inline">Status:</span>
+            <Button
+              size="sm"
+              variant={statusFilter === "" ? "secondary" : "ghost"}
+              className="text-xs h-8"
+              onClick={() => setStatusFilter("")}
+            >
+              All
+            </Button>
+            <Button
+              size="sm"
+              variant={statusFilter === "active" ? "secondary" : "ghost"}
+              className={`text-xs h-8 ${statusFilter === "active" ? "font-semibold text-green-700 dark:text-green-400" : ""}`}
+              onClick={() => setStatusFilter("active")}
+            >
+              Active ({counts.active})
+            </Button>
+            <Button
+              size="sm"
+              variant={statusFilter === "inactive" ? "secondary" : "ghost"}
+              className={`text-xs h-8 ${statusFilter === "inactive" ? "font-semibold text-amber-700 dark:text-amber-400" : ""}`}
+              onClick={() => setStatusFilter("inactive")}
+            >
+              Inactive / Suspended ({counts.inactive})
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -437,9 +500,60 @@ export default function AdminStaff() {
                       )}
                     </div>
                   </div>
-                  <Badge variant="outline" className={s.isActive ? "text-green-600 dark:text-green-400 border-green-500/20 bg-green-500/10 text-xs" : "text-xs text-muted-foreground"}>
-                    {s.isActive ? "Active" : "Inactive"}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className={s.isActive ? "text-green-600 dark:text-green-400 border-green-500/20 bg-green-500/10 text-xs" : "text-xs text-muted-foreground"}>
+                      {s.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                          data-testid={`btn-staff-menu-${s.id}`}
+                        >
+                          <MoreVertical size={14} />
+                          <span className="sr-only">Staff actions</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/admin/staff/${s.id}`} className="cursor-pointer flex items-center gap-2">
+                            <Eye size={13} />
+                            <span>View Details</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {s.isActive ? (
+                          <DropdownMenuItem
+                            className="cursor-pointer text-amber-600 focus:text-amber-700 flex items-center gap-2"
+                            onClick={() => setDeleteTargetStaff(s)}
+                            data-testid={`btn-deactivate-staff-${s.id}`}
+                          >
+                            <UserX size={13} />
+                            <span>Deactivate Staff</span>
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            className="cursor-pointer text-green-600 focus:text-green-700 flex items-center gap-2"
+                            onClick={() => reactivateMutation.mutate(s.id)}
+                            data-testid={`btn-reactivate-staff-${s.id}`}
+                          >
+                            <UserCheck size={13} />
+                            <span>Reactivate Staff</span>
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          className="cursor-pointer text-destructive focus:text-destructive flex items-center gap-2"
+                          onClick={() => setDeleteTargetStaff(s)}
+                          data-testid={`btn-delete-staff-${s.id}`}
+                        >
+                          <Trash2 size={13} />
+                          <span>Delete Staff</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 {!s.userId && (
                   <p className="text-xs text-amber-600 mb-2">No portal login — open profile to create</p>
@@ -476,6 +590,14 @@ export default function AdminStaff() {
             );})}
           </div>
         )}
+        <StaffDeleteModal
+          staff={deleteTargetStaff}
+          open={Boolean(deleteTargetStaff)}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setDeleteTargetStaff(null);
+          }}
+          onSuccess={() => setDeleteTargetStaff(null)}
+        />
       </div>
     </AdminLayout>
   );

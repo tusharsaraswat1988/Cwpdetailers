@@ -85,6 +85,7 @@ export const PENDING_MIGRATIONS = [
   "087_payment_webhook_events.sql",
   "088_operational_calendar_and_working_hours.sql",
   "089_location_serviceability_and_pricing.sql",
+  "090_align_operational_city_lifecycle.sql",
 ] as const;
 
 export type Queryable = {

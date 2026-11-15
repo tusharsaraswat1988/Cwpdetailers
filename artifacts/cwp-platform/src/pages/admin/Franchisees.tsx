@@ -46,7 +46,12 @@ async function fetchCities() {
 
 async function fetchLegalEntities() {
   const res = await fetch("/api/legal-entities");
-  return res.json();
+  if (!res.ok) return [];
+  const body = await res.json();
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.legalEntities)) return body.legalEntities;
+  return [];
 }
 
 async function createFranchisee(data: any) {

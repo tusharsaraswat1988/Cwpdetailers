@@ -157,6 +157,21 @@ export function CreateInvoiceDialog({
     enabled: open,
   });
 
+  const rawLe: any = legalEntitiesData;
+  const legalEntitiesList: Array<{
+    id: number;
+    name: string;
+    code: string;
+    invoicePrefix?: string;
+    isDefault: boolean;
+  }> = Array.isArray(rawLe)
+    ? rawLe
+    : Array.isArray(rawLe?.legalEntities)
+    ? rawLe.legalEntities
+    : Array.isArray(rawLe?.data)
+    ? rawLe.data
+    : [];
+
   const customerId = customer?.id ?? 0;
 
   const { data: prefetchedCustomer } = useGetCustomer(customerId || initialCustomerId || 0, {
@@ -431,7 +446,7 @@ export function CreateInvoiceDialog({
               <SelectTrigger className="mt-1"><SelectValue placeholder="Auto-resolve" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">Auto-resolve (Branch / Corporate Default)</SelectItem>
-                {(legalEntitiesData?.legalEntities ?? []).map(e => (
+                {legalEntitiesList.map(e => (
                   <SelectItem key={e.id} value={String(e.id)}>
                     {e.name} ({e.code}) · Prefix: {e.invoicePrefix || "CWP"} {e.isDefault ? "(Default)" : ""}
                   </SelectItem>

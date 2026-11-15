@@ -73,7 +73,15 @@ async function upsertCity(stateId: number, name: string): Promise<number> {
     .where(sql`${citiesTable.stateId} = ${stateId} AND ${citiesTable.slug} = ${s}`)
     .limit(1);
   if (existing[0]) return existing[0].id;
-  const [row] = await db.insert(citiesTable).values({ stateId, name, slug: s }).returning();
+  const status = s === "varanasi" ? "active" : (s === "noida" ? "setup_in_progress" : "draft");
+  const isActive = s === "varanasi" || s === "noida";
+  const [row] = await db.insert(citiesTable).values({
+    stateId,
+    name,
+    slug: s,
+    status: status as any,
+    isActive,
+  }).returning();
   return row.id;
 }
 

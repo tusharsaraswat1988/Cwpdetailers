@@ -275,8 +275,9 @@ export default function AdminCities() {
   // KPI calculations
   const totalCount = cities.length;
   const activeCount = cities.filter((c) => c.status === "active").length;
-  const setupCount = cities.filter((c) => c.status === "setup_in_progress" || c.status === "draft").length;
+  const setupCount = cities.filter((c) => c.status === "setup_in_progress").length;
   const readyCount = cities.filter((c) => c.status === "ready_for_launch").length;
+  const draftCount = cities.filter((c) => c.status === "draft").length;
 
   const getStatusBadge = (status: CityItem["status"]) => {
     switch (status) {
@@ -392,6 +393,7 @@ export default function AdminCities() {
                 <SelectItem value="active">Active Only</SelectItem>
                 <SelectItem value="ready_for_launch">Launch Ready</SelectItem>
                 <SelectItem value="setup_in_progress">Setup in Progress</SelectItem>
+                <SelectItem value="draft">Draft / Reference</SelectItem>
                 <SelectItem value="suspended">Suspended</SelectItem>
                 <SelectItem value="archived">Archived</SelectItem>
               </SelectContent>

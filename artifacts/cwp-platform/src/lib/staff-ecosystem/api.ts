@@ -244,6 +244,40 @@ export const staffEcosystemApi = {
       `/api/staff/${id}/test-job-alert`,
       { method: "POST" },
     ),
+  checkDeletion: (id: number) =>
+    api<{
+      staffId: number;
+      canDelete: boolean;
+      hasHistory: boolean;
+      totalHistoricalRecords: number;
+      counts: {
+        serviceExecutions: number;
+        dcmsVisits: number;
+        attendance: number;
+        payouts: number;
+        invoices: number;
+        complaints: number;
+        extraServices: number;
+        visitFeedback: number;
+        operationalExceptions: number;
+        completedBookings: number;
+        activeAssignments: number;
+      };
+    }>(`/api/staff/${id}/deletion-check`),
+  deleteStaff: (id: number, forceDeactivate = false, reason?: string) =>
+    api<{ deleted?: boolean; deactivated?: boolean; message: string; code?: string; counts?: Record<string, number> }>(
+      `/api/staff/${id}${forceDeactivate ? `?forceDeactivate=true${reason ? `&reason=${encodeURIComponent(reason)}` : ""}` : ""}`,
+      { method: "DELETE" },
+    ),
+  deactivateStaff: (id: number, reason?: string) =>
+    api<{ deactivated: boolean; message: string }>(`/api/staff/${id}/deactivate`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  reactivateStaff: (id: number) =>
+    api<{ activated: boolean; message: string }>(`/api/staff/${id}/reactivate`, {
+      method: "POST",
+    }),
 };
 
 export const STAFF_ECOSYSTEM_QUERY_KEY = "staff-ecosystem";

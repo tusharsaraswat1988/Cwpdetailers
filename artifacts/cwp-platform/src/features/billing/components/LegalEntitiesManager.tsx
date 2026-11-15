@@ -131,7 +131,10 @@ export function LegalEntitiesManager() {
   const [selectedBranchIds, setSelectedBranchIds] = useState<number[]>([]);
 
   // Fetch Legal Entities
-  const { data: entitiesData, isLoading: entitiesLoading } = useQuery<{ legalEntities: LegalEntity[] }>({
+  const { data: entitiesData, isLoading: entitiesLoading } = useQuery<{
+    legalEntities?: LegalEntity[];
+    data?: LegalEntity[];
+  } | LegalEntity[]>({
     queryKey: LEGAL_ENTITIES_QUERY_KEY,
     queryFn: async () => {
       const res = await fetch("/api/legal-entities", { credentials: "include" });
@@ -290,7 +293,14 @@ export function LegalEntitiesManager() {
     setAssignDialogOpen(true);
   };
 
-  const entities = entitiesData?.legalEntities ?? [];
+  const rawEntities: any = entitiesData;
+  const entities: LegalEntity[] = Array.isArray(rawEntities)
+    ? rawEntities
+    : Array.isArray(rawEntities?.legalEntities)
+    ? rawEntities.legalEntities
+    : Array.isArray(rawEntities?.data)
+    ? rawEntities.data
+    : [];
 
   return (
     <div className="space-y-6" data-testid="legal-entities-manager">

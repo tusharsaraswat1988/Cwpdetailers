@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useRoute, Link } from "wouter";
+import { useRoute, useLocation, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRequestUploadUrl, getListStaffQueryKey } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
@@ -26,8 +26,10 @@ import {
 } from "@/lib/staff-ecosystem/api";
 import {
   ArrowLeft, CheckCircle2, Circle, Download, Eye, Printer, Upload, User, Star, Briefcase, Key, MapPin, Bell,
+  UserX, UserCheck, Trash2,
 } from "lucide-react";
 import { StaffLocationHistory } from "@/features/staff/components/StaffLocationHistory";
+import { StaffDeleteModal } from "@/features/staff/components/StaffDeleteModal";
 
 function ProfileCompletionBar({ p }: { p: StaffEcosystemProfile["profileCompletion"] }) {
   const items = [
@@ -117,6 +119,20 @@ export default function StaffDetail() {
   const [draft, setDraft] = useState<Partial<StaffEcosystemProfile>>({});
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginPassword, setLoginPassword] = useState("staff123");
+  const [, setLocation] = useLocation();
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  const reactivateMutation = useMutation({
+    mutationFn: () => staffEcosystemApi.reactivateStaff(id),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, id] });
+      qc.invalidateQueries({ queryKey: getListStaffQueryKey() });
+      toast({ title: "Staff member reactivated", description: data.message });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to reactivate staff", description: err.message, variant: "destructive" });
+    },
+  });
 
   const { data: profile, isLoading } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, id],
@@ -290,23 +306,56 @@ export default function StaffDetail() {
             </div>
           </div>
           <div className="flex flex-col gap-2 w-full md:w-auto md:items-end">
-            {!profile.userId && (
-              <Button size="sm" variant="outline" onClick={() => { setLoginPassword("staff123"); setLoginOpen(true); }}>
-                <Key size={14} className="mr-1.5" />Create Portal Login
-              </Button>
-            )}
-            {profile.userId && (
+            <div className="flex flex-wrap items-center gap-2">
+              {!profile.userId && (
+                <Button size="sm" variant="outline" onClick={() => { setLoginPassword("staff123"); setLoginOpen(true); }}>
+                  <Key size={14} className="mr-1.5" />Create Portal Login
+                </Button>
+              )}
+              {profile.userId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={testAlertMutation.isPending}
+                  onClick={() => testAlertMutation.mutate()}
+                  data-testid="btn-staff-test-job-alert"
+                >
+                  <Bell size={14} className="mr-1.5" />
+                  {testAlertMutation.isPending ? "Sending…" : "Send test job alert"}
+                </Button>
+              )}
+              {p.isActive ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+                  onClick={() => setDeleteModalOpen(true)}
+                  data-testid="btn-detail-deactivate-staff"
+                >
+                  <UserX size={14} className="mr-1.5" />Deactivate
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-green-600 border-green-500/30 hover:bg-green-500/10"
+                  onClick={() => reactivateMutation.mutate()}
+                  disabled={reactivateMutation.isPending}
+                  data-testid="btn-detail-reactivate-staff"
+                >
+                  <UserCheck size={14} className="mr-1.5" />
+                  {reactivateMutation.isPending ? "Reactivating…" : "Reactivate"}
+                </Button>
+              )}
               <Button
                 size="sm"
-                variant="outline"
-                disabled={testAlertMutation.isPending}
-                onClick={() => testAlertMutation.mutate()}
-                data-testid="btn-staff-test-job-alert"
+                variant="destructive"
+                onClick={() => setDeleteModalOpen(true)}
+                data-testid="btn-detail-delete-staff"
               >
-                <Bell size={14} className="mr-1.5" />
-                {testAlertMutation.isPending ? "Sending…" : "Send test job alert"}
+                <Trash2 size={14} className="mr-1.5" />Delete
               </Button>
-            )}
+            </div>
             <div className="w-full md:w-64"><ProfileCompletionBar p={profile.profileCompletion} /></div>
           </div>
         </div>
@@ -705,6 +754,24 @@ export default function StaffDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <StaffDeleteModal
+        staff={
+          profile
+            ? {
+                id: profile.id,
+                name: profile.name,
+                employeeCode: profile.employeeCode,
+                isActive: profile.isActive,
+              }
+            : null
+        }
+        open={deleteModalOpen}
+        onOpenChange={setDeleteModalOpen}
+        onSuccess={() => {
+          setLocation("/admin/staff");
+        }}
+      />
     </AdminLayout>
   );
 }

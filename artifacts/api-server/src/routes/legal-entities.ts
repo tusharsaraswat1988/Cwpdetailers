@@ -49,7 +49,26 @@ router.get("/legal-entities", async (req, res) => {
       .where(whereClause)
       .orderBy(desc(legalEntitiesTable.isDefault), asc(legalEntitiesTable.name));
 
-    return res.json({ data: entities, total: entities.length });
+    // Fetch branches to display assigned branch pills on each legal entity card
+    const allBranches = await db
+      .select({
+        id: branchesTable.id,
+        name: branchesTable.name,
+        city: branchesTable.city,
+        legalEntityId: branchesTable.legalEntityId,
+      })
+      .from(branchesTable);
+
+    const entitiesWithBranches = entities.map((ent) => ({
+      ...ent,
+      branches: allBranches.filter((b) => b.legalEntityId === ent.id),
+    }));
+
+    return res.json({
+      data: entitiesWithBranches,
+      legalEntities: entitiesWithBranches,
+      total: entitiesWithBranches.length,
+    });
   } catch (err) {
     req.log.error({ err }, "Error listing legal entities");
     return res.status(500).json({ error: "Failed to list legal entities" });

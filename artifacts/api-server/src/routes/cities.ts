@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { db, citiesTable, statesTable } from "@workspace/db";
-import { eq, and, asc, ilike } from "drizzle-orm";
+import { eq, and, asc, ilike, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import {
   createCity,
@@ -104,7 +104,18 @@ router.get("/cities", async (req: Request, res: Response) => {
       .from(citiesTable)
       .innerJoin(statesTable, eq(citiesTable.stateId, statesTable.id))
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(asc(citiesTable.name));
+      .orderBy(
+        sql`CASE ${citiesTable.status}
+          WHEN 'active' THEN 1
+          WHEN 'ready_for_launch' THEN 2
+          WHEN 'setup_in_progress' THEN 3
+          WHEN 'suspended' THEN 4
+          WHEN 'draft' THEN 5
+          WHEN 'archived' THEN 6
+          ELSE 7
+        END`,
+        asc(citiesTable.name)
+      );
 
     return res.json(cities);
   } catch (err: any) {

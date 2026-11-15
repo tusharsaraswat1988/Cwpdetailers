@@ -193,6 +193,7 @@ async function fetchLegalEntities(): Promise<Array<{ id: number; name: string; c
   const body = await res.json();
   if (Array.isArray(body)) return body;
   if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.legalEntities)) return body.legalEntities;
   return [];
 }
 
