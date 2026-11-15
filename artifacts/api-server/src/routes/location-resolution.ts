@@ -74,6 +74,30 @@ router.post("/location/resolve", async (req: Request, res: Response) => {
       resolvedLocation: resolved,
     });
 
+    // Structured Observability Logging
+    if (!serviceability.isServiceable) {
+      req.log.warn({
+        event: "LOCATION_UNSERVICEABLE",
+        cityId: resolved.cityId,
+        zoneId: resolved.zoneId,
+        propertyType: resolved.propertyType,
+        resolutionStatus: resolved.status,
+        serviceabilityStatus: serviceability.status,
+        rejectionReason: serviceability.rejectionReason,
+      }, "Location resolved to non-serviceable status");
+    } else {
+      req.log.info({
+        event: "LOCATION_RESOLVED_SERVICEABLE",
+        cityId: resolved.cityId,
+        branchId: resolved.branchId,
+        zoneId: resolved.zoneId,
+        societyId: resolved.societyId,
+        propertyType: resolved.propertyType,
+        confidence: resolved.confidence,
+        matchedBy: resolved.matchedBy,
+      }, "Location successfully resolved to serviceable area");
+    }
+
     return res.json({
       success: true,
       resolution: resolved,

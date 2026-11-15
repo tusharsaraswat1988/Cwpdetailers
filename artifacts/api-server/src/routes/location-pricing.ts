@@ -313,9 +313,30 @@ router.post("/location-pricing/resolve", async (req: Request, res: Response) => 
       vehicleCategoryId: vehicleCategoryId ? parseInt(vehicleCategoryId, 10) : undefined,
     });
 
+    req.log.info({
+      event: "LOCATION_PRICE_RESOLVED",
+      ruleId: result.ruleId,
+      serviceId,
+      cityId,
+      zoneId,
+      societyId,
+      locationType,
+      priorityLevel: result.priorityLevel,
+      priorityName: result.priorityName,
+      total: result.total,
+    }, "Location differential price successfully resolved");
+
     return res.json(result);
   } catch (err: any) {
     if (err.message?.includes("MISSING_PRICE_CONFIGURATION")) {
+      req.log.warn({
+        event: "LOCATION_PRICE_MISSING_CONFIGURATION",
+        serviceId: req.body?.serviceId,
+        cityId: req.body?.cityId,
+        zoneId: req.body?.zoneId,
+        locationType: req.body?.locationType,
+        error: err.message,
+      }, "Missing location pricing configuration");
       return res.status(422).json({ error: err.message, status: "MISSING_PRICE_CONFIGURATION" });
     }
     req.log.error({ err }, "Error resolving location pricing");
