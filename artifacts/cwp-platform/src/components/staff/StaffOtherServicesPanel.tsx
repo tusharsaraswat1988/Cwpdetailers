@@ -241,7 +241,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
             setSelectedJob(null);
             onSelectJob(null);
           }}
-          className="staff-tap inline-flex items-center gap-1 text-sm font-semibold text-primary h-10"
+          className="staff-tap inline-flex items-center gap-1.5 text-sm font-semibold text-primary min-h-[44px] px-2 rounded-lg hover:bg-muted/50"
         >
           <ChevronLeft size={16} aria-hidden /> {isHindi ? "वापस लिस्ट पर जाएं" : "Back to jobs"}
         </button>
@@ -286,7 +286,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
             onSelectJob(null);
             setFromWalkIn(false);
           }}
-          className="staff-tap inline-flex items-center gap-1 text-sm font-semibold text-primary h-10"
+          className="staff-tap inline-flex items-center gap-1.5 text-sm font-semibold text-primary min-h-[44px] px-2 rounded-lg hover:bg-muted/50"
         >
           <ChevronLeft size={16} aria-hidden /> {isHindi ? "वापस लिस्ट पर जाएं" : "Back to jobs"}
         </button>
@@ -365,7 +365,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
           type="button"
           onClick={() => void jobs.refetchToday()}
           disabled={jobs.loadingToday}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 staff-tap py-1.5 px-2.5 rounded-lg border border-border bg-card shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-xs font-semibold text-primary hover:text-primary/80 staff-tap rounded-lg border border-border bg-card shadow-xs"
           data-testid="staff-refresh-jobs-btn"
         >
           <RotateCcw size={13} className={cn(jobs.loadingToday && "animate-spin")} />
@@ -374,7 +374,11 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
       </div>
 
       {jobs.errorToday ? (
-        <StaffErrorState onRetry={() => jobs.refetchToday()} />
+        <StaffErrorState
+          title={isHindi ? "काम लोड नहीं हो सका" : "Something went wrong"}
+          description={isHindi ? "कृपया इंटरनेट कनेक्शन जांचें और फिर से कोशिश करें।" : "Please check your network connection and try again."}
+          onRetry={() => jobs.refetchToday()}
+        />
       ) : jobs.loadingToday ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (

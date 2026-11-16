@@ -143,7 +143,7 @@ function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: s
         <button
           type="button"
           onClick={handleCopy}
-          className="px-3 h-12 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center"
+          className="min-w-[48px] h-12 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center"
           title={t("copy_address")}
         >
           {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
@@ -360,7 +360,7 @@ export function StaffServiceJobFlow({
     <div className="pt-1">
       <Button
         variant="ghost"
-        className="w-full h-11 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 border border-dashed border-border rounded-xl flex items-center justify-center gap-1.5"
+        className="w-full h-12 min-h-[48px] text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 border border-dashed border-border rounded-xl flex items-center justify-center gap-1.5"
         onClick={() => setExceptionDialogOpen(true)}
         disabled={isActionPending}
         data-testid={`btn-trigger-exception-${job.id}`}

@@ -350,12 +350,12 @@ export function StaffDailyRouteSimplified() {
               <button
                 type="button"
                 onClick={() => void refetch()}
-                className="p-1 rounded-md hover:bg-muted text-primary staff-tap inline-flex items-center gap-1"
+                className="min-h-[44px] min-w-[44px] p-2 rounded-xl hover:bg-muted text-primary staff-tap inline-flex items-center justify-center"
                 aria-label="Refresh route"
                 title={isHindi ? "रीफ्रेश करें" : "Refresh"}
                 data-testid="dcms-refresh-route-btn"
               >
-                <RotateCcw size={13} className={cn(isLoading && "animate-spin")} />
+                <RotateCcw size={15} className={cn(isLoading && "animate-spin")} />
               </button>
             )}
           </div>
@@ -406,9 +406,10 @@ export function StaffDailyRouteSimplified() {
           <button
             type="button"
             onClick={() => setSearchQuery("")}
-            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground staff-tap"
+            aria-label="Clear search"
           >
-            <X size={15} />
+            <X size={16} />
           </button>
         )}
       </div>
@@ -499,13 +500,13 @@ export function StaffDailyRouteSimplified() {
                       <button
                         type="button"
                         onClick={e => handleCopyLocation(e, stop)}
-                        className="shrink-0 p-1 text-blue-700 hover:text-blue-900 rounded"
+                        className="shrink-0 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-500/20 staff-tap"
                         title={t("copy_address")}
                       >
                         {copiedId === stop.subscriptionId ? (
-                          <Check size={13} className="text-emerald-600" />
+                          <Check size={14} className="text-emerald-600" />
                         ) : (
-                          <Copy size={13} />
+                          <Copy size={14} />
                         )}
                       </button>
                     </div>
@@ -524,9 +525,9 @@ export function StaffDailyRouteSimplified() {
                             openExternalNavigation(navUrl);
                           }
                         }}
-                        className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline h-8 px-2.5 rounded-lg bg-primary/10 border border-primary/20 shrink-0 text-xs"
+                        className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline min-h-[44px] px-3.5 rounded-xl bg-primary/10 border border-primary/20 shrink-0 text-xs staff-tap"
                       >
-                        <Navigation className="h-3.5 w-3.5 text-primary" />
+                        <Navigation className="h-4 w-4 text-primary" />
                         <span>{t("directions")}</span>
                       </a>
                     ) : (
@@ -557,7 +558,7 @@ export function StaffDailyRouteSimplified() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-12 px-3 text-xs font-semibold border-border hover:bg-muted"
+                      className="h-12 min-w-[48px] px-3 text-xs font-semibold border-border hover:bg-muted"
                       onClick={() => setSelectedActionStop(stop)}
                       data-testid={`dcms-action-sheet-btn-${stop.subscriptionId}`}
                       title={t("options")}

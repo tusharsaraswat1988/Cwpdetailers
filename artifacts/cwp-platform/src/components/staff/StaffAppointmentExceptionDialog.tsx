@@ -120,7 +120,7 @@ export function StaffAppointmentExceptionDialog({
 
   return (
     <Dialog open={open} onOpenChange={openState => { if (!openState) handleClose(); }}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-4" data-testid="appointment-exception-dialog">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]" data-testid="appointment-exception-dialog">
         {selectedOption ? (
           /* STEP 2: REMARKS & CONFIRMATION */
           <div className="space-y-4">
@@ -128,7 +128,7 @@ export function StaffAppointmentExceptionDialog({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0"
+                className="min-h-[44px] min-w-[44px] p-0 flex items-center justify-center rounded-xl"
                 onClick={() => setSelectedOption(null)}
               >
                 <ArrowLeft size={16} />

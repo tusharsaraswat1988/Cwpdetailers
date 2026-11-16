@@ -77,7 +77,7 @@ export function StaffVehicleCleanDialog({
   onSuccess,
 }: Props) {
   const { toast } = useToast();
-  const { t } = useStaffLanguage();
+  const { t, isHindi } = useStaffLanguage();
   const completeVisit = useCompleteVisit();
 
   const [step, setStep] = useState<Step>("ready");

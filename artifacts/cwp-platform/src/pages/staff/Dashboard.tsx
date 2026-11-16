@@ -37,6 +37,7 @@ import {
   Loader2,
   CheckCircle2,
   Check,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StaffPage, StaffSkeleton, StaffErrorState } from "@/features/staff-ds";
@@ -458,6 +459,32 @@ export default function StaffDashboardPage() {
           <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80">
             {t("all_tasks_completed_desc")}
           </p>
+        </div>
+      ) : !loadingRoute && !jobs.loadingToday && totalToday === 0 && otherPending === 0 ? (
+        <div className="rounded-2xl border border-border bg-card/60 p-6 text-center space-y-3" data-testid="staff-dashboard-no-assignments">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-foreground">
+              {t("no_assignments_today")}
+            </h3>
+            <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+              {t("no_assignments_desc")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void refetchRoute();
+              void jobs.refetchToday();
+            }}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-muted px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted/80 active:scale-[0.98] transition-all"
+            data-testid="staff-dashboard-refresh-btn"
+          >
+            <RotateCcw className="h-4 w-4" />
+            <span>{isHindi ? "अपडेट जांचें (रिफ्रेश)" : "Check for updates"}</span>
+          </button>
         </div>
       ) : null}
 

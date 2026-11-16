@@ -1,9 +1,11 @@
 import { MapPin, Loader2, MapPinOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStaffLocation } from "./LocationProvider";
+import { getStaffLanguage } from "@/lib/staffLanguage";
 
 export function LocationStatusIndicator({ className }: { className?: string }) {
   const { permissionState, gpsReady, isRefreshing, accuracy } = useStaffLocation();
+  const isHi = getStaffLanguage() === "hi";
 
   if (permissionState === "unsupported" || permissionState === "denied" || permissionState === "location_off") {
     return (
@@ -16,7 +18,7 @@ export function LocationStatusIndicator({ className }: { className?: string }) {
         title={permissionState === "location_off" ? "Location / GPS Off" : "GPS Off"}
       >
         <MapPinOff size={11} />
-        GPS Off
+        {isHi ? "GPS बंद" : "GPS Off"}
       </span>
     );
   }
@@ -32,7 +34,7 @@ export function LocationStatusIndicator({ className }: { className?: string }) {
         title="Checking permission"
       >
         <Loader2 size={11} className="animate-spin" />
-        Checking…
+        {isHi ? "जांच हो रही…" : "Checking…"}
       </span>
     );
   }
@@ -48,7 +50,7 @@ export function LocationStatusIndicator({ className }: { className?: string }) {
         title="Location permission needed"
       >
         <MapPin size={11} />
-        GPS Off
+        {isHi ? "GPS बंद" : "GPS Off"}
       </span>
     );
   }
@@ -64,7 +66,7 @@ export function LocationStatusIndicator({ className }: { className?: string }) {
         title="Checking GPS"
       >
         <Loader2 size={11} className="animate-spin" />
-        Checking…
+        {isHi ? "जांच हो रही…" : "Checking…"}
       </span>
     );
   }
@@ -79,7 +81,7 @@ export function LocationStatusIndicator({ className }: { className?: string }) {
       title={accuracy != null ? `GPS ±${Math.round(accuracy)}m` : "GPS ready"}
     >
       <MapPin size={11} />
-      {accuracy != null ? `GPS ±${Math.round(accuracy)}m` : "GPS Ready"}
+      {accuracy != null ? `GPS ±${Math.round(accuracy)}m` : (isHi ? "GPS चालू" : "GPS Ready")}
     </span>
   );
 }

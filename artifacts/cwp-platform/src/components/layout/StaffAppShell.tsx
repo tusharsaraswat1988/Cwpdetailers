@@ -142,11 +142,11 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={toggleLanguage}
-              className="flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-lg border border-border bg-card/80 hover:bg-muted text-foreground transition-colors shadow-none"
+              className="flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] px-2.5 py-1.5 text-xs font-bold rounded-xl border border-border bg-card/80 hover:bg-muted text-foreground transition-colors shadow-none staff-tap"
               title={lang === "hi" ? "Switch to English" : "हिन्दी में बदलें"}
               data-testid="staff-language-toggle"
             >
-              <Globe size={13} className="text-primary" />
+              <Globe size={14} className="text-primary" />
               <span>{lang === "hi" ? "EN" : "हिन्दी"}</span>
             </button>
             <LocationStatusIndicator />

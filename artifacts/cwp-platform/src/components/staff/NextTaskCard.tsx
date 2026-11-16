@@ -159,10 +159,10 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
               <button
                 type="button"
                 onClick={handleCopyAddress}
-                className="shrink-0 p-1 text-blue-700 hover:text-blue-900 rounded hover:bg-blue-500/20"
+                className="shrink-0 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-500/20 staff-tap"
                 title={t("copy_address")}
               >
-                {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
               </button>
             )}
           </div>
@@ -192,7 +192,7 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
                 openExternalNavigation(navUrl);
               }
             }}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 h-12 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-12 min-h-[48px] rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
             data-testid="next-task-navigate-btn"
           >
             <Navigation size={15} />
@@ -203,7 +203,7 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
         {task.customerPhone && (
           <a
             href={`tel:${task.customerPhone.replace(/[^\d+]/g, "")}`}
-            className="inline-flex items-center justify-center gap-1.5 h-12 px-3.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+            className="inline-flex items-center justify-center gap-1.5 h-12 min-h-[48px] min-w-[48px] px-3.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-colors"
             data-testid="next-task-call-btn"
           >
             <Phone size={15} className="text-emerald-600" />

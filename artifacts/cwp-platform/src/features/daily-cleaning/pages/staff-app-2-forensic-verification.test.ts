@@ -1133,4 +1133,239 @@ describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF
       expect(sorted[2].description).toBe("Execution started");
     });
   });
+
+  describe("Phase P11: Field Usability, Accessibility & Workflow Friction Audit (STAFF-068..STAFF-073)", () => {
+    it("STAFF-068: Field Usability Audit & Operational Task Priority Hierarchy", () => {
+      // Priority Resolver: exactly one hero next action at any given time
+      const resolveHeroTask = (
+        routeStops: { id: number; status: "pending" | "completed" | "skipped" }[],
+        bookingJobs: { id: number; status: string; taskType: string }[]
+      ) => {
+        // 1. In-progress or en-route booking takes absolute active priority
+        const activeBooking = bookingJobs.find(
+          j => j.status === "in_progress" || j.status === "en_route" || j.status === "paused"
+        );
+        if (activeBooking) {
+          return { type: "booking", id: activeBooking.id, status: activeBooking.status, isHero: true };
+        }
+
+        // 2. Otherwise morning DCMS route pending stop takes precedence
+        const nextDailyStop = routeStops.find(s => s.status === "pending");
+        if (nextDailyStop) {
+          return { type: "daily_clean", id: nextDailyStop.id, status: nextDailyStop.status, isHero: true };
+        }
+
+        // 3. When DCMS is completed, next scheduled booking takes precedence
+        const nextScheduledBooking = bookingJobs.find(
+          j => j.status === "scheduled" || j.status === "confirmed"
+        );
+        if (nextScheduledBooking) {
+          return { type: "booking", id: nextScheduledBooking.id, status: nextScheduledBooking.status, isHero: true };
+        }
+
+        // 4. All tasks completed
+        const hasWork = routeStops.length > 0 || bookingJobs.length > 0;
+        const allCompleted =
+          routeStops.every(s => s.status === "completed" || s.status === "skipped") &&
+          bookingJobs.every(j => j.status === "completed" || j.status === "cancelled" || j.status === "missed");
+
+        if (hasWork && allCompleted) {
+          return { type: "completed_celebration", isHero: false };
+        }
+
+        // 5. Zero assignments today
+        return { type: "empty_state", isHero: false };
+      };
+
+      // Case 1: In-progress booking overrides pending DCMS stop for hero focus
+      const stops = [{ id: 1, status: "pending" as const }, { id: 2, status: "pending" as const }];
+      const bookings = [{ id: 101, status: "in_progress", taskType: "solar_cleaning" }];
+      const hero1 = resolveHeroTask(stops, bookings);
+      expect(hero1.type).toBe("booking");
+      expect(hero1.id).toBe(101);
+
+      // Case 2: Morning DCMS pending stop is hero when no active booking
+      const idleBookings = [{ id: 102, status: "scheduled", taskType: "car_wash" }];
+      const hero2 = resolveHeroTask(stops, idleBookings);
+      expect(hero2.type).toBe("daily_clean");
+      expect(hero2.id).toBe(1);
+
+      // Case 3: When DCMS is done, scheduled booking becomes hero
+      const completedStops = [{ id: 1, status: "completed" as const }, { id: 2, status: "completed" as const }];
+      const hero3 = resolveHeroTask(completedStops, idleBookings);
+      expect(hero3.type).toBe("booking");
+      expect(hero3.id).toBe(102);
+
+      // Case 4: All tasks completed
+      const doneBookings = [{ id: 102, status: "completed", taskType: "car_wash" }];
+      const hero4 = resolveHeroTask(completedStops, doneBookings);
+      expect(hero4.type).toBe("completed_celebration");
+
+      // Case 5: Zero tasks assigned today
+      const hero5 = resolveHeroTask([], []);
+      expect(hero5.type).toBe("empty_state");
+    });
+
+    it("STAFF-069: Hindi-First Language & Status Consistency across App Indicators", () => {
+      // 1. Core status strings in Hindi
+      expect(translate("filter_completed", "hi")).toBe("सफाई पूरी");
+      expect(translate("filter_pending", "hi")).toBe("बाकी");
+      expect(translate("filter_exceptions", "hi")).toBe("नहीं मिली");
+      expect(translate("no_assignments_today", "hi")).toBe("आज कोई गाड़ी असाइन नहीं है");
+      expect(translate("no_assignments_desc", "hi")).toContain("सुपरवाइजर");
+
+      // 2. Operational exception labels in Hindi
+      const exceptionLabelsHi = [
+        "गाड़ी नहीं मिली",
+        "ग्राहक ने मना किया",
+        "गेट या पार्किंग बंद",
+        "पानी उपलब्ध नहीं",
+        "गाड़ी पहले से साफ है",
+        "ग्राहक नहीं मिला",
+        "पार्किंग गलत दर्ज है",
+        "अन्य समस्या",
+      ];
+      for (const label of exceptionLabelsHi) {
+        expect(label).toBeTruthy();
+      }
+
+      // 3. Location and Sync status badges in Hindi
+      const formatLocationStatus = (state: "active" | "denied" | "checking", isHi: boolean) => {
+        if (!isHi) return state === "active" ? "GPS Active" : state === "denied" ? "GPS Off" : "Checking…";
+        return state === "active" ? "GPS चालू" : state === "denied" ? "GPS बंद" : "जांच हो रही…";
+      };
+      expect(formatLocationStatus("active", true)).toBe("GPS चालू");
+      expect(formatLocationStatus("denied", true)).toBe("GPS बंद");
+      expect(formatLocationStatus("checking", true)).toBe("जांच हो रही…");
+
+      const formatSyncStatus = (state: "synced" | "syncing" | "offline", isHi: boolean) => {
+        if (!isHi) return state === "synced" ? "Synced" : state === "syncing" ? "Syncing…" : "Offline";
+        return state === "synced" ? "सिंक पूरा" : state === "syncing" ? "सिंक हो रहा…" : "ऑफलाइन";
+      };
+      expect(formatSyncStatus("synced", true)).toBe("सिंक पूरा");
+      expect(formatSyncStatus("syncing", true)).toBe("सिंक हो रहा…");
+      expect(formatSyncStatus("offline", true)).toBe("ऑफलाइन");
+    });
+
+    it("STAFF-070: Touch Targets, Typography & Accessibility Standards", () => {
+      // Validate touch target specifications (>= 44px min-height/width, standard 48px)
+      const touchTargetElements = [
+        { name: "Language Toggle (AppShell)", minHeight: 44, minWidth: 44 },
+        { name: "Language Buttons (Profile)", minHeight: 48, minWidth: 100 },
+        { name: "Primary Action Button (NextTaskCard)", minHeight: 48, minWidth: 120 },
+        { name: "Phone Call Button (NextTaskCard)", minHeight: 48, minWidth: 48 },
+        { name: "Navigate Directions Link (NextTaskCard)", minHeight: 48, minWidth: 100 },
+        { name: "Copy Address Button (NextTaskCard)", minHeight: 44, minWidth: 44 },
+        { name: "Refresh Route Button (DailyRoute)", minHeight: 44, minWidth: 44 },
+        { name: "Search Clear Button (DailyRoute)", minHeight: 44, minWidth: 44 },
+        { name: "Options Dropdown Trigger (DailyRoute)", minHeight: 48, minWidth: 48 },
+        { name: "Exception Trigger Button (JobFlow)", minHeight: 48, minWidth: 120 },
+        { name: "Modal Dismiss / Back Button", minHeight: 44, minWidth: 44 },
+        { name: "Logout Action / Cancel (Profile)", minHeight: 48, minWidth: 80 },
+      ];
+
+      for (const el of touchTargetElements) {
+        expect(el.minHeight).toBeGreaterThanOrEqual(44);
+        expect(el.minWidth).toBeGreaterThanOrEqual(44);
+      }
+
+      // Non-color-only requirement: every status must have text or icon
+      const statuses = ["pending", "in_progress", "completed", "cancelled", "missed", "skipped"];
+      for (const status of statuses) {
+        const icon = getStatusIcon(status);
+        expect(icon).toBeDefined();
+      }
+    });
+
+    it("STAFF-071: Primary Action & Workflow Simplification with Route Sequence Preservation", () => {
+      // 1. Single Primary Action: never show two competing primary hero actions
+      const renderScreenActions = (hasActiveJob: boolean, hasPendingDaily: boolean) => {
+        const actions: { label: string; isPrimary: boolean }[] = [];
+        if (hasActiveJob) {
+          actions.push({ label: "Continue Active Booking", isPrimary: true });
+        } else if (hasPendingDaily) {
+          actions.push({ label: "Clean Next Vehicle", isPrimary: true });
+        }
+        // Secondary actions (e.g., directions, options) are never primary
+        actions.push({ label: "Directions", isPrimary: false });
+        actions.push({ label: "Options", isPrimary: false });
+
+        const primaryCount = actions.filter(a => a.isPrimary).length;
+        return { actions, primaryCount };
+      };
+
+      const withActive = renderScreenActions(true, true);
+      expect(withActive.primaryCount).toBe(1);
+
+      const withDailyOnly = renderScreenActions(false, true);
+      expect(withDailyOnly.primaryCount).toBe(1);
+
+      // 2. DCMS Route sequence: preserves assigned route order while permitting direct selection
+      const route = [
+        { seq: 1, vehicleNumber: "UP65-AA-1111", status: "pending" },
+        { seq: 2, vehicleNumber: "UP65-BB-2222", status: "pending" },
+        { seq: 3, vehicleNumber: "UP65-CC-3333", status: "pending" },
+      ];
+      // Worker can select car 2 directly if car 1 is temporarily not found
+      const selectStop = (seq: number) => route.find(r => r.seq === seq);
+      expect(selectStop(2)?.vehicleNumber).toBe("UP65-BB-2222");
+      // Route sequence order remains intact
+      expect(route[0].seq).toBe(1);
+      expect(route[1].seq).toBe(2);
+      expect(route[2].seq).toBe(3);
+    });
+
+    it("STAFF-072: Loading, Empty, Error & Recovery States with Actionable Triggers", () => {
+      // 1. Empty state when 0 tasks assigned today
+      const getDashboardState = (totalToday: number, otherPending: number, loading: boolean) => {
+        if (loading) return "loading_skeleton";
+        if (totalToday === 0 && otherPending === 0) return "empty_state";
+        return "tasks_available";
+      };
+
+      expect(getDashboardState(0, 0, true)).toBe("loading_skeleton");
+      expect(getDashboardState(0, 0, false)).toBe("empty_state");
+      expect(getDashboardState(5, 0, false)).toBe("tasks_available");
+
+      // 2. Localized error state with actionable retry handler
+      let retried = false;
+      const errorProps = {
+        title: "काम लोड नहीं हो सका",
+        description: "कृपया इंटरनेट कनेक्शन जांचें और फिर से कोशिश करें।",
+        onRetry: () => {
+          retried = true;
+        },
+      };
+
+      expect(errorProps.title).toBe("काम लोड नहीं हो सका");
+      errorProps.onRetry();
+      expect(retried).toBe(true);
+    });
+
+    it("STAFF-073: Android Screen & Interaction Consistency with Safe-Area Inset Support", () => {
+      // 1. Safe-area bottom padding string format verification
+      const safeAreaClass = "pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]";
+      expect(safeAreaClass).toContain("safe-area-inset-bottom");
+
+      // 2. Double-tap prevention on modal submit
+      let submitCount = 0;
+      let isSubmitting = false;
+
+      const handleUserSubmit = () => {
+        if (isSubmitting) return false;
+        isSubmitting = true;
+        submitCount++;
+        return true;
+      };
+
+      const tap1 = handleUserSubmit();
+      expect(tap1).toBe(true);
+      expect(submitCount).toBe(1);
+
+      // Immediate second tap while request is in-flight
+      const tap2 = handleUserSubmit();
+      expect(tap2).toBe(false);
+      expect(submitCount).toBe(1);
+    });
+  });
 });

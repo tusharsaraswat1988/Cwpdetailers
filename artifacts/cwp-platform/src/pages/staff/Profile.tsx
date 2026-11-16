@@ -172,7 +172,7 @@ export default function StaffProfile() {
           <button
             type="button"
             onClick={() => setLang("hi")}
-            className={`h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
+            className={`min-h-[48px] h-12 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
               lang === "hi"
                 ? "bg-primary text-primary-foreground border-primary shadow-sm"
                 : "bg-muted/40 border-border text-foreground hover:bg-muted"
@@ -185,7 +185,7 @@ export default function StaffProfile() {
           <button
             type="button"
             onClick={() => setLang("en")}
-            className={`h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
+            className={`min-h-[48px] h-12 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
               lang === "en"
                 ? "bg-primary text-primary-foreground border-primary shadow-sm"
                 : "bg-muted/40 border-border text-foreground hover:bg-muted"
@@ -402,11 +402,11 @@ export default function StaffProfile() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="flex-row gap-2 justify-end pt-3">
-              <AlertDialogCancel className="h-11 min-h-[44px] px-4 text-xs font-medium m-0">
+              <AlertDialogCancel className="h-12 min-h-[48px] px-4 text-xs font-medium m-0">
                 {t("logout_cancel_btn")}
               </AlertDialogCancel>
               <AlertDialogAction
-                className="h-11 min-h-[44px] px-4 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground m-0"
+                className="h-12 min-h-[48px] px-4 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground m-0"
                 onClick={() => logout("staff")}
                 data-testid="confirm-logout-btn"
               >

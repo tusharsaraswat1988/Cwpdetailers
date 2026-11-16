@@ -165,6 +165,16 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 | `artifacts/api-server/src/routes/staff.ts` | **MODIFIED** | Idempotent attendance punch endpoint returning HTTP 200 with existing record instead of 409 conflict (`STAFF-064`) |
 | `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts` | **MODIFIED** | In-flight action deduplication lock preventing rapid double-taps; expanded query invalidation to `daily-route` (`STAFF-063`, `STAFF-066`) |
 | `artifacts/cwp-platform/src/lib/staffLanguage.ts` | **MODIFIED** | Colloquial Hindi translations for terminal status errors, assignment conflicts, and wrong technician errors (`STAFF-065`) |
+| `artifacts/cwp-platform/src/lib/location/LocationStatusIndicator.tsx` | **MODIFIED** | Localized GPS status badges ("GPS चालू", "GPS बंद", "जांच हो रही…") (`STAFF-069`) |
+| `artifacts/cwp-platform/src/components/connectivity/SyncStatusIndicator.tsx` | **MODIFIED** | Localized Sync status badges ("सिंक पूरा", "सिंक हो रहा…", "ऑफलाइन") (`STAFF-069`) |
+| `artifacts/cwp-platform/src/features/daily-cleaning/components/StaffExecutionActionsSheet.tsx` | **MODIFIED** | Localized all 8 exception option titles/subtitles into colloquial Hindi, added safe-area bottom padding (`STAFF-069`, `STAFF-073`) |
+| `artifacts/cwp-platform/src/components/staff/StaffAppointmentExceptionDialog.tsx` | **MODIFIED** | Added safe-area bottom padding and 44px back button (`STAFF-070`, `STAFF-073`) |
+| `artifacts/cwp-platform/src/components/staff/NextTaskCard.tsx` | **MODIFIED** | Upgraded phone dialer, navigation, and copy address touch targets to 44px–48px (`STAFF-070`) |
+| `artifacts/cwp-platform/src/features/daily-cleaning/pages/StaffDailyRouteSimplified.tsx` | **MODIFIED** | Upgraded refresh, search clear, directions, copy, and options buttons to 44px–48px (`STAFF-070`) |
+| `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx` | **MODIFIED** | Upgraded copy address to `min-w-[48px] h-12` and exception button to `h-12 min-h-[48px]` (`STAFF-070`) |
+| `artifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx` | **MODIFIED** | Upgraded back and refresh buttons to 44px, added localized Hindi error state with retry (`STAFF-070`, `STAFF-072`) |
+| `artifacts/cwp-platform/src/pages/staff/Dashboard.tsx` | **MODIFIED** | Added dedicated empty state with refresh CTA when 0 tasks assigned today (`STAFF-072`) |
+| `artifacts/cwp-platform/src/pages/staff/Profile.tsx` | **MODIFIED** | Upgraded language selector and logout buttons to `min-h-[48px] h-12` (`STAFF-070`) |
 | `docs/staff/STAFF_APP_EXISTING_FEATURE_INVENTORY.md` | **NEW FILE** | Full screen-by-screen inventory |
 | `docs/staff/STAFF_APP_FORENSIC_AUDIT.md` | **NEW FILE** | Forensic technical audit report |
 | `docs/staff/STAFF_APP_UX_GAP_ANALYSIS.md` | **NEW FILE** | UX gap analysis matrix |
@@ -176,7 +186,7 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 ## 4. Test & Verification Evidence
 
 1. **Staff App 2.0 Forensic Test Suite (`staff-app-2-forensic-verification.test.ts`)**:
-   - Total tests: **38 passed (38)** (100% pass rate in 3.83s)
+   - Total tests: **44 passed (44)** (100% pass rate in 3.17s)
    - Tested:
      - Out-of-order route segregation and original sequence preservation.
      - IST time formatting and chronological completion sequence.
@@ -209,13 +219,19 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
      - Admin reassignment & ownership conflict recovery with clear colloquial Hindi guidance (`STAFF-065`).
      - Stale cache & offline queue reconciliation across DCMS routes and appointment services (`STAFF-066`).
      - Operational timeline consistency and duplicate event suppression within 5 seconds (`STAFF-067`).
+     - Field usability audit & operational task priority hierarchy (`STAFF-068`).
+     - Hindi-first language & status consistency across GPS, sync, and exception indicators (`STAFF-069`).
+     - Touch targets, typography & accessibility compliance (>= 44px–48px) across all controls (`STAFF-070`).
+     - Primary action & route sequence simplification with out-of-order vehicle selection (`STAFF-071`).
+     - Loading, empty, error & recovery states with actionable retry handlers (`STAFF-072`).
+     - Android screen safe-area bottom padding and modal double-tap prevention (`STAFF-073`).
 2. **Backend Execution Validation Suite (`executionValidation.test.ts`)**:
    - Total tests: **8 passed (8)** (100% pass rate in 7ms)
 3. **Backend API Bundle (`@workspace/api-server`)**:
-   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 7569ms**
+   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 1005ms**
 4. **Frontend Production Build (`@workspace/cwp-platform`)**:
-   - Built via `vite build --config vite.config.ts`: **Built cleanly in 16.99s**
-   - Service worker generated via `vite-plugin-pwa`: **Built in 199ms (54 precache entries)**
+   - Built via `vite build --config vite.config.ts`: **Built cleanly in 15.99s**
+   - Service worker generated via `vite-plugin-pwa`: **Built in 248ms (54 precache entries)**
 
 ---
 

@@ -1,6 +1,7 @@
 import { Loader2, CloudOff, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useConnectivity } from "@/services/ConnectivityContext";
+import { getStaffLanguage } from "@/lib/staffLanguage";
 
 type SyncStatusIndicatorProps = {
   className?: string;
@@ -9,6 +10,7 @@ type SyncStatusIndicatorProps = {
 
 export function SyncStatusIndicator({ className, compact }: SyncStatusIndicatorProps) {
   const { state, pendingQueueCount, isSyncing } = useConnectivity();
+  const isHi = getStaffLanguage() === "hi";
 
   if (state === "online" && pendingQueueCount === 0 && !isSyncing) {
     if (compact) return null;
@@ -22,7 +24,7 @@ export function SyncStatusIndicator({ className, compact }: SyncStatusIndicatorP
         data-status="synced"
       >
         <CheckCircle2 size={12} className="text-emerald-500" />
-        Synced
+        {isHi ? "सिंक पूरा" : "Synced"}
       </span>
     );
   }
@@ -35,7 +37,7 @@ export function SyncStatusIndicator({ className, compact }: SyncStatusIndicatorP
         data-status="syncing"
       >
         <Loader2 size={12} className="animate-spin text-primary" />
-        Syncing…
+        {isHi ? "सिंक हो रहा…" : "Syncing…"}
       </span>
     );
   }
@@ -51,7 +53,9 @@ export function SyncStatusIndicator({ className, compact }: SyncStatusIndicatorP
         data-status="pending"
       >
         <CloudOff size={12} />
-        {pendingQueueCount} Change{pendingQueueCount === 1 ? "" : "s"} Pending
+        {isHi
+          ? `${pendingQueueCount} सिंक पेंडिंग`
+          : `${pendingQueueCount} Change${pendingQueueCount === 1 ? "" : "s"} Pending`}
       </span>
     );
   }
@@ -64,7 +68,9 @@ export function SyncStatusIndicator({ className, compact }: SyncStatusIndicatorP
         data-status={state}
       >
         <CloudOff size={12} />
-        {compact ? "Offline" : "Waiting for connection"}
+        {compact
+          ? (isHi ? "ऑफलाइन" : "Offline")
+          : (isHi ? "इंटरनेट का इंतजार…" : "Waiting for connection")}
       </span>
     );
   }

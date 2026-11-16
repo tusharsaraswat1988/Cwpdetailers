@@ -48,17 +48,17 @@ export type StaffActionOption = {
 const ACTION_OPTIONS: StaffActionOption[] = [
   {
     id: "completed",
-    title: "Car Found — Cleaning Completed",
-    subtitle: "Car mil gayi. Plate verify karein aur clean photo capture karein.",
+    title: "गाड़ी मिल गई — सफाई करें (Clean Vehicle)",
+    subtitle: "गाड़ी मौजूद है। नंबर प्लेट और सफाई की फोटो लेकर सबमिट करें।",
     icon: Sparkles,
     category: "primary",
-    badgeText: "Standard Flow",
+    badgeText: "Standard Clean",
     actionColor: "text-emerald-700 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20",
   },
   {
     id: "car_not_available",
-    title: "Car Not Available",
-    subtitle: "Assigned parking bay me gaadi maujood nahi hai.",
+    title: "गाड़ी मौजूद नहीं है (Car Not Available)",
+    subtitle: "असाइन की गई बे या पार्किंग में गाड़ी नहीं मिली। खाली जगह की फोटो लें।",
     icon: CarFront,
     category: "exception",
     badgeText: "Vehicle Absent",
@@ -66,8 +66,8 @@ const ACTION_OPTIONS: StaffActionOption[] = [
   },
   {
     id: "plate_not_visible",
-    title: "Vehicle Number Not Visible",
-    subtitle: "Car cover laga hai ya number plate gandi / dabi hui hai.",
+    title: "नंबर प्लेट नहीं दिख रही (Plate Obscured)",
+    subtitle: "कार कवर चढ़ा है या नंबर प्लेट ढकी/गंदी है। फोटो लेकर दर्ज करें।",
     icon: EyeOff,
     category: "exception",
     badgeText: "Plate Obscured",
@@ -75,8 +75,8 @@ const ACTION_OPTIONS: StaffActionOption[] = [
   },
   {
     id: "customer_skip",
-    title: "Customer Requested Skip",
-    subtitle: "Customer ne aaj car saaf na karne ki request ki hai.",
+    title: "ग्राहक ने मना किया (Customer Skip)",
+    subtitle: "ग्राहक ने आज गाड़ी धोने से मना किया है या यात्रा पर हैं।",
     icon: UserX,
     category: "exception",
     badgeText: "Customer Request",
@@ -84,8 +84,8 @@ const ACTION_OPTIONS: StaffActionOption[] = [
   },
   {
     id: "access_denied",
-    title: "Unable to Access Parking (प्रवेश नहीं मिला)",
-    subtitle: "Gate pe guard ne entry nahi di ya basement locked hai.",
+    title: "पार्किंग में प्रवेश नहीं मिला (Access Denied)",
+    subtitle: "गेट गार्ड ने एंट्री नहीं दी या बेसमेंट बंद मिला।",
     icon: Lock,
     category: "exception",
     badgeText: "Access Denied",
@@ -93,8 +93,8 @@ const ACTION_OPTIONS: StaffActionOption[] = [
   },
   {
     id: "water_unavailable",
-    title: "Water / Utility Unavailable (पानी उपलब्ध नहीं)",
-    subtitle: "सोसायटी या पार्किंग में पानी या बिजली की सुविधा उपलब्ध नहीं है।",
+    title: "पानी उपलब्ध नहीं (Water Unavailable)",
+    subtitle: "सोसायटी या पार्किंग में पानी की सुविधा उपलब्ध नहीं है।",
     icon: Droplets,
     category: "exception",
     badgeText: "No Water",
@@ -102,8 +102,8 @@ const ACTION_OPTIONS: StaffActionOption[] = [
   },
   {
     id: "already_cleaned",
-    title: "Already Cleaned (पहले से साफ)",
-    subtitle: "गाड़ी ड्राइवर या मालिक द्वारा आज पहले ही साफ की जा चुकी है।",
+    title: "गाड़ी पहले से साफ है (Already Cleaned)",
+    subtitle: "मालिक या ड्राइवर ने गाड़ी पहले ही धो ली है।",
     icon: CheckCircle2,
     category: "exception",
     badgeText: "Already Done",
@@ -111,8 +111,8 @@ const ACTION_OPTIONS: StaffActionOption[] = [
   },
   {
     id: "issue_reported",
-    title: "Report Vehicle Issue (गाड़ी समस्या)",
-    subtitle: "Car me pehle se scratch, flat tyre ya koi nuksan hai.",
+    title: "गाड़ी में डैमेज या समस्या (Vehicle Damage/Issue)",
+    subtitle: "गाड़ी पर पहले से गहरा स्क्रैच, डेंट या पंचर है। फोटो प्रमाण लें।",
     icon: AlertTriangle,
     category: "exception",
     badgeText: "Report Issue",
@@ -230,7 +230,7 @@ export function StaffExecutionActionsSheet({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-4">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]">
         {selectedException ? (
           /* EXCEPTION DETAILS STEP */
           <div className="space-y-4">
@@ -238,7 +238,7 @@ export function StaffExecutionActionsSheet({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0"
+                className="min-h-[44px] min-w-[44px] p-0 flex items-center justify-center rounded-xl"
                 onClick={() => setSelectedException(null)}
               >
                 <ArrowLeft size={16} />
@@ -300,7 +300,7 @@ export function StaffExecutionActionsSheet({
                     type="button"
                     variant="secondary"
                     size="sm"
-                    className="absolute bottom-2 right-2 text-xs h-7 px-2"
+                    className="absolute bottom-2 right-2 text-xs min-h-[36px] px-3 font-semibold rounded-lg shadow-sm"
                     onClick={() => void handleCaptureEvidencePhoto()}
                   >
                     दोबारा लें
