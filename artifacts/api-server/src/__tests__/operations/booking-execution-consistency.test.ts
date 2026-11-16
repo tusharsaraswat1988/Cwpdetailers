@@ -381,5 +381,46 @@ describe("Phase 16 — Core Service Operations & Booking-to-Execution Consistenc
       const cancelled = computeUpdateData("cancelled", { reason: "Customer requested cancellation" });
       expect(cancelled.cancellationReason).toBe("Customer requested cancellation");
     });
+
+    it("STAFF-053: enforces tenant scope staff authorization using assignedStaffId in rowInScope", async () => {
+      const { rowInScope } = await import("../../middlewares/tenantScope");
+
+      // Staff caller scoped to staffId = 5
+      const staffReq = {
+        scope: {
+          isSuperAdmin: false,
+          staffId: 5,
+          branchIds: null,
+          cityId: null,
+          companyId: null,
+          franchiseeId: null,
+          customerId: null,
+        },
+      } as any;
+
+      // 1. Row matching assignedStaffId -> allowed
+      expect(rowInScope(staffReq, { assignedStaffId: 5 })).toBe(true);
+
+      // 2. Row with different assignedStaffId -> blocked (IDOR / reassignment defense)
+      expect(rowInScope(staffReq, { assignedStaffId: 99 })).toBe(false);
+
+      // 3. Row matching staffId -> allowed
+      expect(rowInScope(staffReq, { staffId: 5 })).toBe(true);
+
+      // 4. Row with different staffId -> blocked
+      expect(rowInScope(staffReq, { staffId: 99 })).toBe(false);
+
+      // 5. Superadmin caller -> allowed regardless of assignee
+      const superAdminReq = {
+        scope: {
+          isSuperAdmin: true,
+          staffId: null,
+          branchIds: null,
+          cityId: null,
+          companyId: null,
+        },
+      } as any;
+      expect(rowInScope(superAdminReq, { assignedStaffId: 99 })).toBe(true);
+    });
   });
 });

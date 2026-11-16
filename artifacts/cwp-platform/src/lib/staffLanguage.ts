@@ -437,6 +437,33 @@ export function formatStaffOperationalError(err: unknown, isHindi = true): { tit
     };
   }
 
+  if (/wrong technician|different staff member|not assigned to you/i.test(lower)) {
+    return {
+      title: isHindi ? "काम दूसरे साथी को सौंपा गया है" : "Job Reassigned",
+      description: isHindi
+        ? "यह काम अब आपके नाम पर नहीं है। लिस्ट रीफ्रेश हो रही है।"
+        : "This job is no longer assigned to you. The list is updating.",
+    };
+  }
+
+  if (/assignment.*removed|linked assignment was removed/i.test(lower)) {
+    return {
+      title: isHindi ? "काम हटा दिया गया है" : "Assignment Removed",
+      description: isHindi
+        ? "एडमिन ने इस काम का असाइनमेंट हटा दिया है।"
+        : "This assignment was removed by admin.",
+    };
+  }
+
+  if (/cancelled|execution is already cancelled/i.test(lower)) {
+    return {
+      title: isHindi ? "काम रद्द हो चुका है" : "Job Cancelled",
+      description: isHindi
+        ? "एडमिन या कस्टमर ने यह काम रद्द कर दिया है।"
+        : "This job was cancelled by admin or customer.",
+    };
+  }
+
   if (/already completed|already started/i.test(lower)) {
     return {
       title: isHindi ? "स्थिति पहले ही अपडेट है" : "Status Already Updated",

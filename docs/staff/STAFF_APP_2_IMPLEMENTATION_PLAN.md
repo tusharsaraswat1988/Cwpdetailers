@@ -183,3 +183,24 @@
 4. **Task P6-4: Colloquial Hindi Field Error Recovery & Settings Deep Linking (STAFF-050)**
    - **Scope:** In staffLanguage.ts, implement ormatStaffOperationalError providing reassuring, non-technical everyday Hindi guidance confirming that work is safely saved on the device and detailing actionable next steps. Add 1-tap phone settings deep link (openNativeAppSettings) in GeoPhotoSlotGrid.tsx and StaffVehicleCleanDialog.tsx for permanent camera/location permission denials.
    - **Files:** rtifacts/cwp-platform/src/lib/staffLanguage.ts, rtifacts/cwp-platform/src/features/daily-cleaning/components/StaffVehicleCleanDialog.tsx, rtifacts/cwp-platform/src/components/staff/GeoPhotoSlotGrid.tsx.
+
+---
+
+### Phase P7: Assignment Synchronization, Staff Eligibility & Access Integrity (Completed)
+**Objective:** Eliminate assignment staleness, harden cross-staff IDOR access control, ensure removed/reassigned jobs fail gracefully with colloquial Hindi recovery, integrate deep-linked job alerts with deduplication, and provide 1-tap manual refresh.
+
+1. **Task P7-1: Direct Job Alert Deep-Linking & Self-View Suppression (STAFF-051)**
+   - **Scope:** Attach jobKey: staffJobKey(job) directly to StaffJobAlert in useStaffJobAlerts.ts and StaffJobAlertPopup.tsx so "काम खोलें" links to /staff/bookings?job={jobKey}. Check whether the staff member is already on that job's screen to avoid redundant banner alerts.
+   - **Files:** artifacts/cwp-platform/src/hooks/useStaffJobAlerts.ts, artifacts/cwp-platform/src/components/staff/StaffJobAlertPopup.tsx.
+
+2. **Task P7-2: Assignment Conflict & Reassignment Recovery (STAFF-052)**
+   - **Scope:** In StaffOtherServicesPanel.tsx, detect when a selected job key is no longer assigned to this staff member (reassigned or removed by admin), rendering a clear conflict recovery card in colloquial Hindi ("यह काम अब आपके नाम पर नहीं है") with a 1-tap button to return to the active job list. Add manual refresh buttons with spin indicators on both DCMS route and bookings headers.
+   - **Files:** artifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx, artifacts/cwp-platform/src/features/daily-cleaning/pages/StaffDailyRouteSimplified.tsx.
+
+3. **Task P7-3: Tenant Scope Staff Scoping with assignedStaffId in rowInScope & Backend Ownership Guard (STAFF-053)**
+   - **Scope:** In tenantScope.ts, support assignedStaffId in rowInScope so staff role cannot access or mutate bookings or assignments assigned to a different staff member. Add explicit technician ownership checks on POST /bookings/:id/transition, /confirm, /reschedule, /cancel.
+   - **Files:** artifacts/api-server/src/middlewares/tenantScope.ts, artifacts/api-server/src/routes/bookings.ts, artifacts/api-server/src/__tests__/operations/booking-execution-consistency.test.ts.
+
+4. **Task P7-4: Colloquial Hindi Reassignment & Removal Error Formatting (STAFF-054)**
+   - **Scope:** In staffLanguage.ts, extend formatStaffOperationalError with patterns for wrong technician ("काम दूसरे साथी को सौंपा गया है"), removed assignment ("काम हटा दिया गया है"), and cancelled executions ("काम रद्द हो चुका है"). In useStaffJobsData.ts, call invalidateJobs() on mutation errors to force synchronization with server reality.
+   - **Files:** artifacts/cwp-platform/src/lib/staffLanguage.ts, artifacts/cwp-platform/src/hooks/useStaffJobsData.ts, artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts.

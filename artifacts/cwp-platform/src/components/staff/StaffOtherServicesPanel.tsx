@@ -7,7 +7,8 @@ import { StaffJobListItem } from "@/components/staff/StaffJobListItem";
 import { StaffServiceJobFlow } from "@/components/staff/StaffServiceJobFlow";
 import { StaffWalkInPanel } from "@/components/staff/StaffWalkInPanel";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, ChevronDown, ChevronLeft, UserPlus } from "lucide-react";
+import { Calendar, ChevronDown, ChevronLeft, UserPlus, RotateCcw, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { staffJobKey, pickActiveJob, type StaffJob } from "@/lib/staff-jobs";
 import { cn } from "@/lib/utils";
 import {
@@ -222,6 +223,58 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
     isActionPending: jobs.isActionPending,
   };
 
+  const isJobNotFoundOrReassigned = Boolean(
+    selectedJobKey &&
+    !jobs.loadingToday &&
+    !jobs.loadingAll &&
+    !jobs.today.some(j => staffJobKey(j) === selectedJobKey) &&
+    !jobs.all.some(j => staffJobKey(j) === selectedJobKey)
+  );
+
+  if (isJobNotFoundOrReassigned) {
+    return (
+      <div className="space-y-4" data-testid="job-reassigned-conflict-card">
+        <button
+          type="button"
+          onClick={() => {
+            setUserDismissedSelection(true);
+            setSelectedJob(null);
+            onSelectJob(null);
+          }}
+          className="staff-tap inline-flex items-center gap-1 text-sm font-semibold text-primary h-10"
+        >
+          <ChevronLeft size={16} aria-hidden /> {isHindi ? "वापस लिस्ट पर जाएं" : "Back to jobs"}
+        </button>
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-center space-y-3">
+          <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
+            <AlertTriangle size={24} />
+          </div>
+          <h3 className="font-bold text-base text-foreground">
+            {isHindi ? "यह काम अब आपके नाम पर नहीं है" : "Job No Longer Assigned"}
+          </h3>
+          <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
+            {isHindi
+              ? "यह काम एडमिन द्वारा किसी अन्य साथी को सौंपा गया है या रद्द कर दिया गया है। आपकी लिस्ट अपडेट कर दी गई है।"
+              : "This job has been reassigned to another technician or removed by admin. Your list is up to date."}
+          </p>
+          <div className="pt-2">
+            <Button
+              className="h-11 font-semibold rounded-xl bg-primary text-primary-foreground"
+              onClick={() => {
+                setUserDismissedSelection(true);
+                setSelectedJob(null);
+                onSelectJob(null);
+                void jobs.refetchToday();
+              }}
+            >
+              {isHindi ? "मेरी आज की लिस्ट देखें" : "View My Jobs"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (selectedJob) {
     return (
       <div className="space-y-4">
@@ -303,6 +356,22 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
           />
         </CollapsibleContent>
       </Collapsible>
+
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {isHindi ? `आज के काम (${jobs.today.length})` : `Today's Jobs (${jobs.today.length})`}
+        </span>
+        <button
+          type="button"
+          onClick={() => void jobs.refetchToday()}
+          disabled={jobs.loadingToday}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 staff-tap py-1.5 px-2.5 rounded-lg border border-border bg-card shadow-xs"
+          data-testid="staff-refresh-jobs-btn"
+        >
+          <RotateCcw size={13} className={cn(jobs.loadingToday && "animate-spin")} />
+          <span>{jobs.loadingToday ? (isHindi ? "अपडेट हो रहा है…" : "Updating…") : (isHindi ? "रीफ्रेश" : "Refresh")}</span>
+        </button>
+      </div>
 
       {jobs.errorToday ? (
         <StaffErrorState onRetry={() => jobs.refetchToday()} />

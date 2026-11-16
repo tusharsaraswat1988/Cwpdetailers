@@ -5,6 +5,7 @@ import { staffJobKey, type StaffJob } from "@/lib/staff-jobs";
 
 export type StaffJobAlert = {
   id: number;
+  jobKey: string;
   customerName?: string;
   serviceName?: string | null;
   scheduledTime?: string | null;
@@ -114,8 +115,16 @@ export function useStaffJobAlerts(todayJobs: StaffJob[], enabled: boolean) {
 
     // Single unified alert banner to prevent conflicting double-color UI
     const first = newJobs[0]!;
+    const key = staffJobKey(first);
+
+    // If the staff member is already on this job's detail screen, avoid redundant alert overlay
+    if (typeof window !== "undefined" && window.location.search.includes(key)) {
+      return;
+    }
+
     setLatestAlert({
       id: first.id,
+      jobKey: key,
       customerName: first.customerName,
       serviceName: first.serviceName ?? first.serviceType,
       scheduledTime: first.scheduledTime,

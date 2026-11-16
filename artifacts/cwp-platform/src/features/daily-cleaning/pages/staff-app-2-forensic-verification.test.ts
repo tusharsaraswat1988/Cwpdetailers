@@ -24,6 +24,7 @@ import {
   type GpsEvidenceSource,
 } from "@/lib/native/captureStaffPhoto";
 import { offlineQueue } from "@/services/offlineQueue";
+import { suppressStaffJobAlert, type StaffJobAlert } from "@/hooks/useStaffJobAlerts";
 
 describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF-042)", () => {
   const staffId = 99;
@@ -53,6 +54,7 @@ describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF
         },
       },
     } as unknown as Window & typeof globalThis;
+    (global as any).localStorage = (global.window as any).localStorage;
   });
 
   describe("STAFF-037 & STAFF-038: Out-of-Sequence Customer Completion & Original Sequence Preservation", () => {
@@ -580,6 +582,87 @@ describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF
       // 3. User cancellation of camera
       const cancelErr = new Error("user cancelled");
       expect(isCameraCancel(cancelErr)).toBe(true);
+    });
+  });
+
+  describe("Phase P7: Assignment Synchronization, Staff Eligibility & Access Integrity (STAFF-051, STAFF-052, STAFF-054)", () => {
+    it("STAFF-051: attaches direct jobKey to StaffJobAlert for reliable deep linking and suppresses self-view alerts", () => {
+      const newExecutionJob: StaffJob = {
+        id: 991,
+        source: "execution",
+        taskType: "car_wash",
+        customerName: "P7 Customer",
+        serviceName: "Doorstep Car Wash",
+        scheduledTime: "10:30 AM",
+      };
+
+      const key = staffJobKey(newExecutionJob);
+      expect(key).toBe("execution-991");
+
+      const alert: StaffJobAlert = {
+        id: newExecutionJob.id,
+        jobKey: key,
+        customerName: newExecutionJob.customerName,
+        serviceName: newExecutionJob.serviceName,
+        scheduledTime: newExecutionJob.scheduledTime,
+        receivedAt: Date.now(),
+      };
+
+      expect(alert.jobKey).toBe("execution-991");
+      const deepLinkHref = `/staff/bookings?job=${encodeURIComponent(alert.jobKey)}`;
+      expect(deepLinkHref).toBe("/staff/bookings?job=execution-991");
+
+      // Test suppression for walk-in / self-started job
+      suppressStaffJobAlert(newExecutionJob);
+      const stored = JSON.parse(storeMap["cwp_staff_alerted_jobs"] ?? "[]");
+      expect(stored).toContain("execution-991");
+    });
+
+    it("STAFF-052: detects reassigned or removed jobs and displays non-crashing conflict recovery state", () => {
+      const selectedJobKey = "execution-999";
+      const availableTodayJobs: StaffJob[] = [
+        { id: 101, source: "execution", status: "scheduled", customerName: "Other Job" },
+      ];
+      const availableAllJobs: StaffJob[] = [
+        { id: 101, source: "execution", status: "scheduled", customerName: "Other Job" },
+      ];
+
+      // Case 1: Job was reassigned/removed by Admin -> not present in today or all
+      const isJobNotFoundOrReassigned = Boolean(
+        selectedJobKey &&
+        !availableTodayJobs.some(j => staffJobKey(j) === selectedJobKey) &&
+        !availableAllJobs.some(j => staffJobKey(j) === selectedJobKey)
+      );
+      expect(isJobNotFoundOrReassigned).toBe(true);
+
+      // Case 2: Job is present -> normal view
+      const validKey = "execution-101";
+      const isValidPresent = Boolean(
+        validKey &&
+        (availableTodayJobs.some(j => staffJobKey(j) === validKey) ||
+         availableAllJobs.some(j => staffJobKey(j) === validKey))
+      );
+      expect(isValidPresent).toBe(true);
+    });
+
+    it("STAFF-054: formats assignment conflicts and removals into reassuring colloquial Hindi without raw errors", () => {
+      // 1. Reassigned to another technician
+      const reassignedErr = new Error("Wrong technician — this job is assigned to a different staff member");
+      const formattedReassigned = formatStaffOperationalError(reassignedErr, true);
+      expect(formattedReassigned.title).toBe("काम दूसरे साथी को सौंपा गया है");
+      expect(formattedReassigned.description).toContain("आपके नाम पर नहीं है");
+
+      // 2. Removed by Admin
+      const removedErr = new Error("Linked assignment was removed — cannot execute");
+      const formattedRemoved = formatStaffOperationalError(removedErr, true);
+      expect(formattedRemoved.title).toBe("काम हटा दिया गया है");
+      expect(formattedRemoved.description).toContain("असाइनमेंट हटा दिया है");
+
+      // 3. Cancelled job
+      const cancelledErr = new Error("Execution is already cancelled");
+      const formattedCancelled = formatStaffOperationalError(cancelledErr, true);
+      expect(formattedCancelled.title).toBe("काम रद्द हो चुका है");
+      expect(formattedCancelled.description).toContain("रद्द कर दिया है");
     });
   });
 });

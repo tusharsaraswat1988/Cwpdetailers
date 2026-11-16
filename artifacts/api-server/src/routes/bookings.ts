@@ -769,6 +769,18 @@ router.post("/bookings/:id/confirm", async (req, res) => {
     const existing = await getBookingWithScope(req, id);
     if (!existing) return res.status(404).json({ error: "Booking not found" });
 
+    if (req.user?.role === "staff") {
+      const staffId = req.scope?.staffId ?? req.user.staffId;
+      if (staffId == null) {
+        return res.status(403).json({ error: "Staff identity required to transition booking" });
+      }
+      if (existing.assignedStaffId && existing.assignedStaffId !== staffId) {
+        return res.status(403).json({
+          error: "Wrong technician — this booking is assigned to a different staff member",
+        });
+      }
+    }
+
     const { booking } = await bookingCapability.confirmBooking(id, {
       actorId: req.user?.id,
       actorName: req.user?.name,
@@ -819,6 +831,18 @@ router.post("/bookings/:id/transition", async (req, res) => {
     const existing = await getBookingWithScope(req, id);
     if (!existing) return res.status(404).json({ error: "Booking not found" });
 
+    if (req.user?.role === "staff") {
+      const staffId = req.scope?.staffId ?? req.user.staffId;
+      if (staffId == null) {
+        return res.status(403).json({ error: "Staff identity required to transition booking" });
+      }
+      if (existing.assignedStaffId && existing.assignedStaffId !== staffId) {
+        return res.status(403).json({
+          error: "Wrong technician — this booking is assigned to a different staff member",
+        });
+      }
+    }
+
     const next = nextRaw as BookingStatus;
     if (!(BOOKING_TRANSITIONS[existing.status as BookingStatus] ?? []).includes(next)) {
       return res.status(400).json({
@@ -860,6 +884,18 @@ router.post("/bookings/:id/reschedule", async (req, res) => {
 
     const existing = await getBookingWithScope(req, id);
     if (!existing) return res.status(404).json({ error: "Booking not found" });
+
+    if (req.user?.role === "staff") {
+      const staffId = req.scope?.staffId ?? req.user.staffId;
+      if (staffId == null) {
+        return res.status(403).json({ error: "Staff identity required to transition booking" });
+      }
+      if (existing.assignedStaffId && existing.assignedStaffId !== staffId) {
+        return res.status(403).json({
+          error: "Wrong technician — this booking is assigned to a different staff member",
+        });
+      }
+    }
 
     const { booking } = await bookingCapability.rescheduleBooking({
       bookingId: id,
@@ -908,6 +944,18 @@ router.post("/bookings/:id/cancel", async (req, res) => {
     const { reason } = req.body as { reason?: string };
     const existing = await getBookingWithScope(req, id);
     if (!existing) return res.status(404).json({ error: "Booking not found" });
+
+    if (req.user?.role === "staff") {
+      const staffId = req.scope?.staffId ?? req.user.staffId;
+      if (staffId == null) {
+        return res.status(403).json({ error: "Staff identity required to transition booking" });
+      }
+      if (existing.assignedStaffId && existing.assignedStaffId !== staffId) {
+        return res.status(403).json({
+          error: "Wrong technician — this booking is assigned to a different staff member",
+        });
+      }
+    }
 
     const { booking } = await bookingCapability.cancelBooking({
       bookingId: id,

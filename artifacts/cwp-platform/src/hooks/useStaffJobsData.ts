@@ -41,6 +41,7 @@ import {
   SERVICE_EXECUTIONS_QUERY_KEY,
 } from "@/features/service-executions/api";
 import { staffBackgroundLocation } from "@/lib/location/staffBackgroundLocation";
+import { formatStaffOperationalError } from "@/lib/staffLanguage";
 
 function enrichBookingJob(job: StaffJob): StaffJob {
   const proof = job.proofPhotoUrls ?? [];
@@ -175,8 +176,11 @@ export function useStaffJobsData() {
       }
       toast({ title: "Status updated" });
     },
-    onError: (err: Error) =>
-      toast({ title: "Action blocked", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      invalidateJobs();
+      const formatted = formatStaffOperationalError(err, true);
+      toast({ title: formatted.title, description: formatted.description, variant: "destructive" });
+    },
   });
 
   const executionMutation = useMutation({
@@ -230,8 +234,11 @@ export function useStaffJobsData() {
       }
       toast({ title: "Status updated" });
     },
-    onError: (err: Error) =>
-      toast({ title: "Action blocked", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      invalidateJobs();
+      const formatted = formatStaffOperationalError(err, true);
+      toast({ title: formatted.title, description: formatted.description, variant: "destructive" });
+    },
   });
 
   const updateMutation = useUpdateBooking({

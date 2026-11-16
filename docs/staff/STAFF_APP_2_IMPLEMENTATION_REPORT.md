@@ -84,6 +84,25 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 - In `staffLanguage.ts`, implemented `formatStaffOperationalError` providing reassuring everyday Hindi guidance confirming that work is safely saved on the device and detailing actionable next steps.
 - Added 1-tap phone settings deep link (`openNativeAppSettings`) in `GeoPhotoSlotGrid.tsx` and `StaffVehicleCleanDialog.tsx` for permanent camera/location permission denials.
 
+### 2.16 Direct Job Alert Deep-Linking & Self-View Alert Suppression (STAFF-051)
+- Embedded `jobKey` directly onto `StaffJobAlert` in `useStaffJobAlerts.ts` and updated `StaffJobAlertPopup.tsx` so clicking "काम खोलें" deep-links directly to `/staff/bookings?job={jobKey}`.
+- Added active screen check preventing redundant alert overlays when the cleaner is already viewing that exact job screen.
+- Preserved walk-in and self-started alert suppression in persistent local storage.
+
+### 2.17 Assignment Conflict & Reassignment Recovery (STAFF-052)
+- In `StaffOtherServicesPanel.tsx`, added detection for when a selected job key is no longer assigned to the current staff member (e.g. after Admin reassignment or removal).
+- Instead of silently failing or dropping into an unguided empty state, renders a prominent, reassuring conflict recovery card in colloquial Hindi ("यह काम अब आपके नाम पर नहीं है") with a 1-tap return button to the active job list.
+- Added accessible manual refresh buttons with animated spin indicators on both DCMS route and bookings headers.
+
+### 2.18 Tenant Scope Staff Scoping with assignedStaffId in rowInScope & Backend Ownership Guard (STAFF-053)
+- In `tenantScope.ts`, updated `rowInScope` to check `effectiveStaffId = row.staffId ?? row.assignedStaffId`, eliminating cross-staff access bypass on bookings and service assignments.
+- Added explicit technician ownership verification on `POST /bookings/:id/transition`, `/confirm`, `/reschedule`, and `/cancel` routes, blocking unauthorized mutations.
+
+### 2.19 Colloquial Hindi Reassignment & Removal Error Formatting (STAFF-054)
+- In `staffLanguage.ts`, extended `formatStaffOperationalError` to translate "wrong technician", "assignment removed", and "cancelled" errors into reassuring, non-technical everyday Hindi.
+- In `useStaffJobsData.ts`, hooked `formatStaffOperationalError` and called `invalidateJobs()` on mutation errors so client cache immediately synchronizes with server state.
+
+
 
 ---
 
@@ -128,7 +147,7 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 ## 4. Test & Verification Evidence
 
 1. **Staff App 2.0 Forensic Test Suite (`staff-app-2-forensic-verification.test.ts`)**:
-   - Total tests: **22 passed (22)** (100% pass rate in 2.50s)
+   - Total tests: **25 passed (25)** (100% pass rate in 2.50s)
    - Tested:
      - Out-of-order route segregation and original sequence preservation.
      - IST time formatting and chronological completion sequence.

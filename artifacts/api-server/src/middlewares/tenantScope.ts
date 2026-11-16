@@ -144,6 +144,7 @@ export function rowInScope(req: Request, row: {
   franchiseeId?: number | null;
   customerId?: number | null;
   staffId?: number | null;
+  assignedStaffId?: number | null;
   cityId?: number | null;
 }): boolean {
   const s = req.scope;
@@ -159,7 +160,8 @@ export function rowInScope(req: Request, row: {
   if (s.cityId && row.cityId != null && row.cityId !== s.cityId) return false;
   if (s.franchiseeId && row.franchiseeId != null && row.franchiseeId !== s.franchiseeId) return false;
   if (s.customerId && row.customerId != null && row.customerId !== s.customerId) return false;
-  if (s.staffId && row.staffId != null && row.staffId !== s.staffId) return false;
+  const effectiveStaffId = row.staffId ?? row.assignedStaffId;
+  if (s.staffId && effectiveStaffId != null && effectiveStaffId !== s.staffId) return false;
   return true;
 }
 

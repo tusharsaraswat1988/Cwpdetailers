@@ -316,10 +316,14 @@ export function StaffDailyRouteSimplified() {
 
   if (stops.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-muted/30 p-8 text-center space-y-2">
+      <div className="rounded-2xl border border-border bg-muted/30 p-8 text-center space-y-3">
         <Sparkles className="mx-auto h-8 w-8 text-muted-foreground/60" />
         <p className="text-sm font-semibold text-foreground">{t("no_assignments_today")}</p>
         <p className="text-xs text-muted-foreground">{t("no_assignments_desc")}</p>
+        <Button variant="outline" size="sm" className="h-9 gap-1.5 mx-auto" onClick={() => void refetch()}>
+          <RotateCcw size={13} className={cn(isLoading && "animate-spin")} />
+          <span>{isHindi ? "रीफ्रेश करें" : "Refresh"}</span>
+        </Button>
       </div>
     );
   }
@@ -338,9 +342,23 @@ export function StaffDailyRouteSimplified() {
           <span className="font-semibold text-foreground">
             {walkInMode ? "Walk-in Job" : t("progress_title")}
           </span>
-          <span className="font-bold text-foreground">
-            {stats.completed} / {stats.total} {t("progress_summary")} ({progressPercent}%)
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-foreground">
+              {stats.completed} / {stats.total} {t("progress_summary")} ({progressPercent}%)
+            </span>
+            {!walkInMode && (
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="p-1 rounded-md hover:bg-muted text-primary staff-tap inline-flex items-center gap-1"
+                aria-label="Refresh route"
+                title={isHindi ? "रीफ्रेश करें" : "Refresh"}
+                data-testid="dcms-refresh-route-btn"
+              >
+                <RotateCcw size={13} className={cn(isLoading && "animate-spin")} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* PROGRESS BAR */}
