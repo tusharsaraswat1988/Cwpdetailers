@@ -19,15 +19,19 @@ import {
   Check,
   ShieldCheck,
   AlertCircle,
+  MapPin,
 } from "lucide-react";
-import { captureStaffPhoto, isCameraCancel, type StaffCapturedPhoto } from "@/lib/native/captureStaffPhoto";
-import { getStaffLocation } from "@/lib/location";
+import {
+  captureStaffPhotoWithGps,
+  isCameraCancel,
+  type CapturedStaffPhoto,
+} from "@/lib/native/captureStaffPhoto";
 import { isOfflineQueued, queuedSavedMessage } from "@/services/queuedResult";
 import { visitUploadErrorMessage } from "../lib/visitUploadError";
 import { recognizePlateFromImage, normalizeRegistration } from "../lib/plateOcr";
 import { useCompleteVisit } from "../api";
 import type { VehicleReferencePhotoSet } from "@/components/shared/VehicleReferencePhotos";
-import { PlateVerifyCard } from "./PlateVerifyCard";
+import { useStaffLanguage } from "@/lib/staffLanguage";
 
 export type CleanDialogStop = {
   subscriptionId: number;
@@ -52,19 +56,12 @@ type Props = {
 };
 
 type Step =
-  | "ready"           // Initial prompt: clean vehicle, then scan plate
-  | "processing"      // Running OCR on captured photo
-  | "verified"        // Plate confirmed & photo ready for proof
-  | "mismatch"        // Wrong vehicle detected
+  | "ready"           // Initial prompt: take photo near car
+  | "processing"      // Verifying plate & location
+  | "verified"        // Confirmed & ready to submit proof
+  | "mismatch"        // Wrong vehicle photo detected
   | "manual_fallback" // Plate unreadable, enter number with assigned match verification
   | "submitting";     // Sending to server
-
-const EMPTY_PHOTOS: VehicleReferencePhotoSet = {
-  front: null,
-  rear: null,
-  left: null,
-  right: null,
-};
 
 export function StaffVehicleCleanDialog({
   open,
@@ -75,10 +72,17 @@ export function StaffVehicleCleanDialog({
   onSuccess,
 }: Props) {
   const { toast } = useToast();
+  const { t } = useStaffLanguage();
   const completeVisit = useCompleteVisit();
 
   const [step, setStep] = useState<Step>("ready");
-  const [photo, setPhoto] = useState<StaffCapturedPhoto | null>(null);
+  const [photo, setPhoto] = useState<CapturedStaffPhoto | null>(null);
+  const [capturedLocation, setCapturedLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  } | null>(null);
+
   const [ocrRaw, setOcrRaw] = useState("");
   const [ocrConfidence, setOcrConfidence] = useState(0);
   const [detectedReg, setDetectedReg] = useState("");
@@ -90,6 +94,7 @@ export function StaffVehicleCleanDialog({
     if (!open) {
       setStep("ready");
       setPhoto(null);
+      setCapturedLocation(null);
       setOcrRaw("");
       setOcrConfidence(0);
       setDetectedReg("");
@@ -107,15 +112,18 @@ export function StaffVehicleCleanDialog({
     try {
       setSubmitError(null);
       setManualError(null);
-      const captured = await captureStaffPhoto("rear");
+
+      // Phase 4: Capture photo and lock device location at the EXACT moment of capture
+      const captured = await captureStaffPhotoWithGps("rear");
       setPhoto(captured);
+      setCapturedLocation(captured.location);
       setStep("processing");
 
       let ocrResult;
       try {
         ocrResult = await recognizePlateFromImage(captured.file);
       } catch (ocrErr) {
-        console.warn("OCR client error:", ocrErr);
+        console.warn("OCR recognition error:", ocrErr);
         ocrResult = {
           rawText: "",
           confidence: 0,
@@ -134,7 +142,7 @@ export function StaffVehicleCleanDialog({
       setOcrConfidence(conf);
       setDetectedReg(detected);
 
-      // Clean alphanumeric comparison
+      // Alphanumeric comparison against assigned vehicle
       const cleanExpected = expectedRegNorm.replace(/[^A-Z0-9]/g, "");
       const cleanDetected = detected.replace(/[^A-Z0-9]/g, "");
 
@@ -146,10 +154,8 @@ export function StaffVehicleCleanDialog({
       if (isExact || (isSubMatch && conf >= 50)) {
         setStep("verified");
       } else if (cleanDetected.length >= 4) {
-        // Detected a completely different plate number
         setStep("mismatch");
       } else {
-        // Plate could not be parsed clearly
         setStep("manual_fallback");
       }
     } catch (err) {
@@ -157,9 +163,10 @@ export function StaffVehicleCleanDialog({
         setStep("ready");
         return;
       }
+      const msg = err instanceof Error ? err.message : t("photo_failed_retry");
       toast({
-        title: "Camera error",
-        description: (err as Error).message,
+        title: t("loc_not_found_retry"),
+        description: msg,
         variant: "destructive",
       });
       setStep("ready");
@@ -172,10 +179,12 @@ export function StaffVehicleCleanDialog({
     const cleanEntered = entered.replace(/[^A-Z0-9]/g, "");
     const cleanExpected = expectedRegNorm.replace(/[^A-Z0-9]/g, "");
 
-    if (cleanEntered !== cleanExpected) {
-      setManualError(
-        `Yeh number assigned car se match nahi karta. Expected: ${stop.vehicleNumber}`,
-      );
+    // Allow full match or last 4 digits match
+    const isFullMatch = cleanEntered === cleanExpected;
+    const isTailMatch = cleanEntered.length >= 4 && cleanExpected.endsWith(cleanEntered);
+
+    if (!isFullMatch && !isTailMatch) {
+      setManualError(t("manual_plate_match_error"));
       return;
     }
 
@@ -183,12 +192,12 @@ export function StaffVehicleCleanDialog({
   };
 
   const handleSubmitCompletion = async () => {
-    if (!photo) return;
+    if (!photo || !capturedLocation) return;
     try {
       setStep("submitting");
       setSubmitError(null);
 
-      const gps = await getStaffLocation("action");
+      // Send locked capture-time GPS coordinates directly to server
       const result = await completeVisit.mutateAsync({
         subscriptionId: stop.subscriptionId,
         visitType,
@@ -196,16 +205,18 @@ export function StaffVehicleCleanDialog({
         exif: photo.exif,
         capturedAt: photo.capturedAt,
         walkIn: walkInMode,
-        ...gps,
+        latitude: capturedLocation.latitude,
+        longitude: capturedLocation.longitude,
+        accuracy: capturedLocation.accuracy,
         ocrText: ocrRaw || "MANUAL_VERIFIED",
         ocrConfidence: ocrConfidence || null,
         confirmedRegistration: stop.vehicleNumber,
       });
 
       if (isOfflineQueued(result)) {
-        toast({ title: "Visit saved on phone", description: queuedSavedMessage("visit") });
+        toast({ title: t("photo_uploading"), description: queuedSavedMessage("visit") });
       } else {
-        toast({ title: "Ho gaya!", description: `${stop.vehicleNumber} — cleaning complete` });
+        toast({ title: t("photo_success"), description: `${stop.vehicleNumber} — ${t("cleaning_complete")}` });
       }
 
       onSuccess();
@@ -214,7 +225,7 @@ export function StaffVehicleCleanDialog({
       setStep("verified");
       const msg = visitUploadErrorMessage(err);
       setSubmitError(msg);
-      toast({ title: "Upload failed", description: msg, variant: "destructive" });
+      toast({ title: t("photo_failed_retry"), description: msg, variant: "destructive" });
     }
   };
 
@@ -223,10 +234,10 @@ export function StaffVehicleCleanDialog({
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4">
         <DialogHeader className="text-left space-y-1">
           <div className="flex items-center justify-between gap-2">
-            <DialogTitle className="text-xl font-bold font-display tracking-tight">
+            <DialogTitle className="text-2xl font-bold font-display tracking-tight text-foreground">
               {stop.vehicleNumber}
             </DialogTitle>
-            <Badge variant="outline" className="font-mono text-xs">
+            <Badge variant="outline" className="font-mono text-xs px-2.5 py-1">
               {stop.vehicleMake} {stop.vehicleModel}
             </Badge>
           </div>
@@ -238,201 +249,164 @@ export function StaffVehicleCleanDialog({
         {submitError && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <div className="flex-1">{submitError}</div>
+            <div className="flex-1 font-medium">{submitError}</div>
           </div>
         )}
 
         {/* STEP 1: Ready to start */}
         {step === "ready" && (
           <div className="space-y-4 py-2">
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2 text-sm">
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-2 text-sm">
               <p className="font-semibold text-foreground flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-primary" /> Guided Daily Clean Workflow
+                <ShieldCheck className="h-4 w-4 text-primary" /> {t("photo_take_near_car")}
               </p>
-              <ol className="list-decimal list-inside text-xs space-y-1 text-muted-foreground">
-                <li>Gaadi clean karein</li>
-                <li>Cleaned gaadi ki number plate scan karein</li>
-                <li>App plate match verify karega aur proof photo upload karega</li>
-              </ol>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                सफाई पूरी करने के बाद गाड़ी की नंबर प्लेट और रियर व्यू की फोटो लें। लोकेशन और प्लेट अपने आप वेरिफाई हो जाएंगे।
+              </p>
             </div>
 
             <Button
               className="w-full h-12 text-base font-semibold"
               onClick={() => void handleCaptureAndScan()}
+              data-testid="dialog-capture-plate-btn"
             >
               <Camera className="mr-2 h-5 w-5" />
-              Plate scan karein & photo lein
+              {t("photo_take_near_car")}
             </Button>
           </div>
         )}
 
-        {/* PROCESSING: OCR in progress */}
+        {/* STEP 2: Processing OCR & Location */}
         {step === "processing" && (
-          <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm font-medium">Number plate scan aur verify ho rahi hai…</p>
+          <div className="py-8 text-center space-y-3">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm font-semibold text-foreground">{t("photo_scanning_plate")}</p>
+            <p className="text-xs text-muted-foreground">{t("loc_searching")}</p>
           </div>
         )}
 
-        {/* MISMATCH: Detected wrong vehicle */}
-        {step === "mismatch" && (
-          <div className="space-y-4 py-2">
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 space-y-2 text-xs text-destructive">
-              <p className="font-bold text-sm flex items-center gap-1.5">
-                <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
-                Galat gaadi detect hui!
-              </p>
-              <p>
-                Scan kiya gaya number: <strong className="font-mono">{detectedReg || "UNKNOWN"}</strong>
-              </p>
-              <p>
-                Assigned gaadi: <strong className="font-mono">{stop.vehicleNumber}</strong> ({stop.vehicleMake} {stop.vehicleModel})
-              </p>
-              <p className="text-foreground/80 mt-1">
-                Kripya sahi assigned gaadi clean karein aur uski plate scan karein.
-              </p>
-            </div>
-
-            {photo && (
-              <div className="relative rounded-xl overflow-hidden border max-h-48">
-                <img src={photo.dataUrl} alt="Scanned car" className="w-full object-cover" />
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Button
-                className="w-full h-11"
-                onClick={() => void handleCaptureAndScan()}
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Sahi gaadi dobara scan karein
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full text-xs text-muted-foreground"
-                onClick={() => {
-                  setManualInput("");
-                  setManualError(null);
-                  setStep("manual_fallback");
-                }}
-              >
-                Plate saaf nahi aayi? Manual confirm karein
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* MANUAL FALLBACK: Plate unreadable */}
-        {step === "manual_fallback" && (
-          <div className="space-y-4 py-2">
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-1 text-xs text-amber-900">
-              <p className="font-bold flex items-center gap-1">
-                <AlertCircle className="h-4 w-4 text-amber-700" />
-                Number plate padh nahi paye
-              </p>
-              <p>
-                Agar plate par dhool ya reflection thi, gaadi ka number confirm karein:
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase text-muted-foreground">
-                Vehicle registration number
-              </label>
-              <Input
-                placeholder="e.g. UP65AB1234"
-                value={manualInput}
-                onChange={e => {
-                  setManualInput(e.target.value.toUpperCase());
-                  setManualError(null);
-                }}
-                className="font-mono text-lg tracking-wider h-11"
-                autoFocus
-              />
-              {manualError && (
-                <p className="text-xs text-destructive font-medium">{manualError}</p>
-              )}
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => void handleCaptureAndScan()}
-              >
-                <RotateCcw className="mr-1.5 h-4 w-4" /> Dobara photo lein
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={handleConfirmManualRegistration}
-                disabled={!manualInput.trim()}
-              >
-                <Check className="mr-1.5 h-4 w-4" /> Confirm karein
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* VERIFIED: Plate confirmed, ready to submit proof */}
+        {/* STEP 3: Verified plate match */}
         {step === "verified" && (
-          <div className="space-y-4 py-1">
-            <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-3 flex items-center justify-between gap-2 text-green-900">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-                <div>
-                  <p className="text-xs font-semibold">Plate Verified</p>
-                  <p className="font-mono text-sm font-bold">{stop.vehicleNumber}</p>
+          <div className="space-y-4">
+            {photo?.dataUrl && (
+              <div className="relative rounded-2xl overflow-hidden border border-border aspect-[4/3] bg-muted">
+                <img
+                  src={photo.dataUrl}
+                  alt="Vehicle proof"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-2 left-2 bg-emerald-600/90 text-white text-xs px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1">
+                  <CheckCircle2 size={13} />
+                  {t("plate_match_success")}
                 </div>
-              </div>
-              {ocrConfidence > 0 && (
-                <Badge variant="outline" className="border-green-600 text-green-800 text-[10px]">
-                  {Math.round(ocrConfidence)}% OCR match
-                </Badge>
-              )}
-            </div>
-
-            {photo && (
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium text-muted-foreground">Cleaning Proof Photo:</p>
-                <div className="relative rounded-xl overflow-hidden border max-h-48 bg-muted">
-                  <img src={photo.dataUrl} alt="Cleaned vehicle proof" className="w-full object-cover" />
-                </div>
+                {capturedLocation && (
+                  <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[11px] px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <MapPin size={11} className="text-emerald-400" />
+                    <span>GPS Lock ±{Math.round(capturedLocation.accuracy ?? 10)}m</span>
+                  </div>
+                )}
               </div>
             )}
 
-            <div className="space-y-2 pt-1">
-              <Button
-                className="w-full h-12 text-base font-semibold"
-                onClick={() => void handleSubmitCompletion()}
-                disabled={completeVisit.isPending}
-              >
-                {completeVisit.isPending ? (
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="mr-2 h-5 w-5" />
-                )}
-                Kaam complete karein
-              </Button>
-
+            <div className="flex gap-2">
               <Button
                 variant="outline"
-                size="sm"
-                className="w-full text-xs"
+                className="flex-1 h-12 text-xs font-semibold"
                 onClick={() => void handleCaptureAndScan()}
-                disabled={completeVisit.isPending}
               >
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Photo dobara lein
+                {t("retry")}
+              </Button>
+              <Button
+                className="flex-[2] h-12 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => void handleSubmitCompletion()}
+                data-testid="dialog-submit-verified-btn"
+              >
+                <Check className="mr-1.5 h-4 w-4" />
+                {t("complete_cleaning_action")}
               </Button>
             </div>
           </div>
         )}
 
-        {/* SUBMITTING */}
+        {/* STEP 4: Mismatch detected */}
+        {step === "mismatch" && (
+          <div className="space-y-4 py-2">
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 space-y-2 text-center">
+              <AlertTriangle className="mx-auto h-7 w-7 text-destructive" />
+              <p className="text-sm font-bold text-destructive">
+                {t("plate_mismatch_warning")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Assigned: <span className="font-bold text-foreground">{stop.vehicleNumber}</span>
+              </p>
+            </div>
+
+            <Button
+              className="w-full h-12 text-sm font-semibold"
+              onClick={() => void handleCaptureAndScan()}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              {t("photo_take_near_car")}
+            </Button>
+          </div>
+        )}
+
+        {/* STEP 5: Manual Plate Input Fallback */}
+        {step === "manual_fallback" && (
+          <div className="space-y-4 py-2">
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 space-y-1.5">
+              <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                {t("manual_plate_prompt")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                गाड़ी: <span className="font-bold text-foreground">{stop.vehicleNumber}</span>
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Input
+                placeholder="गाड़ी नंबर लिखें (जैसे 1234)"
+                value={manualInput}
+                onChange={e => {
+                  setManualInput(e.target.value);
+                  setManualError(null);
+                }}
+                className="h-12 text-base font-bold text-center tracking-wider uppercase rounded-xl"
+                autoFocus
+                data-testid="manual-plate-input"
+              />
+              {manualError && (
+                <p className="text-xs text-destructive font-medium text-center">{manualError}</p>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 h-12 text-xs font-semibold"
+                onClick={() => void handleCaptureAndScan()}
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                {t("retry")}
+              </Button>
+              <Button
+                className="flex-1 h-12 text-sm font-semibold"
+                onClick={handleConfirmManualRegistration}
+                data-testid="dialog-confirm-manual-plate-btn"
+              >
+                {t("confirm_plate_btn")}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 6: Submitting */}
         {step === "submitting" && (
-          <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm font-medium">Server par visit upload ho rahi hai…</p>
+          <div className="py-8 text-center space-y-3">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm font-semibold text-foreground">{t("photo_uploading")}</p>
+            <p className="text-xs text-muted-foreground">{t("loading")}</p>
           </div>
         )}
       </DialogContent>

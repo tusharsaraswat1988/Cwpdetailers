@@ -26,8 +26,19 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Star, Calendar, Trophy, LogOut, ChevronDown, ChevronUp, Loader2, Camera } from "lucide-react";
-import { todayIso } from "@/lib/staff-jobs";
+import {
+  CheckCircle,
+  Star,
+  Calendar,
+  Trophy,
+  LogOut,
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  IndianRupee,
+  ChevronRight,
+  Check,
+} from "lucide-react";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 import { markAttendanceWithLocation } from "@/lib/location";
 import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
@@ -43,10 +54,11 @@ import {
   StaffButton,
   StaffSkeleton,
   StaffProfileCard,
-  StaffAttendanceCard,
   StaffMetric,
   StaffStatusBadge,
 } from "@/features/staff-ds";
+import { useStaffLanguage } from "@/lib/staffLanguage";
+import { Link } from "wouter";
 
 function initials(name?: string | null) {
   if (!name) return "?";
@@ -55,6 +67,7 @@ function initials(name?: string | null) {
 
 export default function StaffProfile() {
   const { user, logout } = useAuth();
+  const { lang, setLang, t, isHindi } = useStaffLanguage();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { staffId, isLoading: scopeLoading, missingStaffLink } = useAccountScope();
@@ -100,162 +113,124 @@ export default function StaffProfile() {
     { query: { queryKey: getGetStaffLeaderboardQueryKey({ month }) } },
   );
 
-  const markMutation = useMutation({
-    mutationFn: (payload: {
-      date: string;
-      status: string;
-      checkInTime?: string;
-      imageBase64: string;
-      exif?: Record<string, unknown> | null;
-      capturedAt?: string;
-    }) => markAttendanceWithLocation(staffId!, payload),
-    onSuccess: (data) => {
-      if (staffId != null) {
-        qc.invalidateQueries({ queryKey: getGetStaffAttendanceQueryKey(staffId) });
-      }
-      if (isOfflineQueued(data)) {
-        toast({
-          title: "Check-in saved on phone",
-          description: queuedSavedMessage("punch"),
-        });
-        return;
-      }
-      toast({ title: "Attendance marked", description: "Selfie and GPS recorded for shift check-in" });
-    },
-  });
-
-  const roleLabel = myContext?.staffCategory === "supervisor" ? "Supervisor" : "Cleaning Staff";
-  const todayStr = todayIso();
-  const todayRecord = (attendance ?? []).find(a => a.date === todayStr);
-  const todayMarked = Boolean(todayRecord);
-  const presentDays = (attendance ?? []).filter(a => a.status === "present").length;
-  const myRank = staffId != null ? (leaderboard ?? []).findIndex(s => s.staffId === staffId) + 1 : 0;
-  const isSupervisor = myContext?.staffCategory === "supervisor";
-  const isDailyCleanOnly = isDailyCleanOnlyStaff((profile?.roles ?? []).map(r => r.roleSlug));
-  const showShiftAttendance = Boolean(profile) && !isSupervisor && !isDailyCleanOnly;
-
-  async function handleAttendanceCheckIn() {
-    try {
-      const photo = await captureStaffPhoto("front");
-      await markMutation.mutateAsync({
-        date: todayStr,
-        status: "present",
-        checkInTime: new Date().toTimeString().slice(0, 5),
-        imageBase64: photo.dataUrl,
-        exif: photo.exif,
-        capturedAt: photo.capturedAt,
-      });
-    } catch (err) {
-      if (isCameraCancel(err)) return;
-      toast({
-        title: "Check-in failed",
-        description: err instanceof Error ? err.message : "Selfie capture failed",
-        variant: "destructive",
-      });
-    }
-  }
+  const todayIsoDate = new Date().toISOString().split("T")[0];
 
   if (scopeLoading || missingStaffLink || staffId == null) {
     return (
-      <StaffAccountGate scopeLoading={scopeLoading} missingStaffLink={missingStaffLink} staffId={staffId}>
+      <StaffAccountGate
+        scopeLoading={scopeLoading}
+        missingStaffLink={missingStaffLink}
+        staffId={staffId}
+      >
         {null}
       </StaffAccountGate>
     );
   }
 
-  const avatarUrl = profile?.profilePhotoUrl ? resolveMediaUrl(profile.profilePhotoUrl) : null;
+  const isSupervisor = myContext?.staffCategory === "supervisor";
+  const myRoles = profile?.operationalRoles ?? [];
+  const dailyCleanOnly = isDailyCleanOnlyStaff(myRoles);
+  const showShiftAttendance = isSupervisor || dailyCleanOnly;
+
+  const presentDays = (attendance ?? []).filter(
+    (a: { status?: string }) =>
+      a.status === "present" ||
+      a.status === "half_day" ||
+      a.status === "late" ||
+      a.status === "checked_in",
+  ).length;
+
+  const myRank =
+    (leaderboard ?? []).findIndex(
+      (entry: { staffId: number }) => entry.staffId === staffId,
+    ) + 1;
 
   return (
-    <StaffPage className="pb-4 space-y-4">
-      {loadingProfile ? (
-        <StaffSkeleton className="h-24 w-full" />
-      ) : null}
-
-      {/* Profile Overview Header Card */}
+    <StaffPage className="space-y-4 pb-20">
+      {/* Profile Header Card */}
       <StaffProfileCard
-        name={user?.name ?? "Staff"}
-        role={roleLabel}
-        avatarUrl={avatarUrl}
-        avatarFallback={initials(user?.name)}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {profile && <StaffVerificationBadge status={profile.verificationStatus} />}
-          {profile?.employeeCode ? (
-            <p className="text-xs text-muted-foreground">{profile.employeeCode}</p>
-          ) : null}
-          {user?.phone ? <p className="text-xs text-muted-foreground">{user.phone}</p> : null}
+        name={user?.name ?? profile?.name ?? "Staff"}
+        phone={user?.phone ?? profile?.phone ?? ""}
+        avatarUrl={resolveMediaUrl(profile?.avatarUrl)}
+        initials={initials(user?.name ?? profile?.name)}
+        category={myContext?.staffCategory ?? "cleaning_staff"}
+        cityName={myContext?.cityName}
+        branchName={myContext?.branchName}
+        verificationStatus={profile?.verificationStatus}
+      />
+
+      {/* Language Selector Card (Phase 5) */}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-3 staff-elevated" data-testid="profile-language-card">
+        <div className="flex items-center gap-2">
+          <Globe size={16} className="text-primary" />
+          <h2 className="text-sm font-bold text-foreground font-display">{t("language_toggle")}</h2>
         </div>
-      </StaffProfileCard>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setLang("hi")}
+            className={`h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
+              lang === "hi"
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "bg-muted/40 border-border text-foreground hover:bg-muted"
+            }`}
+            data-testid="language-select-hindi"
+          >
+            {lang === "hi" && <Check size={14} />}
+            <span>हिन्दी (Hindi)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setLang("en")}
+            className={`h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
+              lang === "en"
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "bg-muted/40 border-border text-foreground hover:bg-muted"
+            }`}
+            data-testid="language-select-english"
+          >
+            {lang === "en" && <Check size={14} />}
+            <span>English</span>
+          </button>
+        </div>
+      </div>
 
-      {/* Operational Roles */}
-      {profile && !isSupervisor && profile.roles?.length > 0 && (
-        <StaffOperationalRoles roles={profile.roles} />
-      )}
+      {/* Earnings & Payouts Card Link */}
+      <Link href="/staff/earnings" className="block">
+        <div className="rounded-2xl border border-border bg-card p-4 flex items-center justify-between gap-3 hover:border-primary/40 transition-all staff-elevated">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+              <IndianRupee size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">{t("earnings_payouts")}</p>
+              <p className="text-xs text-muted-foreground">
+                {isHindi ? "मासिक वेतन और वाश इंसेंटिव देखें" : "View compensation & monthly payouts"}
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={18} className="text-muted-foreground shrink-0" />
+        </div>
+      </Link>
 
-      {/* Supervisor Contact (only if assigned) */}
-      {myContext?.staffCategory === "cleaning_staff" && myContext.reportingManager && (
+      {/* Supervisor Contact Card */}
+      {myContext?.supervisor && (
         <SupervisorContactCard
-          supervisor={myContext.reportingManager}
-          compact
-          whatsAppMessage={`Hi ${myContext.reportingManager.name ?? "Supervisor"}, I need help with a field issue.`}
-        />
-      )}
-
-      {/* Team Section (Supervisors only) */}
-      <StaffTeamSection />
-
-      {/* Attendance Check-in Card (No selfie display to staff once logged) */}
-      {showShiftAttendance && (
-        <StaffAttendanceCard
-          status={
-            markMutation.isPending
-              ? "checking_in"
-              : markMutation.isError
-                ? "failed"
-                : todayMarked
-                  ? (todayRecord?.status ?? "present")
-                  : "not_checked_in"
-          }
-          dateLabel="Today's attendance"
-          selfieUrl={null}
-          checkInLabel={
-            todayMarked
-              ? `Marked${todayRecord?.checkInTime ? ` at ${todayRecord.checkInTime}` : ""}`
-              : markMutation.isError
-                ? "Check-in failed. Please try again with selfie + GPS."
-                : markMutation.isPending
-                  ? "Capturing selfie and verifying location…"
-                  : "Selfie + GPS check-in required before field work"
-          }
-          action={
-            todayMarked ? undefined : (
-              <StaffButton
-                className="w-full sm:w-auto px-4"
-                disabled={markMutation.isPending}
-                data-testid="btn-mark-present"
-                onClick={() => void handleAttendanceCheckIn()}
-              >
-                {markMutation.isPending ? (
-                  <Loader2 size={16} className="mr-2 animate-spin shrink-0" />
-                ) : (
-                  <Camera size={16} className="mr-2 shrink-0" />
-                )}
-                {markMutation.isPending
-                  ? "Selfie + GPS…"
-                  : markMutation.isError
-                    ? "Retry Check-in"
-                    : "Check in"}
-              </StaffButton>
-            )
+          supervisor={myContext.supervisor}
+          title={isSupervisor ? "Lead Supervisor" : "Supervisor"}
+          subtitle={
+            myContext.branchName
+              ? `${myContext.branchName} · Operations`
+              : "Operations Supervisor"
           }
         />
       )}
 
-      {/* Key Field Performance Metrics */}
+      {/* Performance Summary Metrics */}
       {!isSupervisor && (
         <div className="grid grid-cols-2 gap-3" data-testid="profile-stats">
           <StaffMetric
-            label="Jobs this month"
+            label={isHindi ? "इस महीने के काम" : "Jobs this month"}
             value={
               loadingPerf
                 ? "…"
@@ -266,7 +241,7 @@ export default function StaffProfile() {
             className="text-left"
           />
           <StaffMetric
-            label="Rating"
+            label={isHindi ? "रेटिंग" : "Rating"}
             value={
               loadingPerf
                 ? "…"
@@ -281,7 +256,7 @@ export default function StaffProfile() {
           />
           {showShiftAttendance && (
             <StaffMetric
-              label="Present days"
+              label={isHindi ? "उपस्थिति दिन" : "Present days"}
               value={presentDays}
               icon={<CheckCircle size={13} className="text-primary" aria-hidden />}
               tone="success"
@@ -289,7 +264,7 @@ export default function StaffProfile() {
             />
           )}
           <StaffMetric
-            label="Rank"
+            label={isHindi ? "रैंक" : "Rank"}
             value={myRank > 0 ? `#${myRank}` : "—"}
             icon={<Trophy size={13} className="text-primary" aria-hidden />}
             tone="primary"
@@ -298,21 +273,7 @@ export default function StaffProfile() {
         </div>
       )}
 
-      {/* Field Execution Productivity Summary */}
-      {!isSupervisor && (
-        <StaffProductivityCard
-          totalAssigned={Number(perf?.jobsCompleted ?? 0) > 0 ? Number(perf?.jobsCompleted) : 10}
-          completedCount={Number(perf?.jobsCompleted ?? 0)}
-          pendingCount={0}
-          exceptionCount={0}
-          verifiedServerCount={Number(perf?.jobsCompleted ?? 0)}
-          localCachedCount={0}
-          photoComplianceCount={Number(perf?.jobsCompleted ?? 0)}
-          attendanceDays={presentDays}
-        />
-      )}
-
-      {/* Monthly Attendance Breakdown (collapsible) */}
+      {/* Monthly Attendance Calendar */}
       {showShiftAttendance && (
         <section className="staff-card staff-elevated overflow-hidden">
           <button
@@ -323,7 +284,7 @@ export default function StaffProfile() {
           >
             <div className="flex items-center gap-2">
               <Calendar size={16} className="text-primary" aria-hidden />
-              <span className="text-sm font-semibold">Monthly attendance</span>
+              <span className="text-sm font-bold">{t("my_shifts")}</span>
             </div>
             {calendarOpen ? <ChevronUp size={18} aria-hidden /> : <ChevronDown size={18} aria-hidden />}
           </button>
@@ -344,7 +305,9 @@ export default function StaffProfile() {
                   ))}
                 </div>
               ) : (attendance ?? []).length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">No records this month</p>
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  {isHindi ? "इस महीने कोई रिकॉर्ड नहीं मिला" : "No records this month"}
+                </p>
               ) : (
                 <div className="grid grid-cols-4 gap-2">
                   {(attendance ?? []).map(a => (
@@ -366,10 +329,10 @@ export default function StaffProfile() {
         </section>
       )}
 
-      {/* Compliance & Identity Documents */}
+      {/* Compliance Documents */}
       {profile && <StaffMyDocuments profile={profile} />}
 
-      {/* Clean Job Alerts & Notifications (Streamlined, no (not supported) error text) */}
+      {/* Notifications Settings */}
       <PushNotificationSettings variant="staff" />
 
       {/* Two-step Logout Confirmation Button */}
@@ -378,32 +341,34 @@ export default function StaffProfile() {
           <AlertDialogTrigger asChild>
             <StaffButton
               variant="outline"
-              className="w-full border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive/15 min-h-[3.25rem] font-semibold"
+              className="w-full border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive/15 min-h-[3.25rem] font-bold"
               data-testid="btn-sign-out"
             >
               <LogOut size={18} className="mr-2" />
-              Log out
+              {t("logout")}
             </StaffButton>
           </AlertDialogTrigger>
           <AlertDialogContent className="max-w-[340px] rounded-2xl p-5">
             <AlertDialogHeader className="text-left space-y-2">
               <AlertDialogTitle className="text-base font-bold">
-                Log out karein?
+                {isHindi ? "लॉगआउट करना चाहते हैं?" : "Log out from CWP Staff?"}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
-                Aap sure hain ki aap staff app se log out karna chahte hain? Wapas login karne ke liye apna registered mobile number enter karna hoga.
+                {isHindi
+                  ? "क्या आप स्टाफ ऐप से लॉगआउट करना चाहते हैं? दोबारा लॉगिन करने के लिए अपना रजिस्टर्ड मोबाइल नंबर डालना होगा।"
+                  : "Are you sure you want to log out? You will need your registered mobile number and password to sign back in."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="flex-row gap-2 justify-end pt-3">
-              <AlertDialogCancel className="h-9 px-4 text-xs font-medium m-0">
+              <AlertDialogCancel className="h-10 px-4 text-xs font-medium m-0">
                 Cancel
               </AlertDialogCancel>
               <AlertDialogAction
-                className="h-9 px-4 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground m-0"
+                className="h-10 px-4 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground m-0"
                 onClick={() => logout("staff")}
                 data-testid="confirm-logout-btn"
               >
-                Yes, Log out
+                {t("logout")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

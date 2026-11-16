@@ -34,6 +34,9 @@ export default function StaffPortalRouter() {
   if (location === "/staff/daily-route" || location === "/staff/daily-cleaning") {
     return <Redirect to="/staff/daily-clean" />;
   }
+  if (location === "/staff/other-jobs") {
+    return <Redirect to="/staff/bookings" />;
+  }
   if (location === "/staff/schedule") {
     return <Redirect to="/staff/jobs" />;
   }

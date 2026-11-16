@@ -10,6 +10,7 @@
  * - Key format: `cwp_staff_dcms_${staffId}_${istDate}`.
  * - Automatic purge of previous days' cache to prevent memory accumulation.
  * - Multi-exception reason tracking (car not available, plate not visible, customer skip, access denied, issue reported).
+ * - Preservation of both assigned sequence and actual completion order (Phase 2 & Phase 3).
  */
 
 export type DcmsLocalCompletionType =
@@ -26,6 +27,8 @@ export type DcmsLocalRecord = {
   status: DcmsLocalCompletionType;
   actionLabel: string;
   timestamp: string; // ISO string
+  completionOrder?: number; // Actual completion order (1st, 2nd, 3rd, ...)
+  completedAtTime?: string; // Formatted IST time (e.g. 06:45 AM)
   notes?: string;
   photoDataUrl?: string; // small thumbnail or reference if stored locally
 };
@@ -52,6 +55,20 @@ export function getTodayIstDate(now: Date = new Date()): string {
     const utc = now.getTime() + now.getTimezoneOffset() * 60000;
     const ist = new Date(utc + 3600000 * 5.5);
     return ist.toISOString().split("T")[0];
+  }
+}
+
+/** Format current time in Asia/Kolkata timezone for display (e.g. "06:30 AM") */
+export function formatIstTime(now: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(now);
+  } catch {
+    return now.toTimeString().slice(0, 5);
   }
 }
 
@@ -100,6 +117,13 @@ export function saveDcmsLocalRecord(
 ): DcmsStaffDayStore {
   const store = getDcmsDayStore(staffId, istDate);
 
+  // Compute next completion order if marked completed
+  const existingRecords = Object.values(store.records);
+  const priorCompleted = existingRecords.filter(r => r.status === "completed" && r.subscriptionId !== record.subscriptionId);
+  const currentCompletionOrder = record.status === "completed"
+    ? (store.records[record.subscriptionId]?.completionOrder ?? priorCompleted.length + 1)
+    : undefined;
+
   store.records[record.subscriptionId] = {
     subscriptionId: record.subscriptionId,
     vehicleNumber: record.vehicleNumber,
@@ -107,6 +131,8 @@ export function saveDcmsLocalRecord(
     actionLabel: record.actionLabel,
     notes: record.notes,
     timestamp: new Date().toISOString(),
+    completionOrder: currentCompletionOrder,
+    completedAtTime: formatIstTime(new Date()),
   };
   store.lastUpdated = new Date().toISOString();
 
@@ -133,35 +159,31 @@ export function clearDcmsDayStore(staffId: number, istDate: string = getTodayIst
   }
 }
 
-/** Purge keys from older dates to conserve localStorage quota */
-function cleanupOldDcmsStores(staffId: number, todayIstDate: string): void {
+/** Map local status to RouteStop todayStatus */
+export function localStatusToRouteStopStatus(
+  status: DcmsLocalCompletionType,
+): "completed" | "car_not_available" | "rejected" {
+  if (status === "completed") return "completed";
+  return "car_not_available";
+}
+
+/** Clean up old days' stores to prevent localStorage memory leakage */
+function cleanupOldDcmsStores(staffId: number, currentIstDate: string): void {
   try {
     const prefix = `cwp_staff_dcms_${staffId}_`;
-    const toRemove: string[] = [];
+    const keysToRemove: string[] = [];
 
     for (let i = 0; i < window.localStorage.length; i++) {
-      const k = window.localStorage.key(i);
-      if (k && k.startsWith(prefix) && k !== `${prefix}${todayIstDate}`) {
-        toRemove.push(k);
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(prefix) && key !== getStorageKey(staffId, currentIstDate)) {
+        keysToRemove.push(key);
       }
     }
 
-    for (const k of toRemove) {
-      window.localStorage.removeItem(k);
+    for (const key of keysToRemove) {
+      window.localStorage.removeItem(key);
     }
   } catch {
-    // Ignore storage iteration errors
+    // ignore storage quota errors during cleanup
   }
-}
-
-/**
- * Maps a structured local status to standard RouteStop display status:
- * - "completed" -> "completed"
- * - any exception -> "car_not_available" (keeps visit counter intact)
- */
-export function localStatusToRouteStopStatus(
-  status: DcmsLocalCompletionType,
-): "completed" | "car_not_available" | "pending" {
-  if (status === "completed") return "completed";
-  return "car_not_available";
 }

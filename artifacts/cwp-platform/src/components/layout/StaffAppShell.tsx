@@ -6,52 +6,14 @@ import { AppShell, type BottomNavItem } from "@/components/app-shell";
 import { LocationStatusIndicator } from "@/lib/location/LocationStatusIndicator";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
-import { Zap, ClipboardCheck, Sparkles, IndianRupee, User } from "lucide-react";
+import { Zap, Wrench, Sparkles, User, Globe } from "lucide-react";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
-import { OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
-
-type StaffNavDef = BottomNavItem & { requiresRole?: string; requiresCategory?: "supervisor" | "cleaning_staff" };
-
-const allStaffNavItems: StaffNavDef[] = [
-  { href: "/staff/dashboard", label: "Dashboard", icon: Zap, requiresCategory: "cleaning_staff" },
-  {
-    href: "/staff/daily-clean",
-    label: "Daily Clean",
-    icon: Sparkles,
-    requiresRole: OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER,
-  },
-  { href: "/staff/bookings", label: "Bookings", icon: ClipboardCheck, requiresCategory: "cleaning_staff" },
-  {
-    href: "/staff/earnings",
-    label: "Earnings",
-    icon: IndianRupee,
-    requiresCategory: "cleaning_staff",
-    comingSoon: true,
-  },
-  { href: "/staff/profile", label: "Profile", icon: User },
-];
-
-const pageTitles: Record<string, string> = {
-  "/staff/dashboard": "Dashboard",
-  "/staff/daily-clean": "Daily Clean",
-  "/staff/bookings": "Bookings",
-  "/staff/daily-route": "Daily Clean",
-  "/staff/daily-cleaning": "Daily Clean",
-  "/staff/work": "Work",
-  "/staff/jobs": "Jobs",
-  "/staff/earnings": "Earnings",
-  "/staff/profile": "Profile",
-};
+import { useStaffLanguage } from "@/lib/staffLanguage";
 
 export default function StaffAppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { user } = useAuth();
-
-  const { data: myRoles } = useQuery({
-    queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "my-roles"],
-    queryFn: staffEcosystemApi.getMyOperationalRoles,
-    enabled: Boolean(user?.staffId),
-  });
+  const { lang, setLang, t } = useStaffLanguage();
 
   const { data: myContext } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-context"],
@@ -59,37 +21,50 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
     enabled: Boolean(user?.staffId),
   });
 
-  const staffNavItems = useMemo(() => {
-    const slugs = myRoles?.slugs ?? [];
-    const category = myContext?.staffCategory ?? "cleaning_staff";
-    const availableCategories = myContext?.availableServiceCategories;
+  const staffNavItems: BottomNavItem[] = useMemo(() => {
+    const isSupervisor = myContext?.staffCategory === "supervisor";
 
-    return allStaffNavItems.filter(item => {
-      if (item.requiresCategory && item.requiresCategory !== category) return false;
-      if (item.requiresRole && !slugs.includes(item.requiresRole)) return false;
+    if (isSupervisor) {
+      return [
+        { href: "/staff/dashboard", label: t("nav_dashboard"), icon: Zap },
+        { href: "/staff/daily-clean", label: t("nav_dcms"), icon: Sparkles },
+        { href: "/staff/bookings", label: t("nav_other_jobs"), icon: Wrench },
+        { href: "/staff/profile", label: t("nav_account"), icon: User },
+      ];
+    }
 
-      // City-wise & Role-wise service adaptation:
-      // If city only supports Daily Cleaning (e.g. initial Noida launch) or cleaner is Daily Clean only,
-      // hide other service Bookings module to prevent clutter.
-      if (item.href === "/staff/bookings") {
-        const staffHasOtherRoles = slugs.some(s => s !== OPERATIONAL_ROLE_SLUGS.DAILY_CAR_CLEANER);
-        if (availableCategories && availableCategories.length > 0) {
-          const citySupportsBookings = availableCategories.some(
-            c => c === "car_wash" || c === "solar_cleaning" || c === "detailing"
-          );
-          if (!citySupportsBookings) return false;
-        }
-        if (slugs.length > 0 && !staffHasOtherRoles) return false;
-      }
+    // Core 4-tab simplified navigation for field workers (Phase 3 & Phase 5)
+    return [
+      {
+        href: "/staff/dashboard",
+        label: t("nav_dashboard"),
+        icon: Zap,
+      },
+      {
+        href: "/staff/daily-clean",
+        label: t("nav_dcms"),
+        icon: Sparkles,
+      },
+      {
+        href: "/staff/bookings",
+        label: t("nav_other_jobs"),
+        icon: Wrench,
+      },
+      {
+        href: "/staff/profile",
+        label: t("nav_account"),
+        icon: User,
+      },
+    ];
+  }, [myContext?.staffCategory, t]);
 
-      return true;
-    });
-  }, [myRoles?.slugs, myContext?.staffCategory, myContext?.availableServiceCategories]);
-
-  const pageTitle =
-    pageTitles[location] ??
-    staffNavItems.find(item => location === item.href || location.startsWith(item.href + "/"))?.label ??
-    "Staff";
+  const pageTitle = useMemo(() => {
+    if (location.startsWith("/staff/dashboard")) return t("nav_dashboard");
+    if (location.startsWith("/staff/daily-clean") || location.startsWith("/staff/daily-route")) return t("nav_dcms");
+    if (location.startsWith("/staff/bookings") || location.startsWith("/staff/jobs")) return t("nav_other_jobs");
+    if (location.startsWith("/staff/profile") || location.startsWith("/staff/earnings")) return t("nav_account");
+    return "CWP Staff";
+  }, [location, t]);
 
   const subtitle = useMemo(() => {
     if (!user?.name) return undefined;
@@ -98,6 +73,10 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
     if (myContext?.staffCategory === "supervisor") parts.push("Supervisor");
     return parts.join(" · ");
   }, [user?.name, myContext?.cityName, myContext?.staffCategory]);
+
+  const toggleLanguage = () => {
+    setLang(lang === "hi" ? "en" : "hi");
+  };
 
   return (
     <AppShell
@@ -114,6 +93,17 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
         subtitle,
         trailing: (
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* 1-tap Language Switcher */}
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-lg border border-border bg-card/80 hover:bg-muted text-foreground transition-colors shadow-none"
+              title={lang === "hi" ? "Switch to English" : "हिन्दी में बदलें"}
+              data-testid="staff-language-toggle"
+            >
+              <Globe size={13} className="text-primary" />
+              <span>{lang === "hi" ? "EN" : "हिन्दी"}</span>
+            </button>
             <LocationStatusIndicator />
             <SyncStatusIndicator compact />
           </div>

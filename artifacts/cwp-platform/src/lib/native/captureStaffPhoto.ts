@@ -5,6 +5,8 @@ import {
   type ClientExifPayload,
 } from "@/features/daily-cleaning/lib/cameraCapture";
 import { isStaffNativeApp } from "./staffNative";
+import { getStaffLocation } from "@/lib/location";
+import { locationStoreSnapshot } from "@/lib/location/locationStore";
 
 export type StaffCameraFacing = "front" | "rear";
 
@@ -13,7 +15,15 @@ export type CapturedStaffPhoto = {
   dataUrl: string;
   capturedAt: string;
   exif: ClientExifPayload | null;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  } | null;
 };
+
+// Backwards-compatibility alias
+export type StaffCapturedPhoto = CapturedStaffPhoto;
 
 export function isCameraCancel(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -91,4 +101,31 @@ function captureWebPhoto(facing: StaffCameraFacing): Promise<CapturedStaffPhoto>
 export async function captureStaffPhoto(facing: StaffCameraFacing): Promise<CapturedStaffPhoto> {
   if (isStaffNativeApp()) return captureNativePhoto(facing);
   return captureWebPhoto(facing);
+}
+
+/**
+ * Capture-time location-verified photo proof.
+ * Immediately binds device GPS coordinates at the instant of camera capture (Phase 4).
+ */
+export async function captureStaffPhotoWithGps(
+  facing: StaffCameraFacing,
+): Promise<CapturedStaffPhoto & { location: { latitude: number; longitude: number; accuracy?: number } }> {
+  // Fire photo capture and location query concurrently for exact timestamp match
+  const locationPromise = getStaffLocation("action").catch(() => {
+    const cached = locationStoreSnapshot().lastKnownLocation;
+    if (cached) return cached;
+    throw new Error("लोकेशन नहीं मिल रही। कृपया फोन का GPS ऑन करें और फिर कोशिश करें।");
+  });
+
+  const photo = await captureStaffPhoto(facing);
+  const location = await locationPromise;
+
+  return {
+    ...photo,
+    location: {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy,
+    },
+  };
 }

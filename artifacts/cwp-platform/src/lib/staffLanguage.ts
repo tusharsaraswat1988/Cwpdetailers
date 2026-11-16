@@ -1,0 +1,303 @@
+import { useState, useEffect, useSyncExternalStore } from "react";
+
+export type StaffLanguage = "hi" | "en";
+
+const STORAGE_KEY = "cwp_staff_language_preference";
+let currentLang: StaffLanguage = "hi"; // Default Hindi-first per operational requirements
+
+const listeners = new Set<() => void>();
+
+function getInitialLanguage(): StaffLanguage {
+  if (typeof window === "undefined") return "hi";
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved === "hi" || saved === "en") return saved;
+  } catch {
+    // fallback
+  }
+  return "hi";
+}
+
+currentLang = getInitialLanguage();
+
+export function getStaffLanguage(): StaffLanguage {
+  return currentLang;
+}
+
+export function setStaffLanguage(lang: StaffLanguage): void {
+  currentLang = lang;
+  try {
+    localStorage.setItem(STORAGE_KEY, lang);
+  } catch {
+    // ignore
+  }
+  listeners.forEach(l => l());
+}
+
+export function subscribeStaffLanguage(callback: () => void): () => void {
+  listeners.add(callback);
+  return () => listeners.delete(callback);
+}
+
+export function useStaffLanguage(): {
+  lang: StaffLanguage;
+  setLang: (lang: StaffLanguage) => void;
+  isHindi: boolean;
+  t: (key: TranslationKey) => string;
+} {
+  const lang = useSyncExternalStore(subscribeStaffLanguage, getStaffLanguage, () => "hi");
+  return {
+    lang,
+    setLang: setStaffLanguage,
+    isHindi: lang === "hi",
+    t: (key: TranslationKey) => translate(key, lang),
+  };
+}
+
+export type TranslationKey =
+  // Bottom Navigation
+  | "nav_dashboard"
+  | "nav_dcms"
+  | "nav_other_jobs"
+  | "nav_account"
+  // Attendance & Shift
+  | "attendance_shift"
+  | "attendance_check_in"
+  | "attendance_checked_in"
+  | "attendance_not_checked_in"
+  | "attendance_checking_in"
+  | "attendance_verified"
+  // Daily Clean & Progress
+  | "progress_title"
+  | "progress_summary"
+  | "filter_all"
+  | "filter_pending"
+  | "filter_completed"
+  | "filter_exceptions"
+  | "pending_vehicles_title"
+  | "completed_vehicles_title"
+  | "no_pending_vehicles"
+  | "no_completed_vehicles"
+  | "no_assignments_today"
+  | "no_assignments_desc"
+  | "complete_cleaning_action"
+  | "cleaning_in_progress"
+  | "cleaning_complete"
+  | "car_not_available_action"
+  | "car_found_clean_now"
+  | "options"
+  | "change"
+  | "directions"
+  | "copy_address"
+  | "address_copied"
+  | "search_plate_placeholder"
+  // Photo & Location Proof
+  | "photo_take_near_car"
+  | "photo_scanning_plate"
+  | "photo_uploading"
+  | "photo_success"
+  | "photo_failed_retry"
+  | "loc_not_found_retry"
+  | "loc_searching"
+  | "plate_match_success"
+  | "plate_mismatch_warning"
+  | "manual_plate_prompt"
+  | "manual_plate_match_error"
+  | "confirm_plate_btn"
+  // Dashboard Hero & Next Task
+  | "next_task_hero"
+  | "all_tasks_completed_title"
+  | "all_tasks_completed_desc"
+  | "action_start"
+  | "action_clean"
+  | "my_other_jobs_title"
+  | "other_jobs_pending"
+  | "other_jobs_none"
+  | "call_customer"
+  | "accept_job"
+  | "on_my_way"
+  | "arrived"
+  // Account & Profile
+  | "account_title"
+  | "my_shifts"
+  | "earnings_payouts"
+  | "language_toggle"
+  | "language_hindi"
+  | "language_english"
+  | "logout"
+  | "supervisor_contact"
+  | "my_documents"
+  // General
+  | "retry"
+  | "loading"
+  | "back"
+  | "bay"
+  | "tower"
+  | "flat";
+
+const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
+  hi: {
+    nav_dashboard: "डैशबोर्ड",
+    nav_dcms: "रोज़ाना सफाई",
+    nav_other_jobs: "अन्य काम",
+    nav_account: "खाता",
+
+    attendance_shift: "आज की हाजिरी",
+    attendance_check_in: "हाजिरी लगाएं",
+    attendance_checked_in: "हाजिरी लग गई",
+    attendance_not_checked_in: "हाजिरी नहीं लगी",
+    attendance_checking_in: "हाजिरी लग रही है…",
+    attendance_verified: "वेरिफाइड",
+
+    progress_title: "आज का काम",
+    progress_summary: "गाड़ियां साफ हुईं",
+    filter_all: "सभी",
+    filter_pending: "बाकी",
+    filter_completed: "सफाई पूरी",
+    filter_exceptions: "नहीं मिली",
+    pending_vehicles_title: "सफाई के लिए बाकी गाड़ियां",
+    completed_vehicles_title: "सफाई पूरी हो चुकी गाड़ियां",
+    no_pending_vehicles: "बहुत बढ़िया! सफाई के लिए कोई गाड़ी बाकी नहीं है।",
+    no_completed_vehicles: "अभी तक कोई गाड़ी पूरी नहीं हुई है।",
+    no_assignments_today: "आज कोई गाड़ी असाइन नहीं है",
+    no_assignments_desc: "जब सुपरवाइजर गाड़ी जोड़ेगा, यहां लिस्ट दिखेगी।",
+    complete_cleaning_action: "सफाई पूरी करें",
+    cleaning_in_progress: "सफाई हो रही है…",
+    cleaning_complete: "सफाई पूरी हो गई",
+    car_not_available_action: "गाड़ी नहीं मिली",
+    car_found_clean_now: "गाड़ी मिल गई — सफाई करें",
+    options: "अन्य विकल्प",
+    change: "बदलें",
+    directions: "रास्ता देखें",
+    copy_address: "पता कॉपी करें",
+    address_copied: "पता कॉपी हो गया",
+    search_plate_placeholder: "गाड़ी नंबर से खोजें (जैसे 1234)...",
+
+    photo_take_near_car: "गाड़ी के पास जाकर फोटो लें।",
+    photo_scanning_plate: "नंबर प्लेट जांची जा रही है…",
+    photo_uploading: "फोटो भेजी जा रही है…",
+    photo_success: "सफाई पूरी हो गई!",
+    photo_failed_retry: "काम सेव नहीं हुआ। फिर कोशिश करें।",
+    loc_not_found_retry: "लोकेशन नहीं मिल रही। फिर कोशिश करें।",
+    loc_searching: "लोकेशन जांची जा रही है…",
+    plate_match_success: "गाड़ी नंबर सही मिला!",
+    plate_mismatch_warning: "यह दूसरी गाड़ी का नंबर है। कृपया असाइन की गई गाड़ी की फोटो लें।",
+    manual_plate_prompt: "नंबर साफ नहीं दिखा। नीचे गाड़ी नंबर लिखें:",
+    manual_plate_match_error: "यह नंबर असाइन की गई गाड़ी से मेल नहीं खाता।",
+    confirm_plate_btn: "नंबर कन्फर्म करें",
+
+    next_task_hero: "अगला काम",
+    all_tasks_completed_title: "आज का सारा काम पूरा हो गया!",
+    all_tasks_completed_desc: "शाबाश! आपने आज की सभी असाइन गाड़ियां साफ कर ली हैं।",
+    action_start: "काम शुरू करें",
+    action_clean: "सफाई करें",
+    my_other_jobs_title: "अन्य बुकिंग / काम",
+    other_jobs_pending: "काम बाकी हैं",
+    other_jobs_none: "आज कोई अन्य बुकिंग नहीं है",
+    call_customer: "ग्राहक को कॉल करें",
+    accept_job: "काम स्वीकार करें",
+    on_my_way: "निकल रहे हैं (On My Way)",
+    arrived: "पहुंच गए",
+
+    account_title: "मेरी प्रोफाइल और खाता",
+    my_shifts: "मेरी हाजिरी और शिफ्ट्स",
+    earnings_payouts: "कमाई और भुगतान (Earnings)",
+    language_toggle: "भाषा बदलें (Language)",
+    language_hindi: "हिन्दी",
+    language_english: "English",
+    logout: "लॉगआउट करें",
+    supervisor_contact: "सुपरवाइजर से संपर्क करें",
+    my_documents: "मेरे दस्तावेज",
+
+    retry: "फिर कोशिश करें",
+    loading: "लोड हो रहा है…",
+    back: "पीछे जाएं",
+    bay: "बे",
+    tower: "टावर",
+    flat: "फ्लैट",
+  },
+  en: {
+    nav_dashboard: "Dashboard",
+    nav_dcms: "DCMS Route",
+    nav_other_jobs: "My Other Jobs",
+    nav_account: "Account",
+
+    attendance_shift: "Today's Shift Attendance",
+    attendance_check_in: "Check In",
+    attendance_checked_in: "Checked In",
+    attendance_not_checked_in: "Not Checked In",
+    attendance_checking_in: "Checking in…",
+    attendance_verified: "Verified",
+
+    progress_title: "Today's Progress",
+    progress_summary: "Cars Cleaned",
+    filter_all: "All",
+    filter_pending: "Pending",
+    filter_completed: "Cleaned",
+    filter_exceptions: "Exceptions",
+    pending_vehicles_title: "Pending Vehicles",
+    completed_vehicles_title: "Completed Vehicles",
+    no_pending_vehicles: "Great job! All pending cleanings are complete.",
+    no_completed_vehicles: "No vehicles cleaned yet today.",
+    no_assignments_today: "No daily cleaning assignments today",
+    no_assignments_desc: "Assigned vehicles will appear here once allocated.",
+    complete_cleaning_action: "Complete Cleaning",
+    cleaning_in_progress: "Cleaning…",
+    cleaning_complete: "Clean Completed",
+    car_not_available_action: "Car Not Available",
+    car_found_clean_now: "Car Found — Clean Now",
+    options: "Options",
+    change: "Change",
+    directions: "Directions",
+    copy_address: "Copy Address",
+    address_copied: "Address copied",
+    search_plate_placeholder: "Search plate number (e.g. 1234)...",
+
+    photo_take_near_car: "Take photo standing near the car.",
+    photo_scanning_plate: "Verifying number plate…",
+    photo_uploading: "Uploading photo proof…",
+    photo_success: "Cleaning completed successfully!",
+    photo_failed_retry: "Work not saved. Please try again.",
+    loc_not_found_retry: "Location not found. Please try again.",
+    loc_searching: "Verifying GPS location…",
+    plate_match_success: "Number plate verified!",
+    plate_mismatch_warning: "Different vehicle detected. Please photograph the assigned vehicle.",
+    manual_plate_prompt: "Plate could not be read clearly. Enter registration number:",
+    manual_plate_match_error: "Entered number does not match assigned vehicle.",
+    confirm_plate_btn: "Confirm Plate Number",
+
+    next_task_hero: "Next Task",
+    all_tasks_completed_title: "All Tasks Complete for Today!",
+    all_tasks_completed_desc: "Great job! You have completed all assigned vehicle tasks.",
+    action_start: "Start Service",
+    action_clean: "Clean Vehicle",
+    my_other_jobs_title: "Other Service Bookings",
+    other_jobs_pending: "jobs pending",
+    other_jobs_none: "No other service bookings today",
+    call_customer: "Call Customer",
+    accept_job: "Accept Job",
+    on_my_way: "On My Way",
+    arrived: "I Have Arrived",
+
+    account_title: "My Account & Profile",
+    my_shifts: "Attendance & Shifts",
+    earnings_payouts: "Earnings & Payouts",
+    language_toggle: "Change Language",
+    language_hindi: "हिन्दी",
+    language_english: "English",
+    logout: "Log Out",
+    supervisor_contact: "Contact Supervisor",
+    my_documents: "My Documents",
+
+    retry: "Try Again",
+    loading: "Loading…",
+    back: "Back",
+    bay: "Bay",
+    tower: "Tower",
+    flat: "Flat",
+  },
+};
+
+export function translate(key: TranslationKey, lang: StaffLanguage = currentLang): string {
+  return translations[lang]?.[key] ?? translations.en[key] ?? key;
+}
