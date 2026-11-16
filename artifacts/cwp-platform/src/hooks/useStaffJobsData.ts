@@ -115,6 +115,7 @@ export function useStaffJobsData() {
 
   const queryOpts = {
     enabled: staffId != null,
+    staleTime: 15_000,
     refetchInterval: 30_000 as const,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
@@ -144,6 +145,7 @@ export function useStaffJobsData() {
       query: {
         queryKey: getListBookingsQueryKey({ staffId: staffId ?? 0, limit: 100 }),
         enabled: staffId != null,
+        staleTime: 30_000,
         refetchInterval: 60_000,
         refetchOnWindowFocus: true,
       },
@@ -155,6 +157,7 @@ export function useStaffJobsData() {
       queryKey: [...SERVICE_EXECUTIONS_QUERY_KEY, "all", staffId],
       queryFn: () => fetchStaffExecutions(100),
       enabled: staffId != null,
+      staleTime: 30_000,
       refetchInterval: 60_000,
       refetchOnWindowFocus: true,
     });

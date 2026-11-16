@@ -1,5 +1,5 @@
-# CWP Detailers Staff App 2.0 — Implementation Plan (Phase 7)
-**Document Version:** 2.0.0  
+# CWP Detailers Staff App 2.0 — Implementation Plan (Phase 8)
+**Document Version:** 2.1.0  
 **Target:** CWP Staff Field Application 2.0  
 **Date:** 2026-11-16  
 
@@ -204,3 +204,24 @@
 4. **Task P7-4: Colloquial Hindi Reassignment & Removal Error Formatting (STAFF-054)**
    - **Scope:** In staffLanguage.ts, extend formatStaffOperationalError with patterns for wrong technician ("काम दूसरे साथी को सौंपा गया है"), removed assignment ("काम हटा दिया गया है"), and cancelled executions ("काम रद्द हो चुका है"). In useStaffJobsData.ts, call invalidateJobs() on mutation errors to force synchronization with server reality.
    - **Files:** artifacts/cwp-platform/src/lib/staffLanguage.ts, artifacts/cwp-platform/src/hooks/useStaffJobsData.ts, artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts.
+
+---
+
+### Phase P8: Staff UX Completeness, Performance & Interaction Consistency (Completed)
+**Objective:** Standardize interaction patterns, eliminate workflow friction, ensure non-color-only status badge accessibility, optimize mobile caching/performance, and provide reassuring account/session management.
+
+1. **Task P8-1: Non-Color-Only Status Badge Representation (STAFF-055)**
+   - **Scope:** Enhanced `StatusBadge.tsx` and `StaffStatusBadge` across the platform to pair color and text with distinct, accessible Lucide iconography (`CheckCircle2` for success/completed/verified, `Clock` for pending/scheduled/waiting, `RotateCw` for in-progress/en_route, `AlertTriangle` for car_not_available/warning/sync_pending, `XCircle` for cancelled/rejected/missed), satisfying WCAG 2.1 non-color-only accessibility and outdoor sunlight readability.
+   - **Files:** `artifacts/cwp-platform/src/components/shared/StatusBadge.tsx`, `artifacts/cwp-platform/src/features/staff-ds/components/domain.tsx`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+2. **Task P8-2: Two-Step Logout Confirmation & Active Shift Safety Reassurance (STAFF-056)**
+   - **Scope:** Refined logout flow in `Profile.tsx` with an `AlertDialog` confirmation dialog in colloquial Hindi assuring cleaners that today's attendance and local/synced progress remain completely safe, preventing accidental mid-shift logouts; standardized confirm/cancel touch targets to >= 44px/48px.
+   - **Files:** `artifacts/cwp-platform/src/pages/staff/Profile.tsx`, `artifacts/cwp-platform/src/lib/staffLanguage.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+3. **Task P8-3: Query Caching & Mobile Network Performance Tuning (STAFF-057)**
+   - **Scope:** Configured `staleTime: 15_000` in `useStaffJobsData.ts` and `useStaffDailyRoute` in `api.ts` (and `staleTime: 30_000` for booking history), eliminating aggressive immediate background refetches on rapid tab navigation, preserving mobile device battery and eliminating UI stutter on weak 3G/4G connections.
+   - **Files:** `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/api.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+4. **Task P8-4: Staff Account, Version & Field Support Infrastructure (STAFF-058)**
+   - **Scope:** Built dedicated Field Support card in `Profile.tsx` with 1-tap phone dialer to operations hotline (`tel:+919999999999` or supervisor phone), displayed official app version `v2.0 (Build 2026.11)` and active session ID, sanitized customer phone dialer URIs (`tel:${phone.replace(/[^\d+]/g, "")}`) across `NextTaskCard.tsx`, `StaffServiceJobFlow.tsx`, and `StaffJobListItem.tsx`, and expanded colloquial Hindi vocabulary in `staffLanguage.ts`.
+   - **Files:** `artifacts/cwp-platform/src/pages/staff/Profile.tsx`, `artifacts/cwp-platform/src/components/staff/NextTaskCard.tsx`, `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx`, `artifacts/cwp-platform/src/components/staff/StaffJobListItem.tsx`, `artifacts/cwp-platform/src/lib/staffLanguage.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.

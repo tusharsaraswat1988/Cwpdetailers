@@ -202,7 +202,7 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
 
         {task.customerPhone && (
           <a
-            href={`tel:${task.customerPhone}`}
+            href={`tel:${task.customerPhone.replace(/[^\d+]/g, "")}`}
             className="inline-flex items-center justify-center gap-1.5 h-12 px-3.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-colors"
             data-testid="next-task-call-btn"
           >

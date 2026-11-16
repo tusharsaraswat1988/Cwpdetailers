@@ -115,7 +115,7 @@ function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: s
     <div className="flex gap-2">
       {job.customerPhone && (
         <a
-          href={`tel:${job.customerPhone}`}
+          href={`tel:${job.customerPhone.replace(/[^\d+]/g, "")}`}
           className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl border border-border text-xs font-semibold text-foreground hover:bg-muted"
           data-testid={`job-call-${job.id}`}
         >

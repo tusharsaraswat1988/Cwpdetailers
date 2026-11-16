@@ -408,6 +408,9 @@ export function useStaffDailyRoute(date?: string, opts?: { enabled?: boolean }) 
     queryKey: ["dcms", "staff", "daily-route", date ?? "today"],
     queryFn: () => dcmsFetch<{ date: string; stops: unknown[] }>(`/daily-cleaning/staff/daily-route${qs}`),
     enabled: opts?.enabled ?? true,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 }
 

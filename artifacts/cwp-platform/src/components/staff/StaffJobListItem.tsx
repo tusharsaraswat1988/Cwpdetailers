@@ -44,7 +44,7 @@ export function StaffJobListItem({ job, compact, showAmount, linkToDashboard }: 
           ? `₹${jobAmount(job).toLocaleString("en-IN")}`
           : undefined
       }
-      phoneHref={job.customerPhone ? `tel:${job.customerPhone}` : undefined}
+      phoneHref={job.customerPhone ? `tel:${job.customerPhone.replace(/[^\d+]/g, "")}` : undefined}
       navigateHref={canNavigateTo(job) ? buildNavigateUrl(job) : undefined}
       className={linkToDashboard ? undefined : undefined}
     />

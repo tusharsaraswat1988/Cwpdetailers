@@ -127,6 +127,15 @@ export type TranslationKey =
   | "logout"
   | "supervisor_contact"
   | "my_documents"
+  | "app_version"
+  | "session_active"
+  | "field_support"
+  | "field_support_desc"
+  | "call_support"
+  | "logout_confirm_title"
+  | "logout_confirm_desc"
+  | "logout_confirm_btn"
+  | "logout_cancel_btn"
   // General & Lifecycle Stepper
   | "retry"
   | "loading"
@@ -238,6 +247,15 @@ const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
     logout: "लॉगआउट करें",
     supervisor_contact: "सुपरवाइजर से संपर्क करें",
     my_documents: "मेरे दस्तावेज",
+    app_version: "ऐप वर्शन",
+    session_active: "सक्रिय सत्र (लॉगिन सुरक्षित)",
+    field_support: "फील्ड सपोर्ट व सहायता",
+    field_support_desc: "रूट में बदलाव या फील्ड में किसी आपात समस्या के लिए तुरंत संपर्क करें",
+    call_support: "सपोर्ट को कॉल करें",
+    logout_confirm_title: "लॉगआउट करना चाहते हैं?",
+    logout_confirm_desc: "क्या आप स्टाफ ऐप से लॉगआउट करना चाहते हैं? आपका आज का अटेंडेंस और सिंक हुआ काम पूरी तरह सुरक्षित रहेगा।",
+    logout_confirm_btn: "हाँ, लॉगआउट करें",
+    logout_cancel_btn: "नहीं, वापस जाएं",
 
     retry: "फिर कोशिश करें",
     loading: "लोड हो रहा है…",
@@ -348,6 +366,15 @@ const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
     logout: "Log Out",
     supervisor_contact: "Contact Supervisor",
     my_documents: "My Documents",
+    app_version: "App Version",
+    session_active: "Active Session (Secure)",
+    field_support: "Field Support & Assistance",
+    field_support_desc: "Contact operations for route adjustments or urgent field help",
+    call_support: "Call Support",
+    logout_confirm_title: "Log out from CWP Staff?",
+    logout_confirm_desc: "Are you sure you want to log out? Your attendance and synced work remain completely safe.",
+    logout_confirm_btn: "Yes, Log Out",
+    logout_cancel_btn: "Cancel",
 
     retry: "Try Again",
     loading: "Loading…",

@@ -38,6 +38,9 @@ import {
   IndianRupee,
   ChevronRight,
   Check,
+  PhoneCall,
+  ShieldCheck,
+  Smartphone,
 } from "lucide-react";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 import { markAttendanceWithLocation } from "@/lib/location";
@@ -335,40 +338,79 @@ export default function StaffProfile() {
       {/* Notifications Settings */}
       <PushNotificationSettings variant="staff" />
 
-      {/* Two-step Logout Confirmation Button */}
+      {/* Field Operations Support Card (P8.7) */}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-3 staff-elevated" data-testid="profile-support-card">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <PhoneCall size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">{t("field_support")}</p>
+              <p className="text-xs text-muted-foreground">{t("field_support_desc")}</p>
+            </div>
+          </div>
+        </div>
+        <a
+          href={myContext?.supervisor?.phone ? `tel:${myContext.supervisor.phone}` : "tel:+919999999999"}
+          className="w-full h-12 min-h-[48px] rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+          data-testid="profile-call-support-btn"
+        >
+          <PhoneCall size={15} />
+          <span>{t("call_support")}</span>
+        </a>
+      </div>
+
+      {/* App Version & Active Session Status (P8.7) */}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-2 text-xs staff-elevated" data-testid="profile-session-card">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-foreground font-semibold">
+            <ShieldCheck size={15} className="text-emerald-600" />
+            <span>{t("session_active")}</span>
+          </div>
+          <span className="font-mono text-muted-foreground">ID #{staffId}</span>
+        </div>
+        <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/50">
+          <div className="flex items-center gap-1.5">
+            <Smartphone size={14} />
+            <span>{t("app_version")}</span>
+          </div>
+          <span className="font-mono font-medium text-foreground">v2.0 (Build 2026.11)</span>
+        </div>
+      </div>
+
+      {/* Two-step Logout Confirmation Button (P8.7) */}
       <div className="pt-2 pb-14">
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <StaffButton
               variant="outline"
-              className="w-full border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive/15 min-h-[3.25rem] font-bold"
+              className="w-full border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive/15 min-h-[48px] h-12 font-bold"
               data-testid="btn-sign-out"
             >
               <LogOut size={18} className="mr-2" />
               {t("logout")}
             </StaffButton>
           </AlertDialogTrigger>
-          <AlertDialogContent className="max-w-[340px] rounded-2xl p-5">
+          <AlertDialogContent className="max-w-[340px] rounded-2xl p-5" data-testid="logout-confirm-dialog">
             <AlertDialogHeader className="text-left space-y-2">
               <AlertDialogTitle className="text-base font-bold">
-                {isHindi ? "लॉगआउट करना चाहते हैं?" : "Log out from CWP Staff?"}
+                {t("logout_confirm_title")}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
-                {isHindi
-                  ? "क्या आप स्टाफ ऐप से लॉगआउट करना चाहते हैं? दोबारा लॉगिन करने के लिए अपना रजिस्टर्ड मोबाइल नंबर डालना होगा।"
-                  : "Are you sure you want to log out? You will need your registered mobile number and password to sign back in."}
+                {t("logout_confirm_desc")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="flex-row gap-2 justify-end pt-3">
-              <AlertDialogCancel className="h-10 px-4 text-xs font-medium m-0">
-                Cancel
+              <AlertDialogCancel className="h-11 min-h-[44px] px-4 text-xs font-medium m-0">
+                {t("logout_cancel_btn")}
               </AlertDialogCancel>
               <AlertDialogAction
-                className="h-10 px-4 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground m-0"
+                className="h-11 min-h-[44px] px-4 text-xs font-semibold bg-destructive hover:bg-destructive/90 text-destructive-foreground m-0"
                 onClick={() => logout("staff")}
                 data-testid="confirm-logout-btn"
               >
-                {t("logout")}
+                {t("logout_confirm_btn")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

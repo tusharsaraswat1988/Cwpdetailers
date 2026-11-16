@@ -1,4 +1,14 @@
+import React, { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import {
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  XCircle,
+  Info,
+  RotateCw,
+  Minus,
+} from "lucide-react";
 
 export type StatusTone = "info" | "warning" | "success" | "destructive" | "neutral" | "progress";
 
@@ -88,12 +98,72 @@ interface StatusBadgeProps {
   tone?: StatusTone;
   pulse?: boolean;
   className?: string;
+  icon?: ReactNode;
+  showIcon?: boolean;
 }
 
-export function StatusBadge({ status, label, tone, pulse, className }: StatusBadgeProps) {
+export function getStatusIcon(status: string, tone: StatusTone): ReactNode {
+  switch (status) {
+    case "completed":
+    case "checked_in":
+    case "verified":
+    case "approved":
+    case "active":
+    case "accepted":
+    case "customer_approved":
+    case "otp_verified":
+    case "present":
+      return <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden="true" />;
+    case "pending":
+    case "scheduled":
+    case "waiting":
+    case "waiting_assignment":
+    case "not_checked_in":
+    case "payment_pending":
+    case "late":
+      return <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />;
+    case "in_progress":
+    case "started":
+    case "en_route":
+    case "travelling":
+    case "checking_in":
+    case "uploading":
+      return <RotateCw className="h-3 w-3 shrink-0 animate-spin" aria-hidden="true" />;
+    case "car_not_available":
+    case "warning":
+    case "sync_pending":
+    case "paused":
+      return <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />;
+    case "cancelled":
+    case "rejected":
+    case "missed":
+    case "absent":
+    case "failed":
+    case "upload_failed":
+      return <XCircle className="h-3 w-3 shrink-0" aria-hidden="true" />;
+    default:
+      if (tone === "success") return <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      if (tone === "warning") return <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      if (tone === "destructive") return <XCircle className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      if (tone === "progress") return <RotateCw className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      if (tone === "info") return <Info className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      return <Minus className="h-3 w-3 shrink-0" aria-hidden="true" />;
+  }
+}
+
+export function StatusBadge({
+  status,
+  label,
+  tone,
+  pulse,
+  className,
+  icon,
+  showIcon = true,
+}: StatusBadgeProps) {
   const normalized = status.toLowerCase().replace(/\s+/g, "_");
   const display = label ?? status.replace(/_/g, " ");
   const resolvedTone = tone ?? statusTone[normalized] ?? "neutral";
+  const iconNode = showIcon !== false ? (icon ?? getStatusIcon(normalized, resolvedTone)) : null;
 
   return (
     <span
@@ -105,11 +175,13 @@ export function StatusBadge({ status, label, tone, pulse, className }: StatusBad
       data-testid="status-badge"
       data-status={normalized}
     >
-      {pulse && (
+      {pulse ? (
         <span className="relative flex h-1.5 w-1.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[hsl(var(--tone-success,142_71%_45%))] opacity-75" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[hsl(var(--tone-success,142_71%_45%))]" />
         </span>
+      ) : (
+        iconNode
       )}
       {display}
     </span>
