@@ -300,3 +300,32 @@
 6. **Task P11-6: Android Screen & Interaction Consistency with Safe-Area Inset Support (STAFF-073)**
    - **Scope:** Added Android system navigation safe-area bottom padding `pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]` on `StaffExecutionActionsSheet.tsx` and `StaffAppointmentExceptionDialog.tsx` DialogContent containers to prevent action buttons from being clipped by system gesture bars on Android devices; verified double-tap prevention on modal submissions.
    - **Files:** `artifacts/cwp-platform/src/features/daily-cleaning/components/StaffExecutionActionsSheet.tsx`, `artifacts/cwp-platform/src/components/staff/StaffAppointmentExceptionDialog.tsx`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+---
+
+### Phase P12: Security, Privacy, Permission & Evidence Integrity Audit (Completed)
+**Objective:** Eliminate data authorization leaks, prevent cross-staff and cross-customer record access, enforce secure protocol schemes and geo-coordinates for evidence and signatures, prevent cached locations from being disguised as fresh shutter-time fixes, protect offline queues against cross-account contamination on shared mobile devices, warn staff before logout when unsynced work exists, and sanitize server logs to prevent raw GPS coordinate leakage.
+
+1. **Task P12-1: Staff Data Access & Tenant Ownership Isolation (STAFF-074)**
+   - **Scope:** Hardened `tenantScope.ts` (`rowInScope`) so that when the caller has `role === "staff"`, unassigned records (`assignedStaffId == null`) and records assigned to other technicians are strictly denied; added `staffCol: bookingsTable.assignedStaffId` to `SCOPE_COLS` in `bookings.ts` ensuring booking list queries automatically filter by assigned technician; guarded `/customers` and `/customers/:id/*` dossier endpoints in `customers.ts` to reject staff role with HTTP 403 Forbidden (`STAFF_FORBIDDEN`); locked `staffId` in `executionService.ts` (`listStaffExecutions`) to the caller's authenticated identity, preventing query ID substitution.
+   - **Files:** `artifacts/api-server/src/middlewares/tenantScope.ts`, `artifacts/api-server/src/routes/bookings.ts`, `artifacts/api-server/src/routes/customers.ts`, `artifacts/api-server/src/lib/executions/executionService.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+2. **Task P12-2: Photo Evidence Privacy & Integrity Verification (STAFF-075)**
+   - **Scope:** Hardened `addExecutionPhotos` and `completeExecution` in `executionService.ts` to strictly validate evidence and signature URLs against secure `https://` protocols, eliminating arbitrary schemes (`javascript:`, `file:`, `data:`); verified shutter-time geo-coordinates (`latitude`, `longitude`) requirement; prevented pending/failed uploads from ever being falsely displayed as server-confirmed.
+   - **Files:** `artifacts/api-server/src/lib/executions/executionService.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+3. **Task P12-3: GPS & Location Permission Privacy and Evidence Source Distinction (STAFF-076)**
+   - **Scope:** Updated `types.ts`, `locationStore.ts`, and `getStaffLocation.ts` to track evidence source origin (`fresh`, `cache`, `last_known`); verified that `action` mode (attendance, photo capture, visit completion) strictly forbids cached coordinates (`modeUsesCache("action") === false`), guaranteeing that last-known locations cannot be disguised as fresh shutter-time evidence.
+   - **Files:** `artifacts/cwp-platform/src/lib/location/types.ts`, `artifacts/cwp-platform/src/lib/location/locationStore.ts`, `artifacts/cwp-platform/src/lib/location/getStaffLocation.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+4. **Task P12-4: Local Storage & Offline Data Cross-Staff Protection (STAFF-077)**
+   - **Scope:** Extended `QueueItem` in `offlineQueue.ts` with `staffId` and `userId` metadata, auto-stamped upon enqueuing; isolated queue execution in `runSync()` to skip pending items queued by other staff accounts, preventing cross-account mutation contamination on shared mobile devices.
+   - **Files:** `artifacts/cwp-platform/src/services/offlineQueue.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+5. **Task P12-5: Session, Logout & Account Switching Integrity (STAFF-078)**
+   - **Scope:** Subscribed `Profile.tsx` logout dialog to `offlineQueue.getPendingCount()`; when unsynced work exists (`pendingSyncCount > 0`), rendered an amber warning alert in colloquial Hindi assuring the worker that their data remains safely stored on the device and will sync upon logging back into this account.
+   - **Files:** `artifacts/cwp-platform/src/pages/staff/Profile.tsx`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+6. **Task P12-6: Security Error Handling & Logging Hygiene (STAFF-079)**
+   - **Scope:** In `dcms.ts` (`POST /daily-cleaning/visits/complete`), redacted micro-degree GPS coordinates from server logs, logging `hasGps: boolean` and rounded accuracy; verified `formatStaffOperationalError` shields technical database stack traces and internal errors into reassuring colloquial Hindi.
+   - **Files:** `artifacts/api-server/src/routes/dcms.ts`, `artifacts/cwp-platform/src/lib/staffLanguage.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.

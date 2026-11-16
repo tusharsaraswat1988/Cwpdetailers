@@ -2,6 +2,8 @@ export type StaffGpsCoords = {
   latitude: number;
   longitude: number;
   accuracy: number;
+  timestamp?: number;
+  source?: "fresh" | "cache" | "last_known";
 };
 
 export type LocationPermissionState =

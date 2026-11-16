@@ -563,9 +563,8 @@ router.post(
       subscriptionId,
       visitType: visitType ?? "cleaning",
       imageBytes: typeof imageBase64 === "string" ? imageBase64.length : 0,
-      latitude,
-      longitude,
-      accuracy,
+      hasGps: latitude != null && longitude != null,
+      accuracy: accuracy != null ? Math.round(Number(accuracy)) : null,
       contentLength: req.headers["content-length"],
     }, "POST /daily-cleaning/visits/complete");
 

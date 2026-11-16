@@ -47,7 +47,7 @@ export const useLocationStore = create<StaffLocationState & StaffLocationActions
     const { lastKnownLocation, lastUpdateTime } = get();
     if (!lastKnownLocation || lastUpdateTime == null) return null;
     if (Date.now() - lastUpdateTime > maxAgeMs) return null;
-    return lastKnownLocation;
+    return { ...lastKnownLocation, source: "cache" as const };
   },
 
   reset: () => set(initialState),

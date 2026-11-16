@@ -174,7 +174,16 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 | `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx` | **MODIFIED** | Upgraded copy address to `min-w-[48px] h-12` and exception button to `h-12 min-h-[48px]` (`STAFF-070`) |
 | `artifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx` | **MODIFIED** | Upgraded back and refresh buttons to 44px, added localized Hindi error state with retry (`STAFF-070`, `STAFF-072`) |
 | `artifacts/cwp-platform/src/pages/staff/Dashboard.tsx` | **MODIFIED** | Added dedicated empty state with refresh CTA when 0 tasks assigned today (`STAFF-072`) |
-| `artifacts/cwp-platform/src/pages/staff/Profile.tsx` | **MODIFIED** | Upgraded language selector and logout buttons to `min-h-[48px] h-12` (`STAFF-070`) |
+| `artifacts/cwp-platform/src/pages/staff/Profile.tsx` | **MODIFIED** | Upgraded language selector and logout buttons to `min-h-[48px] h-12`, added unsynced work warning in logout dialog (`STAFF-070`, `STAFF-078`) |
+| `artifacts/api-server/src/middlewares/tenantScope.ts` | **MODIFIED** | Hardened `rowInScope` rejecting unassigned records and records assigned to other technicians for staff role (`STAFF-074`) |
+| `artifacts/api-server/src/routes/bookings.ts` | **MODIFIED** | Added `staffCol` to `SCOPE_COLS` ensuring booking list queries automatically filter by assigned technician (`STAFF-074`) |
+| `artifacts/api-server/src/routes/customers.ts` | **MODIFIED** | Guarded customer dossiers against staff role with 403 Forbidden (`STAFF-074`) |
+| `artifacts/api-server/src/lib/executions/executionService.ts` | **MODIFIED** | Locked `staffId` in `listStaffExecutions` to authenticated caller identity; validated photo and signature URLs for secure `https://` schemes (`STAFF-074`, `STAFF-075`) |
+| `artifacts/cwp-platform/src/lib/location/types.ts` | **MODIFIED** | Added timestamp and source tracking (`fresh` vs `cache`) to `StaffGpsCoords` (`STAFF-076`) |
+| `artifacts/cwp-platform/src/lib/location/locationStore.ts` | **MODIFIED** | Tagged cached location returns with `source: "cache"` (`STAFF-076`) |
+| `artifacts/cwp-platform/src/lib/location/getStaffLocation.ts` | **MODIFIED** | Tagged fresh GPS readings with `source: "fresh"`, forbidding cache for action mode (`STAFF-076`) |
+| `artifacts/cwp-platform/src/services/offlineQueue.ts` | **MODIFIED** | Added `staffId` and `userId` metadata to `QueueItem`, isolating sync by active staff identity on shared devices (`STAFF-077`, `STAFF-078`) |
+| `artifacts/api-server/src/routes/dcms.ts` | **MODIFIED** | Redacted micro-degree GPS coordinates in visit completion request logs, logging `hasGps` and rounded accuracy (`STAFF-079`) |
 | `docs/staff/STAFF_APP_EXISTING_FEATURE_INVENTORY.md` | **NEW FILE** | Full screen-by-screen inventory |
 | `docs/staff/STAFF_APP_FORENSIC_AUDIT.md` | **NEW FILE** | Forensic technical audit report |
 | `docs/staff/STAFF_APP_UX_GAP_ANALYSIS.md` | **NEW FILE** | UX gap analysis matrix |
@@ -186,7 +195,7 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 ## 4. Test & Verification Evidence
 
 1. **Staff App 2.0 Forensic Test Suite (`staff-app-2-forensic-verification.test.ts`)**:
-   - Total tests: **44 passed (44)** (100% pass rate in 3.17s)
+   - Total tests: **50 passed (50)** (100% pass rate)
    - Tested:
      - Out-of-order route segregation and original sequence preservation.
      - IST time formatting and chronological completion sequence.
@@ -225,13 +234,19 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
      - Primary action & route sequence simplification with out-of-order vehicle selection (`STAFF-071`).
      - Loading, empty, error & recovery states with actionable retry handlers (`STAFF-072`).
      - Android screen safe-area bottom padding and modal double-tap prevention (`STAFF-073`).
+     - Staff data access & tenant ownership isolation rejecting unassigned and other staff records (`STAFF-074`).
+     - Photo evidence privacy & integrity with https protocol and geo-coordinates validation (`STAFF-075`).
+     - GPS & location permission privacy with evidence source tracking and cache prohibition in action mode (`STAFF-076`).
+     - Local storage & offline data cross-staff isolation on shared devices (`STAFF-077`).
+     - Session, logout & account switching integrity with pending sync count warning (`STAFF-078`).
+     - Security error handling & logging hygiene with coordinate sanitization and error shielding (`STAFF-079`).
 2. **Backend Execution Validation Suite (`executionValidation.test.ts`)**:
    - Total tests: **8 passed (8)** (100% pass rate in 7ms)
 3. **Backend API Bundle (`@workspace/api-server`)**:
-   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 1005ms**
+   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 893ms**
 4. **Frontend Production Build (`@workspace/cwp-platform`)**:
-   - Built via `vite build --config vite.config.ts`: **Built cleanly in 15.99s**
-   - Service worker generated via `vite-plugin-pwa`: **Built in 248ms (54 precache entries)**
+   - Built via `vite build --config vite.config.ts`: **Built cleanly in 13.43s**
+   - Service worker generated via `vite-plugin-pwa`: **Built in 174ms (54 precache entries)**
 
 ---
 

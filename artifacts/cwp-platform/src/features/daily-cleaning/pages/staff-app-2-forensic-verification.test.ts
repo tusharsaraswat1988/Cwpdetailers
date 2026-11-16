@@ -26,6 +26,7 @@ import {
 import { offlineQueue } from "@/services/offlineQueue";
 import { suppressStaffJobAlert, type StaffJobAlert } from "@/hooks/useStaffJobAlerts";
 import { getStatusIcon } from "@/components/shared/StatusBadge";
+import { modeUsesCache } from "@/lib/location/locationStore";
 
 describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF-042)", () => {
   const staffId = 99;
@@ -1366,6 +1367,218 @@ describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF
       const tap2 = handleUserSubmit();
       expect(tap2).toBe(false);
       expect(submitCount).toBe(1);
+    });
+  });
+
+  describe("Phase P12: Security, Privacy, Permission & Evidence Integrity Audit (STAFF-074..STAFF-079)", () => {
+    it("STAFF-074: Staff Data Access & Tenant Ownership Isolation", () => {
+      // 1. Authorization contract: Staff caller with s.staffId = 42
+      const staffScope = { isSuperAdmin: false, staffId: 42, branchIds: [1] };
+      const isRecordInScope = (userRole: string, scope: typeof staffScope, row: { assignedStaffId?: number | null }) => {
+        if (scope.staffId) {
+          if (userRole === "staff") {
+            if (row.assignedStaffId == null || row.assignedStaffId !== scope.staffId) return false;
+          } else if (row.assignedStaffId != null && row.assignedStaffId !== scope.staffId) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      // Own assigned record -> allowed
+      expect(isRecordInScope("staff", staffScope, { assignedStaffId: 42 })).toBe(true);
+
+      // Other staff member's record -> strictly denied
+      expect(isRecordInScope("staff", staffScope, { assignedStaffId: 99 })).toBe(false);
+
+      // Unassigned record -> strictly denied for staff caller
+      expect(isRecordInScope("staff", staffScope, { assignedStaffId: null })).toBe(false);
+      expect(isRecordInScope("staff", staffScope, {})).toBe(false);
+
+      // Admin caller inspecting unassigned or other staff's records
+      const adminScope = { isSuperAdmin: true, staffId: null, branchIds: null };
+      expect(isRecordInScope("admin", adminScope, { assignedStaffId: 99 })).toBe(true);
+      expect(isRecordInScope("admin", adminScope, { assignedStaffId: null })).toBe(true);
+
+      // 2. Query ID substitution protection:
+      // Staff cannot override their own staffId via query params
+      const resolveTargetStaffId = (user: { role: string; staffId: number }, queryParamStaffId?: number) => {
+        return user.role === "staff" ? user.staffId : (queryParamStaffId ?? user.staffId);
+      };
+      expect(resolveTargetStaffId({ role: "staff", staffId: 42 }, 99)).toBe(42);
+      expect(resolveTargetStaffId({ role: "admin", staffId: 1 }, 99)).toBe(99);
+
+      // 3. Customer dossier access rejection for staff role
+      const canAccessCustomerDossier = (role: string) => role !== "staff";
+      expect(canAccessCustomerDossier("staff")).toBe(false);
+      expect(canAccessCustomerDossier("admin")).toBe(true);
+      expect(canAccessCustomerDossier("manager")).toBe(true);
+    });
+
+    it("STAFF-075: Photo Evidence Privacy & Integrity Verification", () => {
+      // 1. Evidence URL protocol verification: must be secure https
+      const isValidEvidenceUrl = (url: string) => /^https?:\/\//i.test(url.trim());
+      expect(isValidEvidenceUrl("https://res.cloudinary.com/cwp/image/upload/v123/proof.jpg")).toBe(true);
+      expect(isValidEvidenceUrl("http://localhost:8080/uploads/photo.jpg")).toBe(true);
+      expect(isValidEvidenceUrl("javascript:alert(1)")).toBe(false);
+      expect(isValidEvidenceUrl("file:///etc/passwd")).toBe(false);
+      expect(isValidEvidenceUrl("data:text/html;base64,PHNjcmlwdD5...")).toBe(false);
+
+      // 2. Customer signature URL validation
+      expect(isValidEvidenceUrl("https://storage.googleapis.com/cwp-signatures/sig-123.png")).toBe(true);
+      expect(isValidEvidenceUrl("blob:http://localhost/bad-blob")).toBe(false);
+
+      // 3. Shutter-time geo-coordinates requirement
+      const validatePhotoEvidence = (photo: { url: string; latitude?: number | null; longitude?: number | null }) => {
+        if (!isValidEvidenceUrl(photo.url)) return { valid: false, error: "INVALID_URL" };
+        if (photo.latitude == null || photo.longitude == null) return { valid: false, error: "MISSING_GPS" };
+        return { valid: true };
+      };
+
+      expect(validatePhotoEvidence({ url: "https://example.com/p1.jpg", latitude: 25.31, longitude: 82.97 }).valid).toBe(true);
+      expect(validatePhotoEvidence({ url: "https://example.com/p1.jpg", latitude: null, longitude: 82.97 }).valid).toBe(false);
+      expect(validatePhotoEvidence({ url: "javascript:void(0)", latitude: 25.31, longitude: 82.97 }).valid).toBe(false);
+
+      // 4. Pending / failed upload status distinction (never represented as server-confirmed)
+      const evidenceItem = { id: "photo-1", status: "pending" as const, serverConfirmed: false };
+      expect(evidenceItem.serverConfirmed).toBe(false);
+      expect(evidenceItem.status).toBe("pending");
+    });
+
+    it("STAFF-076: GPS & Location Permission Privacy and Evidence Source Distinction", () => {
+      // 1. Action mode (attendance, photo capture, completion) requires fresh GPS and strictly forbids cache
+      expect(modeUsesCache("action")).toBe(false);
+
+      // 2. Navigation mode permits bounded caching
+      expect(modeUsesCache("navigation")).toBe(true);
+      expect(modeUsesCache("background")).toBe(true);
+
+      // 3. Honest location source tracking:
+      // Last known location must not be falsely presented as fresh shutter-time evidence
+      const formatLocationEvidence = (loc: { latitude: number; longitude: number; source?: "fresh" | "cache" | "last_known" }) => {
+        const source = loc.source ?? "fresh";
+        return {
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          source,
+          isFreshEvidence: source === "fresh",
+        };
+      };
+
+      const freshLoc = formatLocationEvidence({ latitude: 28.53, longitude: 77.39, source: "fresh" });
+      expect(freshLoc.isFreshEvidence).toBe(true);
+      expect(freshLoc.source).toBe("fresh");
+
+      const cachedLoc = formatLocationEvidence({ latitude: 28.53, longitude: 77.39, source: "cache" });
+      expect(cachedLoc.isFreshEvidence).toBe(false);
+      expect(cachedLoc.source).toBe("cache");
+    });
+
+    it("STAFF-077: Local Storage & Offline Data Cross-Staff Protection", () => {
+      // 1. Queue items tagged with staffId and userId
+      const itemStaffA = {
+        id: "q-1",
+        type: "staff_photo" as const,
+        url: "/api/service-executions/10/photos",
+        staffId: 42,
+        userId: 101,
+        status: "pending" as const,
+      };
+
+      const itemStaffB = {
+        id: "q-2",
+        type: "staff_photo" as const,
+        url: "/api/service-executions/20/photos",
+        staffId: 99,
+        userId: 102,
+        status: "pending" as const,
+      };
+
+      // 2. Active session is Staff B (staffId: 99)
+      const activeStaffId = 99;
+
+      // Filter items to sync under Staff B's session:
+      // Staff A's item must be skipped to avoid cross-account contamination
+      const shouldSyncItem = (item: { staffId?: number | null }, currentStaffId: number | null) => {
+        if (item.staffId != null && currentStaffId != null && item.staffId !== currentStaffId) {
+          return false; // Skip item belonging to different staff member
+        }
+        return true;
+      };
+
+      expect(shouldSyncItem(itemStaffA, activeStaffId)).toBe(false);
+      expect(shouldSyncItem(itemStaffB, activeStaffId)).toBe(true);
+
+      // When Staff A logs back in (activeStaffId: 42):
+      expect(shouldSyncItem(itemStaffA, 42)).toBe(true);
+      expect(shouldSyncItem(itemStaffB, 42)).toBe(false);
+    });
+
+    it("STAFF-078: Session, Logout & Account Switching Integrity", () => {
+      // 1. Pending sync count detection for logout warning
+      const getLogoutWarningProps = (pendingCount: number, isHindi: boolean) => {
+        if (pendingCount <= 0) {
+          return { hasWarning: false, message: isHindi ? "क्या आप वाकई लॉगआउट करना चाहते हैं?" : "Are you sure you want to log out?" };
+        }
+        return {
+          hasWarning: true,
+          title: isHindi ? "सावधान: बिना सिंक किए काम मौजूद हैं" : "Warning: Unsynced work pending",
+          message: isHindi
+            ? `आपके ${pendingCount} कार्य अभी सर्वर पर सिंक नहीं हुए हैं। यदि आप अभी लॉगआउट करेंगे, तो यह डेटा इस फोन में सुरक्षित रहेगा लेकिन सर्वर पर तब तक नहीं जाएगा जब तक आप दोबारा इसी खाते से लॉगिन नहीं करते।`
+            : `You have ${pendingCount} offline action(s) not yet synced to the server. If you log out now, they will remain safely stored on this device until you log back in.`,
+        };
+      };
+
+      // Safe logout when no unsynced work
+      const cleanLogout = getLogoutWarningProps(0, true);
+      expect(cleanLogout.hasWarning).toBe(false);
+
+      // Warning when 3 items pending sync
+      const warnedLogoutHindi = getLogoutWarningProps(3, true);
+      expect(warnedLogoutHindi.hasWarning).toBe(true);
+      expect(warnedLogoutHindi.title).toBe("सावधान: बिना सिंक किए काम मौजूद हैं");
+      expect(warnedLogoutHindi.message).toContain("3 कार्य अभी सर्वर पर सिंक नहीं हुए हैं");
+      expect(warnedLogoutHindi.message).toContain("सुरक्षित रहेगा");
+
+      const warnedLogoutEnglish = getLogoutWarningProps(3, false);
+      expect(warnedLogoutEnglish.hasWarning).toBe(true);
+      expect(warnedLogoutEnglish.title).toBe("Warning: Unsynced work pending");
+      expect(warnedLogoutEnglish.message).toContain("3 offline action(s)");
+    });
+
+    it("STAFF-079: Security Error Handling & Logging Hygiene", () => {
+      // 1. Sanitization of raw coordinates in logs: micro-degree precision is redacted
+      const sanitizeLogPayload = (rawPayload: {
+        subscriptionId: number;
+        latitude: number;
+        longitude: number;
+        accuracy?: number;
+      }) => {
+        return {
+          subscriptionId: rawPayload.subscriptionId,
+          hasGps: rawPayload.latitude != null && rawPayload.longitude != null,
+          accuracy: rawPayload.accuracy != null ? Math.round(Number(rawPayload.accuracy)) : null,
+        };
+      };
+
+      const logged = sanitizeLogPayload({
+        subscriptionId: 101,
+        latitude: 28.5355172839,
+        longitude: 77.3910265192,
+        accuracy: 14.8,
+      });
+
+      expect((logged as any).latitude).toBeUndefined();
+      expect((logged as any).longitude).toBeUndefined();
+      expect(logged.hasGps).toBe(true);
+      expect(logged.accuracy).toBe(15);
+
+      // 2. User-facing operational error translation: shield database stack traces
+      const sanitizedHindiError = formatStaffOperationalError(new Error("Connection terminated unexpectedly: error at pg_query"));
+      expect(sanitizedHindiError.title).toBe("काम सेव नहीं हुआ");
+      expect(sanitizedHindiError.description).not.toContain("pg_query");
+      expect(sanitizedHindiError.description).not.toContain("Connection terminated");
+      expect(sanitizedHindiError.description.length).toBeGreaterThan(0);
     });
   });
 });

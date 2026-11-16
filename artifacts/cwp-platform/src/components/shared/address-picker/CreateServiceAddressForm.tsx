@@ -98,11 +98,15 @@ export function CreateServiceAddressForm({
             latitude: hasCoords ? lat : undefined,
             longitude: hasCoords ? lng : undefined,
             city: value.city || undefined,
+            cityName: value.city || undefined,
             locality: value.area || undefined,
+            area: value.area || undefined,
             societyName: value.buildingName || undefined,
+            buildingName: value.buildingName || undefined,
             propertyType: selectedPropertyType,
             placeId: value.placeId || undefined,
             pincode: value.pincode || undefined,
+            postalCode: value.pincode || undefined,
           }),
         });
         if (res.ok && !cancelled) {

@@ -43,6 +43,8 @@ function readBrowserPosition(options: PositionOptions): Promise<StaffGpsCoords> 
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
+          timestamp: pos.timestamp || Date.now(),
+          source: "fresh",
         }),
       err => reject(new Error(mapGeoError(err))),
       options,

@@ -471,6 +471,30 @@ describe("CWP PRD v1.5 — End-to-End Branch Operations & Customer Lifecycle", (
       expect(memoryStore.adminAuditLogs.length).toBeGreaterThan(0);
       expect(memoryStore.adminAuditLogs[0].action).toBe("branch_activated");
     });
+
+    it("provides contextual action links for missing prerequisites and auto-heals cityId (BR-005)", async () => {
+      const branch3 = memoryStore.branches.find((b) => b.id === 3);
+      branch3.legalEntityId = null;
+      branch3.serviceAvailability = [];
+      branch3.cityId = null;
+      branch3.city = "Varanasi";
+
+      const report3 = await validateBranchReadiness(3);
+      const legalItem = report3.checklist.find((i) => i.key === "legal_entity");
+      expect(legalItem?.actionKey).toBe("edit_branch");
+      expect(legalItem?.actionLabel).toBe("Assign Entity");
+
+      const serviceItem = report3.checklist.find((i) => i.key === "services_configured");
+      expect(serviceItem?.actionKey).toBe("edit_branch");
+      expect(serviceItem?.actionLabel).toBe("Enable Services");
+
+      const staffItem = report3.checklist.find((i) => i.key === "staff_allocated");
+      expect(staffItem?.actionKey).toBe("assign_staff");
+      expect(staffItem?.actionHref).toContain("/admin/staff");
+
+      const cityItem = report3.checklist.find((i) => i.key === "city_assignment");
+      expect(cityItem?.actionKey).toBeDefined();
+    });
   });
 
   describe("3. Customer Subscription Lifecycle & Idempotency (DCMS-011)", () => {

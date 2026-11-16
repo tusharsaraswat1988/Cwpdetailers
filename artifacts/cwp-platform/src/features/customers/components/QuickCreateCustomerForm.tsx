@@ -315,7 +315,14 @@ export function QuickCreateCustomerForm({
             <Label htmlFor={`${idPrefix}-branch`}>Branch</Label>
             <Select
               value={form.branchId}
-              onValueChange={v => setForm(f => ({ ...f, branchId: v }))}
+              onValueChange={v => {
+                const targetBranch = branchOptions.find(b => String(b.id) === v);
+                setForm(f => ({
+                  ...f,
+                  branchId: v,
+                  city: targetBranch?.city || f.city,
+                }));
+              }}
             >
               <SelectTrigger id={`${idPrefix}-branch`} className="mt-1" data-testid={`${idPrefix}-branch`}>
                 <SelectValue placeholder="Select branch" />

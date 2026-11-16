@@ -161,7 +161,13 @@ export function rowInScope(req: Request, row: {
   if (s.franchiseeId && row.franchiseeId != null && row.franchiseeId !== s.franchiseeId) return false;
   if (s.customerId && row.customerId != null && row.customerId !== s.customerId) return false;
   const effectiveStaffId = row.staffId ?? row.assignedStaffId;
-  if (s.staffId && effectiveStaffId != null && effectiveStaffId !== s.staffId) return false;
+  if (s.staffId) {
+    if (req.user?.role === "staff") {
+      if (effectiveStaffId == null || effectiveStaffId !== s.staffId) return false;
+    } else if (effectiveStaffId != null && effectiveStaffId !== s.staffId) {
+      return false;
+    }
+  }
   return true;
 }
 

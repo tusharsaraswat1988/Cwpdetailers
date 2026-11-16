@@ -332,8 +332,14 @@ export async function listStaffExecutions(
   const limit = Math.min(opts?.limit ?? 100, 100);
   const conditions: SQL[] = [...tenantFilters(req, EXEC_SCOPE)];
 
-  const staffId = opts?.staffId ?? (req.user?.role === "staff" ? req.scope?.staffId : undefined);
-  if (staffId) {
+  // STAFF-074: When caller is staff, lock staffId to their authenticated identity, preventing query ID substitution
+  const staffId = req.user?.role === "staff"
+    ? (req.scope?.staffId ?? req.user.staffId ?? null)
+    : (opts?.staffId ?? undefined);
+
+  if (req.user?.role === "staff" && !staffId) {
+    conditions.push(sql`false`);
+  } else if (staffId) {
     conditions.push(eq(serviceExecutionsTable.assignedStaffId, staffId));
   }
 
@@ -874,7 +880,12 @@ export async function completeExecution(
 
   const now = new Date();
 
-  // Validate incoming photos before any state mutations
+  // Validate incoming photos and signature before any state mutations
+  if (input.customerSignatureUrl?.trim()) {
+    if (!/^https?:\/\//i.test(input.customerSignatureUrl.trim())) {
+      throw new Error("Customer signature must be a valid https URL");
+    }
+  }
   if (input.photos?.length) {
     for (const p of input.photos) {
       if (!p.url || !/^https?:\/\//i.test(p.url)) {

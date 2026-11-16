@@ -41,6 +41,18 @@ import { composeSavedAddress, toCreateAddressBody, hasRequiredAddressParts } fro
 
 const router = Router();
 
+// STAFF-074: Reject direct staff access to customer directory and dossiers.
+// Staff can only access customer contact details bound to their assigned bookings or visits.
+router.use((req, res, next) => {
+  if (req.user?.role === "staff") {
+    return res.status(403).json({
+      error: "Staff members are not authorized to directly access customer directory dossiers",
+      code: "STAFF_FORBIDDEN",
+    });
+  }
+  next();
+});
+
 /**
  * Excludes for a contact-uniqueness check on an existing customer: the customer
  * row itself plus every login user linked to it, so the customer's own portal

@@ -26,11 +26,15 @@ router.post("/location/resolve", async (req: Request, res: Response) => {
       cityId,
       citySlug,
       cityName,
+      city, // Normalized alias
       pincode,
       postalCode,
+      pin, // Normalized alias
       locality,
+      area, // Normalized alias
       sector,
       societyName,
+      buildingName, // Normalized alias
       societyId,
       localityId,
       propertyType,
@@ -40,6 +44,11 @@ router.post("/location/resolve", async (req: Request, res: Response) => {
       scheduledDate,
     } = req.body;
 
+    const normalizedCityName = cityName || city || undefined;
+    const normalizedPincode = pincode || postalCode || pin || undefined;
+    const normalizedLocality = locality || area || sector || undefined;
+    const normalizedSocietyName = societyName || buildingName || undefined;
+
     // Run Location Resolver
     const resolved = await locationResolver.resolve({
       placeId: placeId || undefined,
@@ -47,12 +56,12 @@ router.post("/location/resolve", async (req: Request, res: Response) => {
       longitude: longitude != null ? parseFloat(longitude) : locationLng != null ? parseFloat(locationLng) : undefined,
       cityId: cityId ? parseInt(cityId, 10) : undefined,
       citySlug: citySlug || undefined,
-      cityName: cityName || undefined,
-      pincode: pincode || postalCode || undefined,
-      postalCode: postalCode || pincode || undefined,
-      locality: locality || undefined,
+      cityName: normalizedCityName,
+      pincode: normalizedPincode,
+      postalCode: normalizedPincode,
+      locality: normalizedLocality,
       sector: sector || undefined,
-      societyName: societyName || undefined,
+      societyName: normalizedSocietyName,
       societyId: societyId ? parseInt(societyId, 10) : undefined,
       localityId: localityId ? parseInt(localityId, 10) : undefined,
       propertyType: propertyType || undefined,
@@ -67,7 +76,7 @@ router.post("/location/resolve", async (req: Request, res: Response) => {
       zoneId: resolved.zoneId,
       societyId: resolved.societyId,
       localityId: resolved.localityId,
-      pincode: pincode || postalCode,
+      pincode: normalizedPincode,
       propertyType: resolved.propertyType,
       serviceId: serviceId ? parseInt(serviceId, 10) : undefined,
       scheduledDate: scheduledDate || undefined,

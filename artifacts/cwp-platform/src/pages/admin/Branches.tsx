@@ -40,9 +40,13 @@ import {
   Shield,
   History,
   Lock,
+  BookOpen,
+  ArrowUpRight,
+  HelpCircle,
 } from "lucide-react";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { useMasterList, type City } from "@/features/master-data/api";
+import { BranchSetupGuidelinesModal } from "@/components/admin/BranchSetupGuidelinesModal";
 
 type BranchAssignmentItem = {
   id: number;
@@ -99,6 +103,9 @@ type BranchReadinessReport = {
     passed: boolean;
     message: string;
     critical: boolean;
+    actionKey?: "edit_branch" | "goto_cities" | "assign_staff" | "assign_manager" | "configure_services" | "goto_zones" | "goto_franchisees";
+    actionLabel?: string;
+    actionHref?: string;
   }>;
   missingPrerequisites: string[];
 };
@@ -245,6 +252,9 @@ export default function BranchesPage() {
   const [opsHubModal, setOpsHubModal] = useState<BranchItem | null>(null);
   const [opsHubData, setOpsHubData] = useState<BranchOperationsDashboard | null>(null);
   const [opsHubLoading, setOpsHubLoading] = useState(false);
+
+  // Setup Guidelines Modal
+  const [showGuidelines, setShowGuidelines] = useState(false);
 
   // Branch Governance / Assignments Dialog
   const [assignmentsModal, setAssignmentsModal] = useState<BranchItem | null>(null);
@@ -513,6 +523,13 @@ export default function BranchesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowGuidelines(true)}
+              className="h-9 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold gap-1.5"
+            >
+              <BookOpen size={14} /> Setup Guidelines (SOP)
+            </Button>
             <div className="w-48">
               <SearchableCombobox
                 items={(citiesQuery.data || []).map((c) => ({ value: String(c.id), label: c.name }))}
@@ -840,10 +857,21 @@ export default function BranchesPage() {
         <Dialog open={readinessModal != null} onOpenChange={(open) => !open && setReadinessModal(null)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary" />
-                Setup Readiness — {readinessModal?.name}
-              </DialogTitle>
+              <div className="flex items-center justify-between">
+                <DialogTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-primary" />
+                  Setup Readiness — {readinessModal?.name}
+                </DialogTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] gap-1 text-primary border-primary/30"
+                  onClick={() => setShowGuidelines(true)}
+                >
+                  <BookOpen className="h-3 w-3" /> Setup SOP
+                </Button>
+              </div>
               <DialogDescription>
                 Verification checklist required before activating branch operations.
               </DialogDescription>
@@ -867,7 +895,13 @@ export default function BranchesPage() {
                   {readinessData.checklist.map((item) => (
                     <div
                       key={item.key}
-                      className="p-2.5 rounded-lg border text-xs flex items-start gap-2.5 bg-card"
+                      className={`p-2.5 rounded-lg border text-xs flex items-start gap-2.5 ${
+                        item.passed
+                          ? "bg-card"
+                          : item.critical
+                            ? "bg-rose-500/5 border-rose-500/30"
+                            : "bg-amber-500/5 border-amber-500/30"
+                      }`}
                     >
                       {item.passed ? (
                         <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
@@ -883,6 +917,49 @@ export default function BranchesPage() {
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-0.5">{item.message}</p>
                       </div>
+
+                      {/* Interactive Action Button to fix failing item */}
+                      {!item.passed && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] shrink-0 font-medium ml-1 border-primary/40 text-primary hover:bg-primary/10 gap-0.5"
+                          onClick={() => {
+                            if (
+                              item.actionKey === "edit_branch" ||
+                              item.key === "basic_profile" ||
+                              item.key === "services_configured" ||
+                              item.key === "legal_entity" ||
+                              item.key === "operational_notes"
+                            ) {
+                              const target = readinessModal;
+                              setReadinessModal(null);
+                              if (target) openEdit(target);
+                            } else if (
+                              item.actionKey === "assign_manager" ||
+                              item.key === "manager_account_assignment"
+                            ) {
+                              const target = readinessModal;
+                              setReadinessModal(null);
+                              if (target) openAssignments(target);
+                            } else if (item.actionHref) {
+                              window.location.href = item.actionHref;
+                            } else if (item.actionKey === "goto_cities" || item.key === "city_assignment") {
+                              window.location.href = "/admin/cities";
+                            } else if (
+                              item.actionKey === "assign_staff" ||
+                              item.key === "staff_allocated" ||
+                              item.key === "supervisor_configuration"
+                            ) {
+                              window.location.href = `/admin/staff?branchId=${readinessData.branchId}`;
+                            } else if (item.actionKey === "goto_franchisees" || item.key === "franchise_partner") {
+                              window.location.href = "/admin/franchisees";
+                            }
+                          }}
+                        >
+                          {item.actionLabel || "Fix"} <ArrowUpRight className="h-2.5 w-2.5" />
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1103,6 +1180,22 @@ export default function BranchesPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">
+              <div className="flex items-center justify-between p-2.5 bg-primary/5 border border-primary/20 rounded-lg text-xs text-primary">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 shrink-0" />
+                  <span>New to branch setup? Follow the 5-step SOP.</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs font-semibold text-primary underline"
+                  onClick={() => setShowGuidelines(true)}
+                >
+                  View Setup SOP
+                </Button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Branch Name *</Label>
@@ -1378,6 +1471,9 @@ export default function BranchesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Branch Setup Guidelines & Operations SOP Modal */}
+        <BranchSetupGuidelinesModal open={showGuidelines} onOpenChange={setShowGuidelines} />
       </div>
     </AdminLayout>
   );

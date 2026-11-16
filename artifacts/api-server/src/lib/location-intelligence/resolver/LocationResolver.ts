@@ -151,15 +151,42 @@ export class LocationResolver {
         ? eq(citiesTable.slug, input.citySlug.toLowerCase().trim())
         : ilike(citiesTable.name, `%${input.cityName?.trim()}%`);
 
+      // First try to match active city, then fallback to any known city in registry
       const [city] = await db
-        .select({ id: citiesTable.id, name: citiesTable.name })
+        .select({ id: citiesTable.id, name: citiesTable.name, isActive: citiesTable.isActive })
         .from(citiesTable)
-        .where(and(cityQuery, eq(citiesTable.isActive, true)))
+        .where(cityQuery)
+        .orderBy(sql`${citiesTable.isActive} DESC`)
         .limit(1);
 
       if (city) {
         cityId = city.id;
         cityName = city.name;
+      }
+    }
+
+    // 1b. Fallback: Resolve City via Pincode Coverage Rule if City Name was omitted or unmapped
+    const rawPin = input.pincode || input.postalCode;
+    if (!cityId && rawPin && rawPin.trim().length === 6) {
+      const [pincodeZone] = await db
+        .select({
+          cityId: operationalZonesTable.cityId,
+          cityName: citiesTable.name,
+        })
+        .from(zoneCoverageRulesTable)
+        .innerJoin(operationalZonesTable, eq(zoneCoverageRulesTable.zoneId, operationalZonesTable.id))
+        .innerJoin(citiesTable, eq(operationalZonesTable.cityId, citiesTable.id))
+        .where(
+          and(
+            eq(zoneCoverageRulesTable.pincode, rawPin.trim()),
+            eq(zoneCoverageRulesTable.isActive, true),
+          ),
+        )
+        .limit(1);
+
+      if (pincodeZone) {
+        cityId = pincodeZone.cityId;
+        cityName = pincodeZone.cityName;
       }
     }
 

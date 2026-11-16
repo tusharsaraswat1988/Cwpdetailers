@@ -45,6 +45,7 @@ const SCOPE_COLS = {
   branchCol: bookingsTable.branchId,
   franchiseeCol: bookingsTable.franchiseeId,
   customerCol: bookingsTable.customerId,
+  staffCol: bookingsTable.assignedStaffId,
   cityCol: bookingsTable.cityId,
 };
 

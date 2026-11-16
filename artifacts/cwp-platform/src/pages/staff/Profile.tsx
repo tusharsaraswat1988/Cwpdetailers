@@ -41,7 +41,9 @@ import {
   PhoneCall,
   ShieldCheck,
   Smartphone,
+  AlertTriangle,
 } from "lucide-react";
+import { offlineQueue } from "@/services/offlineQueue";
 import { PushNotificationSettings } from "@/components/settings/PushNotificationSettings";
 import { markAttendanceWithLocation } from "@/lib/location";
 import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhoto";
@@ -76,6 +78,13 @@ export default function StaffProfile() {
   const { staffId, isLoading: scopeLoading, missingStaffLink } = useAccountScope();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+
+  useEffect(() => {
+    return offlineQueue.subscribe((count) => {
+      setPendingSyncCount(count);
+    });
+  }, []);
 
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-profile"],
@@ -397,9 +406,23 @@ export default function StaffProfile() {
               <AlertDialogTitle className="text-base font-bold">
                 {t("logout_confirm_title")}
               </AlertDialogTitle>
-              <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
-                {t("logout_confirm_desc")}
-              </AlertDialogDescription>
+              {pendingSyncCount > 0 ? (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                    {isHindi ? "सावधान: बिना सिंक किए काम मौजूद हैं" : "Warning: Unsynced work pending"}
+                  </p>
+                  <p className="leading-relaxed">
+                    {isHindi
+                      ? `आपके ${pendingSyncCount} कार्य अभी सर्वर पर सिंक नहीं हुए हैं। यदि आप अभी लॉगआउट करेंगे, तो यह डेटा इस फोन में सुरक्षित रहेगा लेकिन सर्वर पर तब तक नहीं जाएगा जब तक आप दोबारा इसी खाते से लॉगिन नहीं करते।`
+                      : `You have ${pendingSyncCount} offline action(s) not yet synced to the server. If you log out now, they will remain safely stored on this device until you log back in.`}
+                  </p>
+                </div>
+              ) : (
+                <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
+                  {t("logout_confirm_desc")}
+                </AlertDialogDescription>
+              )}
             </AlertDialogHeader>
             <AlertDialogFooter className="flex-row gap-2 justify-end pt-3">
               <AlertDialogCancel className="h-12 min-h-[48px] px-4 text-xs font-medium m-0">

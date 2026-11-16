@@ -245,7 +245,9 @@ export class ServiceabilityEngine {
       if (cityZone) {
         return this.reject({
           cityId, branchId, zoneId, societyId, localityId, propertyType,
-          reason: "Location is outside active operational zones for this city.",
+          reason: pincode
+            ? `Pincode ${pincode} is outside active operational zones for ${city?.name || "this city"}.`
+            : `Location is outside active operational zones for ${city?.name || "this city"}.`,
           status: "NOT_SERVICEABLE",
         });
       }

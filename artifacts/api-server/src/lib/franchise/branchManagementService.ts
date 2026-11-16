@@ -11,7 +11,7 @@ import {
   type Branch,
   type Franchisee,
 } from "@workspace/db";
-import { eq, and, sql, desc, or, isNull } from "drizzle-orm";
+import { eq, and, sql, desc, or, isNull, ilike } from "drizzle-orm";
 import { logger } from "../logger";
 import { logAdminAudit } from "../audit/adminAuditService";
 
@@ -170,6 +170,9 @@ export type BranchReadinessItem = {
   passed: boolean;
   message: string;
   critical: boolean;
+  actionKey?: "edit_branch" | "goto_cities" | "assign_staff" | "assign_manager" | "configure_services" | "goto_zones" | "goto_franchisees";
+  actionLabel?: string;
+  actionHref?: string;
 };
 
 export type BranchReadinessReport = {
@@ -202,22 +205,59 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
     passed: hasBasicInfo,
     message: hasBasicInfo ? `Code: ${branch.code}` : "Missing name or branch code",
     critical: true,
+    actionKey: "edit_branch",
+    actionLabel: "Edit Profile",
   });
 
   // 2. City assignment & active status
   let cityActive = false;
   let cityName = branch.city;
-  if (branch.cityId) {
-    const [city] = await db.select().from(citiesTable).where(eq(citiesTable.id, branch.cityId)).limit(1);
-    cityActive = Boolean(city && city.isActive);
+  let cityResolvedId = branch.cityId;
+
+  // Auto-heal: If cityId is missing but branch has a city name, match against citiesTable
+  if (!cityResolvedId && branch.city?.trim()) {
+    const [matchedCity] = await db
+      .select({ id: citiesTable.id, name: citiesTable.name, isActive: citiesTable.isActive, status: citiesTable.status })
+      .from(citiesTable)
+      .where(ilike(citiesTable.name, branch.city.trim()))
+      .limit(1);
+
+    if (matchedCity) {
+      cityResolvedId = matchedCity.id;
+      cityName = matchedCity.name;
+      cityActive = Boolean(matchedCity.isActive && (matchedCity.status === "active" || !matchedCity.status));
+      // Persist the linkage back to branch
+      await db.update(branchesTable).set({ cityId: matchedCity.id }).where(eq(branchesTable.id, branchId));
+    }
+  } else if (cityResolvedId) {
+    const [city] = await db.select().from(citiesTable).where(eq(citiesTable.id, cityResolvedId)).limit(1);
+    cityActive = Boolean(city && city.isActive && (city.status === "active" || !city.status));
     if (city) cityName = city.name;
   }
+
+  let cityMessage = "Branch has no city assigned";
+  let cityActionKey: BranchReadinessItem["actionKey"] = "edit_branch";
+  let cityActionLabel = "Select City";
+  let cityActionHref: string | undefined = undefined;
+
+  if (cityResolvedId && cityActive) {
+    cityMessage = `Mapped to active city: ${cityName}`;
+  } else if (cityResolvedId && !cityActive) {
+    cityMessage = `City "${cityName}" is inactive or onboarding. Activate city in Cities & Expansion.`;
+    cityActionKey = "goto_cities";
+    cityActionLabel = "Activate City";
+    cityActionHref = "/admin/cities";
+  }
+
   checklist.push({
     key: "city_assignment",
     label: "Active City Assignment",
-    passed: Boolean(branch.cityId && cityActive),
-    message: branch.cityId && cityActive ? `Mapped to active city: ${cityName}` : "City missing or inactive",
+    passed: Boolean(cityResolvedId && cityActive),
+    message: cityMessage,
     critical: true,
+    actionKey: cityActionKey,
+    actionLabel: cityActionLabel,
+    actionHref: cityActionHref,
   });
 
   // 3. Issuing Legal Entity
@@ -232,6 +272,8 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
     passed: legalEntityAssigned,
     message: legalEntityAssigned ? "Legal entity configured for invoicing" : "No legal entity assigned for billing",
     critical: true,
+    actionKey: "edit_branch",
+    actionLabel: "Assign Entity",
   });
 
   // 4. Operating Model Configured (COCO vs FOFO)
@@ -260,6 +302,9 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
       passed: franchiseValid,
       message: franMsg,
       critical: true,
+      actionKey: "goto_franchisees",
+      actionLabel: "Link Franchisee",
+      actionHref: "/admin/franchisees",
     });
   } else {
     checklist.push({
@@ -280,6 +325,8 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
     passed: hasServices,
     message: hasServices ? `${services.length} services enabled (${services.join(", ")})` : "No services enabled for branch",
     critical: true,
+    actionKey: "edit_branch",
+    actionLabel: "Enable Services",
   });
 
   // 7. Staff & Resource Allocation
@@ -294,6 +341,9 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
     passed: staffCount > 0,
     message: staffCount > 0 ? `${staffCount} active staff members allocated` : "No active staff allocated to branch",
     critical: true,
+    actionKey: "assign_staff",
+    actionLabel: "Assign Staff",
+    actionHref: `/admin/staff?branchId=${branchId}`,
   });
 
   // 8. Actual Branch Manager User Assignment (PRD v3.0, BR-003)
@@ -327,6 +377,8 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
     passed: hasAssignedManager,
     message: managerMsg,
     critical: true,
+    actionKey: "assign_manager",
+    actionLabel: "Appoint Manager",
   });
 
   // 9. Supervisor Configuration (PRD v3.0, SUPV-001)
@@ -347,6 +399,9 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
     passed: supervisorCount > 0,
     message: supervisorCount > 0 ? `${supervisorCount} supervisor(s) configured` : "No active supervisor assigned to branch",
     critical: false,
+    actionKey: "assign_staff",
+    actionLabel: "Assign Supervisor",
+    actionHref: `/admin/staff?branchId=${branchId}`,
   });
 
   // 10. Operational Notes & Territorial Policy
@@ -356,6 +411,8 @@ export async function validateBranchReadiness(branchId: number): Promise<BranchR
     passed: Boolean(branch.operationalNotes?.trim()),
     message: branch.operationalNotes ? "Operational instructions recorded" : "No operational notes provided (recommended)",
     critical: false,
+    actionKey: "edit_branch",
+    actionLabel: "Add Notes",
   });
 
   // Calculate score and completeness

@@ -23,11 +23,30 @@ export type QueueItem = {
   retries: number;
   status: QueueItemStatus;
   lastError?: string;
+  staffId?: number | null;
+  userId?: number | null;
 };
 
 type QueueListener = (pendingCount: number, syncing: boolean) => void;
 
 const STORAGE_KEY = "cwp_offline_queue_fallback";
+
+function getActiveStaffIdentity(): { staffId: number | null; userId: number | null } {
+  try {
+    if (typeof localStorage === "undefined") return { staffId: null, userId: null };
+    const raw = localStorage.getItem("cwp_user_staff");
+    if (raw) {
+      const u = JSON.parse(raw);
+      return {
+        staffId: typeof u.staffId === "number" ? u.staffId : null,
+        userId: typeof u.id === "number" ? u.id : null,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return { staffId: null, userId: null };
+}
 
 class OfflineQueueService {
   private listeners = new Set<QueueListener>();
@@ -88,12 +107,16 @@ class OfflineQueueService {
       return existing;
     }
 
+    const { staffId: activeStaffId, userId: activeUserId } = getActiveStaffIdentity();
+
     const entry: QueueItem = {
       ...item,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       retries: 0,
       status: "pending",
+      staffId: item.staffId !== undefined ? item.staffId : activeStaffId,
+      userId: item.userId !== undefined ? item.userId : activeUserId,
     };
 
     await this.persist(entry);
@@ -115,6 +138,8 @@ class OfflineQueueService {
     const pending = await this.getPendingItems();
     if (pending.length === 0) return;
 
+    const { staffId: activeStaffId } = getActiveStaffIdentity();
+
     this.syncing = true;
     this.emit();
 
@@ -122,6 +147,12 @@ class OfflineQueueService {
       if (!connectivityService.canExecuteWrites()) break;
       if (!canQueueOfflineOperation(item.type, item.url)) {
         await this.removeItem(item.id);
+        continue;
+      }
+
+      // STAFF-077 / STAFF-078: Cross-staff queue isolation on shared devices.
+      // If this item was queued by Staff A, do not attempt to sync it under Staff B's session.
+      if (item.staffId != null && activeStaffId != null && item.staffId !== activeStaffId) {
         continue;
       }
 
