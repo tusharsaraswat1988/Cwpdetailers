@@ -343,12 +343,43 @@ export function useStaffJobsData() {
     }
   }
 
-  async function uploadGeoPhoto(job: StaffJob, kind: "before" | "after", file: File, photoIndex: number) {
+  async function uploadGeoPhoto(
+    job: StaffJob,
+    kind: "before" | "after",
+    file: File,
+    photoIndex: number,
+    capturedEvidence?: {
+      latitude?: number;
+      longitude?: number;
+      accuracy?: number;
+      gpsSource?: string;
+    },
+  ) {
     setUploadingJobId(job.id);
     setUploadingPhotoIndex(photoIndex);
     let gps: { latitude: number; longitude: number; accuracy: number } | null = null;
     try {
-      gps = await getStaffLocation("action");
+      if (
+        capturedEvidence?.latitude != null &&
+        capturedEvidence?.longitude != null &&
+        Number.isFinite(capturedEvidence.latitude) &&
+        Number.isFinite(capturedEvidence.longitude) &&
+        !(capturedEvidence.latitude === 0 && capturedEvidence.longitude === 0)
+      ) {
+        gps = {
+          latitude: capturedEvidence.latitude,
+          longitude: capturedEvidence.longitude,
+          accuracy: capturedEvidence.accuracy ?? 50,
+        };
+      } else {
+        gps = await getStaffLocation("action").catch(() => {
+          const cached = locationStoreSnapshot().lastKnownLocation;
+          if (cached) {
+            return { latitude: cached.latitude, longitude: cached.longitude, accuracy: cached.accuracy ?? 50 };
+          }
+          return { latitude: 0, longitude: 0, accuracy: 999 };
+        });
+      }
       const presign = await requestUrlMutation.mutateAsync({
         data: { name: file.name, size: file.size, contentType: file.type },
       });

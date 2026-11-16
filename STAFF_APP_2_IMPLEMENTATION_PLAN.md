@@ -137,3 +137,49 @@
 5. **Task P4-5: Resilient Job Resolution across Today and All Sets**
    - **Scope:** In `StaffOtherServicesPanel.tsx`, fall back to searching `jobs.all` if a deep linked job is not present in `jobs.today`, preventing blank views when navigating to assigned appointments.
    - **Files:** `artifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx`.
+
+---
+
+### Phase P5: Operational Workflow Hardening, State Consistency, Idempotency & Lifecycle Integrity (Completed)
+**Objective:** Harden appointment job lifecycle transitions, eliminate state fragility across reloads, enforce backend transition idempotency, resolve active job priority, and ensure honest sync states.
+
+1. **Task P5-1: Honest Sync Reconciliation (`STAFF-043`)**
+   - **Scope:** In `StaffDailyRouteSimplified.tsx`, ensure `isPendingSync` flag on local DCMS route stops automatically clears to `false` (green checkmark) when the server confirms `todayStatus === 'completed'`.
+   - **Files:** `artifacts/cwp-platform/src/features/daily-cleaning/pages/StaffDailyRouteSimplified.tsx`.
+
+2. **Task P5-2: Terminal Lifecycle State Protection & Reopening Prevention (`STAFF-044`)**
+   - **Scope:** Ensure completed and cancelled executions cannot reopen. Enforced on backend via `assertNotCompleted` in `executionService.ts` and on frontend with read-only terminal cards for both `completed` and `cancelled` statuses in `StaffServiceJobFlow.tsx`.
+   - **Files:** `artifacts/api-server/src/lib/executions/executionService.ts`, `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx`.
+
+3. **Task P5-3: Active Focus Job Priority Resolution (`STAFF-045`)**
+   - **Scope:** In `staff-jobs.ts` (`pickActiveJob`), resolve multiple assigned jobs with strict precedence: `in_progress` > `paused` > `en_route` > `confirmed` > `scheduled`. Completed or cancelled jobs return null.
+   - **Files:** `artifacts/cwp-platform/src/lib/staff-jobs.ts`.
+
+4. **Task P5-4: Idempotent Execution Transitions & State Persistence (`STAFF-046`)**
+   - **Scope:**
+     - In `executionService.ts`, added idempotency guards to `startExecution`, `pauseExecution`, `resumeExecution`, and `completeExecution` so network retries return the current execution view rather than 409 Conflict.
+     - In `trackingService.ts` (`markTechnicianEnRoute`), added full support for standalone service executions without legacy booking records.
+     - In `StaffServiceJobFlow.tsx`, persisted execution job acceptance across app refreshes/reloads via `localStorage`, preventing loss of accepted state.
+     - Added interactive service-specific checklists for Solar Cleaning and Vehicle Detailing/Wash during Step 3 (`onSiteForWashing`) with >= 44px touch targets.
+   - **Files:** `artifacts/api-server/src/lib/executions/executionService.ts`, `artifacts/api-server/src/lib/booking/services/trackingService.ts`, `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx`.
+
+---
+
+### Phase P6: Android Lifecycle, Camera/GPS Evidence Integrity & Recovery (Completed)
+**Objective:** Harden Android app lifecycle resilience, photo capture and preview workflows, honest GPS source categorization, offline upload queue stall recovery, and colloquial Hindi field-worker operational error recovery.
+
+1. **Task P6-1: Shutter-Time GPS Evidence Classification & Integrity (STAFF-047)**
+   - **Scope:** Concurrently lock GPS at the camera shutter moment. Accurately categorize GPS evidence source (resh_shutter for accuracy <= 200m, low_accuracy for > 200m, last_known_fallback for cached fix, underground_basement for garage signal loss, and permission_denied). Never disguise cached location as fresh GPS. Provide interactive photo preview and retake dialog in GeoPhotoSlotGrid.tsx with honest status chips (GPS वेरिफाइड, कैंपस लोकेशन, कमजोर GPS) and >= 48px touch targets, hiding raw coordinates from staff.
+   - **Files:** rtifacts/cwp-platform/src/lib/native/captureStaffPhoto.ts, rtifacts/cwp-platform/src/components/staff/GeoPhotoSlotGrid.tsx, rtifacts/cwp-platform/src/hooks/useStaffJobsData.ts, rtifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx.
+
+2. **Task P6-2: Photo Upload Queue Crash Recovery & Deduplication (STAFF-048)**
+   - **Scope:** In offlineQueue.ts, recover orphaned syncing queue entries left over from Android process terminations/crashes by resetting them to pending on restart. Add duplicate upload prevention in enqueue() to prevent duplicate queue items for the same photo or visit payload.
+   - **Files:** rtifacts/cwp-platform/src/services/offlineQueue.ts.
+
+3. **Task P6-3: Android App Lifecycle Resilience & Active Job Auto-Restoration (STAFF-049)**
+   - **Scope:** In StaffAppShell.tsx, register listeners for @capacitor/app ppStateChange (isActive === true) and isibilitychange to invalidate React Query caches and resume offline sync processing on resume. In StaffOtherServicesPanel.tsx, auto-restore active in-progress, en-route, or paused jobs when navigating to the jobs tab without losing confirmed server state.
+   - **Files:** rtifacts/cwp-platform/src/components/layout/StaffAppShell.tsx, rtifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx.
+
+4. **Task P6-4: Colloquial Hindi Field Error Recovery & Settings Deep Linking (STAFF-050)**
+   - **Scope:** In staffLanguage.ts, implement ormatStaffOperationalError providing reassuring, non-technical everyday Hindi guidance confirming that work is safely saved on the device and detailing actionable next steps. Add 1-tap phone settings deep link (openNativeAppSettings) in GeoPhotoSlotGrid.tsx and StaffVehicleCleanDialog.tsx for permanent camera/location permission denials.
+   - **Files:** rtifacts/cwp-platform/src/lib/staffLanguage.ts, rtifacts/cwp-platform/src/features/daily-cleaning/components/StaffVehicleCleanDialog.tsx, rtifacts/cwp-platform/src/components/staff/GeoPhotoSlotGrid.tsx.

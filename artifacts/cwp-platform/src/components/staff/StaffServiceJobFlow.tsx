@@ -212,21 +212,43 @@ export function StaffServiceJobFlow({
   isActionPending,
 }: Props) {
   const { t, isHindi } = useStaffLanguage();
-  const [accepted, setAccepted] = useState(false);
-  const [onWay, setOnWay] = useState(false);
-  const [arrived, setArrived] = useState(false);
+  const acceptedStorageKey = `staff_job_accepted_${job.source}_${job.id}`;
+  const [accepted, setAccepted] = useState(() => {
+    try {
+      return localStorage.getItem(acceptedStorageKey) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [readyForAfter, setReadyForAfter] = useState(false);
   const [remarks, setRemarks] = useState("");
+  const [completedChecklist, setCompletedChecklist] = useState<Record<string, boolean>>({});
+
+  const markAccepted = () => {
+    try {
+      localStorage.setItem(acceptedStorageKey, "1");
+    } catch {}
+    setAccepted(true);
+  };
+
+  const toggleChecklistItem = (id: string) => {
+    setCompletedChecklist(prev => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   const { before, after } = countJobPhotos(job);
 
   useEffect(() => {
-    setAccepted(false);
-    setOnWay(false);
-    setArrived(false);
+    if (job.status !== "scheduled") {
+      try {
+        localStorage.removeItem(acceptedStorageKey);
+      } catch {}
+    }
     setReadyForAfter(after > 0);
     setRemarks(job.technicianNotes ?? "");
-  }, [job.id, job.source, job.status, after, job.technicianNotes]);
+  }, [job.id, job.source, job.status, after, job.technicianNotes, acceptedStorageKey]);
 
   const btnClass = "w-full h-12 text-sm font-semibold rounded-xl";
   const isLocating = locatingJobId === job.id;
@@ -243,14 +265,9 @@ export function StaffServiceJobFlow({
   const canComplete = canCompleteOtherServiceJob(job);
 
   const isAccepted = job.status === "confirmed" || (isExecution && job.status === "scheduled" && accepted);
-  const isEnRoute =
-    job.status === "en_route" || (isExecution && job.status === "scheduled" && accepted && onWay);
+  const isEnRoute = job.status === "en_route";
 
-  const readyToStartWork = job.status === "en_route" && arrived && beforeDone;
-
-  const onSiteForBefore =
-    (job.status === "en_route" && arrived && !beforeDone) ||
-    (job.status === "in_progress" && !beforeDone);
+  const onSiteForBefore = job.status === "in_progress" && !beforeDone;
 
   const onSiteForWashing =
     job.status === "in_progress" && beforeDone && !readyForAfter && after === 0;
@@ -264,7 +281,7 @@ export function StaffServiceJobFlow({
   if (job.status === "completed") {
     const completedLabel = formatCompletedAt(job.completedAt);
     return (
-      <div className="space-y-4 py-3">
+      <div className="space-y-4 py-3" data-testid={`job-completed-${job.id}`}>
         <ServiceStepper currentStep="complete" isSolar={isSolar} />
         <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-300 text-sm font-semibold bg-green-500/10 border border-green-500/20 rounded-xl py-4">
           <CheckCircle size={18} className="text-green-600" /> {isHindi ? "काम पूरा हुआ" : "Job Completed"}
@@ -280,6 +297,19 @@ export function StaffServiceJobFlow({
             <p className="text-foreground">{job.technicianNotes}</p>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (job.status === "cancelled") {
+    return (
+      <div className="space-y-4 py-3" data-testid={`job-cancelled-${job.id}`}>
+        <div className="flex items-center justify-center gap-2 text-rose-700 dark:text-rose-300 text-sm font-semibold bg-rose-500/10 border border-rose-500/20 rounded-xl py-4">
+          <AlertCircle size={18} className="text-rose-600" /> {isHindi ? "काम रद्द हो चुका है" : "Job Cancelled"}
+        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          {isHindi ? "यह काम रद्द कर दिया गया है। कोई और कार्रवाई आवश्यक नहीं है।" : "This job has been cancelled. No further action needed."}
+        </p>
       </div>
     );
   }
@@ -335,7 +365,7 @@ export function StaffServiceJobFlow({
         <JobContactActions job={job} addressLine={addressLine} />
         <Button
           className={`${btnClass} bg-orange-600 hover:bg-orange-700 text-white`}
-          onClick={() => setAccepted(true)}
+          onClick={() => markAccepted()}
           disabled={isActionPending}
           data-testid={`btn-accept-job-${job.id}`}
         >
@@ -359,13 +389,7 @@ export function StaffServiceJobFlow({
         <JobContactActions job={job} addressLine={addressLine} />
         <Button
           className={`${btnClass} bg-orange-600 hover:bg-orange-700 text-white`}
-          onClick={() => {
-            if (isExecution) {
-              setOnWay(true);
-              return;
-            }
-            void transitionJob(job.id, "en_route", job);
-          }}
+          onClick={() => void transitionJob(job.id, "en_route", job)}
           disabled={isActionPending}
           data-testid={`btn-en-route-${job.id}`}
         >
@@ -376,7 +400,7 @@ export function StaffServiceJobFlow({
     );
   }
 
-  if (isEnRoute && !arrived && job.status !== "in_progress") {
+  if (isEnRoute && job.status !== "in_progress") {
     return (
       <div className="space-y-4">
         <ServiceStepper currentStep="route" isSolar={isSolar} />
@@ -389,13 +413,7 @@ export function StaffServiceJobFlow({
         <JobContactActions job={job} addressLine={addressLine} />
         <Button
           className={`${btnClass} bg-primary text-primary-foreground hover:bg-primary/90`}
-          onClick={() => {
-            if (isExecution) {
-              void transitionJob(job.id, "in_progress", job);
-              return;
-            }
-            setArrived(true);
-          }}
+          onClick={() => void transitionJob(job.id, "in_progress", job)}
           disabled={isActionPending}
           data-testid={`btn-arrived-${job.id}`}
         >
@@ -452,13 +470,27 @@ export function StaffServiceJobFlow({
           photos={beforePhotos}
           uploadingIndex={isUploading && uploadingPhotoIndex != null ? uploadingPhotoIndex : null}
           disabled={beforeDone}
-          onCapture={file => void uploadGeoPhoto(job, "before", file, beforePhotos.length)}
+          onCapture={(file, evidence) => void uploadGeoPhoto(job, "before", file, beforePhotos.length, evidence?.location ? { ...evidence.location, gpsSource: evidence.gpsSource } : undefined)}
         />
       </div>
     );
   }
 
   if (onSiteForWashing) {
+    const checklistItems = isSolar
+      ? [
+          { id: "s1", label: isHindi ? "साइट सुरक्षा और सोलर पैनल की स्थिति जांचें" : "Inspect site safety & solar panel condition" },
+          { id: "s2", label: isHindi ? "सॉफ्ट ब्रश व पानी से पैनल की सफाई करें" : "Clean panels with soft brush and water" },
+          { id: "s3", label: isHindi ? "फ्रेम और वायरिंग के पास सावधानी रखें" : "Check frames, cabling & work area" },
+          { id: "s4", label: isHindi ? "कार्य क्षेत्र साफ करें और उपकरण समेटें" : "Clean up work area and pack equipment" },
+        ]
+      : [
+          { id: "v1", label: isHindi ? "गाड़ी की स्थिति और स्क्रैच जांचें" : "Inspect vehicle & note any existing marks" },
+          { id: "v2", label: isHindi ? "सर्विस के अनुसार पूरी सफाई / वॉश करें" : "Perform detailed wash & cleaning service" },
+          { id: "v3", label: isHindi ? "शीशे, पहिए और बाहरी भाग चमकाएं" : "Clean mirrors, glass, and wheels" },
+          { id: "v4", label: isHindi ? "कार्य क्षेत्र साफ करें और उपकरण समेटें" : "Clean up work area and pack equipment" },
+        ];
+
     return (
       <div className="space-y-4">
         <ServiceStepper currentStep="work" isSolar={isSolar} />
@@ -468,9 +500,43 @@ export function StaffServiceJobFlow({
             <p className="font-semibold text-blue-800">{t("service_in_progress")}</p>
           </div>
           <p className="text-xs text-muted-foreground">
-            {isHindi ? "स्टेप 3 — सफाई ध्यान से पूरी करें। काम पूरा होने पर बाद की फोटो लें।" : "Step 3 — Complete the service carefully. When finished, take after photos."}
+            {isHindi ? "स्टेप 3 — सफाई ध्यान से पूरी करें। चेकलिस्ट पूरी होने पर बाद की फोटो लें।" : "Step 3 — Complete the service carefully. Check off items then take after photos."}
           </p>
         </div>
+
+        {/* Service-specific checklist */}
+        <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground">
+            {isHindi ? "सर्विस चेकलिस्ट" : "Service Checklist"}
+          </p>
+          <div className="space-y-1">
+            {checklistItems.map(item => {
+              const isChecked = !!completedChecklist[item.id];
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => toggleChecklistItem(item.id)}
+                  className="w-full min-h-[44px] flex items-center gap-3 p-2 rounded-lg text-left transition-colors hover:bg-muted text-xs font-medium"
+                >
+                  <span
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-xs font-bold ${
+                      isChecked
+                        ? "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-border text-transparent"
+                    }`}
+                  >
+                    ✓
+                  </span>
+                  <span className={isChecked ? "line-through text-muted-foreground" : "text-foreground"}>
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid grid-cols-3 gap-2 opacity-85">
           {beforePhotos.map((photo, i) => (
             <div key={photo.url} className="aspect-square rounded-xl overflow-hidden border border-green-500/30 bg-black">
@@ -520,7 +586,7 @@ export function StaffServiceJobFlow({
           photos={afterPhotos}
           uploadingIndex={isUploading && uploadingPhotoIndex != null ? uploadingPhotoIndex : null}
           disabled={false}
-          onCapture={file => void uploadGeoPhoto(job, "after", file, afterPhotos.length)}
+          onCapture={(file, evidence) => void uploadGeoPhoto(job, "after", file, afterPhotos.length, evidence?.location ? { ...evidence.location, gpsSource: evidence.gpsSource } : undefined)}
         />
       </div>
     );

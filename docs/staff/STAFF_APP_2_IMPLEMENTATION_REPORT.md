@@ -55,6 +55,36 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 - On `Dashboard.tsx`, the large attendance check-in card is displayed ONLY when check-in is pending.
 - Once verified, it automatically collapses into a subtle verified badge (`हाजिरी लग गई (06:15 AM)`), saving vertical screen space and eliminating cognitive clutter.
 
+### 2.8 Honest Sync Reconciliation (STAFF-043)
+- In `StaffDailyRouteSimplified.tsx`, updated route stop reconciliation so `isPendingSync` is cleared to `false` (green checkmark) strictly when the backend confirms `todayStatus === 'completed'`, preventing premature or false sync indicators.
+
+### 2.9 Terminal Lifecycle State Protection & Reopening Prevention (STAFF-044)
+- Hardened `executionService.ts` (`assertNotCompleted`) and `StaffServiceJobFlow.tsx` so completed and cancelled jobs are terminal and read-only; added clear cancelled card (`काम रद्द हो चुका है`), preventing reopening or duplicate actions.
+
+### 2.10 Active Focus Job Priority Resolution (STAFF-045)
+- In `staff-jobs.ts` (`pickActiveJob`), implemented strict priority resolution: `in_progress` > `paused` > `en_route` > `confirmed` > `scheduled`, ensuring unambiguous active task focus when multiple jobs exist.
+
+### 2.11 Idempotent Transitions & Execution Acceptance Persistence (STAFF-046)
+- Added idempotent checks in `startExecution`, `pauseExecution`, `resumeExecution`, and `completeExecution` in `executionService.ts` so network retries return current state instead of 409 Conflict. Supported standalone executions in `markTechnicianEnRoute` in `trackingService.ts`. Persisted execution job acceptance in `StaffServiceJobFlow.tsx` across app refreshes and reloads via `localStorage`. Added service-specific interactive checklists for Solar and Vehicle detailing with >= 44px touch targets.
+
+### 2.12 Shutter-Time GPS Evidence Classification & Integrity (STAFF-047)
+- Concurrently captured GPS coordinates, accuracy, and capture timestamp at the exact camera shutter moment (`captureStaffPhotoWithGps`).
+- Categorized GPS evidence source honestly: `fresh_shutter` (accuracy <= 200m), `low_accuracy` (> 200m), `last_known_fallback` (cached campus location), `underground_basement` (garage signal loss), and `permission_denied`. Never silently presents cached location as fresh GPS.
+- Built interactive photo preview and retake modal in `GeoPhotoSlotGrid.tsx` with honest status chips (`GPS वेरिफाइड`, `कैंपस लोकेशन`, `कमजोर GPS`) and >= 48px touch targets, while shielding raw coordinates and internal hashes from staff.
+
+### 2.13 Photo Upload Queue Crash Recovery & Deduplication (STAFF-048)
+- In `offlineQueue.ts`, recovered orphaned `syncing` queue entries from interrupted Android process crashes by automatically resetting non-active `syncing` items back to `pending` upon `getPendingItems()`.
+- Implemented duplicate upload prevention in `enqueue()` to prevent redundant queue entries for the same photo or visit payload.
+
+### 2.14 Android App Lifecycle Resilience & Active Job Auto-Restoration (STAFF-049)
+- In `StaffAppShell.tsx`, registered listeners for `@capacitor/app` `appStateChange` (`isActive === true`) and web `visibilitychange` to trigger automatic query cache invalidation and resume queue processing on app foregrounding.
+- In `StaffOtherServicesPanel.tsx`, implemented auto-restoration of active `in_progress`, `en_route`, or `paused` appointment jobs without losing confirmed server-side state.
+
+### 2.15 Colloquial Hindi Operational Error Recovery & Permission Deep Linking (STAFF-050)
+- In `staffLanguage.ts`, implemented `formatStaffOperationalError` providing reassuring everyday Hindi guidance confirming that work is safely saved on the device and detailing actionable next steps.
+- Added 1-tap phone settings deep link (`openNativeAppSettings`) in `GeoPhotoSlotGrid.tsx` and `StaffVehicleCleanDialog.tsx` for permanent camera/location permission denials.
+
+
 ---
 
 ## 3. Exact Files Modified or Created
@@ -81,6 +111,12 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 | `artifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx` | **MODIFIED** | Resilient job resolution across today and all sets, Android hardware back button handler |
 | `artifacts/cwp-platform/src/pages/staff/Dashboard.tsx` | **MODIFIED** | Refined operational lifecycle priority: active appointment job -> morning DCMS -> next scheduled job |
 | `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts` | **NEW FILE** | Unit tests for DCMS route segregation, Hindi translations, basement GPS, lifecycle task focus, and deep linking |
+| `artifacts/api-server/src/lib/executions/executionService.ts` | **MODIFIED** | Idempotency guards (`start`, `pause`, `resume`, `complete`), `assertNotCompleted` terminal safeguard |
+| `artifacts/api-server/src/lib/booking/services/trackingService.ts` | **MODIFIED** | Standalone service execution support in `markTechnicianEnRoute` location tracking |
+| `artifacts/cwp-platform/src/lib/staff-jobs.ts` | **MODIFIED** | Strict active job precedence (`in_progress` > `paused` > `en_route` > `confirmed` > `scheduled`) |
+| `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx` | **MODIFIED** | Execution acceptance persistence across reload (`localStorage`), terminal cancelled card, service checklists |
+| `artifacts/cwp-platform/src/features/daily-cleaning/pages/StaffDailyRouteSimplified.tsx` | **MODIFIED** | Honest sync reconciliation (`isPendingSync` cleared strictly on server confirmed status) |
+| `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts` | **MODIFIED** | Resilient location fallback for photo uploads under weak GPS/timeout |
 | `docs/staff/STAFF_APP_EXISTING_FEATURE_INVENTORY.md` | **NEW FILE** | Full screen-by-screen inventory |
 | `docs/staff/STAFF_APP_FORENSIC_AUDIT.md` | **NEW FILE** | Forensic technical audit report |
 | `docs/staff/STAFF_APP_UX_GAP_ANALYSIS.md` | **NEW FILE** | UX gap analysis matrix |
@@ -92,18 +128,23 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 ## 4. Test & Verification Evidence
 
 1. **Staff App 2.0 Forensic Test Suite (`staff-app-2-forensic-verification.test.ts`)**:
-   - Total tests: **14 passed (14)** (100% pass rate in 2.49s)
+   - Total tests: **22 passed (22)** (100% pass rate in 2.50s)
    - Tested:
      - Out-of-order route segregation and original sequence preservation.
      - IST time formatting and chronological completion sequence.
      - Colloquial Hindi field-worker vocabulary and bilingual toggle.
-     - Offline pending sync indicator honesty.
+     - Offline pending sync indicator honesty and reconciliation upon server confirmation (`STAFF-043`).
+     - Terminal completed and cancelled job protection (`STAFF-044`).
      - Cross-session server completion data restoration.
      - Field execution lifecycle step and action translations.
      - Operational lifecycle priority: active appointment job -> morning DCMS -> scheduled appointment job.
      - Deep link key resolution for execution vs booking records (`execution-${id}` vs `booking-${id}`).
-2. **Backend API Bundle (`@workspace/api-server`)**:
-   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 838ms**
-3. **Frontend Production Build (`@workspace/cwp-platform`)**:
-   - Built via `vite build --config vite.config.ts`: **Built cleanly in 12.69s**
+     - Active focus job priority resolution with strict precedence (`STAFF-045`).
+     - Execution job acceptance persistence across app refresh / restart (`STAFF-046`).
+2. **Backend Execution Validation Suite (`executionValidation.test.ts`)**:
+   - Total tests: **8 passed (8)** (100% pass rate in 391ms)
+3. **Backend API Bundle (`@workspace/api-server`)**:
+   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 1030ms**
+4. **Frontend Production Build (`@workspace/cwp-platform`)**:
+   - Built via `vite build --config vite.config.ts`: **Built cleanly in 13.48s**
    - Service worker generated via `vite-plugin-pwa`: **55 precache entries**

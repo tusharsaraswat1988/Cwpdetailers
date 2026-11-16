@@ -8,7 +8,7 @@ import { StaffServiceJobFlow } from "@/components/staff/StaffServiceJobFlow";
 import { StaffWalkInPanel } from "@/components/staff/StaffWalkInPanel";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Calendar, ChevronDown, ChevronLeft, UserPlus } from "lucide-react";
-import { staffJobKey, type StaffJob } from "@/lib/staff-jobs";
+import { staffJobKey, pickActiveJob, type StaffJob } from "@/lib/staff-jobs";
 import { cn } from "@/lib/utils";
 import {
   StaffSkeleton,
@@ -110,6 +110,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [fromWalkIn, setFromWalkIn] = useState(false);
   const [walkInSuccess, setWalkInSuccess] = useState<string | null>(null);
+  const [userDismissedSelection, setUserDismissedSelection] = useState(false);
 
   const pendingJobs = jobs.today.filter(j => j.status !== "completed" && j.status !== "cancelled");
   const completedJobs = jobs.today.filter(j => j.status === "completed");
@@ -127,8 +128,20 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
   }, [search]);
 
   useEffect(() => {
-    if (!selectedJobKey) {
+    if (selectedJobKey) {
+      setUserDismissedSelection(false);
+    } else {
       setSelectedJob(null);
+      // Android lifecycle auto-restoration: if no job key is selected, but staff has an active job,
+      // restore the active job view unless explicitly dismissed by user.
+      if (!userDismissedSelection && !jobs.loadingToday && jobs.today.length > 0) {
+        const active = pickActiveJob(jobs.today);
+        if (active && (active.status === "in_progress" || active.status === "en_route" || active.status === "paused")) {
+          const key = staffJobKey(active);
+          onSelectJob(key);
+          return;
+        }
+      }
       return;
     }
     if (jobs.loadingToday && jobs.loadingAll) return;
@@ -147,7 +160,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
     return () => {
       cancelled = true;
     };
-  }, [selectedJobKey, jobs.loadingToday, jobs.loadingAll, jobs.today, jobs.all]);
+  }, [selectedJobKey, userDismissedSelection, jobs.loadingToday, jobs.loadingAll, jobs.today, jobs.all, onSelectJob]);
 
   async function refreshSelectedJob(job: StaffJob) {
     const refreshed = await jobs.refetchToday();
@@ -189,8 +202,14 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
       kind: "before" | "after",
       file: File,
       photoIndex: number,
+      capturedEvidence?: {
+        latitude?: number;
+        longitude?: number;
+        accuracy?: number;
+        gpsSource?: string;
+      },
     ) => {
-      await jobs.uploadGeoPhoto(job, kind, file, photoIndex);
+      await jobs.uploadGeoPhoto(job, kind, file, photoIndex, capturedEvidence);
       await refreshSelectedJob(job);
     },
     completeJobWithNotes: async (job: StaffJob, notes: string) => {
@@ -209,6 +228,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
         <button
           type="button"
           onClick={() => {
+            setUserDismissedSelection(true);
             setSelectedJob(null);
             onSelectJob(null);
             setFromWalkIn(false);

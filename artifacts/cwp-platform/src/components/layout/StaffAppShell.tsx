@@ -1,6 +1,6 @@
-import { ReactNode, useMemo } from "react";
+import { ReactNode, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { AppShell, type BottomNavItem } from "@/components/app-shell";
 import { LocationStatusIndicator } from "@/lib/location/LocationStatusIndicator";
@@ -10,11 +10,55 @@ import { Zap, Wrench, Sparkles, User, Globe } from "lucide-react";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { useStaffLanguage } from "@/lib/staffLanguage";
 import { StaffPendingSyncBanner } from "@/components/staff/StaffPendingSyncBanner";
+import { isStaffNativeApp } from "@/lib/native/staffNative";
+import { offlineQueue } from "@/services/offlineQueue";
+import { getGetTodayBookingsQueryKey } from "@workspace/api-client-react";
+import { SERVICE_EXECUTIONS_QUERY_KEY } from "@/features/service-executions/api";
 
 export default function StaffAppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { user } = useAuth();
   const { lang, setLang, t } = useStaffLanguage();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    let removeListener: (() => void) | undefined;
+
+    const handleResume = () => {
+      void queryClient.invalidateQueries({ queryKey: getGetTodayBookingsQueryKey() });
+      void queryClient.invalidateQueries({ queryKey: SERVICE_EXECUTIONS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["staff-daily-route"] });
+      void queryClient.invalidateQueries({ queryKey: [STAFF_ECOSYSTEM_QUERY_KEY] });
+      void offlineQueue.processQueue();
+    };
+
+    if (typeof window !== "undefined" && isStaffNativeApp()) {
+      void import("@capacitor/app").then(({ App: CapApp }) => {
+        const sub = CapApp.addListener("appStateChange", ({ isActive }) => {
+          if (isActive) {
+            handleResume();
+          }
+        });
+        void sub.then(handle => {
+          removeListener = () => {
+            void handle.remove();
+          };
+        });
+      });
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        handleResume();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      removeListener?.();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [queryClient]);
 
   const { data: myContext } = useQuery({
     queryKey: [STAFF_ECOSYSTEM_QUERY_KEY, "me-context"],

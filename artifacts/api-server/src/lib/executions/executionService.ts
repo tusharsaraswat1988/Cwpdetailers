@@ -443,7 +443,17 @@ async function ensureDefaultChecklist(executionId: number, taskType?: string): P
 export async function startExecution(req: Request, executionId: number, gps?: {
   latitude?: number; longitude?: number; accuracy?: number;
 }): Promise<ExecutionView> {
-  const execution = await getMutableExecution(req, executionId);
+  const row = await loadExecutionRow(executionId);
+  if (!row || !assertInScope(req, row.execution)) {
+    throw new Error("Execution not found");
+  }
+  assertAssignedTechnician(req, row.execution);
+  if (row.execution.status === "started" || row.execution.status === "resumed") {
+    // Idempotent retry: already started
+    return mapExecutionRow(row);
+  }
+  assertNotCompleted(row.execution);
+  const execution = row.execution;
   if (!isReady(execution.status)) {
     throw new Error("Only ready executions can be started");
   }
@@ -507,12 +517,22 @@ export async function startExecution(req: Request, executionId: number, gps?: {
     }
   }
 
-  const row = await loadExecutionRow(executionId);
-  return mapExecutionRow(row!);
+  const updatedRow = await loadExecutionRow(executionId);
+  return mapExecutionRow(updatedRow!);
 }
 
 export async function pauseExecution(req: Request, executionId: number, reason?: string): Promise<ExecutionView> {
-  const execution = await getMutableExecution(req, executionId);
+  const row = await loadExecutionRow(executionId);
+  if (!row || !assertInScope(req, row.execution)) {
+    throw new Error("Execution not found");
+  }
+  assertAssignedTechnician(req, row.execution);
+  if (row.execution.status === "paused") {
+    // Idempotent retry: already paused
+    return mapExecutionRow(row);
+  }
+  assertNotCompleted(row.execution);
+  const execution = row.execution;
   if (!isInProgress(execution.status)) {
     throw new Error("Only in-progress executions can be paused");
   }
@@ -535,12 +555,22 @@ export async function pauseExecution(req: Request, executionId: number, reason?:
     metadata: { reason },
   });
 
-  const row = await loadExecutionRow(executionId);
-  return mapExecutionRow(row!);
+  const updatedRow = await loadExecutionRow(executionId);
+  return mapExecutionRow(updatedRow!);
 }
 
 export async function resumeExecution(req: Request, executionId: number): Promise<ExecutionView> {
-  const execution = await getMutableExecution(req, executionId);
+  const row = await loadExecutionRow(executionId);
+  if (!row || !assertInScope(req, row.execution)) {
+    throw new Error("Execution not found");
+  }
+  assertAssignedTechnician(req, row.execution);
+  if (row.execution.status === "resumed" || row.execution.status === "started") {
+    // Idempotent retry: already resumed or started
+    return mapExecutionRow(row);
+  }
+  assertNotCompleted(row.execution);
+  const execution = row.execution;
   if (execution.status !== "paused") {
     throw new Error("Only paused executions can be resumed");
   }
@@ -562,8 +592,8 @@ export async function resumeExecution(req: Request, executionId: number): Promis
     type: "ExecutionResumed",
   });
 
-  const row = await loadExecutionRow(executionId);
-  return mapExecutionRow(row!);
+  const updatedRow = await loadExecutionRow(executionId);
+  return mapExecutionRow(updatedRow!);
 }
 
 export type CompleteExecutionInput = {
@@ -797,8 +827,8 @@ export async function saveCustomerSignature(
     actorName: actor.actorName,
   });
 
-  const row = await loadExecutionRow(executionId);
-  return mapExecutionRow(row!);
+  const updatedRow = await loadExecutionRow(executionId);
+  return mapExecutionRow(updatedRow!);
 }
 
 export async function completeExecution(
@@ -806,7 +836,17 @@ export async function completeExecution(
   executionId: number,
   input: CompleteExecutionInput = {},
 ): Promise<ExecutionView> {
-  const execution = await getMutableExecution(req, executionId);
+  const row = await loadExecutionRow(executionId);
+  if (!row || !assertInScope(req, row.execution)) {
+    throw new Error("Execution not found");
+  }
+  assertAssignedTechnician(req, row.execution);
+  if (row.execution.status === "completed") {
+    // Idempotent retry: already completed on server
+    return mapExecutionRow(row);
+  }
+  assertNotCompleted(row.execution);
+  const execution = row.execution;
   if (!isInProgress(execution.status)) {
     throw new Error("Start work before completing — cannot complete from current status");
   }
@@ -931,8 +971,8 @@ export async function completeExecution(
     }
   }
 
-  const row = await loadExecutionRow(executionId);
-  return mapExecutionRow(row!);
+  const updatedRow = await loadExecutionRow(executionId);
+  return mapExecutionRow(updatedRow!);
 }
 
 export async function missExecution(req: Request, executionId: number, reason?: string): Promise<ExecutionView> {
@@ -986,8 +1026,8 @@ export async function missExecution(req: Request, executionId: number, reason?: 
     }
   }
 
-  const row = await loadExecutionRow(executionId);
-  return mapExecutionRow(row!);
+  const updatedRow = await loadExecutionRow(executionId);
+  return mapExecutionRow(updatedRow!);
 }
 
 export async function cancelExecution(req: Request, executionId: number, reason?: string): Promise<ExecutionView> {
@@ -1033,8 +1073,8 @@ export async function cancelExecution(req: Request, executionId: number, reason?
     }
   }
 
-  const row = await loadExecutionRow(executionId);
-  return mapExecutionRow(row!);
+  const updatedRow = await loadExecutionRow(executionId);
+  return mapExecutionRow(updatedRow!);
 }
 
 export async function rescheduleExecution(

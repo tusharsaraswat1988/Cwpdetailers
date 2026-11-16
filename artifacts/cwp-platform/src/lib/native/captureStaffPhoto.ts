@@ -30,6 +30,52 @@ export function isCameraCancel(err: unknown): boolean {
   return /cancel|cancelled|canceled|user cancelled|no image/i.test(msg);
 }
 
+export function isCameraPermissionDenied(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /permission|denied|access to camera|not allowed/i.test(msg);
+}
+
+export async function checkStaffCameraPermission(): Promise<{
+  granted: boolean;
+  canAsk: boolean;
+  permanentlyDenied: boolean;
+}> {
+  if (isStaffNativeApp()) {
+    try {
+      const { Camera } = await import("@capacitor/camera");
+      const status = await Camera.checkPermissions();
+      const cameraState = status.camera;
+      return {
+        granted: cameraState === "granted",
+        canAsk: cameraState === "prompt",
+        permanentlyDenied: cameraState === "denied",
+      };
+    } catch {
+      // fallback
+    }
+  }
+  return { granted: true, canAsk: true, permanentlyDenied: false };
+}
+
+export async function requestStaffCameraPermission(): Promise<{
+  granted: boolean;
+  permanentlyDenied: boolean;
+}> {
+  if (isStaffNativeApp()) {
+    try {
+      const { Camera } = await import("@capacitor/camera");
+      const status = await Camera.requestPermissions({ permissions: ["camera"] });
+      return {
+        granted: status.camera === "granted",
+        permanentlyDenied: status.camera === "denied",
+      };
+    } catch {
+      // fallback
+    }
+  }
+  return { granted: true, permanentlyDenied: false };
+}
+
 export async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
   const res = await fetch(dataUrl);
   const blob = await res.blob();
@@ -103,14 +149,25 @@ export async function captureStaffPhoto(facing: StaffCameraFacing): Promise<Capt
   return captureWebPhoto(facing);
 }
 
+export type GpsEvidenceSource =
+  | "fresh_shutter"
+  | "last_known_fallback"
+  | "underground_basement"
+  | "permission_denied"
+  | "unavailable"
+  | "low_accuracy";
+
 export type CapturedStaffPhotoWithGps = CapturedStaffPhoto & {
   location: {
     latitude: number;
     longitude: number;
     accuracy?: number;
   };
+  gpsSource: GpsEvidenceSource;
+  gpsTimestamp: string;
+  isEvidenceAcceptable: boolean;
   gpsUnavailable?: boolean;
-  gpsUnavailableReason?: "underground_basement_no_signal" | "covered_parking_timeout" | "hardware_gps_unavailable";
+  gpsUnavailableReason?: "underground_basement_no_signal" | "covered_parking_timeout" | "hardware_gps_unavailable" | "permission_denied" | "low_accuracy";
   weakGpsFallback?: boolean;
 };
 
@@ -123,31 +180,61 @@ export type CapturedStaffPhotoWithGps = CapturedStaffPhoto & {
 export async function captureStaffPhotoWithGps(
   facing: StaffCameraFacing,
 ): Promise<CapturedStaffPhotoWithGps> {
+  const shutterTimestamp = new Date().toISOString();
+
   // Fire photo capture and location query concurrently for exact timestamp match
   const locationPromise = getStaffLocation("action")
-    .then(loc => ({
-      latitude: loc.latitude,
-      longitude: loc.longitude,
-      accuracy: loc.accuracy,
-      gpsUnavailable: false,
-      weakGpsFallback: false,
-    }))
-    .catch(() => {
+    .then(loc => {
+      const accuracy = loc.accuracy ?? 50;
+      const isLowAccuracy = accuracy > 200;
+      return {
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        accuracy,
+        gpsSource: isLowAccuracy ? ("low_accuracy" as const) : ("fresh_shutter" as const),
+        isEvidenceAcceptable: !isLowAccuracy,
+        gpsUnavailable: false,
+        gpsUnavailableReason: isLowAccuracy ? ("low_accuracy" as const) : undefined,
+        weakGpsFallback: false,
+      };
+    })
+    .catch(err => {
+      const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+      const isPermissionDenied = /permission|denied/i.test(msg);
+
+      if (isPermissionDenied) {
+        return {
+          latitude: 0,
+          longitude: 0,
+          accuracy: 999,
+          gpsSource: "permission_denied" as const,
+          isEvidenceAcceptable: false,
+          gpsUnavailable: true,
+          gpsUnavailableReason: "permission_denied" as const,
+          weakGpsFallback: false,
+        };
+      }
+
       const cached = locationStoreSnapshot().lastKnownLocation;
-      if (cached) {
+      if (cached && Number.isFinite(cached.latitude) && Number.isFinite(cached.longitude) && !(cached.latitude === 0 && cached.longitude === 0)) {
         return {
           latitude: cached.latitude,
           longitude: cached.longitude,
-          accuracy: cached.accuracy,
+          accuracy: cached.accuracy ?? 100,
+          gpsSource: "last_known_fallback" as const,
+          isEvidenceAcceptable: true,
           gpsUnavailable: false,
           weakGpsFallback: true,
         };
       }
+
       // Basement signal loss fallback
       return {
         latitude: 0,
         longitude: 0,
         accuracy: 999,
+        gpsSource: "underground_basement" as const,
+        isEvidenceAcceptable: false,
         gpsUnavailable: true,
         gpsUnavailableReason: "underground_basement_no_signal" as const,
         weakGpsFallback: false,
@@ -164,6 +251,9 @@ export async function captureStaffPhotoWithGps(
       longitude: locInfo.longitude,
       accuracy: locInfo.accuracy,
     },
+    gpsSource: locInfo.gpsSource,
+    gpsTimestamp: shutterTimestamp,
+    isEvidenceAcceptable: locInfo.isEvidenceAcceptable,
     gpsUnavailable: locInfo.gpsUnavailable,
     gpsUnavailableReason: locInfo.gpsUnavailableReason,
     weakGpsFallback: locInfo.weakGpsFallback,

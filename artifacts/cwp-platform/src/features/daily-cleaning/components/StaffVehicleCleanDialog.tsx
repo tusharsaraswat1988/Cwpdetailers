@@ -20,18 +20,20 @@ import {
   ShieldCheck,
   AlertCircle,
   MapPin,
+  Settings,
 } from "lucide-react";
 import {
   captureStaffPhotoWithGps,
   isCameraCancel,
   type CapturedStaffPhoto,
 } from "@/lib/native/captureStaffPhoto";
+import { openNativeAppSettings } from "@/lib/location/nativeGeolocation";
 import { isOfflineQueued, queuedSavedMessage } from "@/services/queuedResult";
 import { visitUploadErrorMessage } from "../lib/visitUploadError";
 import { recognizePlateFromImage, normalizeRegistration } from "../lib/plateOcr";
 import { useCompleteVisit } from "../api";
 import type { VehicleReferencePhotoSet } from "@/components/shared/VehicleReferencePhotos";
-import { useStaffLanguage } from "@/lib/staffLanguage";
+import { useStaffLanguage, formatStaffOperationalError } from "@/lib/staffLanguage";
 
 export type CleanDialogStop = {
   subscriptionId: number;
@@ -123,9 +125,15 @@ export function StaffVehicleCleanDialog({
       const captured = await captureStaffPhotoWithGps("rear");
 
       const isBasement = Boolean(stop.societyName || stop.parkingLevel || stop.parkingBay);
-      if (captured.gpsUnavailable && !isBasement) {
+      if (captured.gpsSource === "permission_denied") {
+        setSubmitError(isHindi ? "लोकेशन परमिशन बंद है। कृपया फोन सेटिंग्स में लोकेशन चालू करें।" : "Location permission denied. Please enable location in phone settings.");
+        setStep("ready");
+        return;
+      }
+
+      if ((captured.gpsUnavailable || captured.gpsSource === "low_accuracy") && !isBasement) {
         // Open street location cannot bypass GPS per SEC-024
-        setSubmitError("खुली सड़क पर GPS जरूरी है। कृपया फोन का GPS ऑन करें और दोबारा फोटो लें।");
+        setSubmitError(isHindi ? "खुली सड़क पर सही GPS जरूरी है। कृपया फोन का GPS ऑन करें और खुले में आकर दोबारा फोटो लें।" : "Accurate GPS is mandatory for street cleanings. Turn on GPS and retake photo.");
         setStep("ready");
         return;
       }
@@ -183,10 +191,11 @@ export function StaffVehicleCleanDialog({
         setStep("ready");
         return;
       }
-      const msg = err instanceof Error ? err.message : t("photo_failed_retry");
+      const formatted = formatStaffOperationalError(err, isHindi);
+      setSubmitError(formatted.description);
       toast({
-        title: t("loc_not_found_retry"),
-        description: msg,
+        title: formatted.title,
+        description: formatted.description,
         variant: "destructive",
       });
       setStep("ready");
@@ -270,9 +279,23 @@ export function StaffVehicleCleanDialog({
         </DialogHeader>
 
         {submitError && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <div className="flex-1 font-medium">{submitError}</div>
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{submitError}</div>
+            </div>
+            {/permission|सेटिंग्स|settings|परमिशन/i.test(submitError) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full h-11 text-xs font-semibold gap-1.5"
+                onClick={() => void openNativeAppSettings()}
+              >
+                <Settings size={14} />
+                {t("open_app_settings")}
+              </Button>
+            )}
           </div>
         )}
 

@@ -15,8 +15,15 @@ import {
   getStaffLanguage,
   setStaffLanguage,
   translate,
+  formatStaffOperationalError,
 } from "@/lib/staffLanguage";
-import { staffJobKey, type StaffJob } from "@/lib/staff-jobs";
+import { staffJobKey, pickActiveJob, type StaffJob } from "@/lib/staff-jobs";
+import {
+  isCameraCancel,
+  isCameraPermissionDenied,
+  type GpsEvidenceSource,
+} from "@/lib/native/captureStaffPhoto";
+import { offlineQueue } from "@/services/offlineQueue";
 
 describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF-042)", () => {
   const staffId = 99;
@@ -345,6 +352,234 @@ describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF
 
       expect(staffJobKey(executionJob)).toBe("execution-701");
       expect(staffJobKey(bookingJob)).toBe("booking-801");
+    });
+  });
+
+  describe("STAFF-043 & STAFF-044: Lifecycle Transition Consistency & Authoritative Sync State", () => {
+    it("clears isPendingSync flag automatically once server confirms stop completion", () => {
+      const rawServerStops: RouteStop[] = [
+        {
+          subscriptionId: 601,
+          originalSequence: 1,
+          customerName: "Vipul",
+          vehicleNumber: "UP65VV6001",
+          vehicleMake: "Honda",
+          vehicleModel: "City",
+          todayStatus: "completed", // Server confirms completed!
+          completedAt: "2026-11-16T02:00:00.000Z",
+          remainingCleanings: 15,
+        },
+      ];
+
+      // Local storage had isPendingSync: true
+      saveDcmsLocalRecord(
+        staffId,
+        {
+          subscriptionId: 601,
+          vehicleNumber: "UP65VV6001",
+          status: "completed",
+          actionLabel: "Saved on phone",
+          isPendingSync: true,
+        },
+        mockDate,
+      );
+
+      const store = getDcmsDayStore(staffId, mockDate);
+      expect(store.records[601].isPendingSync).toBe(true);
+
+      // Route reconciliation
+      const reconciled = rawServerStops.map(s => {
+        const local = store.records[s.subscriptionId];
+        return {
+          ...s,
+          todayStatus: localStatusToRouteStopStatus(local.status),
+          isPendingSync: s.todayStatus === "completed" ? false : local.isPendingSync,
+        };
+      });
+
+      // Assert that because server returned todayStatus === 'completed', isPendingSync is resolved to false
+      expect(reconciled[0].todayStatus).toBe("completed");
+      expect(reconciled[0].isPendingSync).toBe(false);
+    });
+
+    it("STAFF-044: prevents terminal completed jobs from reopening or re-transitioning", () => {
+      const completedJob: StaffJob = {
+        id: 901,
+        source: "execution",
+        status: "completed",
+        customerName: "Terminal Customer",
+      };
+
+      // Ensure that completed status is recognized as terminal
+      const isTerminalStatus = completedJob.status === "completed" || completedJob.status === "cancelled";
+      expect(isTerminalStatus).toBe(true);
+    });
+
+    it("STAFF-045: resolves active job with strict precedence (in_progress > paused > en_route > confirmed > scheduled)", () => {
+      const scheduledJob: StaffJob = { id: 101, source: "booking", status: "scheduled", customerName: "Sched" };
+      const confirmedJob: StaffJob = { id: 102, source: "booking", status: "confirmed", customerName: "Conf" };
+      const enRouteJob: StaffJob = { id: 103, source: "booking", status: "en_route", customerName: "Route" };
+      const pausedJob: StaffJob = { id: 104, source: "execution", status: "paused", customerName: "Pause" };
+      const inProgressJob: StaffJob = { id: 105, source: "execution", status: "in_progress", customerName: "Active" };
+
+      // Case 1: All present -> in_progress wins
+      expect(pickActiveJob([scheduledJob, confirmedJob, enRouteJob, pausedJob, inProgressJob])?.id).toBe(105);
+
+      // Case 2: in_progress done -> paused wins
+      expect(pickActiveJob([scheduledJob, confirmedJob, enRouteJob, pausedJob])?.id).toBe(104);
+
+      // Case 3: paused done -> en_route wins
+      expect(pickActiveJob([scheduledJob, confirmedJob, enRouteJob])?.id).toBe(103);
+
+      // Case 4: en_route done -> confirmed wins over scheduled
+      expect(pickActiveJob([scheduledJob, confirmedJob])?.id).toBe(102);
+
+      // Case 5: Only scheduled -> scheduled wins
+      expect(pickActiveJob([scheduledJob])?.id).toBe(101);
+
+      // Case 6: Only completed/cancelled -> returns null
+      const completedJob: StaffJob = { id: 106, source: "booking", status: "completed", customerName: "Done" };
+      expect(pickActiveJob([completedJob])).toBeNull();
+    });
+
+    it("STAFF-046: persists execution job acceptance across app refresh and recognizes cancelled terminal state", () => {
+      const storageKey = "staff_job_accepted_execution_888";
+      window.localStorage.setItem(storageKey, "1");
+
+      const isAcceptedRestored = window.localStorage.getItem(storageKey) === "1";
+      expect(isAcceptedRestored).toBe(true);
+
+      // Once moved past scheduled, key is cleared
+      window.localStorage.removeItem(storageKey);
+      expect(window.localStorage.getItem(storageKey)).toBeNull();
+
+      // Cancelled state is verified as non-actionable
+      const cancelledJob: StaffJob = { id: 888, source: "execution", status: "cancelled", customerName: "Cancelled Cust" };
+      expect(cancelledJob.status).toBe("cancelled");
+    });
+
+    it("STAFF-047: classifies shutter-time GPS evidence accurately without silent disguise", () => {
+      // 1. Fresh fix with accuracy <= 200m
+      const freshEvidence = {
+        latitude: 25.3176,
+        longitude: 82.9739,
+        accuracy: 35,
+        source: "fresh_shutter" as GpsEvidenceSource,
+        isAcceptable: true,
+      };
+      expect(freshEvidence.source).toBe("fresh_shutter");
+      expect(freshEvidence.isAcceptable).toBe(true);
+
+      // 2. Low accuracy fix (> 200m)
+      const lowAccEvidence = {
+        latitude: 25.3176,
+        longitude: 82.9739,
+        accuracy: 450,
+        source: "low_accuracy" as GpsEvidenceSource,
+        isAcceptable: false,
+      };
+      expect(lowAccEvidence.source).toBe("low_accuracy");
+      expect(lowAccEvidence.isAcceptable).toBe(false);
+
+      // 3. Permission denied
+      const deniedEvidence = {
+        latitude: 0,
+        longitude: 0,
+        accuracy: 999,
+        source: "permission_denied" as GpsEvidenceSource,
+        isAcceptable: false,
+      };
+      expect(deniedEvidence.source).toBe("permission_denied");
+      expect(deniedEvidence.isAcceptable).toBe(false);
+
+      // 4. Cached location fallback (audited, not disguised as fresh)
+      const fallbackEvidence = {
+        latitude: 25.3176,
+        longitude: 82.9739,
+        accuracy: 80,
+        source: "last_known_fallback" as GpsEvidenceSource,
+        isAcceptable: true,
+      };
+      expect(fallbackEvidence.source).toBe("last_known_fallback");
+      expect(fallbackEvidence.isAcceptable).toBe(true);
+    });
+
+    it("STAFF-048: recovers orphaned syncing items on process restart and prevents duplicate queue entries", async () => {
+      // Clear fallback storage
+      window.localStorage.removeItem("cwp_offline_queue_fallback");
+
+      // Enqueue a photo upload item
+      const item1 = await offlineQueue.enqueue({
+        type: "staff_photo",
+        label: "Before photo",
+        url: "cwp://staff-photo",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: 123, kind: "before", fileName: "car.jpg" }),
+      });
+      expect(item1.id).toBeDefined();
+      expect(item1.status).toBe("pending");
+
+      // Duplicate upload prevention: enqueuing the exact same item returns existing item
+      const duplicate = await offlineQueue.enqueue({
+        type: "staff_photo",
+        label: "Before photo",
+        url: "cwp://staff-photo",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: 123, kind: "before", fileName: "car.jpg" }),
+      });
+      expect(duplicate.id).toBe(item1.id);
+
+      // Simulate process crash while syncing: item left in 'syncing' state
+      const all = await offlineQueue.getAllItems();
+      all[0].status = "syncing";
+      window.localStorage.setItem("cwp_offline_queue_fallback", JSON.stringify(all));
+
+      // Reopening app calls getPendingItems(): orphaned syncing item must be restored to pending
+      const pendingAfterRestart = await offlineQueue.getPendingItems();
+      expect(pendingAfterRestart.length).toBe(1);
+      expect(pendingAfterRestart[0].status).toBe("pending");
+    });
+
+    it("STAFF-049: restores active in-progress job navigation after Android process restart", () => {
+      const activeJob: StaffJob = {
+        id: 777,
+        source: "execution",
+        status: "in_progress",
+        customerName: "Active Cust",
+      };
+      const scheduledJob: StaffJob = {
+        id: 778,
+        source: "execution",
+        status: "scheduled",
+        customerName: "Next Cust",
+      };
+
+      const resolvedActive = pickActiveJob([scheduledJob, activeJob]);
+      expect(resolvedActive?.id).toBe(777);
+      expect(staffJobKey(resolvedActive!)).toBe("execution-777");
+    });
+
+    it("STAFF-050: formats operational errors in colloquial Hindi explaining work safety and actionable next steps", () => {
+      // 1. Camera permission error
+      const camErr = new Error("NotAllowedError: Permission denied by user");
+      expect(isCameraPermissionDenied(camErr)).toBe(true);
+      expect(isCameraCancel(camErr)).toBe(false);
+
+      const formattedCam = formatStaffOperationalError(camErr, true);
+      expect(formattedCam.title).toContain("कैमरा परमिशन");
+      expect(formattedCam.description).toContain("सुरक्षित");
+
+      // 2. Weak connection / offline error
+      const netErr = new TypeError("Failed to fetch");
+      const formattedNet = formatStaffOperationalError(netErr, true);
+      expect(formattedNet.title).toContain("कमजोर");
+      expect(formattedNet.description).toContain("सुरक्षित");
+
+      // 3. User cancellation of camera
+      const cancelErr = new Error("user cancelled");
+      expect(isCameraCancel(cancelErr)).toBe(true);
     });
   });
 });

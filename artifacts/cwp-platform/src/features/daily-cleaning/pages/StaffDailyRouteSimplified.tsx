@@ -184,7 +184,7 @@ export function StaffDailyRouteSimplified() {
         localActionLabel: local.actionLabel,
         completionOrder: local.completionOrder,
         completedAtTime: local.completedAtTime,
-        isPendingSync: local.isPendingSync,
+        isPendingSync: s.todayStatus === "completed" ? false : local.isPendingSync,
       };
     });
   }, [walkInMode, walkInStop, rawRouteStops, localRecords]);

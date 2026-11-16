@@ -199,7 +199,10 @@ export function partitionStaffJobs(all: StaffJob[], todayList: StaffJob[]) {
 /** Active focus job: in-progress / paused first, else first ready today */
 export function pickActiveJob(todayJobs: StaffJob[]): StaffJob | null {
   const active =
-    todayJobs.find(j => j.status === "en_route" || j.status === "in_progress" || j.status === "paused") ??
+    todayJobs.find(j => j.status === "in_progress") ??
+    todayJobs.find(j => j.status === "paused") ??
+    todayJobs.find(j => j.status === "en_route") ??
+    todayJobs.find(j => j.status === "confirmed") ??
     todayJobs.find(j => j.status === "scheduled");
   return active ?? null;
 }

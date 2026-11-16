@@ -97,8 +97,59 @@ export async function markTechnicianEnRoute(
     if (exec?.id) executionId = exec.id;
   }
 
-  if (!bookingId) {
+  if (!bookingId && !executionId) {
     throw new Error("Booking or execution reference required");
+  }
+
+  const now = new Date();
+
+  // If standalone execution without linked legacy booking
+  if (!bookingId && executionId) {
+    const [exec] = await db
+      .select()
+      .from(serviceExecutionsTable)
+      .where(eq(serviceExecutionsTable.id, executionId))
+      .limit(1);
+
+    if (!exec) throw new Error("Execution not found");
+
+    if (req.user?.role === "staff") {
+      const staffId = req.scope?.staffId ?? req.user.staffId;
+      if (exec.assignedStaffId && staffId && exec.assignedStaffId !== staffId) {
+        throw new Error("Only the assigned technician can mark en-route");
+      }
+    }
+
+    const eta = calculateEta(input.latitude, input.longitude, exec.locationLatitude, exec.locationLongitude);
+
+    await db
+      .update(serviceExecutionsTable)
+      .set({
+        enRouteAt: exec.enRouteAt ?? now,
+        estimatedArrivalAt: eta?.estimatedArrivalAt ?? null,
+        etaMinutes: eta?.etaMinutes ?? null,
+        lastLocationUpdateAt: input.latitude != null ? now : null,
+        updatedAt: now,
+      })
+      .where(eq(serviceExecutionsTable.id, executionId));
+
+    if (input.latitude != null && input.longitude != null) {
+      await db.insert(serviceExecutionLocationLogsTable).values({
+        executionId,
+        eventType: "gps_ping",
+        latitude: input.latitude,
+        longitude: input.longitude,
+        accuracy: input.accuracy ?? null,
+      });
+    }
+
+    return {
+      bookingId: null,
+      executionId,
+      enRouteAt: (exec.enRouteAt ?? now).toISOString(),
+      eta,
+      status: "en_route",
+    };
   }
 
   const [booking] = await db
@@ -153,7 +204,6 @@ export async function markTechnicianEnRoute(
   }
 
   const eta = calculateEta(input.latitude, input.longitude, destLat, destLng);
-  const now = new Date();
 
   // Duplicate ping suppression: Skip log insert if < 5s and < 5m movement
   let isDuplicatePing = false;

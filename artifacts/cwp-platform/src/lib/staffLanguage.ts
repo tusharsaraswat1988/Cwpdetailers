@@ -150,7 +150,20 @@ export type TranslationKey =
   | "step_before"
   | "step_work"
   | "step_after"
-  | "step_done";
+  | "step_done"
+  // Android Camera & GPS Operational Recovery (Phase P6)
+  | "camera_permission_denied"
+  | "camera_unavailable"
+  | "camera_cancelled"
+  | "retake_photo"
+  | "confirm_photo_btn"
+  | "photo_preview_title"
+  | "gps_verified"
+  | "gps_basement_fallback"
+  | "gps_weak_warning"
+  | "gps_permission_denied"
+  | "open_app_settings"
+  | "offline_saved_toast";
 
 const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
   hi: {
@@ -249,6 +262,19 @@ const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
     step_work: "सफाई",
     step_after: "बाद में",
     step_done: "पूरा",
+
+    camera_permission_denied: "कैमरा परमिशन बंद है। ऐप सेटिंग्स में जाकर ऑन करें।",
+    camera_unavailable: "कैमरा शुरू नहीं हो सका। कृपया ऐप दोबारा खोलें।",
+    camera_cancelled: "फोटो लेना रद्द किया गया।",
+    retake_photo: "दोबारा फोटो लें",
+    confirm_photo_btn: "यह फोटो सही है — सेव करें",
+    photo_preview_title: "फोटो की जांच करें",
+    gps_verified: "GPS वेरिफाइड",
+    gps_basement_fallback: "कैंपस लोकेशन (बेसमेंट)",
+    gps_weak_warning: "कमजोर GPS सिग्नल",
+    gps_permission_denied: "लोकेशन परमिशन बंद है",
+    open_app_settings: "फोन सेटिंग्स खोलें",
+    offline_saved_toast: "फोन में सुरक्षित सेव हुआ — ऑनलाइन आते ही सिंक होगा",
   },
   en: {
     nav_dashboard: "Dashboard",
@@ -346,8 +372,87 @@ const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
     step_work: "Work",
     step_after: "After",
     step_done: "Done",
+
+    camera_permission_denied: "Camera permission denied. Enable it in phone settings.",
+    camera_unavailable: "Camera could not be started. Please relaunch the app.",
+    camera_cancelled: "Photo capture cancelled.",
+    retake_photo: "Retake Photo",
+    confirm_photo_btn: "Looks Good — Save",
+    photo_preview_title: "Preview & Verify Photo",
+    gps_verified: "GPS Verified",
+    gps_basement_fallback: "Campus Location (Basement)",
+    gps_weak_warning: "Weak GPS Signal",
+    gps_permission_denied: "Location Permission Denied",
+    open_app_settings: "Open Settings",
+    offline_saved_toast: "Saved locally on phone — will sync automatically when online",
   },
 };
+
+export function formatStaffOperationalError(err: unknown, isHindi = true): { title: string; description: string } {
+  const msg = err instanceof Error ? err.message : String(err || "");
+  const lower = msg.toLowerCase();
+
+  if (/permission|camera access|not allowed/i.test(lower)) {
+    return {
+      title: isHindi ? "कैमरा परमिशन बंद है" : "Camera Permission Denied",
+      description: isHindi
+        ? "ऐप सेटिंग्स में जाकर कैमरा चालू करें। आपका काम सुरक्षित है।"
+        : "Enable camera access in device settings. Your progress is safe.",
+    };
+  }
+
+  if (/location.*permission|denied.*location/i.test(lower)) {
+    return {
+      title: isHindi ? "लोकेशन परमिशन बंद है" : "Location Permission Denied",
+      description: isHindi
+        ? "फोन सेटिंग्स में लोकेशन ऑन करें। आपका काम सुरक्षित है।"
+        : "Enable location in device settings. Your progress is safe.",
+    };
+  }
+
+  if (/network|offline|failed to fetch|timeout|abort/i.test(lower)) {
+    return {
+      title: isHindi ? "इंटरनेट कमजोर है" : "Weak Connection",
+      description: isHindi
+        ? "काम फोन में सुरक्षित सेव हो गया है। नेटवर्क आते ही अपने आप सिंक होगा।"
+        : "Saved locally on phone. It will automatically sync once online.",
+    };
+  }
+
+  if (/geofence|away|150m/i.test(lower)) {
+    return {
+      title: isHindi ? "कस्टमर लोकेशन से दूर हैं" : "Location Verification Required",
+      description: isHindi
+        ? "कृपया गाड़ी या सर्विस लोकेशन के पास जाकर दोबारा प्रयास करें।"
+        : "Please step closer to the service vehicle location and try again.",
+    };
+  }
+
+  if (/session|unauthorized|401|expired/i.test(lower)) {
+    return {
+      title: isHindi ? "सेशन समाप्त हो गया" : "Session Expired",
+      description: isHindi
+        ? "कृपया ऐप में दोबारा लॉगिन करें। आपका काम सुरक्षित रहेगा।"
+        : "Please re-login. Your completed work remains safe.",
+    };
+  }
+
+  if (/already completed|already started/i.test(lower)) {
+    return {
+      title: isHindi ? "स्थिति पहले ही अपडेट है" : "Status Already Updated",
+      description: isHindi
+        ? "यह काम सर्वर पर पहले ही अपडेट हो चुका है।"
+        : "This action has already been confirmed by the server.",
+    };
+  }
+
+  return {
+    title: isHindi ? "काम सेव नहीं हुआ" : "Action Incomplete",
+    description: isHindi
+      ? "कृपया दोबारा कोशिश करें। यदि समस्या बनी रहे तो सुपरवाइजर से संपर्क करें।"
+      : "Please try again or contact your field supervisor if this continues.",
+  };
+}
 
 export function translate(key: TranslationKey, lang: StaffLanguage = currentLang): string {
   return translations[lang]?.[key] ?? translations.en[key] ?? key;

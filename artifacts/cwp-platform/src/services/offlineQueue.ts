@@ -51,6 +51,15 @@ class OfflineQueueService {
 
   async getPendingItems(): Promise<QueueItem[]> {
     const all = await this.getAllItems();
+    // Recover any orphaned 'syncing' items left from interrupted Android app terminations
+    if (!this.syncing) {
+      for (const item of all) {
+        if (item.status === "syncing") {
+          item.status = "pending";
+          await this.persist(item);
+        }
+      }
+    }
     return all.filter((item) => item.status === "pending" || item.status === "failed");
   }
 
@@ -64,6 +73,19 @@ class OfflineQueueService {
   async enqueue(item: Omit<QueueItem, "id" | "createdAt" | "retries" | "status">): Promise<QueueItem> {
     if (!canQueueOfflineOperation(item.type, item.url)) {
       throw new Error(SERVER_CONFIRMATION_REQUIRED_MESSAGE);
+    }
+
+    // Duplicate upload prevention: check if identical item is already pending or syncing
+    const all = await this.getAllItems();
+    const existing = all.find(
+      (existingItem) =>
+        (existingItem.status === "pending" || existingItem.status === "syncing") &&
+        existingItem.type === item.type &&
+        existingItem.url === item.url &&
+        existingItem.body === item.body,
+    );
+    if (existing) {
+      return existing;
     }
 
     const entry: QueueItem = {
