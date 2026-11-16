@@ -712,11 +712,12 @@ router.post("/staff/:id/attendance", async (req, res) => {
       roleSlugs: roles.map(r => r.roleSlug),
     });
 
-    const [already] = await db.select({ id: attendanceTable.id }).from(attendanceTable)
+    const [already] = await db.select().from(attendanceTable)
       .where(and(eq(attendanceTable.staffId, staffId), eq(attendanceTable.date, date)))
       .limit(1);
     if (already) {
-      return res.status(409).json({ error: "Attendance already marked for this date" });
+      // Idempotent: return existing attendance record instead of 409 conflict
+      return res.json(already);
     }
 
     let selfiePhotoUrl: string | null = null;

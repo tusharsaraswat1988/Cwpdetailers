@@ -1,6 +1,6 @@
 import type { Logger } from "pino";
 import { db, executionTimelineTable, type ExecutionTimelineEventType } from "@workspace/db";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc, and } from "drizzle-orm";
 
 const TITLES: Record<ExecutionTimelineEventType, string> = {
   EXECUTION_READY: "Ready for Execution",
@@ -31,6 +31,23 @@ export async function recordExecutionTimeline(
   input: RecordExecutionTimelineInput,
   _logger?: Logger,
 ) {
+  // Prevent duplicate consecutive timeline events with identical executionId, eventType, and description within 5 seconds
+  const [recent] = await db.select()
+    .from(executionTimelineTable)
+    .where(and(
+      eq(executionTimelineTable.executionId, input.executionId),
+      eq(executionTimelineTable.eventType, input.eventType),
+    ))
+    .orderBy(desc(executionTimelineTable.createdAt))
+    .limit(1);
+
+  if (recent) {
+    const elapsed = Date.now() - new Date(recent.createdAt).getTime();
+    if (elapsed < 5000 && recent.description === (input.description ?? null)) {
+      return recent;
+    }
+  }
+
   const [entry] = await db.insert(executionTimelineTable).values({
     executionId: input.executionId,
     eventType: input.eventType,

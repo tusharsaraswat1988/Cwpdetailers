@@ -22,6 +22,7 @@ import {
   ChevronRight,
   ArrowLeft,
   CheckCircle2,
+  Droplets,
 } from "lucide-react";
 import { captureStaffPhoto, isCameraCancel, type StaffCapturedPhoto } from "@/lib/native/captureStaffPhoto";
 import { getStaffLocation } from "@/lib/location";
@@ -83,7 +84,7 @@ const ACTION_OPTIONS: StaffActionOption[] = [
   },
   {
     id: "access_denied",
-    title: "Unable to Access Parking",
+    title: "Unable to Access Parking (प्रवेश नहीं मिला)",
     subtitle: "Gate pe guard ne entry nahi di ya basement locked hai.",
     icon: Lock,
     category: "exception",
@@ -91,8 +92,26 @@ const ACTION_OPTIONS: StaffActionOption[] = [
     actionColor: "text-rose-800 bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20",
   },
   {
+    id: "water_unavailable",
+    title: "Water / Utility Unavailable (पानी उपलब्ध नहीं)",
+    subtitle: "सोसायटी या पार्किंग में पानी या बिजली की सुविधा उपलब्ध नहीं है।",
+    icon: Droplets,
+    category: "exception",
+    badgeText: "No Water",
+    actionColor: "text-cyan-800 bg-cyan-500/10 border-cyan-500/30 hover:bg-cyan-500/20",
+  },
+  {
+    id: "already_cleaned",
+    title: "Already Cleaned (पहले से साफ)",
+    subtitle: "गाड़ी ड्राइवर या मालिक द्वारा आज पहले ही साफ की जा चुकी है।",
+    icon: CheckCircle2,
+    category: "exception",
+    badgeText: "Already Done",
+    actionColor: "text-teal-800 bg-teal-500/10 border-teal-500/30 hover:bg-teal-500/20",
+  },
+  {
     id: "issue_reported",
-    title: "Report Vehicle Issue",
+    title: "Report Vehicle Issue (गाड़ी समस्या)",
     subtitle: "Car me pehle se scratch, flat tyre ya koi nuksan hai.",
     icon: AlertTriangle,
     category: "exception",
@@ -247,17 +266,17 @@ export function StaffExecutionActionsSheet({
                 {selectedException.title}
               </p>
               <p className="text-muted-foreground">{selectedException.subtitle}</p>
-              <p className="text-[11px] text-muted-foreground/80 italic">
-                Notice: Is car ka cleaning visit record ho jayega aur customer ka cleaning quota safe rahega.
+              <p className="text-[11px] text-muted-foreground/90 italic">
+                सूचना: इस गाड़ी का एक्सेप्शन दर्ज हो जाएगा, ग्राहक का कोटा सुरक्षित रहेगा और एडमिन को सूचित किया जाएगा।
               </p>
             </div>
 
             <div className="space-y-2">
               <label className="text-xs font-semibold text-foreground">
-                Remark / Reason (Optional)
+                कारण / टिप्पणी (वैकल्पिक)
               </label>
               <Textarea
-                placeholder="Ex: Bay 42 pe koi gaadi nahi thi, guard ne bola car service pe gayi hai..."
+                placeholder="उदा: बे में गाड़ी मौजूद नहीं थी, गार्ड ने बताया गाड़ी सर्विस सेंटर गई है..."
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 className="text-xs min-h-[70px] resize-none"
@@ -266,8 +285,12 @@ export function StaffExecutionActionsSheet({
 
             <div className="space-y-2">
               <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                <span>Proof / Location Photo (Optional)</span>
-                {photo && <span className="text-[11px] text-emerald-600 font-medium">Photo attached</span>}
+                <span>खाली बे / साइट का फोटो (अनिवार्य प्रमाण)</span>
+                {photo ? (
+                  <span className="text-[11px] text-emerald-600 font-medium">✓ फोटो ली गई</span>
+                ) : (
+                  <span className="text-[11px] text-rose-600 font-medium">* फोटो जरूरी है</span>
+                )}
               </label>
 
               {photo ? (
@@ -280,45 +303,52 @@ export function StaffExecutionActionsSheet({
                     className="absolute bottom-2 right-2 text-xs h-7 px-2"
                     onClick={() => void handleCaptureEvidencePhoto()}
                   >
-                    Retake
+                    दोबारा लें
                   </Button>
                 </div>
               ) : (
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full h-11 border-dashed text-xs text-muted-foreground flex items-center justify-center gap-2"
+                  className="w-full h-12 border-dashed border-primary/40 bg-primary/5 text-xs text-primary font-semibold flex items-center justify-center gap-2 hover:bg-primary/10"
                   onClick={() => void handleCaptureEvidencePhoto()}
+                  data-testid="btn-capture-exception-photo"
                 >
-                  <Camera size={14} />
-                  Empty Bay / Gate Photo capture karein
+                  <Camera size={16} />
+                  <span>खाली बे / गेट की फोटो खींचें</span>
                 </Button>
+              )}
+              {!photo && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                  कृपया आगे बढ़ने के लिए खाली पार्किंग या स्थान का फोटो लें।
+                </p>
               )}
             </div>
 
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"
-                className="flex-1 h-11 text-xs"
+                className="flex-1 h-12 text-xs"
                 onClick={() => setSelectedException(null)}
                 disabled={isSubmitting}
               >
-                Cancel
+                रद्द करें
               </Button>
               <Button
-                className="flex-1 h-11 text-xs font-semibold"
+                className="flex-1 h-12 text-xs font-semibold"
                 onClick={() => void handleSubmitException()}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !photo}
+                data-testid="btn-confirm-exception"
               >
                 {isSubmitting ? (
                   <>
                     <Loader2 size={14} className="mr-1.5 animate-spin" />
-                    Recording...
+                    सेव हो रहा है...
                   </>
                 ) : (
                   <>
                     <CheckCircle2 size={14} className="mr-1.5" />
-                    Confirm & Save
+                    दर्ज करें व सेव करें
                   </>
                 )}
               </Button>

@@ -37,6 +37,8 @@ import {
   pauseExecution,
   resumeExecution,
   completeExecution,
+  missExecution,
+  cancelExecution,
   addExecutionPhotos,
   SERVICE_EXECUTIONS_QUERY_KEY,
 } from "@/features/service-executions/api";
@@ -166,6 +168,7 @@ export function useStaffJobsData() {
     qc.invalidateQueries({ queryKey: getGetTodayBookingsQueryKey() });
     qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
     qc.invalidateQueries({ queryKey: SERVICE_EXECUTIONS_QUERY_KEY });
+    qc.invalidateQueries({ queryKey: ["dcms", "staff", "daily-route"] });
   };
 
   const transitionMutation = useMutation({
@@ -226,6 +229,14 @@ export function useStaffJobsData() {
       if (toStatus === "completed") {
         void staffBackgroundLocation.stopTracking();
         return completeExecution(executionId, { gps, notes });
+      }
+      if (toStatus === "missed") {
+        void staffBackgroundLocation.stopTracking();
+        return missExecution(executionId, notes);
+      }
+      if (toStatus === "cancelled") {
+        void staffBackgroundLocation.stopTracking();
+        return cancelExecution(executionId, notes);
       }
       throw new Error("Unsupported action for this job");
     },
@@ -296,6 +307,7 @@ export function useStaffJobsData() {
   );
 
   async function transitionJob(jobId: number, toStatus: string, job?: StaffJob, notes?: string) {
+    if (locatingJobId != null || transitionMutation.isPending || executionMutation.isPending) return;
     setLocatingJobId(jobId);
     try {
       if (job?.source === "execution") {
@@ -309,10 +321,11 @@ export function useStaffJobsData() {
           customerName: job?.customerName,
           destinationAddress: job?.address,
         });
-      } else if (toStatus === "in_progress" || toStatus === "completed" || toStatus === "cancelled") {
+      } else if (toStatus === "in_progress" || toStatus === "completed" || toStatus === "cancelled" || toStatus === "missed") {
         void staffBackgroundLocation.stopTracking();
       }
-      await transitionMutation.mutateAsync({ id: jobId, data: { toStatus } });
+      const bookingStatus = toStatus === "missed" ? "cancelled" : toStatus;
+      await transitionMutation.mutateAsync({ id: jobId, data: { toStatus: bookingStatus, reason: notes } });
     } finally {
       setLocatingJobId(null);
     }

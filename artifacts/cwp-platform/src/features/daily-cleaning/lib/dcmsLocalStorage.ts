@@ -19,6 +19,8 @@ export type DcmsLocalCompletionType =
   | "plate_not_visible"
   | "customer_skip"
   | "access_denied"
+  | "water_unavailable"
+  | "already_cleaned"
   | "issue_reported";
 
 export type DcmsLocalRecord = {
@@ -32,6 +34,8 @@ export type DcmsLocalRecord = {
   isPendingSync?: boolean; // True when queued offline awaiting network sync
   notes?: string;
   photoDataUrl?: string; // small thumbnail or reference if stored locally
+  completionType?: DcmsLocalCompletionType;
+  exceptionReason?: string;
 };
 
 export type DcmsStaffDayStore = {
@@ -114,6 +118,8 @@ export function saveDcmsLocalRecord(
     actionLabel: string;
     isPendingSync?: boolean;
     notes?: string;
+    completionType?: DcmsLocalCompletionType;
+    exceptionReason?: string;
   },
   istDate: string = getTodayIstDate(),
 ): DcmsStaffDayStore {
@@ -136,6 +142,8 @@ export function saveDcmsLocalRecord(
     completionOrder: currentCompletionOrder,
     completedAtTime: formatIstTime(new Date()),
     isPendingSync: record.isPendingSync ?? false,
+    completionType: record.completionType,
+    exceptionReason: record.exceptionReason,
   };
   store.lastUpdated = new Date().toISOString();
 

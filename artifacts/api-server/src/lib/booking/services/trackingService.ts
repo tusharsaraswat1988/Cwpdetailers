@@ -112,6 +112,9 @@ export async function markTechnicianEnRoute(
       .limit(1);
 
     if (!exec) throw new Error("Execution not found");
+    if (["completed", "cancelled", "missed"].includes(exec.status)) {
+      throw new Error(`Execution is already ${exec.status} — cannot mark en-route`);
+    }
 
     if (req.user?.role === "staff") {
       const staffId = req.scope?.staffId ?? req.user.staffId;
@@ -160,6 +163,9 @@ export async function markTechnicianEnRoute(
 
   if (!booking) {
     throw new Error("Booking not found");
+  }
+  if (["completed", "cancelled", "missed"].includes(booking.status)) {
+    throw new Error(`Booking is already ${booking.status} — cannot mark en-route`);
   }
 
   // Authorization check: Staff must match assigned technician, or user must be admin/manager
@@ -321,6 +327,9 @@ export async function getLiveTracking(
 
   if (!booking) {
     throw new Error("Booking not found");
+  }
+  if (["completed", "cancelled", "missed"].includes(booking.status)) {
+    throw new Error(`Booking is already ${booking.status} — cannot mark en-route`);
   }
 
   // Customer authorization check (IDOR guard)

@@ -149,9 +149,22 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 | `artifacts/cwp-platform/src/pages/staff/Dashboard.tsx` | **MODIFIED** | Refined operational lifecycle priority: active appointment job -> morning DCMS -> next scheduled job |
 | `artifacts/cwp-platform/src/components/shared/StatusBadge.tsx` | **MODIFIED** | Non-color-only status badges paired with accessible Lucide iconography (`STAFF-055`) |
 | `artifacts/cwp-platform/src/pages/staff/Profile.tsx` | **MODIFIED** | Two-step logout confirmation dialog, active session status, app version display, field support hotline (`STAFF-056`, `STAFF-058`) |
-| `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts` | **MODIFIED** | `staleTime: 15_000` / `30_000` query caching, location fallback under weak GPS (`STAFF-057`) |
+| `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts` | **MODIFIED** | `staleTime: 15_000` / `30_000` query caching, location fallback under weak GPS, support for `missed`/`cancelled` transitions (`STAFF-057`, `STAFF-060`) |
 | `artifacts/cwp-platform/src/features/daily-cleaning/api.ts` | **MODIFIED** | `staleTime: 15_000` and background interval sync for daily route query (`STAFF-057`) |
-| `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts` | **MODIFIED** | Unit tests for route segregation, Hindi vocabulary, GPS, lifecycle focus, deep linking, non-color badges, logout safety, query caching |
+| `artifacts/cwp-platform/src/components/staff/StaffAppointmentExceptionDialog.tsx` | **NEW FILE** | 7-scenario field exception dialog with remarks, colloquial Hindi guidance, and authoritative transition (`STAFF-060`) |
+| `artifacts/cwp-platform/src/features/daily-cleaning/components/StaffExecutionActionsSheet.tsx` | **MODIFIED** | Added `water_unavailable` and `already_cleaned` exceptions; enforced mandatory photo proof before submission (`STAFF-059`) |
+| `artifacts/cwp-platform/src/features/daily-cleaning/lib/dcmsLocalStorage.ts` | **MODIFIED** | Extended exception types, local exception reason tracking, and day store persistence (`STAFF-059`) |
+| `artifacts/cwp-platform/src/features/service-executions/api.ts` | **MODIFIED** | Added `missExecution` and `cancelExecution` exports (`STAFF-060`) |
+| `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx` | **MODIFIED** | Persisted checklist in `localStorage`, added progress counter, gated after-photos transition, added exception triggers and terminal missed card (`STAFF-060`, `STAFF-061`, `STAFF-062`) |
+| `artifacts/cwp-platform/src/lib/staffLanguage.ts` | **MODIFIED** | Added translation keys for exception triggers, checklist progress, and colloquial Hindi exception recovery (`STAFF-062`) |
+| `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts` | **MODIFIED** | Unit tests for route segregation, Hindi vocabulary, GPS, lifecycle focus, deep linking, non-color badges, logout safety, query caching, DCMS exceptions, appointment exceptions, checklist persistence/gating, recovery guidance, in-flight action locks, idempotency, reassignment conflicts, cache/queue reconciliation, and timeline deduplication |
+| `artifacts/api-server/src/lib/executions/executionTimeline.ts` | **MODIFIED** | Added timeline event deduplication suppressing identical consecutive events within 5 seconds (`STAFF-067`) |
+| `artifacts/api-server/src/lib/executions/executionService.ts` | **MODIFIED** | Idempotent `missExecution` / `cancelExecution`, event publishing, timeline integration (`STAFF-063`, `STAFF-064`) |
+| `artifacts/api-server/src/lib/booking/services/trackingService.ts` | **MODIFIED** | Terminal status checks in `markTechnicianEnRoute` preventing tracking reversals (`STAFF-063`) |
+| `artifacts/api-server/src/routes/bookings.ts` | **MODIFIED** | Booking event deduplication, idempotent confirm/transition/cancel, terminal state reversal protection (`STAFF-063`, `STAFF-064`, `STAFF-067`) |
+| `artifacts/api-server/src/routes/staff.ts` | **MODIFIED** | Idempotent attendance punch endpoint returning HTTP 200 with existing record instead of 409 conflict (`STAFF-064`) |
+| `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts` | **MODIFIED** | In-flight action deduplication lock preventing rapid double-taps; expanded query invalidation to `daily-route` (`STAFF-063`, `STAFF-066`) |
+| `artifacts/cwp-platform/src/lib/staffLanguage.ts` | **MODIFIED** | Colloquial Hindi translations for terminal status errors, assignment conflicts, and wrong technician errors (`STAFF-065`) |
 | `docs/staff/STAFF_APP_EXISTING_FEATURE_INVENTORY.md` | **NEW FILE** | Full screen-by-screen inventory |
 | `docs/staff/STAFF_APP_FORENSIC_AUDIT.md` | **NEW FILE** | Forensic technical audit report |
 | `docs/staff/STAFF_APP_UX_GAP_ANALYSIS.md` | **NEW FILE** | UX gap analysis matrix |
@@ -163,7 +176,7 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 ## 4. Test & Verification Evidence
 
 1. **Staff App 2.0 Forensic Test Suite (`staff-app-2-forensic-verification.test.ts`)**:
-   - Total tests: **29 passed (29)** (100% pass rate in 2.62s)
+   - Total tests: **38 passed (38)** (100% pass rate in 3.83s)
    - Tested:
      - Out-of-order route segregation and original sequence preservation.
      - IST time formatting and chronological completion sequence.
@@ -187,23 +200,25 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
      - Two-step logout confirmation dialog text and shift safety reassurance (`STAFF-056`).
      - Query caching staleTime tuning preventing redundant background refetches (`STAFF-057`).
      - Staff account support infrastructure, version display, and phone dialer sanitization (`STAFF-058`).
+     - DCMS vehicle exception handling with mandatory evidence photo validation contract (`STAFF-059`).
+     - Appointment service exception reporting with authoritative backend transition to missed (`STAFF-060`).
+     - Service-specific checklist integrity, persistence across reload, and required-step gating (`STAFF-061`).
+     - Staff recovery guidance, error translation, and storage cleanup on terminal completion (`STAFF-062`).
+     - Lifecycle transition race-condition audit and terminal state reversal protection (`STAFF-063`).
+     - Idempotency & duplicate action protection for execution, booking, and attendance check-in (`STAFF-064`).
+     - Admin reassignment & ownership conflict recovery with clear colloquial Hindi guidance (`STAFF-065`).
+     - Stale cache & offline queue reconciliation across DCMS routes and appointment services (`STAFF-066`).
+     - Operational timeline consistency and duplicate event suppression within 5 seconds (`STAFF-067`).
 2. **Backend Execution Validation Suite (`executionValidation.test.ts`)**:
    - Total tests: **8 passed (8)** (100% pass rate in 7ms)
 3. **Backend API Bundle (`@workspace/api-server`)**:
-   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 1278ms**
+   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 7569ms**
 4. **Frontend Production Build (`@workspace/cwp-platform`)**:
-   - Built via `vite build --config vite.config.ts`: **Built cleanly in 13.61s**
-   - Service worker generated via `vite-plugin-pwa`: **54 precache entries**
+   - Built via `vite build --config vite.config.ts`: **Built cleanly in 16.99s**
+   - Service worker generated via `vite-plugin-pwa`: **Built in 199ms (54 precache entries)**
 
 ---
 
 ## 5. Deferral Notice
 
 Per non-negotiable project rules, **final comprehensive verification, monorepo-wide regression testing, Android APK sign-off, production deployment, and pushing to Git main remain strictly deferred** until all planned development phases are completed.
-2. **Backend Execution Validation Suite (`executionValidation.test.ts`)**:
-   - Total tests: **8 passed (8)** (100% pass rate in 391ms)
-3. **Backend API Bundle (`@workspace/api-server`)**:
-   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 1030ms**
-4. **Frontend Production Build (`@workspace/cwp-platform`)**:
-   - Built via `vite build --config vite.config.ts`: **Built cleanly in 13.48s**
-   - Service worker generated via `vite-plugin-pwa`: **55 precache entries**

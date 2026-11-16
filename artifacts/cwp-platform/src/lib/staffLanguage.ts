@@ -172,7 +172,15 @@ export type TranslationKey =
   | "gps_weak_warning"
   | "gps_permission_denied"
   | "open_app_settings"
-  | "offline_saved_toast";
+  | "offline_saved_toast"
+  // Operational Exceptions & Checklist Integrity (Phase P9)
+  | "report_issue_btn"
+  | "checklist_progress"
+  | "checklist_steps_done"
+  | "checklist_required_helper"
+  | "job_missed_title"
+  | "job_missed_desc"
+  | "recorded_exception_notes";
 
 const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
   hi: {
@@ -293,6 +301,14 @@ const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
     gps_permission_denied: "लोकेशन परमिशन बंद है",
     open_app_settings: "फोन सेटिंग्स खोलें",
     offline_saved_toast: "फोन में सुरक्षित सेव हुआ — ऑनलाइन आते ही सिंक होगा",
+
+    report_issue_btn: "समस्या रिपोर्ट करें / काम नहीं हो सका",
+    checklist_progress: "सर्विस चेकलिस्ट",
+    checklist_steps_done: "स्टेप्स पूरे",
+    checklist_required_helper: "⚠️ आगे बढ़ने के लिए सभी चेकलिस्ट स्टेप्स पर सही का निशान लगाएं।",
+    job_missed_title: "काम एक्सेप्शन / नहीं हो सका",
+    job_missed_desc: "यह काम एक्सेप्शन के रूप में दर्ज हो चुका है। आपके आज के बचे हुए काम नीचे दिए गए हैं या सुपरवाइजर से बात करें।",
+    recorded_exception_notes: "दर्ज कारण / नोट्स",
   },
   en: {
     nav_dashboard: "Dashboard",
@@ -412,12 +428,29 @@ const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
     gps_permission_denied: "Location Permission Denied",
     open_app_settings: "Open Settings",
     offline_saved_toast: "Saved locally on phone — will sync automatically when online",
+
+    report_issue_btn: "Report Issue / Cannot Complete",
+    checklist_progress: "Service Checklist",
+    checklist_steps_done: "Steps Done",
+    checklist_required_helper: "⚠️ Please check off all required checklist steps before proceeding.",
+    job_missed_title: "Job Missed / Exception",
+    job_missed_desc: "This job has been marked as an exception. Please proceed with remaining jobs or contact your supervisor.",
+    recorded_exception_notes: "Recorded Reason / Notes",
   },
 };
 
 export function formatStaffOperationalError(err: unknown, isHindi = true): { title: string; description: string } {
   const msg = err instanceof Error ? err.message : String(err || "");
   const lower = msg.toLowerCase();
+
+  if (/missed|exception|cannot complete|unable to execute/i.test(lower)) {
+    return {
+      title: isHindi ? "एक्सेप्शन दर्ज हुआ" : "Exception Recorded",
+      description: isHindi
+        ? "यह काम एक्सेप्शन के तौर पर दर्ज किया गया है। सुपरवाइजर को अपडेट मिल गया है।"
+        : "Job recorded as exception. Operations has been notified.",
+    };
+  }
 
   if (/permission|camera access|not allowed/i.test(lower)) {
     return {
@@ -488,6 +521,15 @@ export function formatStaffOperationalError(err: unknown, isHindi = true): { tit
       description: isHindi
         ? "एडमिन या कस्टमर ने यह काम रद्द कर दिया है।"
         : "This job was cancelled by admin or customer.",
+    };
+  }
+
+  if (/terminal status|cannot transition.*terminal|cannot confirm.*terminal|cannot cancel a completed/i.test(lower)) {
+    return {
+      title: isHindi ? "काम पहले ही पूरा या रद्द हो चुका है" : "Job Closed",
+      description: isHindi
+        ? "यह काम सर्वर पर बंद हो चुका है और बदला नहीं जा सकता।"
+        : "This job is in a terminal state and cannot be changed.",
     };
   }
 

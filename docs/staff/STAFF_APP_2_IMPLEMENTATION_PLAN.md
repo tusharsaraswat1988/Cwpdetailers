@@ -225,3 +225,49 @@
 4. **Task P8-4: Staff Account, Version & Field Support Infrastructure (STAFF-058)**
    - **Scope:** Built dedicated Field Support card in `Profile.tsx` with 1-tap phone dialer to operations hotline (`tel:+919999999999` or supervisor phone), displayed official app version `v2.0 (Build 2026.11)` and active session ID, sanitized customer phone dialer URIs (`tel:${phone.replace(/[^\d+]/g, "")}`) across `NextTaskCard.tsx`, `StaffServiceJobFlow.tsx`, and `StaffJobListItem.tsx`, and expanded colloquial Hindi vocabulary in `staffLanguage.ts`.
    - **Files:** `artifacts/cwp-platform/src/pages/staff/Profile.tsx`, `artifacts/cwp-platform/src/components/staff/NextTaskCard.tsx`, `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx`, `artifacts/cwp-platform/src/components/staff/StaffJobListItem.tsx`, `artifacts/cwp-platform/src/lib/staffLanguage.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+---
+
+### Phase P9: Operational Exceptions, Incomplete Work & Recovery Workflows (Completed)
+**Objective:** Provide robust, structured operational exception handling for both DCMS routes and appointment services, enforce mandatory evidence proof for exception visits without falsifying completions, guarantee service checklist state persistence across interruptions, and deliver reassuring recovery guidance for field technicians.
+
+1. **Task P9-1: DCMS Vehicle Exception Handling & Mandatory Evidence Photo Contract (STAFF-059)**
+   - **Scope:** Extended `StaffExecutionActionsSheet.tsx` and `dcmsLocalStorage.ts` to support new operational exceptions (`water_unavailable` / पानी उपलब्ध नहीं and `already_cleaned` / पहले से साफ) alongside vehicle absent, plate obscured, customer skip, and access denied. Strictly enforced that an evidence photo (empty bay or site condition) is mandatory proof before exception submission, disabling the confirm button if `!photo` and validating against the backend contract (`/daily-cleaning/visits/car-not-available`), ensuring customer cleaning quota is preserved (`consumed = false`) and admin reports record reason prefixes without false cleaner penalties.
+   - **Files:** `artifacts/cwp-platform/src/features/daily-cleaning/components/StaffExecutionActionsSheet.tsx`, `artifacts/cwp-platform/src/features/daily-cleaning/lib/dcmsLocalStorage.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+2. **Task P9-2: Appointment Service Exception Reporting & Authoritative Terminal Transition (STAFF-060)**
+   - **Scope:** Created `StaffAppointmentExceptionDialog.tsx` presenting 7 structured field exception scenarios (customer unreachable, customer unavailable at location, customer refused/postponed, scope/condition mismatch, water/power unavailable, site access blocked, other field issue) with optional remarks and clear colloquial Hindi guidance. Integrated with `missExecution` / `cancelExecution` via `useStaffJobsData.ts`, enabling authoritative transitions to `missed` / `cancelled` with event timeline logging, preventing staff from needing to fake completion photos or leaving blocked jobs hanging.
+   - **Files:** `artifacts/cwp-platform/src/components/staff/StaffAppointmentExceptionDialog.tsx`, `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx`, `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts`, `artifacts/cwp-platform/src/features/service-executions/api.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+3. **Task P9-3: Service-Specific Checklist Integrity, Persistence & Required-Step Gating (STAFF-061)**
+   - **Scope:** In `StaffServiceJobFlow.tsx`, persisted interactive service checklist state in `localStorage` under `staff_job_checklist_${source}_${id}`, preventing accidental loss of checked steps during app reloads, task switching, or pauses. Added visual checklist progress badge (`X/Y Steps Done`) and strictly gated "Service Done — After Photos" transition until all required steps are completed, accompanied by helpful colloquial Hindi warnings.
+   - **Files:** `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+4. **Task P9-4: Staff Recovery Guidance & Exception State Compatibility (STAFF-062)**
+   - **Scope:** Added read-only terminal status card for `job.status === "missed"` displaying recorded reason, reassuring notes, and explicit guidance to proceed with remaining scheduled work or contact the field supervisor. Updated `formatStaffOperationalError` to provide clear reassurance upon reporting exceptions, and implemented automated cleanup of `localStorage` acceptance and checklist keys on all terminal job states (`completed`, `cancelled`, `missed`).
+   - **Files:** `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx`, `artifacts/cwp-platform/src/lib/staffLanguage.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+---
+
+### Phase P10: Operational State Consistency, Race Conditions & Stale-Data Recovery (Completed)
+**Objective:** Eliminate lifecycle race conditions, enforce double-tap and in-flight mutation protection, ensure idempotent API behavior across bookings, executions, and attendance check-in, safeguard technician ownership boundaries with non-crashing recovery views, reconcile multi-day caches and offline queue entries, and guarantee deterministic operational timeline ordering with duplicate event suppression.
+
+1. **Task P10-1: Lifecycle Transition Race-Condition Audit & In-Flight Lock (STAFF-063)**
+   - **Scope:** Added in-flight action deduplication lock `if (locatingJobId != null || transitionMutation.isPending || executionMutation.isPending) return;` in `useStaffJobsData.ts` to block duplicate concurrent requests from rapid double-tapping; hardened backend state machines across `executionService.ts` and `bookings.ts` ensuring terminal states (`completed`, `cancelled`, `missed`) strictly reject reverse transitions.
+   - **Files:** `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts`, `artifacts/api-server/src/lib/booking/services/trackingService.ts`, `artifacts/api-server/src/routes/bookings.ts`, `artifacts/api-server/src/lib/executions/executionService.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+2. **Task P10-2: Idempotency & Duplicate Action Protection for Execution, Booking and Attendance (STAFF-064)**
+   - **Scope:** Updated `POST /staff/:id/attendance` in `routes/staff.ts` to return HTTP 200 with the existing attendance record rather than HTTP 409 Conflict when already marked for that date, ensuring network retries and offline queue flushes succeed without duplicate rows; hardened `POST /bookings/:id/confirm`, `/transition`, and `/cancel` in `routes/bookings.ts` to return the existing record idempotently when already at the requested status; prevented duplicate events and quota depletion on retries.
+   - **Files:** `artifacts/api-server/src/routes/staff.ts`, `artifacts/api-server/src/routes/bookings.ts`, `artifacts/api-server/src/lib/executions/executionService.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+3. **Task P10-3: Admin Reassignment & Ownership Conflict Recovery with Hindi Guidance (STAFF-065)**
+   - **Scope:** Enforced server-side technician ownership validation on booking and execution transition routes; updated `formatStaffOperationalError` in `staffLanguage.ts` to translate terminal status errors, assignment removals, and wrong technician conflicts into clear colloquial Hindi with non-crashing recovery view, preserving offline evidence and attendance records.
+   - **Files:** `artifacts/api-server/src/routes/bookings.ts`, `artifacts/cwp-platform/src/features/staff-jobs/components/StaffOtherServicesPanel.tsx`, `artifacts/cwp-platform/src/lib/staffLanguage.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+4. **Task P10-4: Stale Cache & Offline Queue Reconciliation across DCMS and Appointments (STAFF-066)**
+   - **Scope:** In `useStaffJobsData.ts`, added query invalidation for `["dcms", "staff", "daily-route"]` inside `invalidateJobs()`; verified multi-day DCMS localStorage isolation in `dcmsLocalStorage.ts` and automated cleanup of previous dates; verified offline queue deduplication in `offlineQueue.ts` preventing redundant pending mutations.
+   - **Files:** `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/lib/dcmsLocalStorage.ts`, `artifacts/cwp-platform/src/services/offlineQueue.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.
+
+5. **Task P10-5: Operational Timeline Consistency & Duplicate Event Suppression (STAFF-067)**
+   - **Scope:** In `executionTimeline.ts` and `bookings.ts`, added event deduplication suppressing identical consecutive events occurring within 5 seconds for the same entity and type, preserving deterministic chronological ordering and ensuring staff status and admin timeline match.
+   - **Files:** `artifacts/api-server/src/lib/executions/executionTimeline.ts`, `artifacts/api-server/src/routes/bookings.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts`.

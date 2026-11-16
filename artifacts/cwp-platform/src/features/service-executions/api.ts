@@ -204,3 +204,25 @@ export async function completeExecution(
     "Complete job",
   );
 }
+
+export async function missExecution(
+  id: number,
+  reason?: string,
+): Promise<ServiceExecution | { queued: true }> {
+  return staffExecutionMutate(
+    `/service-executions/${id}/miss`,
+    reason ? { reason } : {},
+    "Report issue / miss",
+  );
+}
+
+export async function cancelExecution(
+  id: number,
+  reason?: string,
+): Promise<ServiceExecution | { queued: true }> {
+  return staffExecutionMutate(
+    `/service-executions/${id}/cancel`,
+    reason ? { reason } : {},
+    "Cancel job",
+  );
+}

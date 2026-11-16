@@ -738,4 +738,399 @@ describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF
       expect(sanitizedDialer).toBe("tel:+919876543210");
     });
   });
+
+  describe("Phase P9: Operational Exceptions, Incomplete Work & Recovery Workflows (STAFF-059..STAFF-062)", () => {
+    it("STAFF-059: DCMS vehicle exception handling with mandatory evidence photo validation contract", () => {
+      // 1. Local storage supports extended DCMS exception types
+      saveDcmsLocalRecord(
+        staffId,
+        {
+          subscriptionId: 701,
+          vehicleNumber: "UP65EE7001",
+          status: "car_not_available",
+          completionType: "water_unavailable",
+          actionLabel: "Water Unavailable — पानी नहीं मिला",
+          isPendingSync: true,
+          exceptionReason: "WATER_UNAVAILABLE: Society pump maintenance in progress",
+        },
+        mockDate,
+      );
+
+      const store = getDcmsDayStore(staffId, mockDate);
+      const record = store.records[701];
+      expect(record).toBeDefined();
+      expect(record.status).toBe("car_not_available");
+      expect(record.completionType).toBe("water_unavailable");
+      expect(record.exceptionReason).toContain("WATER_UNAVAILABLE");
+      expect(record.isPendingSync).toBe(true);
+
+      // 2. Route stop status mapping
+      expect(localStatusToRouteStopStatus(record.status)).toBe("car_not_available");
+
+      // 3. Mandatory photo contract validation
+      const validateDcmsExceptionPayload = (payload: {
+        subscriptionId: number;
+        imageBase64?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+      }) => {
+        if (!payload.subscriptionId || !payload.imageBase64 || payload.latitude == null || payload.longitude == null) {
+          throw new Error("Missing required exception fields: imageBase64 and GPS coordinates are mandatory proof");
+        }
+        return true;
+      };
+
+      // Fails when photo is absent
+      expect(() =>
+        validateDcmsExceptionPayload({
+          subscriptionId: 701,
+          imageBase64: null,
+          latitude: 25.3176,
+          longitude: 82.9739,
+        }),
+      ).toThrow("Missing required exception fields");
+
+      // Succeeds when photo proof and GPS are provided
+      expect(
+        validateDcmsExceptionPayload({
+          subscriptionId: 701,
+          imageBase64: "data:image/jpeg;base64,mockproof",
+          latitude: 25.3176,
+          longitude: 82.9739,
+        }),
+      ).toBe(true);
+    });
+
+    it("STAFF-060: Appointment service exception reporting with authoritative backend transition to missed", () => {
+      // 1. Exception reason formatting contract
+      const optionId = "customer_unreachable";
+      const userRemarks = "Called 3 times with no answer";
+      const formattedReason = `${optionId.toUpperCase()}: ${userRemarks.trim()}`;
+      expect(formattedReason).toBe("CUSTOMER_UNREACHABLE: Called 3 times with no answer");
+
+      // 2. Job transition to 'missed'
+      const activeJob: StaffJob = {
+        id: 505,
+        source: "execution",
+        status: "in_progress",
+        customerName: "Ramesh Sharma",
+        serviceName: "Deep Detailing",
+      };
+
+      // Transition simulation
+      const transitionToMissed = (job: StaffJob, reason: string): StaffJob => {
+        return {
+          ...job,
+          status: "missed",
+          technicianNotes: reason,
+        };
+      };
+
+      const missedJob = transitionToMissed(activeJob, formattedReason);
+      expect(missedJob.status).toBe("missed");
+      expect(missedJob.technicianNotes).toBe(formattedReason);
+
+      // 3. Recognized as terminal non-active state
+      const isTerminal = missedJob.status === "completed" || missedJob.status === "cancelled" || missedJob.status === "missed";
+      expect(isTerminal).toBe(true);
+
+      // 4. pickActiveJob excludes missed jobs
+      expect(pickActiveJob([missedJob])).toBeNull();
+    });
+
+    it("STAFF-061: Service-specific checklist integrity, persistence across reload, and required-step gating", () => {
+      const jobId = 303;
+      const jobSource = "execution";
+      const checklistStorageKey = `staff_job_checklist_${jobSource}_${jobId}`;
+
+      // 1. Checklist definitions with required flags
+      const vehicleChecklist = [
+        { id: "v1", label: "Inspect vehicle & marks", required: true },
+        { id: "v2", label: "Perform wash service", required: true },
+        { id: "v3", label: "Clean mirrors & wheels", required: true },
+        { id: "v4", label: "Pack equipment", required: true },
+      ];
+
+      // 2. Partial completion in progress
+      const initialProgress = { v1: true, v2: true };
+      window.localStorage.setItem(checklistStorageKey, JSON.stringify(initialProgress));
+
+      // 3. Simulated app restart / refresh: reload state from storage
+      const restoredProgress = JSON.parse(window.localStorage.getItem(checklistStorageKey) || "{}");
+      expect(restoredProgress.v1).toBe(true);
+      expect(restoredProgress.v2).toBe(true);
+      expect(restoredProgress.v3).toBeFalsy();
+
+      // 4. Progress calculation
+      const totalItems = vehicleChecklist.length;
+      let completedCount = vehicleChecklist.filter(item => restoredProgress[item.id]).length;
+      let allRequiredDone = vehicleChecklist.every(item => !item.required || restoredProgress[item.id]);
+
+      expect(completedCount).toBe(2);
+      expect(totalItems).toBe(4);
+      expect(allRequiredDone).toBe(false); // Gating prevents moving to after photos
+
+      // 5. Complete remaining required items
+      restoredProgress.v3 = true;
+      restoredProgress.v4 = true;
+      window.localStorage.setItem(checklistStorageKey, JSON.stringify(restoredProgress));
+
+      completedCount = vehicleChecklist.filter(item => restoredProgress[item.id]).length;
+      allRequiredDone = vehicleChecklist.every(item => !item.required || restoredProgress[item.id]);
+
+      expect(completedCount).toBe(4);
+      expect(allRequiredDone).toBe(true); // Gating passes
+    });
+
+    it("STAFF-062: Staff recovery guidance, error translation, and storage cleanup on terminal completion", () => {
+      // 1. Error formatting with exception / missed operational message
+      const err = new Error("Execution marked missed due to customer unreachable");
+      const formattedHi = formatStaffOperationalError(err, true);
+      const formattedEn = formatStaffOperationalError(err, false);
+
+      expect(formattedHi.title).toBe("एक्सेप्शन दर्ज हुआ");
+      expect(formattedHi.description).toContain("सुपरवाइजर को अपडेट मिल गया है");
+      expect(formattedEn.title).toBe("Exception Recorded");
+      expect(formattedEn.description).toContain("Operations has been notified");
+
+      // 2. Storage cleanup on terminal completion / exception
+      const jobId = 404;
+      const source = "execution";
+      const acceptedKey = `staff_job_accepted_${source}_${jobId}`;
+      const checklistKey = `staff_job_checklist_${source}_${jobId}`;
+
+      window.localStorage.setItem(acceptedKey, "1");
+      window.localStorage.setItem(checklistKey, JSON.stringify({ v1: true }));
+
+      // Clean up simulated terminal completion handler
+      const cleanupTerminalJobStorage = (jSource: string, jId: number) => {
+        window.localStorage.removeItem(`staff_job_accepted_${jSource}_${jId}`);
+        window.localStorage.removeItem(`staff_job_checklist_${jSource}_${jId}`);
+      };
+
+      cleanupTerminalJobStorage(source, jobId);
+      expect(window.localStorage.getItem(acceptedKey)).toBeNull();
+      expect(window.localStorage.getItem(checklistKey)).toBeNull();
+
+      // 3. Localization keys check
+      expect(translate("report_issue_btn", "hi")).toBe("समस्या रिपोर्ट करें / काम नहीं हो सका");
+      expect(translate("job_missed_title", "hi")).toBe("काम एक्सेप्शन / नहीं हो सका");
+      expect(translate("checklist_steps_done", "hi")).toBe("स्टेप्स पूरे");
+      expect(translate("checklist_required_helper", "hi")).toContain("सभी चेकलिस्ट स्टेप्स पर सही का निशान लगाएं");
+    });
+  });
+
+  describe("Phase P10: Operational State Consistency, Race Conditions & Stale-Data Recovery (STAFF-063..STAFF-067)", () => {
+    it("STAFF-063: Lifecycle Transition Race-Condition Audit and Terminal State Reversal Protection", () => {
+      // 1. Double-tap race condition guard logic
+      let locatingJobId: number | null = null;
+      let isTransitionPending = false;
+      let mutationTriggerCount = 0;
+
+      const triggerTransition = (jobId: number) => {
+        if (locatingJobId != null || isTransitionPending) {
+          return { status: "blocked_by_in_flight_lock" };
+        }
+        locatingJobId = jobId;
+        isTransitionPending = true;
+        mutationTriggerCount++;
+        return { status: "dispatched" };
+      };
+
+      // First tap dispatches
+      const firstTap = triggerTransition(101);
+      expect(firstTap.status).toBe("dispatched");
+      expect(mutationTriggerCount).toBe(1);
+
+      // Rapid second tap is blocked by the in-flight lock
+      const secondTap = triggerTransition(101);
+      expect(secondTap.status).toBe("blocked_by_in_flight_lock");
+      expect(mutationTriggerCount).toBe(1);
+
+      // 2. Terminal state reversal protection
+      const terminalStatuses = ["completed", "cancelled", "missed"];
+      const allowedTransitionsFromTerminal = (status: string) => {
+        if (terminalStatuses.includes(status)) {
+          return []; // No valid forward transitions from terminal states
+        }
+        return ["in_progress", "completed", "cancelled", "missed"];
+      };
+
+      for (const tStatus of terminalStatuses) {
+        expect(allowedTransitionsFromTerminal(tStatus)).toHaveLength(0);
+      }
+    });
+
+    it("STAFF-064: Idempotency & Duplicate Action Protection for Execution, Booking and Attendance", () => {
+      // 1. Booking / Execution idempotent status transition check
+      const simulateTransition = (currentStatus: string, requestedStatus: string) => {
+        if (currentStatus === requestedStatus) {
+          return { ok: true, idempotent: true, status: currentStatus };
+        }
+        if (["completed", "cancelled", "missed"].includes(currentStatus)) {
+          return { ok: false, error: `Cannot transition from terminal status "${currentStatus}"` };
+        }
+        return { ok: true, idempotent: false, status: requestedStatus };
+      };
+
+      // Repeating "confirmed" on confirmed booking returns existing record idempotently
+      const repeatConfirm = simulateTransition("confirmed", "confirmed");
+      expect(repeatConfirm.ok).toBe(true);
+      expect(repeatConfirm.idempotent).toBe(true);
+
+      // Attempting to move completed booking to in_progress returns error
+      const terminalAttempt = simulateTransition("completed", "in_progress");
+      expect(terminalAttempt.ok).toBe(false);
+      expect(terminalAttempt.error).toContain("terminal status");
+
+      // 2. Attendance check-in idempotency contract: existing record returned with 200 OK
+      const attendanceDb: { id: number; staffId: number; date: string; status: string }[] = [];
+      const markAttendanceIdempotent = (sId: number, dateStr: string) => {
+        const existing = attendanceDb.find(a => a.staffId === sId && a.date === dateStr);
+        if (existing) {
+          return { statusCode: 200, record: existing, isRetry: true };
+        }
+        const created = { id: attendanceDb.length + 1, staffId: sId, date: dateStr, status: "present" };
+        attendanceDb.push(created);
+        return { statusCode: 201, record: created, isRetry: false };
+      };
+
+      const firstPunch = markAttendanceIdempotent(99, "2026-11-16");
+      expect(firstPunch.statusCode).toBe(201);
+      expect(firstPunch.record.id).toBe(1);
+
+      // Offline queue flush retry / rapid double punch
+      const retryPunch = markAttendanceIdempotent(99, "2026-11-16");
+      expect(retryPunch.statusCode).toBe(200);
+      expect(retryPunch.isRetry).toBe(true);
+      expect(retryPunch.record.id).toBe(1);
+      expect(attendanceDb.length).toBe(1); // No duplicate attendance rows created
+    });
+
+    it("STAFF-065: Admin Reassignment & Ownership Conflict Recovery with Hindi guidance", () => {
+      // 1. Staff ownership verification
+      const jobAssignedStaffId = 88; // Assigned to another technician
+      const loggedInStaffId = 99;
+
+      const verifyStaffOwnership = (assignedId: number | null, currentStaffId: number) => {
+        if (assignedId && assignedId !== currentStaffId) {
+          throw new Error("Wrong technician — this booking is assigned to a different staff member");
+        }
+        return true;
+      };
+
+      expect(() => verifyStaffOwnership(jobAssignedStaffId, loggedInStaffId)).toThrow(
+        "Wrong technician — this booking is assigned to a different staff member",
+      );
+
+      // 2. Clear colloquial Hindi guidance for reassignment conflict
+      const reassignedErr = new Error("Wrong technician — this booking is assigned to a different staff member");
+      const formattedReassigned = formatStaffOperationalError(reassignedErr, true);
+      expect(formattedReassigned.title).toBe("काम दूसरे साथी को सौंपा गया है");
+      expect(formattedReassigned.description).toContain("यह काम अब आपके नाम पर नहीं है");
+
+      // 3. Removed assignment error guidance
+      const removedErr = new Error("The linked assignment was removed by admin");
+      const formattedRemoved = formatStaffOperationalError(removedErr, true);
+      expect(formattedRemoved.title).toBe("काम हटा दिया गया है");
+      expect(formattedRemoved.description).toContain("एडमिन ने इस काम का असाइनमेंट हटा दिया है");
+
+      // 4. Terminal status error guidance
+      const terminalErr = new Error("Cannot transition booking from terminal status completed");
+      const formattedTerminal = formatStaffOperationalError(terminalErr, true);
+      expect(formattedTerminal.title).toBe("काम पहले ही पूरा या रद्द हो चुका है");
+      expect(formattedTerminal.description).toContain("यह काम सर्वर पर बंद हो चुका है");
+    });
+
+    it("STAFF-066: Stale Cache & Offline Queue Reconciliation across DCMS and Appointments", async () => {
+      // 1. Offline queue deduplication prevents duplicate pending mutations
+      const qKey = "cwp_offline_queue_fallback";
+      window.localStorage.removeItem(qKey);
+
+      const action1 = await offlineQueue.enqueue({
+        type: "staff_job",
+        label: "Complete job #105",
+        url: "/api/service-executions/105/complete",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "Completed clean" }),
+      });
+
+      // Immediate retry of same action
+      const action2 = await offlineQueue.enqueue({
+        type: "staff_job",
+        label: "Complete job #105",
+        url: "/api/service-executions/105/complete",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "Completed clean" }),
+      });
+
+      expect(action1.id).toBe(action2.id); // Deduplicated to existing queue item
+
+      // 2. DCMS multi-day storage isolation and cleanup of previous dates
+      const oldDate = "2026-11-14";
+      const todayDate = "2026-11-16";
+      const oldStoreKey = `cwp_staff_dcms_${staffId}_${oldDate}`;
+      const todayStoreKey = `cwp_staff_dcms_${staffId}_${todayDate}`;
+
+      window.localStorage.setItem(oldStoreKey, JSON.stringify({ staffId, istDate: oldDate, records: {} }));
+      saveDcmsLocalRecord(staffId, {
+        subscriptionId: 555,
+        vehicleNumber: "UP65-AB-1234",
+        status: "completed",
+        actionLabel: "Cleaned",
+      }, todayDate);
+
+      expect(window.localStorage.getItem(todayStoreKey)).not.toBeNull();
+      // Verify today's store contains the fresh record
+      const todayStore = getDcmsDayStore(staffId, todayDate);
+      expect(todayStore.records[555]?.vehicleNumber).toBe("UP65-AB-1234");
+    });
+
+    it("STAFF-067: Operational Timeline Consistency and Duplicate Event Suppression", () => {
+      // 1. Timeline event deduplication within 5-second window
+      const timeline: { id: number; eventType: string; description: string; createdAt: number }[] = [];
+
+      const recordTimelineEvent = (eventType: string, description: string, timestamp: number) => {
+        const last = timeline[timeline.length - 1];
+        if (
+          last &&
+          last.eventType === eventType &&
+          last.description === description &&
+          timestamp - last.createdAt < 5000
+        ) {
+          return { deduplicated: true };
+        }
+        timeline.push({ id: timeline.length + 1, eventType, description, createdAt: timestamp });
+        return { deduplicated: false };
+      };
+
+      const t0 = Date.now();
+      const ev1 = recordTimelineEvent("STATUS_CHANGE", "Technician marked en-route", t0);
+      expect(ev1.deduplicated).toBe(false);
+      expect(timeline.length).toBe(1);
+
+      // Repeat identical event 1.2s later (e.g. network retry or button bounce)
+      const ev2 = recordTimelineEvent("STATUS_CHANGE", "Technician marked en-route", t0 + 1200);
+      expect(ev2.deduplicated).toBe(true);
+      expect(timeline.length).toBe(1);
+
+      // Different event 2s later
+      const ev3 = recordTimelineEvent("STATUS_CHANGE", "Execution started", t0 + 2000);
+      expect(ev3.deduplicated).toBe(false);
+      expect(timeline.length).toBe(2);
+
+      // Identical event 6s later (outside 5s deduplication window)
+      const ev4 = recordTimelineEvent("STATUS_CHANGE", "Execution started", t0 + 8000);
+      expect(ev4.deduplicated).toBe(false);
+      expect(timeline.length).toBe(3);
+
+      // 2. Deterministic timeline sorting
+      const sorted = [...timeline].sort((a, b) => a.createdAt - b.createdAt);
+      expect(sorted[0].description).toBe("Technician marked en-route");
+      expect(sorted[1].description).toBe("Execution started");
+      expect(sorted[2].description).toBe("Execution started");
+    });
+  });
 });

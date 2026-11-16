@@ -117,6 +117,28 @@ async function logEvent(
     actorName?: string;
   },
 ) {
+  // Deduplicate consecutive identical booking events within 5 seconds
+  const [recent] = await db.select()
+    .from(bookingEventsTable)
+    .where(and(
+      eq(bookingEventsTable.bookingId, bookingId),
+      eq(bookingEventsTable.type, type as never),
+    ))
+    .orderBy(desc(bookingEventsTable.createdAt))
+    .limit(1);
+
+  if (recent) {
+    const elapsed = Date.now() - new Date(recent.createdAt).getTime();
+    if (
+      elapsed < 5000 &&
+      recent.fromStatus === (opts?.fromStatus ?? null) &&
+      recent.toStatus === (opts?.toStatus ?? null) &&
+      recent.body === (opts?.body ?? null)
+    ) {
+      return;
+    }
+  }
+
   await db.insert(bookingEventsTable).values({
     bookingId,
     type: type as never,
@@ -769,6 +791,14 @@ router.post("/bookings/:id/confirm", async (req, res) => {
     const existing = await getBookingWithScope(req, id);
     if (!existing) return res.status(404).json({ error: "Booking not found" });
 
+    if (existing.status === "confirmed") {
+      // Idempotent retry: already confirmed
+      return res.json(existing);
+    }
+    if (["completed", "cancelled", "missed"].includes(existing.status)) {
+      return res.status(400).json({ error: `Cannot confirm booking in terminal status "${existing.status}"` });
+    }
+
     if (req.user?.role === "staff") {
       const staffId = req.scope?.staffId ?? req.user.staffId;
       if (staffId == null) {
@@ -831,6 +861,14 @@ router.post("/bookings/:id/transition", async (req, res) => {
     const existing = await getBookingWithScope(req, id);
     if (!existing) return res.status(404).json({ error: "Booking not found" });
 
+    if (existing.status === nextRaw) {
+      // Idempotent retry: already at requested status
+      return res.json(existing);
+    }
+    if (["completed", "cancelled", "missed"].includes(existing.status)) {
+      return res.status(400).json({ error: `Cannot transition booking from terminal status "${existing.status}"` });
+    }
+
     if (req.user?.role === "staff") {
       const staffId = req.scope?.staffId ?? req.user.staffId;
       if (staffId == null) {
@@ -884,6 +922,10 @@ router.post("/bookings/:id/reschedule", async (req, res) => {
 
     const existing = await getBookingWithScope(req, id);
     if (!existing) return res.status(404).json({ error: "Booking not found" });
+
+    if (["completed", "cancelled"].includes(existing.status)) {
+      return res.status(400).json({ error: `Cannot reschedule booking in terminal status "${existing.status}"` });
+    }
 
     if (req.user?.role === "staff") {
       const staffId = req.scope?.staffId ?? req.user.staffId;
@@ -944,6 +986,14 @@ router.post("/bookings/:id/cancel", async (req, res) => {
     const { reason } = req.body as { reason?: string };
     const existing = await getBookingWithScope(req, id);
     if (!existing) return res.status(404).json({ error: "Booking not found" });
+
+    if (existing.status === "cancelled") {
+      // Idempotent retry: already cancelled
+      return res.json(existing);
+    }
+    if (existing.status === "completed") {
+      return res.status(400).json({ error: "Cannot cancel a completed booking" });
+    }
 
     if (req.user?.role === "staff") {
       const staffId = req.scope?.staffId ?? req.user.staffId;

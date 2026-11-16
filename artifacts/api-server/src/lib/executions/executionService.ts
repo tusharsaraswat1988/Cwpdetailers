@@ -976,10 +976,17 @@ export async function completeExecution(
 }
 
 export async function missExecution(req: Request, executionId: number, reason?: string): Promise<ExecutionView> {
-  const execution = await getMutableExecution(req, executionId);
-  if (isTerminal(execution.status)) {
-    throw new Error("Execution cannot be marked missed from current status");
+  const row = await loadExecutionRow(executionId);
+  if (!row || !assertInScope(req, row.execution)) {
+    throw new Error("Execution not found");
   }
+  assertAssignedTechnician(req, row.execution);
+  if (row.execution.status === "missed") {
+    // Idempotent retry: already marked missed on server
+    return mapExecutionRow(row);
+  }
+  assertNotCompleted(row.execution);
+  const execution = row.execution;
   const actor = actorFromReq(req);
   const now = new Date();
   await db.update(serviceExecutionsTable)
@@ -989,6 +996,21 @@ export async function missExecution(req: Request, executionId: number, reason?: 
       updatedAt: now,
     })
     .where(eq(serviceExecutionsTable.id, executionId));
+
+  await recordExecutionTimeline({
+    executionId,
+    eventType: "EXECUTION_CANCELLED",
+    title: "Execution Missed",
+    description: reason ?? "Marked missed",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    metadata: { outcome: "missed", reason },
+  });
+  executionDomainEventPublisher.publish({
+    ...eventBase(execution, actor.actorId),
+    type: "ExecutionMissed",
+    metadata: { reason },
+  });
 
   const bookingId = await resolveBookingIdForExecution(execution);
   if (bookingId) {
@@ -1031,10 +1053,17 @@ export async function missExecution(req: Request, executionId: number, reason?: 
 }
 
 export async function cancelExecution(req: Request, executionId: number, reason?: string): Promise<ExecutionView> {
-  const execution = await getMutableExecution(req, executionId);
-  if (isTerminal(execution.status)) {
-    throw new Error("Execution cannot be cancelled from current status");
+  const row = await loadExecutionRow(executionId);
+  if (!row || !assertInScope(req, row.execution)) {
+    throw new Error("Execution not found");
   }
+  assertAssignedTechnician(req, row.execution);
+  if (row.execution.status === "cancelled") {
+    // Idempotent retry: already cancelled on server
+    return mapExecutionRow(row);
+  }
+  assertNotCompleted(row.execution);
+  const execution = row.execution;
   const actor = actorFromReq(req);
   const now = new Date();
   await db.update(serviceExecutionsTable)
