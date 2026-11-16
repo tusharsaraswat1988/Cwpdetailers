@@ -9,6 +9,7 @@ export type StaffJob = {
   id: number;
   source?: "booking" | "execution";
   executionId?: number;
+  bookingId?: number;
   customerId?: number;
   customerPhone?: string;
   vehicleId?: number;
@@ -160,6 +161,7 @@ export function executionToStaffJob(e: {
     source: "execution",
     id: e.id,
     executionId: e.id,
+    bookingId: (e as { bookingId?: number; legacyBookingId?: number }).bookingId ?? (e as { legacyBookingId?: number }).legacyBookingId ?? undefined,
     customerId: e.customerId,
     assetId: e.assetId ?? undefined,
     vehicleId: e.assetId ?? undefined,

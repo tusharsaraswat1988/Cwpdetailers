@@ -29,6 +29,7 @@ export type DcmsLocalRecord = {
   timestamp: string; // ISO string
   completionOrder?: number; // Actual completion order (1st, 2nd, 3rd, ...)
   completedAtTime?: string; // Formatted IST time (e.g. 06:45 AM)
+  isPendingSync?: boolean; // True when queued offline awaiting network sync
   notes?: string;
   photoDataUrl?: string; // small thumbnail or reference if stored locally
 };
@@ -111,6 +112,7 @@ export function saveDcmsLocalRecord(
     vehicleNumber: string;
     status: DcmsLocalCompletionType;
     actionLabel: string;
+    isPendingSync?: boolean;
     notes?: string;
   },
   istDate: string = getTodayIstDate(),
@@ -133,6 +135,7 @@ export function saveDcmsLocalRecord(
     timestamp: new Date().toISOString(),
     completionOrder: currentCompletionOrder,
     completedAtTime: formatIstTime(new Date()),
+    isPendingSync: record.isPendingSync ?? false,
   };
   store.lastUpdated = new Date().toISOString();
 

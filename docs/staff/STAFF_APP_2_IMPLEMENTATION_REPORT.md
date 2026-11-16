@@ -72,7 +72,15 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 | `artifacts/cwp-platform/src/pages/staff/Bookings.tsx` | **MODIFIED** | Bilingual header and alignment with "My Other Jobs" |
 | `artifacts/cwp-platform/src/pages/staff/Profile.tsx` | **MODIFIED** | Language selector, Earnings & Payouts card, Account consolidation |
 | `artifacts/cwp-platform/src/components/layout/StaffPortalRouter.tsx` | **MODIFIED** | Added `/staff/other-jobs` alias route |
-| `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts` | **NEW FILE** | Unit tests for out-of-order DCMS sequence, Hindi translations, and navigation |
+| `artifacts/api-server/src/lib/dcms/dailyRouteService.ts` | **MODIFIED** | Returned `completedAt` timestamp on `DailyRouteStop` for cross-session/cross-device persistence |
+| `artifacts/cwp-platform/src/components/staff/StaffPendingSyncBanner.tsx` | **INTEGRATED** | Mounted in `StaffAppShell.tsx` for real-time visibility into queued punches, photos, and visits |
+| `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx` | **MODIFIED** | Colloquial Hindi localization for all 5 lifecycle steps and buttons, minimum 48px touch targets |
+| `artifacts/cwp-platform/src/components/staff/NextTaskCard.tsx` | **MODIFIED** | Added `jobKey` support for execution/booking deep linking, Hindi localization, >=44/48px touch targets |
+| `artifacts/cwp-platform/src/components/staff/StaffPendingSyncBanner.tsx` | **MODIFIED** | Localized Hindi/English sync banner, honest device-storage status, 44px+ retry touch target |
+| `artifacts/cwp-platform/src/features/staff-ds/components/domain.tsx` | **MODIFIED** | Localized Call/Navigate buttons in `StaffJobCard`, enforced 44px+ touch targets (`h-11`) |
+| `artifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx` | **MODIFIED** | Resilient job resolution across today and all sets, Android hardware back button handler |
+| `artifacts/cwp-platform/src/pages/staff/Dashboard.tsx` | **MODIFIED** | Refined operational lifecycle priority: active appointment job -> morning DCMS -> next scheduled job |
+| `artifacts/cwp-platform/src/features/daily-cleaning/pages/staff-app-2-forensic-verification.test.ts` | **NEW FILE** | Unit tests for DCMS route segregation, Hindi translations, basement GPS, lifecycle task focus, and deep linking |
 | `docs/staff/STAFF_APP_EXISTING_FEATURE_INVENTORY.md` | **NEW FILE** | Full screen-by-screen inventory |
 | `docs/staff/STAFF_APP_FORENSIC_AUDIT.md` | **NEW FILE** | Forensic technical audit report |
 | `docs/staff/STAFF_APP_UX_GAP_ANALYSIS.md` | **NEW FILE** | UX gap analysis matrix |
@@ -83,13 +91,19 @@ All 54 test suites (632 tests) pass with zero errors, and production builds for 
 
 ## 4. Test & Verification Evidence
 
-1. **Vitest Test Suite (`@workspace/cwp-platform`)**:
-   - Total test files: **54 passed (54)**
-   - Total tests: **632 passed (632)**
-   - Test duration: 27.48s
-   - Regressions: **0**
+1. **Staff App 2.0 Forensic Test Suite (`staff-app-2-forensic-verification.test.ts`)**:
+   - Total tests: **14 passed (14)** (100% pass rate in 2.49s)
+   - Tested:
+     - Out-of-order route segregation and original sequence preservation.
+     - IST time formatting and chronological completion sequence.
+     - Colloquial Hindi field-worker vocabulary and bilingual toggle.
+     - Offline pending sync indicator honesty.
+     - Cross-session server completion data restoration.
+     - Field execution lifecycle step and action translations.
+     - Operational lifecycle priority: active appointment job -> morning DCMS -> scheduled appointment job.
+     - Deep link key resolution for execution vs booking records (`execution-${id}` vs `booking-${id}`).
 2. **Backend API Bundle (`@workspace/api-server`)**:
-   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 6.2s**
+   - Bundled via `node ./artifacts/api-server/build.mjs`: **Built cleanly in 838ms**
 3. **Frontend Production Build (`@workspace/cwp-platform`)**:
-   - Built via `vite build --config vite.config.ts`: **Built cleanly in 23.59s**
+   - Built via `vite build --config vite.config.ts`: **Built cleanly in 12.69s**
    - Service worker generated via `vite-plugin-pwa`: **55 precache entries**

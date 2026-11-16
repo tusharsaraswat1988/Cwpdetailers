@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { STAFF_SPACE } from "../tokens";
+import { useStaffLanguage } from "@/lib/staffLanguage";
 import {
   StaffCard,
   StaffStatusBadge,
@@ -53,6 +54,7 @@ export function StaffJobCard({
   trailing?: ReactNode;
   className?: string;
 }) {
+  const { t, isHindi } = useStaffLanguage();
   const body = (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -90,10 +92,10 @@ export function StaffJobCard({
             <a
               href={phoneHref}
               onClick={e => e.stopPropagation()}
-              className="staff-tap inline-flex items-center justify-center gap-1.5 rounded-[var(--staff-radius-sm)] border border-border bg-card px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="staff-tap inline-flex items-center justify-center gap-1.5 h-11 min-h-[44px] rounded-[var(--staff-radius-sm)] border border-border bg-card px-3.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <Phone size={14} className="text-[hsl(var(--tone-success))]" aria-hidden />
-              Call
+              {t("call_customer")}
             </a>
           ) : null}
           {navigateHref ? (
@@ -102,10 +104,10 @@ export function StaffJobCard({
               target="_blank"
               rel="noreferrer"
               onClick={e => e.stopPropagation()}
-              className="staff-tap inline-flex items-center justify-center gap-1.5 rounded-[var(--staff-radius-sm)] border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/15"
+              className="staff-tap inline-flex items-center justify-center gap-1.5 h-11 min-h-[44px] rounded-[var(--staff-radius-sm)] border border-primary/30 bg-primary/10 px-3.5 text-xs font-semibold text-primary hover:bg-primary/15"
             >
               <Navigation size={14} aria-hidden />
-              Navigate
+              {t("directions")}
             </a>
           ) : null}
         </StaffActionBar>

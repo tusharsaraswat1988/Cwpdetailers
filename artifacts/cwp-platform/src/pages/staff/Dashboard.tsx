@@ -8,6 +8,7 @@ import { captureStaffPhoto, isCameraCancel } from "@/lib/native/captureStaffPhot
 import { isOfflineQueued, queuedSavedMessage } from "@/services/queuedResult";
 import { Redirect, Link } from "wouter";
 import { useStaffJobsData } from "@/hooks/useStaffJobsData";
+import { staffJobKey } from "@/lib/staff-jobs";
 import { useStaffDailyRoute } from "@/features/daily-cleaning/api";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { OPERATIONAL_ROLE_SLUGS } from "@/lib/staff-ecosystem/roles";
@@ -204,11 +205,21 @@ export default function StaffDashboardPage() {
   const completedToday = dailyDone;
   const progressPercent = totalToday > 0 ? Math.round((completedToday / totalToday) * 100) : 0;
 
-  // DERIVE EXACTLY ONE NEXT TASK FOR HERO (Phase 3: No competing actions)
-  const nextDailyStop = routeStops.find(s => s.todayStatus === "pending" || s.todayStatus === "rejected") ?? null;
-  const nextBookingJob = (!nextDailyStop && otherPending > 0)
-    ? jobs.today.find(j => j.status !== "completed" && j.status !== "cancelled")
+  // DERIVE EXACTLY ONE NEXT TASK FOR HERO (Operational Lifecycle):
+  // 1. If an appointment job is actively in-progress, en-route, or paused, prioritize it as the active focus.
+  // 2. Otherwise, prioritize morning DCMS route stops.
+  // 3. When DCMS is completed, prioritize the next scheduled appointment job.
+  const activeBookingJob = jobs.today.find(
+    j => j.status === "in_progress" || j.status === "en_route" || j.status === "paused"
+  );
+  const nextDailyStop = (!activeBookingJob)
+    ? (routeStops.find(s => s.todayStatus === "pending" || s.todayStatus === "rejected") ?? null)
     : null;
+  const nextBookingJob = activeBookingJob ?? (
+    (!nextDailyStop && otherPending > 0)
+      ? (jobs.today.find(j => j.status !== "completed" && j.status !== "cancelled") ?? null)
+      : null
+  );
 
   const nextTask: NextTaskData | null = useMemo(() => {
     if (nextDailyStop) {
@@ -236,6 +247,7 @@ export default function StaffDashboardPage() {
       return {
         type: "booking",
         id: nextBookingJob.id,
+        jobKey: staffJobKey(nextBookingJob),
         customerName: nextBookingJob.customerName ?? "Customer",
         customerPhone: nextBookingJob.customerPhone,
         vehicleNumber: nextBookingJob.vehicleName,
@@ -276,19 +288,25 @@ export default function StaffDashboardPage() {
         vehicleMake: nextDailyStop.vehicleMake,
         vehicleModel: nextDailyStop.vehicleModel,
         vehicleColor: nextDailyStop.vehicleColor,
+        societyName: nextDailyStop.societyName,
+        parkingLevel: nextDailyStop.parkingLevel,
+        parkingBay: nextDailyStop.parkingBay,
         todayStatus: nextDailyStop.todayStatus,
         remainingCleanings: nextDailyStop.remainingCleanings,
       });
     }
   };
 
-  const handleSuccessfulClean = () => {
+  const handleSuccessfulClean = (isQueued?: boolean) => {
     if (staffId && selectedCleanStop) {
       saveDcmsLocalRecord(staffId, {
         subscriptionId: selectedCleanStop.subscriptionId,
         vehicleNumber: selectedCleanStop.vehicleNumber,
         status: "completed",
-        actionLabel: isHindi ? "सफाई पूरी हुई" : "Cleaning Completed",
+        actionLabel: isQueued
+          ? (isHindi ? "फोन पर सुरक्षित (सिंक पेंडिंग)" : "Saved on phone (sync pending)")
+          : (isHindi ? "सफाई पूरी हुई" : "Cleaning Completed"),
+        isPendingSync: Boolean(isQueued),
       });
       const store = getDcmsDayStore(staffId);
       setLocalRecords(store.records);

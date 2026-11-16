@@ -42,6 +42,9 @@ export type CleanDialogStop = {
   vehicleMake: string;
   vehicleModel: string;
   vehicleColor?: string | null;
+  societyName?: string | null;
+  parkingLevel?: string | null;
+  parkingBay?: string | null;
   referencePhotos?: VehicleReferencePhotoSet;
   todayStatus: string;
 };
@@ -52,7 +55,7 @@ type Props = {
   stop: CleanDialogStop | null;
   visitType?: "cleaning" | "wash";
   walkInMode?: boolean;
-  onSuccess: () => void;
+  onSuccess: (isQueued?: boolean) => void;
 };
 
 type Step =
@@ -81,6 +84,9 @@ export function StaffVehicleCleanDialog({
     latitude: number;
     longitude: number;
     accuracy?: number;
+    gpsUnavailable?: boolean;
+    gpsUnavailableReason?: string;
+    weakGpsFallback?: boolean;
   } | null>(null);
 
   const [ocrRaw, setOcrRaw] = useState("");
@@ -113,10 +119,24 @@ export function StaffVehicleCleanDialog({
       setSubmitError(null);
       setManualError(null);
 
-      // Phase 4: Capture photo and lock device location at the EXACT moment of capture
+      // Capture photo and lock device location at the EXACT moment of shutter trigger
       const captured = await captureStaffPhotoWithGps("rear");
+
+      const isBasement = Boolean(stop.societyName || stop.parkingLevel || stop.parkingBay);
+      if (captured.gpsUnavailable && !isBasement) {
+        // Open street location cannot bypass GPS per SEC-024
+        setSubmitError("खुली सड़क पर GPS जरूरी है। कृपया फोन का GPS ऑन करें और दोबारा फोटो लें।");
+        setStep("ready");
+        return;
+      }
+
       setPhoto(captured);
-      setCapturedLocation(captured.location);
+      setCapturedLocation({
+        ...captured.location,
+        gpsUnavailable: captured.gpsUnavailable,
+        gpsUnavailableReason: captured.gpsUnavailableReason,
+        weakGpsFallback: captured.weakGpsFallback,
+      });
       setStep("processing");
 
       let ocrResult;
@@ -208,18 +228,21 @@ export function StaffVehicleCleanDialog({
         latitude: capturedLocation.latitude,
         longitude: capturedLocation.longitude,
         accuracy: capturedLocation.accuracy,
+        gpsUnavailable: capturedLocation.gpsUnavailable,
+        gpsUnavailableReason: capturedLocation.gpsUnavailableReason,
         ocrText: ocrRaw || "MANUAL_VERIFIED",
         ocrConfidence: ocrConfidence || null,
         confirmedRegistration: stop.vehicleNumber,
       });
 
-      if (isOfflineQueued(result)) {
+      const isQueued = isOfflineQueued(result);
+      if (isQueued) {
         toast({ title: t("photo_uploading"), description: queuedSavedMessage("visit") });
       } else {
         toast({ title: t("photo_success"), description: `${stop.vehicleNumber} — ${t("cleaning_complete")}` });
       }
 
-      onSuccess();
+      onSuccess(isQueued);
       onOpenChange(false);
     } catch (err) {
       setStep("verified");
@@ -299,12 +322,22 @@ export function StaffVehicleCleanDialog({
                   <CheckCircle2 size={13} />
                   {t("plate_match_success")}
                 </div>
-                {capturedLocation && (
+                {capturedLocation?.gpsUnavailable ? (
+                  <div className="absolute bottom-2 left-2 bg-amber-600/90 backdrop-blur-sm text-white text-[11px] px-2.5 py-0.5 rounded-md flex items-center gap-1 font-medium">
+                    <AlertTriangle size={11} className="text-amber-200" />
+                    <span>बेसमेंट पार्किंग (कमजोर GPS)</span>
+                  </div>
+                ) : capturedLocation?.weakGpsFallback ? (
+                  <div className="absolute bottom-2 left-2 bg-blue-600/90 backdrop-blur-sm text-white text-[11px] px-2.5 py-0.5 rounded-md flex items-center gap-1 font-medium">
+                    <MapPin size={11} className="text-blue-200" />
+                    <span>कैंपस GPS लॉक</span>
+                  </div>
+                ) : capturedLocation ? (
                   <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[11px] px-2 py-0.5 rounded-md flex items-center gap-1">
                     <MapPin size={11} className="text-emerald-400" />
                     <span>GPS Lock ±{Math.round(capturedLocation.accuracy ?? 10)}m</span>
                   </div>
-                )}
+                ) : null}
               </div>
             )}
 

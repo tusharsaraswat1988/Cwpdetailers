@@ -127,13 +127,30 @@ export type TranslationKey =
   | "logout"
   | "supervisor_contact"
   | "my_documents"
-  // General
+  // General & Lifecycle Stepper
   | "retry"
   | "loading"
   | "back"
   | "bay"
   | "tower"
-  | "flat";
+  | "flat"
+  | "start_work"
+  | "service_done_after_photos"
+  | "submit_complete_job"
+  | "resume_work"
+  | "pause_work"
+  | "work_paused"
+  | "booking_accepted"
+  | "before_photos_uploaded"
+  | "service_in_progress"
+  | "technician_notes"
+  | "before_photos_label"
+  | "after_photos_label"
+  | "step_route"
+  | "step_before"
+  | "step_work"
+  | "step_after"
+  | "step_done";
 
 const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
   hi: {
@@ -215,6 +232,23 @@ const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
     bay: "बे",
     tower: "टावर",
     flat: "फ्लैट",
+    start_work: "काम शुरू करें",
+    service_done_after_photos: "सफाई पूरी — बाद की फोटो लें",
+    submit_complete_job: "सबमिट करें — काम पूरा हुआ",
+    resume_work: "काम दोबारा शुरू करें",
+    pause_work: "काम रोकें (Pause)",
+    work_paused: "काम रुका हुआ है",
+    booking_accepted: "बुकिंग स्वीकार की गई",
+    before_photos_uploaded: "शुरू करने से पहले की फोटो ले ली गई",
+    service_in_progress: "सफाई चल रही है",
+    technician_notes: "टिप्पणी / ऑब्जर्वेशन (वैकल्पिक)",
+    before_photos_label: "शुरू से पहले की फोटो (सबूत)",
+    after_photos_label: "सफाई के बाद की फोटो (सबूत)",
+    step_route: "रास्ता",
+    step_before: "पहले",
+    step_work: "सफाई",
+    step_after: "बाद में",
+    step_done: "पूरा",
   },
   en: {
     nav_dashboard: "Dashboard",
@@ -295,6 +329,23 @@ const translations: Record<StaffLanguage, Record<TranslationKey, string>> = {
     bay: "Bay",
     tower: "Tower",
     flat: "Flat",
+    start_work: "Start Work",
+    service_done_after_photos: "Service Done — After Photos",
+    submit_complete_job: "Submit & Complete Job",
+    resume_work: "Resume Work",
+    pause_work: "Pause Work",
+    work_paused: "Work Paused",
+    booking_accepted: "Booking Accepted",
+    before_photos_uploaded: "Before Photos Uploaded",
+    service_in_progress: "Service In Progress",
+    technician_notes: "Technician Notes & Observations (Optional)",
+    before_photos_label: "Before Photos (Evidence)",
+    after_photos_label: "After Photos (Clean Proof)",
+    step_route: "Route",
+    step_before: "Before",
+    step_work: "Work",
+    step_after: "After",
+    step_done: "Done",
   },
 };
 

@@ -9,6 +9,7 @@ import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicat
 import { Zap, Wrench, Sparkles, User, Globe } from "lucide-react";
 import { staffEcosystemApi, STAFF_ECOSYSTEM_QUERY_KEY } from "@/lib/staff-ecosystem/api";
 import { useStaffLanguage } from "@/lib/staffLanguage";
+import { StaffPendingSyncBanner } from "@/components/staff/StaffPendingSyncBanner";
 
 export default function StaffAppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -111,6 +112,7 @@ export default function StaffAppShell({ children }: { children: ReactNode }) {
       }}
       bottomNav={staffNavItems}
     >
+      <StaffPendingSyncBanner />
       {children}
     </AppShell>
   );

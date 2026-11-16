@@ -28,6 +28,7 @@ import {
   useVerifyExtraServiceOtp,
   type ExtraServiceRequestView,
 } from "@/features/extra-service/api";
+import { useStaffLanguage } from "@/lib/staffLanguage";
 
 type Props = {
   selectedJobKey?: string | null;
@@ -100,6 +101,7 @@ function StaffJobExtraServiceSection({ job }: { job: StaffJob }) {
 }
 
 export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) {
+  const { t, isHindi } = useStaffLanguage();
   const jobs = useStaffJobsData();
   const [, navigate] = useLocation();
   const search = useSearch();
@@ -125,8 +127,14 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
   }, [search]);
 
   useEffect(() => {
-    if (!selectedJobKey || jobs.loadingToday) return;
-    const match = jobs.today.find(j => staffJobKey(j) === selectedJobKey);
+    if (!selectedJobKey) {
+      setSelectedJob(null);
+      return;
+    }
+    if (jobs.loadingToday && jobs.loadingAll) return;
+    const match =
+      jobs.today.find(j => staffJobKey(j) === selectedJobKey) ??
+      jobs.all.find(j => staffJobKey(j) === selectedJobKey);
     if (!match) return;
 
     let cancelled = false;
@@ -139,7 +147,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
     return () => {
       cancelled = true;
     };
-  }, [selectedJobKey, jobs.loadingToday, jobs.today]);
+  }, [selectedJobKey, jobs.loadingToday, jobs.loadingAll, jobs.today, jobs.all]);
 
   async function refreshSelectedJob(job: StaffJob) {
     const refreshed = await jobs.refetchToday();
@@ -205,9 +213,9 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
             onSelectJob(null);
             setFromWalkIn(false);
           }}
-          className="staff-tap inline-flex items-center gap-1 text-sm font-semibold text-primary"
+          className="staff-tap inline-flex items-center gap-1 text-sm font-semibold text-primary h-10"
         >
-          <ChevronLeft size={16} aria-hidden /> Back to jobs
+          <ChevronLeft size={16} aria-hidden /> {isHindi ? "वापस लिस्ट पर जाएं" : "Back to jobs"}
         </button>
         <StaffCard padded={false} className="overflow-hidden">
           <div className="space-y-3 p-4">
@@ -244,7 +252,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
         <CollapsibleTrigger className="staff-action-card staff-tap flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
           <span className="flex items-center gap-2">
             <UserPlus size={16} className="text-primary" aria-hidden />
-            Walk-in Entry
+            {isHindi ? "+ नया वॉक-इन कस्टमर जोड़ें" : "Walk-in Entry"}
           </span>
           <ChevronDown
             size={16}
@@ -287,15 +295,15 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
       ) : jobs.today.length === 0 ? (
         <StaffEmptyState
           icon={<Calendar size={20} aria-hidden />}
-          title="No service jobs today"
-          description="Assigned jobs will show up here"
+          title={t("other_jobs_none")}
+          description={isHindi ? "सुपरवाइजर द्वारा असाइन किए गए काम यहां दिखेंगे।" : "Assigned jobs will show up here"}
         />
       ) : (
         <div className="space-y-4">
           {pendingJobs.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Pending Jobs ({pendingJobs.length})
+                {isHindi ? `बाकी काम (${pendingJobs.length})` : `Pending Jobs (${pendingJobs.length})`}
               </p>
               <div className="space-y-2.5">
                 {pendingJobs.map(job => (
@@ -322,7 +330,7 @@ export function StaffOtherServicesPanel({ selectedJobKey, onSelectJob }: Props) 
           {completedJobs.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Completed Jobs ({completedJobs.length})
+                {isHindi ? `पूरे हो चुके काम (${completedJobs.length})` : `Completed Jobs (${completedJobs.length})`}
               </p>
               <div className="space-y-2.5">
                 {completedJobs.map(job => (

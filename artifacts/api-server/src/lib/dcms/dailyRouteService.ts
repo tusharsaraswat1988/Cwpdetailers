@@ -57,6 +57,7 @@ export type DailyRouteStop = {
   parkingNotes?: string | null;
   todayStatus: RouteStopStatus;
   todayVisitId?: number;
+  completedAt?: string;
   rejectionReason?: string | null;
 };
 
@@ -184,6 +185,7 @@ export async function getStaffDailyRoute(staffId: number, dateStr?: string): Pro
       parkingNotes: row.parkingNotes,
       todayStatus,
       todayVisitId: visit?.id,
+      completedAt: visit?.visitTime ? visit.visitTime.toISOString() : undefined,
       rejectionReason: visit?.rejectionReason,
     });
   }

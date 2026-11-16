@@ -40,6 +40,7 @@ import {
   getDcmsDayStore,
   saveDcmsLocalRecord,
   localStatusToRouteStopStatus,
+  formatIstTime,
   type DcmsLocalRecord,
 } from "../lib/dcmsLocalStorage";
 import { useStaffLanguage } from "@/lib/staffLanguage";
@@ -52,6 +53,8 @@ export type RouteStop = {
   originalSequence?: number;
   completionOrder?: number;
   completedAtTime?: string;
+  completedAt?: string;
+  isPendingSync?: boolean;
   customerName: string;
   vehicleNumber: string;
   vehicleMake: string;
@@ -150,9 +153,30 @@ export function StaffDailyRouteSimplified() {
           originalSequence: s.routeOrder && s.routeOrder > 0 ? s.routeOrder : idx + 1,
         }));
 
+    // Calculate server completion orders for cross-device/after-restart persistence
+    const serverCompletedStops = sourceStops.filter(s => s.todayStatus === "completed");
+    const sortedServerCompleted = [...serverCompletedStops].sort((a, b) => {
+      const timeA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+      const timeB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+      return timeA - timeB;
+    });
+    const serverOrderMap = new Map<number, number>();
+    sortedServerCompleted.forEach((s, idx) => {
+      serverOrderMap.set(s.subscriptionId, idx + 1);
+    });
+
     return sourceStops.map(s => {
       const local = localRecords[s.subscriptionId];
-      if (!local) return s;
+      if (!local) {
+        const sOrder = serverOrderMap.get(s.subscriptionId);
+        const sTime = s.completedAt ? formatIstTime(new Date(s.completedAt)) : undefined;
+        return {
+          ...s,
+          completionOrder: s.completionOrder ?? sOrder,
+          completedAtTime: s.completedAtTime ?? sTime,
+          isPendingSync: false,
+        };
+      }
 
       return {
         ...s,
@@ -160,6 +184,7 @@ export function StaffDailyRouteSimplified() {
         localActionLabel: local.actionLabel,
         completionOrder: local.completionOrder,
         completedAtTime: local.completedAtTime,
+        isPendingSync: local.isPendingSync,
       };
     });
   }, [walkInMode, walkInStop, rawRouteStops, localRecords]);
@@ -216,13 +241,16 @@ export function StaffDailyRouteSimplified() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleSuccessfulClean = () => {
+  const handleSuccessfulClean = (isQueued?: boolean) => {
     if (staffId && selectedCleanStop) {
       saveDcmsLocalRecord(staffId, {
         subscriptionId: selectedCleanStop.subscriptionId,
         vehicleNumber: selectedCleanStop.vehicleNumber,
         status: "completed",
-        actionLabel: isHindi ? "गाड़ी साफ हुई — कम्प्लीट" : "Car Cleaned — Completed",
+        actionLabel: isQueued
+          ? (isHindi ? "फोन पर सुरक्षित (सिंक पेंडिंग)" : "Saved on phone (sync pending)")
+          : (isHindi ? "गाड़ी साफ हुई — कम्प्लीट" : "Car Cleaned — Completed"),
+        isPendingSync: Boolean(isQueued),
       });
       const store = getDcmsDayStore(staffId);
       setLocalRecords(store.records);
@@ -580,10 +608,17 @@ export function StaffDailyRouteSimplified() {
                     {/* Actual Completion Order / Status Badge */}
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       {isCleanCompleted ? (
-                        <Badge variant="outline" className="bg-green-600 text-white font-medium text-xs border-0 flex items-center gap-1">
-                          <CheckCircle size={11} />
-                          {stop.completionOrder ? `Completed #${stop.completionOrder}` : t("cleaning_complete")}
-                        </Badge>
+                        stop.isPendingSync ? (
+                          <Badge variant="outline" className="bg-amber-500/20 text-amber-900 dark:text-amber-200 border-amber-500/40 font-medium text-xs flex items-center gap-1">
+                            <Clock size={11} className="text-amber-700 animate-pulse" />
+                            {isHindi ? "सिंक पेंडिंग" : "Sync Pending"}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-green-600 text-white font-medium text-xs border-0 flex items-center gap-1">
+                            <CheckCircle size={11} />
+                            {stop.completionOrder ? `Completed #${stop.completionOrder}` : t("cleaning_complete")}
+                          </Badge>
+                        )
                       ) : (
                         <Badge variant="outline" className="bg-orange-500/15 text-orange-900 border-orange-500/30 font-medium text-xs">
                           {t("car_not_available_action")}

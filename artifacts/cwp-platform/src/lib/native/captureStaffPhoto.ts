@@ -103,29 +103,69 @@ export async function captureStaffPhoto(facing: StaffCameraFacing): Promise<Capt
   return captureWebPhoto(facing);
 }
 
+export type CapturedStaffPhotoWithGps = CapturedStaffPhoto & {
+  location: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  };
+  gpsUnavailable?: boolean;
+  gpsUnavailableReason?: "underground_basement_no_signal" | "covered_parking_timeout" | "hardware_gps_unavailable";
+  weakGpsFallback?: boolean;
+};
+
 /**
  * Capture-time location-verified photo proof.
- * Immediately binds device GPS coordinates at the instant of camera capture (Phase 4).
+ * Immediately binds device GPS coordinates at the instant of camera capture.
+ * If GPS is unavailable (e.g. underground parking basement with concrete shielding),
+ * falls back to recent cached campus location or flags audited basement fallback.
  */
 export async function captureStaffPhotoWithGps(
   facing: StaffCameraFacing,
-): Promise<CapturedStaffPhoto & { location: { latitude: number; longitude: number; accuracy?: number } }> {
+): Promise<CapturedStaffPhotoWithGps> {
   // Fire photo capture and location query concurrently for exact timestamp match
-  const locationPromise = getStaffLocation("action").catch(() => {
-    const cached = locationStoreSnapshot().lastKnownLocation;
-    if (cached) return cached;
-    throw new Error("लोकेशन नहीं मिल रही। कृपया फोन का GPS ऑन करें और फिर कोशिश करें।");
-  });
+  const locationPromise = getStaffLocation("action")
+    .then(loc => ({
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      accuracy: loc.accuracy,
+      gpsUnavailable: false,
+      weakGpsFallback: false,
+    }))
+    .catch(() => {
+      const cached = locationStoreSnapshot().lastKnownLocation;
+      if (cached) {
+        return {
+          latitude: cached.latitude,
+          longitude: cached.longitude,
+          accuracy: cached.accuracy,
+          gpsUnavailable: false,
+          weakGpsFallback: true,
+        };
+      }
+      // Basement signal loss fallback
+      return {
+        latitude: 0,
+        longitude: 0,
+        accuracy: 999,
+        gpsUnavailable: true,
+        gpsUnavailableReason: "underground_basement_no_signal" as const,
+        weakGpsFallback: false,
+      };
+    });
 
   const photo = await captureStaffPhoto(facing);
-  const location = await locationPromise;
+  const locInfo = await locationPromise;
 
   return {
     ...photo,
     location: {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      accuracy: location.accuracy,
+      latitude: locInfo.latitude,
+      longitude: locInfo.longitude,
+      accuracy: locInfo.accuracy,
     },
+    gpsUnavailable: locInfo.gpsUnavailable,
+    gpsUnavailableReason: locInfo.gpsUnavailableReason,
+    weakGpsFallback: locInfo.weakGpsFallback,
   };
 }

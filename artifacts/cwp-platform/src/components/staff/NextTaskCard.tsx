@@ -17,10 +17,12 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { buildNavigateUrl, openExternalNavigation } from "@/lib/maps";
 import { Capacitor } from "@capacitor/core";
+import { useStaffLanguage } from "@/lib/staffLanguage";
 
 export type NextTaskData = {
   type: "daily_clean" | "booking";
   id: string | number;
+  jobKey?: string;
   subscriptionId?: number;
   customerName: string;
   customerPhone?: string | null;
@@ -49,6 +51,7 @@ type Props = {
 
 export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Props) {
   const { toast } = useToast();
+  const { t, isHindi } = useStaffLanguage();
   const [copied, setCopied] = useState(false);
 
   const navUrl = buildNavigateUrl({
@@ -73,11 +76,14 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
     if (!fullLocationText) return;
     navigator.clipboard.writeText(fullLocationText);
     setCopied(true);
-    toast({ title: "Address copied", description: fullLocationText });
+    toast({ title: t("address_copied"), description: fullLocationText });
     setTimeout(() => setCopied(false), 2000);
   };
 
   const isDaily = task.type === "daily_clean";
+  const bookingJobHref = task.jobKey
+    ? `/staff/bookings?job=${encodeURIComponent(task.jobKey)}`
+    : `/staff/bookings?job=booking-${task.id}`;
 
   return (
     <div
@@ -89,14 +95,14 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
         <div className="flex items-center gap-1.5">
           <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-xs font-bold uppercase tracking-wider text-primary">
-            Up Next • Priority Task
+            {isHindi ? "अगला काम • प्राथमिकता" : "Up Next • Priority Task"}
           </span>
         </div>
         <Badge
           variant="outline"
           className="text-[11px] font-semibold border-primary/20 bg-primary/5 text-primary"
         >
-          {isDaily ? "Daily Clean" : (task.serviceName ?? "Service Job")}
+          {isDaily ? t("nav_dcms") : (task.serviceName ?? "Service Job")}
           {task.scheduledTime ? ` • ${task.scheduledTime}` : ""}
         </Badge>
       </div>
@@ -129,7 +135,7 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
         {task.parkingBay && (
           <div className="shrink-0 text-center rounded-xl bg-primary px-3 py-1.5 text-primary-foreground shadow-sm">
             <span className="block text-[10px] uppercase font-bold tracking-wider opacity-85">
-              Bay
+              {isHindi ? "बे" : "Bay"}
             </span>
             <span className="font-mono text-base font-extrabold leading-none">
               {task.parkingBay}
@@ -154,7 +160,7 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
                 type="button"
                 onClick={handleCopyAddress}
                 className="shrink-0 p-1 text-blue-700 hover:text-blue-900 rounded hover:bg-blue-500/20"
-                title="Copy Address"
+                title={t("copy_address")}
               >
                 {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
               </button>
@@ -173,7 +179,7 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
         </div>
       )}
 
-      {/* QUICK ACTIONS ROW: DIRECTIONS, CALL, AND PRIMARY CTA */}
+      {/* QUICK ACTIONS ROW: DIRECTIONS, CALL, AND PRIMARY CTA (48PX MIN TOUCH TARGETS) */}
       <div className="flex items-center gap-2 pt-1">
         {navUrl && (
           <a
@@ -186,51 +192,51 @@ export function NextTaskCard({ task, onAction, actionLabel = "Start Clean" }: Pr
                 openExternalNavigation(navUrl);
               }
             }}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 h-11 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-12 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
             data-testid="next-task-navigate-btn"
           >
-            <Navigation size={14} />
-            <span>Navigate</span>
+            <Navigation size={15} />
+            <span>{t("directions")}</span>
           </a>
         )}
 
         {task.customerPhone && (
           <a
             href={`tel:${task.customerPhone}`}
-            className="inline-flex items-center justify-center gap-1.5 h-11 px-3.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+            className="inline-flex items-center justify-center gap-1.5 h-12 px-3.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-colors"
             data-testid="next-task-call-btn"
           >
-            <Phone size={14} className="text-emerald-600" />
-            <span className="hidden sm:inline">Call</span>
+            <Phone size={15} className="text-emerald-600" />
+            <span className="hidden sm:inline">{t("call_customer")}</span>
           </a>
         )}
 
         {onAction ? (
           <Button
-            className="flex-1 h-11 text-xs font-semibold shadow-sm"
+            className="flex-1 h-12 text-xs font-semibold shadow-sm"
             onClick={onAction}
             data-testid="next-task-primary-btn"
           >
-            <Sparkles size={14} className="mr-1.5" />
+            <Sparkles size={15} className="mr-1.5" />
             {actionLabel}
           </Button>
         ) : isDaily ? (
           <Link
             href="/staff/daily-clean"
-            className="flex-1 inline-flex items-center justify-center gap-1.5 h-11 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-12 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
             data-testid="next-task-route-link"
           >
-            <span>Open Route</span>
-            <ArrowRight size={14} />
+            <span>{isHindi ? "रूट खोलें" : "Open Route"}</span>
+            <ArrowRight size={15} />
           </Link>
         ) : (
           <Link
-            href={`/staff/bookings?job=booking-${task.id}`}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 h-11 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
+            href={bookingJobHref}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-12 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
             data-testid="next-task-booking-link"
           >
-            <span>Open Job</span>
-            <ArrowRight size={14} />
+            <span>{isHindi ? "काम खोलें" : "Open Job"}</span>
+            <ArrowRight size={15} />
           </Link>
         )}
       </div>

@@ -86,3 +86,54 @@
    - Write unit tests verifying that out-of-order completions split correctly into pending and completed lists while preserving original sequence IDs.
 3. **Task P2-3: Regression Verification across Entire Platform**
    - Run vitest test suite across all 53 test files and verify 100% pass rate.
+
+---
+
+### Phase P3: Operational Workflow Hardening & UX Refinement (Completed)
+**Objective:** Bulletproof field reliability across basement signal drops, honest offline indicators, cross-session completion persistence, and job deduplication.
+
+1. **Task P3-1: Basement GPS Signal Loss Recovery & Audited Fallback**
+   - **Scope:** Enhance `captureStaffPhotoWithGps` in `captureStaffPhoto.ts` to detect signal failure in concrete-shielded parking garages (B1/B2/B3). If GPS times out, fallback to recent campus fix or pass `gpsUnavailable: true` + `gpsUnavailableReason: "underground_basement_no_signal"`.
+   - **Enforcement:** In `StaffVehicleCleanDialog.tsx`, check if vehicle is in a residential society or assigned bay. If yes, permit completion under audited fallback with non-technical indicator. If open street, enforce GPS fix per `SEC-024`.
+   - **Files:** `artifacts/cwp-platform/src/lib/native/captureStaffPhoto.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/components/StaffVehicleCleanDialog.tsx`.
+
+2. **Task P3-2: Cross-Session Server Completion Persistence**
+   - **Scope:** Expose `completedAt` on `DailyRouteStop` from backend `dailyRouteService.ts`. In `StaffDailyRouteSimplified.tsx`, automatically format `completedAtTime` and compute chronological `completionOrder` for stops completed on the server, ensuring full data continuity across app restarts, re-logins, or device switches.
+   - **Files:** `artifacts/api-server/src/lib/dcms/dailyRouteService.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/StaffDailyRouteSimplified.tsx`.
+
+3. **Task P3-3: Honest Offline Sync Tracking & Banner Integration**
+   - **Scope:** Add `isPendingSync` flag to `DcmsLocalRecord` and `saveDcmsLocalRecord`. Show an amber pulse badge (`सिंक पेंडिंग`) when queued offline, transitioning to green server-verified check once synced. Mount `StaffPendingSyncBanner` in `StaffAppShell.tsx` so staff has instant visibility of all queued punches, photos, and visits with 1-tap retry.
+   - **Files:** `artifacts/cwp-platform/src/features/daily-cleaning/lib/dcmsLocalStorage.ts`, `artifacts/cwp-platform/src/features/daily-cleaning/pages/StaffDailyRouteSimplified.tsx`, `artifacts/cwp-platform/src/components/layout/StaffAppShell.tsx`.
+
+4. **Task P3-4: Other Jobs Deduplication & Android Back Navigation**
+   - **Scope:** In `useStaffJobsData.ts` `mergeJobs`, filter out bookings that already exist as linked executions, preventing duplicate job cards. In `StaffOtherServicesPanel.tsx`, handle null/empty `selectedJobKey` on Android back button presses to cleanly close detail views.
+   - **Files:** `artifacts/cwp-platform/src/hooks/useStaffJobsData.ts`, `artifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx`.
+
+5. **Task P3-5: Field Stepper & Action Localization in Hindi**
+   - **Scope:** Expand `staffLanguage.ts` with all lifecycle steps (Route, Before, Work, After, Done) and action buttons (Resume, Pause, Start Work, After Photos, Submit). Integrate into `StaffServiceJobFlow.tsx` with minimum 48px touch targets (`h-12`).
+   - **Files:** `artifacts/cwp-platform/src/lib/staffLanguage.ts`, `artifacts/cwp-platform/src/components/staff/StaffServiceJobFlow.tsx`.
+
+---
+
+### Phase P4: Lifecycle Prioritization, Deep Linking & Offline Resilience (Completed)
+**Objective:** Harden task focus priority, deep linking between execution/booking records, accessible touch targets, and honest offline sync messaging.
+
+1. **Task P4-1: Operational Lifecycle Priority on Dashboard**
+   - **Scope:** Refine hero task derivation in `Dashboard.tsx`: if an appointment job is actively in-progress, en-route, or paused, prioritize it as the active hero card; otherwise prioritize morning DCMS route stops; once all DCMS stops are completed, prioritize the next scheduled appointment job.
+   - **Files:** `artifacts/cwp-platform/src/pages/staff/Dashboard.tsx`.
+
+2. **Task P4-2: Execution & Booking Deep Linking in NextTaskCard**
+   - **Scope:** In `NextTaskCard.tsx`, add `jobKey?: string;` to `NextTaskData`. Link to `/staff/bookings?job=${encodeURIComponent(task.jobKey)}` rather than hardcoding `booking-${task.id}`, supporting both execution jobs and booking jobs without navigation failures.
+   - **Files:** `artifacts/cwp-platform/src/components/staff/NextTaskCard.tsx`.
+
+3. **Task P4-3: NextTaskCard & StaffJobCard Hindi Localization & 48px Touch Targets**
+   - **Scope:** Integrate `useStaffLanguage()` into `NextTaskCard.tsx` and `StaffJobCard` (`domain.tsx`). Localize priority badge, action buttons (Navigate, Call, Open Route, Open Job), and enforce >= 44px/48px touch targets (`h-11`/`h-12`).
+   - **Files:** `artifacts/cwp-platform/src/components/staff/NextTaskCard.tsx`, `artifacts/cwp-platform/src/features/staff-ds/components/domain.tsx`.
+
+4. **Task P4-4: Honest Offline Sync Communication & Localized Banner Retry**
+   - **Scope:** Localize `StaffPendingSyncBanner.tsx` in Hindi and English. Honest status messaging that punches and photos are safely stored on the device and will sync upon network restoration. Enforce 44-48px touch target for Retry action.
+   - **Files:** `artifacts/cwp-platform/src/components/staff/StaffPendingSyncBanner.tsx`.
+
+5. **Task P4-5: Resilient Job Resolution across Today and All Sets**
+   - **Scope:** In `StaffOtherServicesPanel.tsx`, fall back to searching `jobs.all` if a deep linked job is not present in `jobs.today`, preventing blank views when navigating to assigned appointments.
+   - **Files:** `artifacts/cwp-platform/src/components/staff/StaffOtherServicesPanel.tsx`.

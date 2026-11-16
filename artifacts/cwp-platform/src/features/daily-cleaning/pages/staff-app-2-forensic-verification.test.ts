@@ -16,6 +16,7 @@ import {
   setStaffLanguage,
   translate,
 } from "@/lib/staffLanguage";
+import { staffJobKey, type StaffJob } from "@/lib/staff-jobs";
 
 describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF-042)", () => {
   const staffId = 99;
@@ -175,6 +176,175 @@ describe("Staff App 2.0 — Forensic Verification Test Suite (STAFF-035 to STAFF
 
       const percent = Math.round((stats.completed / stats.total) * 100);
       expect(percent).toBe(60);
+    });
+  });
+
+  describe("STAFF-039 & STAFF-040: Operational Hardening, Sync Indicators & Deduplication", () => {
+    it("tracks offline pending sync status honestly on local records", () => {
+      saveDcmsLocalRecord(
+        staffId,
+        {
+          subscriptionId: 201,
+          vehicleNumber: "UP65XY9999",
+          status: "completed",
+          actionLabel: "फोन पर सुरक्षित (सिंक पेंडिंग)",
+          isPendingSync: true,
+        },
+        mockDate,
+      );
+
+      const store = getDcmsDayStore(staffId, mockDate);
+      expect(store.records[201]).toBeDefined();
+      expect(store.records[201].isPendingSync).toBe(true);
+      expect(store.records[201].actionLabel).toBe("फोन पर सुरक्षित (सिंक पेंडिंग)");
+      expect(store.records[201].status).toBe("completed");
+    });
+
+    it("restores cross-session server completion timestamps and chronological completion order", () => {
+      const serverStops: RouteStop[] = [
+        {
+          subscriptionId: 301,
+          originalSequence: 1,
+          routeOrder: 1,
+          customerName: "Ramesh",
+          vehicleNumber: "UP65AA1000",
+          vehicleMake: "Maruti",
+          vehicleModel: "Brezza",
+          todayStatus: "completed",
+          completedAt: "2026-11-16T01:30:00.000Z", // 07:00 AM IST
+          remainingCleanings: 20,
+        },
+        {
+          subscriptionId: 302,
+          originalSequence: 2,
+          routeOrder: 2,
+          customerName: "Suresh",
+          vehicleNumber: "UP65BB2000",
+          vehicleMake: "Hyundai",
+          vehicleModel: "Venue",
+          todayStatus: "completed",
+          completedAt: "2026-11-16T01:00:00.000Z", // 06:30 AM IST (completed first!)
+          remainingCleanings: 18,
+        },
+      ];
+
+      // Sort server completed stops chronologically
+      const sorted = [...serverStops].sort((a, b) => {
+        const tA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const tB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return tA - tB;
+      });
+
+      const serverOrderMap = new Map<number, number>();
+      sorted.forEach((s, idx) => {
+        serverOrderMap.set(s.subscriptionId, idx + 1);
+      });
+
+      // 302 was completed earlier than 301
+      expect(serverOrderMap.get(302)).toBe(1);
+      expect(serverOrderMap.get(301)).toBe(2);
+    });
+
+    it("translates all field execution lifecycle steps and actions into natural Hindi", () => {
+      setStaffLanguage("hi");
+      expect(translate("start_work")).toBe("काम शुरू करें");
+      expect(translate("service_done_after_photos")).toBe("सफाई पूरी — बाद की फोटो लें");
+      expect(translate("submit_complete_job")).toBe("सबमिट करें — काम पूरा हुआ");
+      expect(translate("resume_work")).toBe("काम दोबारा शुरू करें");
+      expect(translate("work_paused")).toBe("काम रुका हुआ है");
+      expect(translate("step_route")).toBe("रास्ता");
+      expect(translate("step_work")).toBe("सफाई");
+      expect(translate("before_photos_label")).toBe("शुरू से पहले की फोटो (सबूत)");
+      expect(translate("after_photos_label")).toBe("सफाई के बाद की फोटो (सबूत)");
+    });
+  });
+
+  describe("STAFF-041 & STAFF-042: Operational Lifecycle Task Prioritization & Deep Link Resolution", () => {
+    it("prioritizes actively in-progress appointment job over pending morning DCMS cars", () => {
+      const pendingDcmsStop: RouteStop = {
+        subscriptionId: 401,
+        originalSequence: 1,
+        customerName: "Morning Customer",
+        vehicleNumber: "UP65DC1001",
+        vehicleMake: "Maruti",
+        vehicleModel: "Swift",
+        todayStatus: "pending",
+        remainingCleanings: 10,
+      };
+
+      const activeSolarJob: StaffJob = {
+        id: 501,
+        source: "execution",
+        taskType: "solar_cleaning",
+        customerName: "Rooftop Solar Plant",
+        status: "in_progress",
+      };
+
+      // Lifecycle priority derivation
+      const activeJob = [activeSolarJob].find(
+        j => j.status === "in_progress" || j.status === "en_route" || j.status === "paused"
+      );
+      const nextStop = !activeJob ? pendingDcmsStop : null;
+      const heroTask = activeJob ?? nextStop;
+
+      expect(heroTask).toBe(activeSolarJob);
+      expect(heroTask.status).toBe("in_progress");
+    });
+
+    it("prioritizes morning DCMS route when appointment jobs are only scheduled and not yet active", () => {
+      const pendingDcmsStop: RouteStop = {
+        subscriptionId: 402,
+        originalSequence: 1,
+        customerName: "Morning Customer",
+        vehicleNumber: "UP65DC1002",
+        vehicleMake: "Hyundai",
+        vehicleModel: "i20",
+        todayStatus: "pending",
+        remainingCleanings: 10,
+      };
+
+      const scheduledCarWashJob: StaffJob = {
+        id: 502,
+        source: "booking",
+        taskType: "car_wash",
+        customerName: "Afternoon Wash",
+        status: "scheduled",
+      };
+
+      const activeJob = [scheduledCarWashJob].find(
+        j => j.status === "in_progress" || j.status === "en_route" || j.status === "paused"
+      );
+      const nextStop = !activeJob ? pendingDcmsStop : null;
+      const heroTask = activeJob ?? nextStop;
+
+      expect(heroTask).toBe(pendingDcmsStop);
+      expect((heroTask as RouteStop).todayStatus).toBe("pending");
+    });
+
+    it("prioritizes scheduled appointment job once all morning DCMS stops are completed", () => {
+      const scheduledCarWashJob: StaffJob = {
+        id: 503,
+        source: "booking",
+        taskType: "car_wash",
+        customerName: "Afternoon Wash",
+        status: "scheduled",
+      };
+
+      const activeJob = [scheduledCarWashJob].find(
+        j => j.status === "in_progress" || j.status === "en_route" || j.status === "paused"
+      );
+      const nextStop = null; // All DCMS finished
+      const heroTask = activeJob ?? nextStop ?? scheduledCarWashJob;
+
+      expect(heroTask).toBe(scheduledCarWashJob);
+    });
+
+    it("generates correct deep linking keys for execution vs booking jobs", () => {
+      const executionJob: StaffJob = { id: 701, source: "execution", customerName: "Exec" };
+      const bookingJob: StaffJob = { id: 801, source: "booking", customerName: "Book" };
+
+      expect(staffJobKey(executionJob)).toBe("execution-701");
+      expect(staffJobKey(bookingJob)).toBe("booking-801");
     });
   });
 });

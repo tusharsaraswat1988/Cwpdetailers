@@ -32,6 +32,7 @@ import {
 } from "@/lib/staff-jobs";
 import type { useStaffJobsData } from "@/hooks/useStaffJobsData";
 import { buildNavigateUrl, canNavigateTo } from "@/lib/maps";
+import { useStaffLanguage } from "@/lib/staffLanguage";
 
 type Mutations = Pick<
   ReturnType<typeof useStaffJobsData>,
@@ -55,12 +56,13 @@ function ServiceStepper({
   currentStep: "route" | "before" | "work" | "after" | "complete";
   isSolar: boolean;
 }) {
+  const { t } = useStaffLanguage();
   const steps = [
-    { key: "route", label: "Route" },
-    { key: "before", label: isSolar ? "Pre-Clean" : "Before" },
-    { key: "work", label: isSolar ? "Solar Wash" : "Wash" },
-    { key: "after", label: isSolar ? "Clean Array" : "After" },
-    { key: "complete", label: "Done" },
+    { key: "route", label: t("step_route") },
+    { key: "before", label: isSolar ? "Pre-Clean" : t("step_before") },
+    { key: "work", label: isSolar ? "Solar Wash" : t("step_work") },
+    { key: "after", label: isSolar ? "Clean Array" : t("step_after") },
+    { key: "complete", label: t("step_done") },
   ];
 
   const stepOrder = ["route", "before", "work", "after", "complete"];
@@ -96,6 +98,7 @@ function ServiceStepper({
 
 function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: string | undefined }) {
   const { toast } = useToast();
+  const { t } = useStaffLanguage();
   const [copied, setCopied] = useState(false);
 
   if (!job.customerPhone && !canNavigateTo(job) && !addressLine) return null;
@@ -104,7 +107,7 @@ function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: s
     if (!addressLine) return;
     navigator.clipboard.writeText(addressLine);
     setCopied(true);
-    toast({ title: "Address copied", description: addressLine });
+    toast({ title: t("address_copied"), description: addressLine });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -113,11 +116,11 @@ function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: s
       {job.customerPhone && (
         <a
           href={`tel:${job.customerPhone}`}
-          className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl border border-border text-xs font-semibold text-foreground hover:bg-muted"
+          className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl border border-border text-xs font-semibold text-foreground hover:bg-muted"
           data-testid={`job-call-${job.id}`}
         >
           <Phone size={14} className="text-emerald-600" />
-          <span>Call Customer</span>
+          <span>{t("call_customer")}</span>
         </a>
       )}
 
@@ -126,11 +129,11 @@ function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: s
           href={buildNavigateUrl(job)}
           target="_blank"
           rel="noreferrer"
-          className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20"
+          className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20"
           data-testid={`job-navigate-${job.id}`}
         >
           <Navigation size={14} />
-          <span>Directions</span>
+          <span>{t("directions")}</span>
         </a>
       )}
 
@@ -138,8 +141,8 @@ function JobContactActions({ job, addressLine }: { job: StaffJob; addressLine: s
         <button
           type="button"
           onClick={handleCopy}
-          className="px-3 h-11 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center"
-          title="Copy Address"
+          className="px-3 h-12 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center"
+          title={t("copy_address")}
         >
           {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
         </button>
@@ -208,6 +211,7 @@ export function StaffServiceJobFlow({
   locatingJobId,
   isActionPending,
 }: Props) {
+  const { t, isHindi } = useStaffLanguage();
   const [accepted, setAccepted] = useState(false);
   const [onWay, setOnWay] = useState(false);
   const [arrived, setArrived] = useState(false);
@@ -263,16 +267,16 @@ export function StaffServiceJobFlow({
       <div className="space-y-4 py-3">
         <ServiceStepper currentStep="complete" isSolar={isSolar} />
         <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-300 text-sm font-semibold bg-green-500/10 border border-green-500/20 rounded-xl py-4">
-          <CheckCircle size={18} className="text-green-600" /> Job Completed
+          <CheckCircle size={18} className="text-green-600" /> {isHindi ? "काम पूरा हुआ" : "Job Completed"}
         </div>
         {completedLabel && (
           <p className="text-center text-xs text-muted-foreground">
-            Completed on {completedLabel}
+            {isHindi ? `पूरा हुआ: ${completedLabel}` : `Completed on ${completedLabel}`}
           </p>
         )}
         {job.technicianNotes && (
           <div className="rounded-xl border border-border bg-card p-3 text-sm staff-elevated">
-            <p className="text-xs font-semibold text-muted-foreground mb-1">Technician Remark</p>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">{t("technician_notes")}</p>
             <p className="text-foreground">{job.technicianNotes}</p>
           </div>
         )}
@@ -285,8 +289,10 @@ export function StaffServiceJobFlow({
       <div className="space-y-4">
         <ServiceStepper currentStep="work" isSolar={isSolar} />
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
-          <p className="font-semibold text-amber-800">Work Paused</p>
-          <p className="text-xs text-muted-foreground mt-1">Resume when you are ready to continue.</p>
+          <p className="font-semibold text-amber-800">{t("work_paused")}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {isHindi ? "काम फिर से शुरू करने के लिए नीचे बटन दबाएं।" : "Resume when you are ready to continue."}
+          </p>
         </div>
         <JobContactActions job={job} addressLine={addressLine} />
         <Button
@@ -296,7 +302,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-resume-${job.id}`}
         >
           {isActionPending ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Play size={15} className="mr-2" />}
-          Resume Work
+          {t("resume_work")}
         </Button>
       </div>
     );
@@ -315,7 +321,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-accept-booking-${job.id}`}
         >
           <ClipboardCheck size={16} className="mr-2" />
-          Accept Booking
+          {t("accept_job")}
         </Button>
       </div>
     );
@@ -334,7 +340,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-accept-job-${job.id}`}
         >
           <ClipboardCheck size={16} className="mr-2" />
-          Accept Job
+          {t("accept_job")}
         </Button>
       </div>
     );
@@ -345,8 +351,10 @@ export function StaffServiceJobFlow({
       <div className="space-y-4">
         <ServiceStepper currentStep="route" isSolar={isSolar} />
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
-          <p className="font-semibold text-primary">Booking Accepted</p>
-          <p className="text-xs text-muted-foreground mt-1">Customer site ke liye nikalne par &quot;On My Way&quot; dabayein.</p>
+          <p className="font-semibold text-primary">{t("booking_accepted")}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {isHindi ? "ग्राहक के पते के लिए निकलने पर \"On My Way\" दबाएं।" : "Tap \"On My Way\" when leaving for customer site."}
+          </p>
         </div>
         <JobContactActions job={job} addressLine={addressLine} />
         <Button
@@ -362,7 +370,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-en-route-${job.id}`}
         >
           {isLocating ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Route size={15} className="mr-2" />}
-          {isLocating ? "Getting location…" : "On My Way"}
+          {isLocating ? (isHindi ? "लोकेशन जांची जा रही है…" : "Getting location…") : t("on_my_way")}
         </Button>
       </div>
     );
@@ -373,8 +381,10 @@ export function StaffServiceJobFlow({
       <div className="space-y-4">
         <ServiceStepper currentStep="route" isSolar={isSolar} />
         <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4 text-sm">
-          <p className="font-semibold text-orange-700">En Route</p>
-          <p className="text-xs text-muted-foreground mt-1">Site par pahunch kar &quot;Arrived&quot; dabayein.</p>
+          <p className="font-semibold text-orange-700">{isHindi ? "रास्ते में हैं (En Route)" : "En Route"}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {isHindi ? "ग्राहक के पते पर पहुंचकर \"पहुंच गए\" दबाएं।" : "Tap \"Arrived\" once on site."}
+          </p>
         </div>
         <JobContactActions job={job} addressLine={addressLine} />
         <Button
@@ -390,7 +400,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-arrived-${job.id}`}
         >
           {isLocating ? <Loader2 size={15} className="mr-2 animate-spin" /> : <MapPin size={15} className="mr-2" />}
-          {isLocating ? "Getting location…" : "Arrived at Site"}
+          {isLocating ? (isHindi ? "लोकेशन जांची जा रही है…" : "Getting location…") : t("arrived")}
         </Button>
       </div>
     );
@@ -401,9 +411,9 @@ export function StaffServiceJobFlow({
       <div className="space-y-5">
         <ServiceStepper currentStep="work" isSolar={isSolar} />
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
-          <p className="font-semibold text-primary">Before Photos Uploaded</p>
+          <p className="font-semibold text-primary">{t("before_photos_uploaded")}</p>
           <p className="text-xs text-muted-foreground mt-1">
-            {isSolar ? "Ab solar cleaning shuru karein. Kaam khatam hone ke baad clean panels ki photos lenge." : "Ab car wash shuru karein. Kaam khatam hone ke baad clean car ki photos lenge."}
+            {isSolar ? "अब सोलर क्लीनिंग शुरू करें। काम पूरा होने के बाद साफ पैनल्स की फोटो लेंगे।" : "अब सर्विस शुरू करें। काम पूरा होने के बाद साफ गाड़ी की फोटो लेंगे।"}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -420,7 +430,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-start-work-${job.id}`}
         >
           {isLocating ? <Loader2 size={15} className="mr-2 animate-spin" /> : <ArrowRight size={15} className="mr-2" />}
-          {isLocating ? "Getting location…" : "Start Work"}
+          {isLocating ? (isHindi ? "लोकेशन जांची जा रही है…" : "Getting location…") : t("start_work")}
         </Button>
       </div>
     );
@@ -433,12 +443,12 @@ export function StaffServiceJobFlow({
         <div className="flex items-center justify-between">
           <StaffStatusBadge status={job.status === "in_progress" ? "in_progress" : "en_route"} />
           <p className="text-xs text-muted-foreground">
-            {isSolar ? "Step 2: Uncleaned solar array photos" : "Step 2: Dirty vehicle photos"}
+            {isSolar ? "Step 2: सोलर पैनल की पहले की फोटो" : "Step 2: गंदी गाड़ी की पहले की फोटो"}
           </p>
         </div>
         <GeoPhotoSlotGrid
-          label="Before Photos (Evidence)"
-          description={`${REQUIRED_SERVICE_PHOTOS} geo-tagged photos required before starting service`}
+          label={t("before_photos_label")}
+          description={isHindi ? "शुरू करने से पहले 3 फोटो जरूरी हैं" : `${REQUIRED_SERVICE_PHOTOS} geo-tagged photos required before starting service`}
           photos={beforePhotos}
           uploadingIndex={isUploading && uploadingPhotoIndex != null ? uploadingPhotoIndex : null}
           disabled={beforeDone}
@@ -455,10 +465,10 @@ export function StaffServiceJobFlow({
         <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 text-sm space-y-1">
           <div className="flex items-center gap-2">
             <StaffStatusBadge status="in_progress" pulse />
-            <p className="font-semibold text-blue-800">Service In Progress</p>
+            <p className="font-semibold text-blue-800">{t("service_in_progress")}</p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Step 3 — Complete the service carefully. When finished, take after photos.
+            {isHindi ? "स्टेप 3 — सफाई ध्यान से पूरी करें। काम पूरा होने पर बाद की फोटो लें।" : "Step 3 — Complete the service carefully. When finished, take after photos."}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 opacity-85">
@@ -477,7 +487,7 @@ export function StaffServiceJobFlow({
             data-testid={`btn-pause-${job.id}`}
           >
             <Pause size={15} className="mr-2" />
-            Pause Work
+            {t("pause_work")}
           </Button>
         )}
         <Button
@@ -487,7 +497,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-wash-done-${job.id}`}
         >
           <CheckCircle size={15} className="mr-2" />
-          Service Done — After Photos
+          {t("service_done_after_photos")}
         </Button>
       </div>
     );
@@ -500,13 +510,13 @@ export function StaffServiceJobFlow({
         <div className="flex items-center justify-between">
           <StaffStatusBadge status="in_progress" pulse />
           <p className="text-xs text-muted-foreground">
-            {isSolar ? "Step 4: Clean solar array photos" : "Step 4: Clean vehicle photos"}
+            {isSolar ? "Step 4: साफ सोलर की फोटो" : "Step 4: साफ गाड़ी की फोटो"}
           </p>
         </div>
 
         <GeoPhotoSlotGrid
-          label="After Photos (Clean Proof)"
-          description={`${REQUIRED_SERVICE_PHOTOS} geo-tagged photos required showing completed clean`}
+          label={t("after_photos_label")}
+          description={isHindi ? "सफाई पूरी होने पर 3 साफ फोटो लें" : `${REQUIRED_SERVICE_PHOTOS} geo-tagged photos required showing completed clean`}
           photos={afterPhotos}
           uploadingIndex={isUploading && uploadingPhotoIndex != null ? uploadingPhotoIndex : null}
           disabled={false}
@@ -522,18 +532,20 @@ export function StaffServiceJobFlow({
         <ServiceStepper currentStep="complete" isSolar={isSolar} />
         <div className="flex items-center justify-between">
           <StaffStatusBadge status="in_progress" pulse />
-          <p className="text-xs text-muted-foreground">Step 5 — Remarks &amp; Complete</p>
+          <p className="text-xs text-muted-foreground">
+            {isHindi ? "स्टेप 5 — टिप्पणी और पूरा करें" : "Step 5 — Remarks & Complete"}
+          </p>
         </div>
 
         <div className="space-y-2">
           <label htmlFor={`remarks-${job.id}`} className="text-xs font-semibold text-foreground">
-            Technician Notes &amp; Observations (Optional)
+            {t("technician_notes")}
           </label>
           <Textarea
             id={`remarks-${job.id}`}
             value={remarks}
             onChange={e => setRemarks(e.target.value)}
-            placeholder="Ex: Scratch near rear bumper noted, cleaned extra dirty glass..."
+            placeholder={isHindi ? "उदा: गाड़ी पर हल्का स्क्रैच था, आगे का शीशा ज्यादा गंदा था..." : "Ex: Scratch near rear bumper noted, cleaned extra dirty glass..."}
             rows={3}
             className="text-xs resize-none rounded-xl"
           />
@@ -546,7 +558,7 @@ export function StaffServiceJobFlow({
           data-testid={`btn-complete-${job.id}`}
         >
           {isLocating ? <Loader2 size={15} className="mr-2 animate-spin" /> : <CheckCircle size={15} className="mr-2" />}
-          {isLocating ? "Verifying location…" : "Submit & Complete Job"}
+          {isLocating ? (isHindi ? "लोकेशन जांची जा रही है…" : "Verifying location…") : t("submit_complete_job")}
         </Button>
       </div>
     );

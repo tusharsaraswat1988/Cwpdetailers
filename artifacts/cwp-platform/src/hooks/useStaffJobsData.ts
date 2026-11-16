@@ -91,8 +91,15 @@ function enrichJob(job: StaffJob): StaffJob {
 }
 
 function mergeJobs(bookings: StaffJob[], executions: StaffJob[]) {
+  const executionBookingIds = new Set(
+    executions
+      .map(e => e.bookingId)
+      .filter((id): id is number => typeof id === "number" && id > 0)
+  );
+  const dedupedBookings = bookings.filter(b => !executionBookingIds.has(b.id));
+
   return [
-    ...bookings.map(b => enrichJob({ ...b, source: "booking" as const })),
+    ...dedupedBookings.map(b => enrichJob({ ...b, source: "booking" as const })),
     ...executions.map(e => enrichJob(e)),
   ];
 }
