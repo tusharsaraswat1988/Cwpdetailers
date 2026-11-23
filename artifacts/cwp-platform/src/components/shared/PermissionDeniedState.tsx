@@ -1,5 +1,6 @@
+import React from "react";
 import { Link } from "wouter";
-import { ShieldAlert } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { Button } from "@/components/ui/button";
 
 interface PermissionDeniedStateProps {
@@ -20,7 +21,7 @@ export function PermissionDeniedState({
       role="alert"
     >
       <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[hsl(var(--tone-warning,38_92%_50%)/0.1)] text-[hsl(var(--tone-warning-fg,32_90%_32%))]">
-        <ShieldAlert size={18} aria-hidden />
+        <MaterialSymbol name="shield" size={24} weight={400} aria-hidden />
       </div>
       <h3 className="admin-state-title font-medium text-foreground">{title}</h3>
       <p className="admin-state-desc mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>

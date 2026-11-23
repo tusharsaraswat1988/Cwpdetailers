@@ -112,6 +112,7 @@ import FranchiseeCustomers from "@/pages/franchisee/Customers";
 import FranchiseeCustomerDetail from "@/pages/franchisee/CustomerDetail";
 import OperationsWall from "@/pages/admin/OperationsWall";
 import FounderDashboard from "@/pages/admin/FounderDashboard";
+import OperationsPlaybookPage from "@/pages/admin/OperationsPlaybookPage";
 import {
   DcmsDashboardPage, DcmsSubscriptionsPage, DcmsAssignmentsPage, DcmsServiceHistoryPage, DcmsStaffPerformancePage,
   CustomerDailyCleaningPage, CustomerDcmsHistoryPage, CustomerDcmsGalleryPage,
@@ -210,6 +211,8 @@ function Router() {
 
       {/* Admin — admin/superadmin/manager can reach; per-page permission gates fine-tune */}
       <Route path="/admin/dashboard" component={() => <ProtectedRoute component={AdminDashboard} roles={["admin", "superadmin", "manager"]} loginPath="/admin/login" />} />
+      <Route path="/admin/playbook" component={() => <ProtectedRoute component={OperationsPlaybookPage} roles={["admin", "superadmin", "manager"]} loginPath="/admin/login" />} />
+      <Route path="/admin/operations/playbook" component={() => <Redirect to="/admin/playbook" />} />
       <Route path="/admin/customers/migration" component={() => <ProtectedRoute component={AdminCustomerMigration} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "create" }} loginPath="/admin/login" />} />
       <Route path="/admin/customers/legacy-contacts" component={() => <ProtectedRoute component={AdminLegacyContacts} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
       <Route path="/admin/customers/reactivated" component={() => <ProtectedRoute component={AdminReactivatedCustomers} roles={["admin", "superadmin", "manager"]} permission={{ resource: "customers", action: "view" }} loginPath="/admin/login" />} />
@@ -288,6 +291,7 @@ function Router() {
 
       {/* Branch Manager Portal — Scoped Independent Operations */}
       <Route path="/manager/dashboard" component={() => <ProtectedRoute component={AdminDashboard} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
+      <Route path="/manager/playbook" component={() => <ProtectedRoute component={OperationsPlaybookPage} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
       <Route path="/manager/customers/:id" component={() => <ProtectedRoute component={AdminCustomerDetail} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
       <Route path="/manager/customers" component={() => <ProtectedRoute component={AdminCustomers} roles={MANAGER_ROLES} loginPath="/admin/login" />} />
       <Route path="/manager/bookings" component={() => <ProtectedRoute component={AdminBookings} roles={MANAGER_ROLES} loginPath="/admin/login" />} />

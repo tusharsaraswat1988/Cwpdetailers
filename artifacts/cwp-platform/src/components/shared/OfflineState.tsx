@@ -1,4 +1,5 @@
-import { WifiOff } from "lucide-react";
+import React from "react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { Button } from "@/components/ui/button";
 
 interface OfflineStateProps {
@@ -19,7 +20,7 @@ export function OfflineState({
       role="status"
     >
       <div className="admin-icon-well mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-        <WifiOff size={18} aria-hidden />
+        <MaterialSymbol name="wifi_off" size={24} weight={400} aria-hidden />
       </div>
       <h3 className="admin-state-title font-medium text-foreground">{title}</h3>
       <p className="admin-state-desc mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>

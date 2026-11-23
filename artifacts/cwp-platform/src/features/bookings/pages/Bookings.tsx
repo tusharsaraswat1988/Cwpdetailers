@@ -193,7 +193,7 @@ export default function AdminBookings() {
           <User size={13} className="text-muted-foreground" />
           <div>
             <p className="font-medium text-foreground">{b.customerName}</p>
-            <p className="text-xs text-muted-foreground">{b.customerPhone}</p>
+            <p className="text-xs text-muted-foreground font-mono tabular-nums">{b.customerPhone}</p>
           </div>
         </div>
       ),
@@ -261,8 +261,8 @@ export default function AdminBookings() {
       key: "datetime", header: "Date & Time", sortable: true,
       cell: b => (
         <div>
-          <div className="flex items-center gap-1.5 text-xs text-foreground"><Calendar size={11} className="text-muted-foreground" /><span>{b.scheduledDate}</span></div>
-          {b.scheduledTime && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5"><Clock size={11} /><span>{b.scheduledTime}</span></div>}
+          <div className="flex items-center gap-1.5 text-xs text-foreground"><Calendar size={11} className="text-muted-foreground" /><span className="font-mono tabular-nums">{b.scheduledDate}</span></div>
+          {b.scheduledTime && <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5"><Clock size={11} /><span className="font-mono tabular-nums">{b.scheduledTime}</span></div>}
         </div>
       ),
     },

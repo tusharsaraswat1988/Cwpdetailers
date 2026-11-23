@@ -1,5 +1,5 @@
-import { ReactNode } from "react";
-import { Inbox } from "lucide-react";
+import React, { ReactNode } from "react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 
 interface EmptyStateProps {
   icon?: ReactNode;
@@ -26,7 +26,7 @@ export function EmptyState({
       role="status"
     >
       <div className="admin-icon-well mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        {icon ?? <Inbox size={18} aria-hidden />}
+        {icon ?? <MaterialSymbol name="inbox" size={24} weight={400} aria-hidden />}
       </div>
       <h3 className="admin-state-title font-medium text-foreground">{title}</h3>
       {description ? (

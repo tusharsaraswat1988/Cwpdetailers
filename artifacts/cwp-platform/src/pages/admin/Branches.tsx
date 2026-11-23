@@ -855,7 +855,7 @@ export default function BranchesPage() {
 
         {/* Readiness Checklist Dialog */}
         <Dialog open={readinessModal != null} onOpenChange={(open) => !open && setReadinessModal(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md max-h-[88vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center justify-between">
                 <DialogTitle className="flex items-center gap-2">
@@ -1442,7 +1442,7 @@ export default function BranchesPage() {
 
         {/* Suspend Branch Modal */}
         <Dialog open={suspendModal != null} onOpenChange={(open) => !open && setSuspendModal(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md max-h-[88vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-rose-600 flex items-center gap-2">
                 <ShieldAlert className="h-5 w-5" />

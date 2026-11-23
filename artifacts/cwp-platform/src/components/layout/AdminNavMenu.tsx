@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import {
   ADMIN_NAV_SECTIONS,
   LEGACY_GROUP_ID,
@@ -137,8 +138,9 @@ function NavGroup({
       {expanded && (
         <div className="mt-1 space-y-1">
           {isLegacy && group.description && (
-            <p className="text-[10px] text-amber-200/60 px-3 py-1.5 ml-2 border-l border-amber-500/30 leading-relaxed">
-              ⚠ {group.description}
+            <p className="text-[10px] text-amber-200/60 px-3 py-1.5 ml-2 border-l border-amber-500/30 leading-relaxed flex items-center gap-1.5">
+              <MaterialSymbol name="warning" size={13} className="text-amber-400 shrink-0" aria-hidden />
+              <span>{group.description}</span>
             </p>
           )}
           <div className="space-y-0.5 border-l border-white/10 ml-4 pl-1">

@@ -3,6 +3,7 @@ import { useAppStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
+import { EmptyState } from "@/lib/design-system/EmptyState";
 
 async function fetchBillingHealth(branchId?: number | null) {
   const url = branchId ? `/api/billing/health?branchId=${branchId}` : "/api/billing/health";
@@ -49,25 +50,25 @@ export function DuesTab({ customerId }: Props) {
               <Card>
                 <CardContent className="p-4">
                   <p className="text-muted-foreground text-xs uppercase">Collected This Month</p>
-                  <p className="font-display font-bold text-xl text-green-600 mt-1">{fmt(health?.collectedThisMonth)}</p>
+                  <p className="font-display font-bold text-xl text-green-600 mt-1 tabular-nums">{fmt(health?.collectedThisMonth)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
                   <p className="text-muted-foreground text-xs uppercase">Dues Outstanding</p>
-                  <p className="font-display font-bold text-xl text-destructive mt-1">{fmt(health?.duesOutstanding)}</p>
+                  <p className="font-display font-bold text-xl text-destructive mt-1 tabular-nums">{fmt(health?.duesOutstanding)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
                   <p className="text-muted-foreground text-xs uppercase">Expenses This Month</p>
-                  <p className="font-display font-bold text-xl text-amber-500 mt-1">{fmt(health?.expensesThisMonth)}</p>
+                  <p className="font-display font-bold text-xl text-amber-500 mt-1 tabular-nums">{fmt(health?.expensesThisMonth)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
                   <p className="text-muted-foreground text-xs uppercase">Net</p>
-                  <p className="font-display font-bold text-xl text-primary mt-1">{fmt(health?.net)}</p>
+                  <p className="font-display font-bold text-xl text-primary mt-1 tabular-nums">{fmt(health?.net)}</p>
                 </CardContent>
               </Card>
             </>
@@ -81,9 +82,9 @@ export function DuesTab({ customerId }: Props) {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/30">
                 <tr>
-                  {["Customer", "Invoices", "Total Due"].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
-                  ))}
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customer</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Invoices</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total Due</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -99,7 +100,7 @@ export function DuesTab({ customerId }: Props) {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{d.invoiceCount}</td>
-                      <td className="px-4 py-3 font-semibold text-destructive">
+                      <td className="px-4 py-3 text-right font-semibold text-destructive font-mono tabular-nums">
                         ₹{(d.totalDue ?? 0).toLocaleString("en-IN")}
                       </td>
                     </tr>
@@ -107,7 +108,11 @@ export function DuesTab({ customerId }: Props) {
               </tbody>
             </table>
             {!dLoading && (dues?.data ?? []).length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">No outstanding dues</div>
+              <EmptyState
+                icon="check_circle"
+                title="No outstanding dues"
+                description="All customer accounts have cleared invoices and settled payments."
+              />
             )}
           </div>
         </CardContent>

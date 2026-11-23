@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import type { StaffJob } from "@/lib/staff-jobs";
 import { jobAmount } from "@/lib/staff-jobs";
 import { formatStaffAddressLine } from "@/features/customers/lib/serviceAddress";
@@ -35,7 +36,8 @@ export function StaffJobListItem({ job, compact, showAmount, linkToDashboard }: 
       trailing={
         isSolar ? (
           <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-            ☀️ Solar
+            <MaterialSymbol name="solar_power" size={12} />
+            <span>Solar</span>
           </span>
         ) : undefined
       }

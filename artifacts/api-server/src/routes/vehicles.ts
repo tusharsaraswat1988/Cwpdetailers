@@ -1,6 +1,12 @@
 import { Router, type Request } from "express";
 import { db } from "@workspace/db";
-import { vehiclesTable, customersTable, staffTable } from "@workspace/db";
+import {
+  vehiclesTable,
+  customersTable,
+  staffTable,
+  dcmsSubscriptionsTable,
+  dcmsSubscriptionLocationsTable,
+} from "@workspace/db";
 import { eq, and, inArray, sql, ne } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope, loadIfInScope } from "../middlewares/tenantScope";
 import { roleSlugForVehicleAssignment, staffOperationalRoleError } from "../lib/staffEcosystem/operationalRoles";

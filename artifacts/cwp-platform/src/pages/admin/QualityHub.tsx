@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { useToast } from "@/hooks/use-toast";
 import {
   Star,
@@ -222,15 +223,17 @@ export default function QualityHub() {
 
                 <div className="space-y-2.5 max-h-[280px] overflow-y-auto">
                   {(supervisorHub?.lowRatingVisits ?? []).length === 0 ? (
-                    <div className="text-center py-8 text-xs text-muted-foreground">
-                      No low-rating alerts in the last 7 days! ✨
+                    <div className="text-center py-8 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
+                      <MaterialSymbol name="check_circle" size={24} className="text-emerald-500" />
+                      <span>No low-rating alerts in the last 7 days. All clear!</span>
                     </div>
                   ) : (
                     (supervisorHub?.lowRatingVisits ?? []).map((v: any) => (
                       <div key={v.id} className="p-3 border border-red-500/20 bg-red-500/5 rounded-lg text-xs space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-red-600 flex items-center gap-1">
-                            ★ {v.ratingScore}/5 · Visit #{v.visitId}
+                            <MaterialSymbol name="star" size={13} className="text-amber-500" fill />
+                            <span>{v.ratingScore}/5 · Visit #{v.visitId}</span>
                           </span>
                           <span className="text-[10px] text-muted-foreground">
                             {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}

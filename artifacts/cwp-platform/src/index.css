@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -96,12 +97,12 @@
    * pages (Sprint 2+ fixes that at the module level), not missing tokens.
    */
 
-  /* Brand identity tokens (overridden at runtime by BrandingProvider) */
-  --brand-primary: #00cccc;
-  --brand-secondary: #212529;
+  /* Brand identity tokens (aligned with CWP Universal Design System) */
+  --brand-primary: #1677FF;
+  --brand-secondary: #0B1D36;
   --brand-accent: #e0ffff;
   --brand-background: #f5f6f8;
-  --brand-text: #212529;
+  --brand-text: #0F172A;
 
   --background: 220 20% 97%;
   --foreground: 220 40% 10%;
@@ -111,19 +112,19 @@
   --popover: 0 0% 100%;
   --popover-foreground: 220 40% 10%;
   --popover-border: 220 20% 90%;
-  --primary: 180 100% 40%; 
+  --primary: 215 100% 54%; 
   --primary-foreground: 0 0% 100%;
   --secondary: 220 15% 15%;
   --secondary-foreground: 0 0% 100%;
   --muted: 220 20% 90%;
   --muted-foreground: 220 10% 40%;
-  --accent: 180 100% 90%;
-  --accent-foreground: 180 100% 20%;
+  --accent: 215 100% 95%;
+  --accent-foreground: 215 100% 35%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
   --border: 220 20% 90%;
   --input: 220 20% 90%;
-  --ring: 180 100% 40%;
+  --ring: 215 100% 54%;
   --radius: 0.5rem;
 }
 
@@ -136,19 +137,19 @@
   --popover: 220 35% 10%;
   --popover-foreground: 220 20% 96%;
   --popover-border: 220 30% 15%;
-  --primary: 180 100% 45%; 
+  --primary: 215 100% 60%; 
   --primary-foreground: 220 40% 6%;
   --secondary: 220 30% 15%;
   --secondary-foreground: 220 20% 96%;
   --muted: 220 30% 15%;
   --muted-foreground: 220 15% 60%;
-  --accent: 180 100% 15%;
-  --accent-foreground: 180 100% 45%;
+  --accent: 215 100% 20%;
+  --accent-foreground: 215 100% 70%;
   --destructive: 0 62% 30%;
   --destructive-foreground: 220 20% 96%;
   --border: 220 30% 15%;
   --input: 220 30% 15%;
-  --ring: 180 100% 45%;
+  --ring: 215 100% 60%;
 }
 
 @layer base {

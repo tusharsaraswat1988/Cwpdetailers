@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Loader2, CheckCircle2 } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import {
   searchWalkIn,
   fetchWalkInCustomer,
@@ -41,13 +42,17 @@ function formatPrice(value: string | null | undefined) {
   return Number.isFinite(n) ? `₹${n.toLocaleString("en-IN")}` : null;
 }
 
-function serviceIcon(kind: WalkInServiceKind) {
+function ServiceIcon({ kind }: { kind: WalkInServiceKind }) {
   switch (kind) {
-    case "daily_clean": return "🧹";
+    case "daily_clean":
+      return <MaterialSymbol name="cleaning_services" size={16} className="inline mr-1 align-text-bottom text-primary" />;
     case "daily_wash":
-    case "car_wash": return "🚗";
-    case "solar_clean": return "☀️";
-    default: return "•";
+    case "car_wash":
+      return <MaterialSymbol name="directions_car" size={16} className="inline mr-1 align-text-bottom text-primary" />;
+    case "solar_clean":
+      return <MaterialSymbol name="solar_power" size={16} className="inline mr-1 align-text-bottom text-amber-500" />;
+    default:
+      return <MaterialSymbol name="build" size={16} className="inline mr-1 align-text-bottom text-muted-foreground" />;
   }
 }
 
@@ -165,7 +170,7 @@ function PackageCard({
       <div className="rounded-xl border border-dashed border-border bg-card p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium">
-            {serviceIcon(service.serviceKind)} {service.displayName}
+            <ServiceIcon kind={service.serviceKind} /> {service.displayName}
           </p>
           <ServiceStatusBadge service={service} />
         </div>
@@ -211,7 +216,7 @@ function PackageCard({
             <div key={service.key} className="rounded-lg border border-border/80 bg-muted/20 p-2.5 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium">
-                  {serviceIcon(service.serviceKind)} {service.displayName}
+                  <ServiceIcon kind={service.serviceKind} /> {service.displayName}
                 </p>
                 <ServiceStatusBadge service={service} />
               </div>
@@ -561,7 +566,10 @@ function SolarSiteVisitCallback({
 
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
-      <p className="text-xs font-medium">☀️ Solar — site visit / naya quote</p>
+      <p className="text-xs font-medium inline-flex items-center gap-1.5">
+        <MaterialSymbol name="solar_power" size={14} className="text-amber-500" />
+        <span>Solar — site visit / naya quote</span>
+      </p>
       <p className="text-[11px] text-muted-foreground">
         Bade sites (rate card site-visit band) ke liye callback lead banao. Advisor visit ke baad Book Services se book karega.
       </p>

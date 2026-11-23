@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Contact,
   Building2,
+  BookOpen,
 } from "lucide-react";
 
 export type ManagerNavItem = {
@@ -33,6 +34,7 @@ export const MANAGER_NAV_SECTIONS: ManagerNavSection[] = [
     label: "Overview",
     entries: [
       { id: "dashboard", href: "/manager/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { id: "playbook", href: "/manager/playbook", label: "Operations Playbook", icon: BookOpen },
       { id: "reports", href: "/manager/reports", label: "Branch Reports", icon: BarChart3 },
     ],
   },

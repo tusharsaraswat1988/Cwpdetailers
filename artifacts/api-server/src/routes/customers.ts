@@ -80,6 +80,50 @@ async function customerContactExcludes(
   return excludes;
 }
 
+async function resolveCustomerCity(
+  cityIdInput: unknown,
+  cityNameInput: unknown,
+): Promise<{ cityId: number | null; cityName?: string }> {
+  let resolvedCityId: number | null = null;
+  let resolvedCityName: string | undefined =
+    typeof cityNameInput === "string" && cityNameInput.trim() ? cityNameInput.trim() : undefined;
+
+  if (cityIdInput !== undefined && cityIdInput !== null && cityIdInput !== "") {
+    const parsed = typeof cityIdInput === "number" ? cityIdInput : parseInt(String(cityIdInput), 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      resolvedCityId = parsed;
+    }
+  }
+
+  if (resolvedCityId && !resolvedCityName) {
+    const [found] = await db
+      .select({ id: citiesTable.id, name: citiesTable.name })
+      .from(citiesTable)
+      .where(eq(citiesTable.id, resolvedCityId))
+      .limit(1);
+    if (found) {
+      resolvedCityName = found.name;
+    }
+  } else if (!resolvedCityId && resolvedCityName) {
+    const [found] = await db
+      .select({ id: citiesTable.id, name: citiesTable.name })
+      .from(citiesTable)
+      .where(
+        or(
+          ilike(citiesTable.name, resolvedCityName),
+          ilike(citiesTable.slug, resolvedCityName.toLowerCase().replace(/\s+/g, "-")),
+          ilike(citiesTable.code, resolvedCityName),
+        ),
+      )
+      .limit(1);
+    if (found) {
+      resolvedCityId = found.id;
+    }
+  }
+
+  return { cityId: resolvedCityId, cityName: resolvedCityName };
+}
+
 const SCOPE_COLS = {
   companyCol: customersTable.companyId,
   branchCol: customersTable.branchId,
@@ -90,6 +134,7 @@ const SCOPE_COLS = {
 const CUSTOMER_LIST_SELECT = {
   id: customersTable.id, name: customersTable.name, phone: customersTable.phone,
   email: customersTable.email, address: customersTable.address, city: customersTable.city,
+  cityId: customersTable.cityId,
   status: customersTable.status, walletBalance: customersTable.walletBalance,
   totalDues: customersTable.totalDues, branchId: customersTable.branchId,
   photoUrl: customersTable.photoUrl, lastPaymentDate: customersTable.lastPaymentDate,
@@ -228,7 +273,7 @@ router.get("/customers/reactivated", async (req, res) => {
 router.post("/customers", async (req, res) => {
   try {
     const {
-      name, phone, email, address, city, branchId, password, gstin, billingName, referredByCustomerId,
+      name, phone, email, address, city, cityId, branchId, password, gstin, billingName, referredByCustomerId,
       latitude, longitude, placeId, serviceLocationLabel,
       houseNumber, buildingName, area, landmark, pincode, postalCode,
     } = req.body;
@@ -268,6 +313,7 @@ router.post("/customers", async (req, res) => {
       : "";
     const resolvedAddress = composedFromParts || (typeof address === "string" ? address.trim() : "") || undefined;
     const resolvedCity = structuredParts.city.trim() || (typeof city === "string" ? city.trim() : "") || undefined;
+    const { cityId: finalCityId, cityName: finalCityName } = await resolveCustomerCity(cityId, resolvedCity);
 
     if ((parsedLatitude != null) !== (parsedLongitude != null)) {
       return res.status(400).json({ error: "latitude and longitude must be provided together" });
@@ -281,11 +327,16 @@ router.post("/customers", async (req, res) => {
 
     const stamp = tenantStamp(req, {
       name, phone: identityCheck.identity.phone, email: identityCheck.identity.email,
-      address: resolvedAddress, city: resolvedCity,
+      address: resolvedAddress,
+      city: finalCityName ?? resolvedCity,
+      cityId: finalCityId ?? null,
       branchId: branchId || null,
       status: "active" as const,
     });
-    const values: typeof customersTable.$inferInsert = { ...stamp };
+    const values: typeof customersTable.$inferInsert = {
+      ...stamp,
+      cityId: stamp.cityId ?? finalCityId ?? null,
+    };
 
     try {
       if (gstin !== undefined && String(gstin).trim() !== "") values.gstin = normalizeGstin(gstin);
@@ -508,7 +559,7 @@ router.patch("/customers/:id", async (req, res) => {
       }
     }
 
-    const { name, phone, email, address, city, status, branchId, photoUrl, operationalNotes, gstin, billingName, referredByCustomerId } = req.body;
+    const { name, phone, email, address, city, cityId, status, branchId, photoUrl, operationalNotes, gstin, billingName, referredByCustomerId } = req.body;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
 
@@ -529,7 +580,16 @@ router.patch("/customers/:id", async (req, res) => {
     }
 
     if (address !== undefined) updateData.address = address;
-    if (city !== undefined) updateData.city = city;
+    if (city !== undefined || cityId !== undefined) {
+      const cityToLookup = city !== undefined ? city : existing.city;
+      const { cityId: resolvedCityId, cityName: resolvedCityName } = await resolveCustomerCity(cityId, cityToLookup);
+      if (city !== undefined) updateData.city = resolvedCityName ?? city;
+      if (resolvedCityId != null) {
+        updateData.cityId = resolvedCityId;
+      } else if (cityId === null) {
+        updateData.cityId = null;
+      }
+    }
     if (status !== undefined && !(status === "active" && isLegacyDormantCustomer(existing))) {
       updateData.status = status;
     }

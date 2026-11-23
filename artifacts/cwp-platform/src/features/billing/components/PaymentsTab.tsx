@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ArrowRight, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/lib/design-system/EmptyState";
 
 type Props = {
   customerId?: string;
@@ -39,9 +40,12 @@ export function PaymentsTab({ customerId }: Props) {
         <table className="w-full text-sm">
         <thead className="border-b border-border bg-muted/30">
           <tr>
-            {["Customer", "Amount", "Method", "Invoice", "Transaction ID", "Date"].map(h => (
-              <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
-            ))}
+            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customer</th>
+            <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Amount</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Method</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Invoice</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Transaction ID</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -52,7 +56,7 @@ export function PaymentsTab({ customerId }: Props) {
             : (payments?.data ?? []).map(p => (
               <tr key={p.id} className="hover:bg-muted/20" data-testid={`payment-row-${p.id}`}>
                 <td className="px-4 py-3 font-medium">{p.customerName}</td>
-                <td className="px-4 py-3 font-semibold text-primary">₹{Number(p.amount).toLocaleString("en-IN")}</td>
+                <td className="px-4 py-3 text-right font-semibold text-primary font-mono tabular-nums">₹{Number(p.amount).toLocaleString("en-IN")}</td>
                 <td className="px-4 py-3 text-xs">
                   {p.method?.toLowerCase() === "cashfree" ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
@@ -70,7 +74,11 @@ export function PaymentsTab({ customerId }: Props) {
         </tbody>
       </table>
       {!isLoading && (payments?.data ?? []).length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">No payments found</div>
+        <EmptyState
+          icon="payments"
+          title="No payments recorded"
+          description="Customer receipts and online gateway transactions will appear here."
+        />
       )}
       </div>
     </div>

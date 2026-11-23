@@ -43,7 +43,8 @@ testem.log
 # System Files
 .DS_Store
 Thumbs.db
-.agents/
+.agents/*
+!.agents/skills/
 
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md

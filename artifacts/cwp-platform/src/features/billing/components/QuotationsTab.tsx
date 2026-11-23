@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/shared";
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle } from "lucide-react";
 import { CreateQuotationDialog } from "./CreateQuotationDialog";
+import { EmptyState } from "@/lib/design-system/EmptyState";
 
 type QuotationFilter = "all" | "open" | "converted" | "expired";
 
@@ -128,9 +129,14 @@ export function QuotationsTab({ customerId, prefillCustomerId }: Props) {
         <table className="w-full text-sm">
           <thead className="border-b border-border bg-muted/30">
             <tr>
-              {["Quotation #", "Customer", "Subtotal", "GST", "Total", "Status", "Valid Until", ""].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
-              ))}
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quotation #</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customer</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Subtotal</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">GST</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Valid Until</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -142,9 +148,9 @@ export function QuotationsTab({ customerId, prefillCustomerId }: Props) {
                 <tr key={q.id} className="hover:bg-muted/20">
                   <td className="px-4 py-3 font-mono text-xs font-medium">{q.quotationNumber}</td>
                   <td className="px-4 py-3 font-medium">{q.customerName}</td>
-                  <td className="px-4 py-3">₹{Number(q.subtotal).toLocaleString("en-IN")}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">₹{Number(q.gstAmount).toLocaleString("en-IN")}</td>
-                  <td className="px-4 py-3 font-semibold">₹{Number(q.totalAmount).toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums">₹{Number(q.subtotal).toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-3 text-right text-xs text-muted-foreground font-mono tabular-nums">₹{Number(q.gstAmount).toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-3 text-right font-semibold font-mono tabular-nums">₹{Number(q.totalAmount).toLocaleString("en-IN")}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={q.status ?? "draft"} />
                   </td>
@@ -173,7 +179,16 @@ export function QuotationsTab({ customerId, prefillCustomerId }: Props) {
           </tbody>
         </table>
         {!isLoading && rows.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">No quotations found</div>
+          <EmptyState
+            icon="request_quote"
+            title="No quotations found"
+            description="Create quotations for commercial fleet cleaning or rooftop solar maintenance."
+            action={{
+              label: "New Quotation",
+              onClick: () => setCreateOpen(true),
+              icon: "add",
+            }}
+          />
         )}
       </div>
     </div>

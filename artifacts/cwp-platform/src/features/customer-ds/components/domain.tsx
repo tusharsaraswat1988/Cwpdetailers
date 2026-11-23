@@ -255,7 +255,7 @@ export function CustomerInvoiceCard({
           </div>
           <div className="min-w-0">
             <p className="font-mono text-xs text-muted-foreground">{invoiceNumber}</p>
-            <p className="font-semibold text-base mt-0.5">
+            <p className="font-semibold text-base mt-0.5 tabular-nums">
               {amount}
               <span className="ml-1 text-xs font-normal text-muted-foreground">(GST incl.)</span>
             </p>

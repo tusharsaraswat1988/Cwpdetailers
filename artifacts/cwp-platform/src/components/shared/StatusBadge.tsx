@@ -1,14 +1,6 @@
 import React, { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import {
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  XCircle,
-  Info,
-  RotateCw,
-  Minus,
-} from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 
 export type StatusTone = "info" | "warning" | "success" | "destructive" | "neutral" | "progress";
 
@@ -102,7 +94,7 @@ interface StatusBadgeProps {
   showIcon?: boolean;
 }
 
-export function getStatusIcon(status: string, tone: StatusTone): ReactNode {
+export function getStatusIcon(status: string, tone?: StatusTone): ReactNode {
   switch (status) {
     case "completed":
     case "checked_in":
@@ -113,7 +105,7 @@ export function getStatusIcon(status: string, tone: StatusTone): ReactNode {
     case "customer_approved":
     case "otp_verified":
     case "present":
-      return <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      return <MaterialSymbol name="check_circle" size={13} weight={500} aria-hidden />;
     case "pending":
     case "scheduled":
     case "waiting":
@@ -121,33 +113,33 @@ export function getStatusIcon(status: string, tone: StatusTone): ReactNode {
     case "not_checked_in":
     case "payment_pending":
     case "late":
-      return <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      return <MaterialSymbol name="schedule" size={13} weight={500} aria-hidden />;
     case "in_progress":
     case "started":
     case "en_route":
     case "travelling":
     case "checking_in":
     case "uploading":
-      return <RotateCw className="h-3 w-3 shrink-0 animate-spin" aria-hidden="true" />;
+      return <MaterialSymbol name="sync" size={13} weight={500} className="animate-spin" aria-hidden />;
     case "car_not_available":
     case "warning":
     case "sync_pending":
     case "paused":
-      return <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      return <MaterialSymbol name="warning" size={13} weight={500} aria-hidden />;
     case "cancelled":
     case "rejected":
     case "missed":
     case "absent":
     case "failed":
     case "upload_failed":
-      return <XCircle className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      return <MaterialSymbol name="cancel" size={13} weight={500} aria-hidden />;
     default:
-      if (tone === "success") return <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden="true" />;
-      if (tone === "warning") return <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />;
-      if (tone === "destructive") return <XCircle className="h-3 w-3 shrink-0" aria-hidden="true" />;
-      if (tone === "progress") return <RotateCw className="h-3 w-3 shrink-0" aria-hidden="true" />;
-      if (tone === "info") return <Info className="h-3 w-3 shrink-0" aria-hidden="true" />;
-      return <Minus className="h-3 w-3 shrink-0" aria-hidden="true" />;
+      if (tone === "success") return <MaterialSymbol name="check_circle" size={13} weight={500} aria-hidden />;
+      if (tone === "warning") return <MaterialSymbol name="warning" size={13} weight={500} aria-hidden />;
+      if (tone === "destructive") return <MaterialSymbol name="cancel" size={13} weight={500} aria-hidden />;
+      if (tone === "progress") return <MaterialSymbol name="sync" size={13} weight={500} className="animate-spin" aria-hidden />;
+      if (tone === "info") return <MaterialSymbol name="info" size={13} weight={500} aria-hidden />;
+      return <MaterialSymbol name="remove" size={13} weight={500} aria-hidden />;
   }
 }
 

@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "wouter";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import {
   Dialog,
   DialogContent,
@@ -165,7 +166,10 @@ export function BranchSetupGuidelinesModal({
                     <h4 className="font-semibold text-xs text-amber-950 dark:text-amber-200">
                       Operational Zone & Coverage Rules (ऑपरेशनल दायरा व पिनकोड कवरेज)
                     </h4>
-                    <Badge className="bg-amber-600 text-white text-[10px] py-0 px-1">Most Critical ⚡</Badge>
+                    <Badge className="bg-amber-600 text-white text-[10px] py-0 px-1.5 inline-flex items-center gap-1">
+                      <MaterialSymbol name="bolt" size={12} weight={500} />
+                      <span>Most Critical</span>
+                    </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground leading-normal">
                     <strong>Operational Zones & Coverage</strong> पेज पर जाएं:

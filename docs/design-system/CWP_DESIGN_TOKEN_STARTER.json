@@ -1,0 +1,97 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/2025.10/",
+  "color": {
+    "primitive": {
+      "brand": {
+        "blue-500": { "$type": "color", "$value": "#1677FF", "$description": "CWP Primary Brand Blue" },
+        "blue-600": { "$type": "color", "$value": "#0072F8", "$description": "Admin & Staff Action Blue" },
+        "dark-900": { "$type": "color", "$value": "#0B1D36", "$description": "Midnight Brand Surface" },
+        "teal-400": { "$type": "color", "$value": "#00CCCC", "$description": "CWP Accent Teal" }
+      },
+      "neutral": {
+        "50": { "$type": "color", "$value": "#F8FAFC" },
+        "100": { "$type": "color", "$value": "#F1F5F9" },
+        "200": { "$type": "color", "$value": "#E2E8F0" },
+        "300": { "$type": "color", "$value": "#CBD5E1" },
+        "400": { "$type": "color", "$value": "#94A3B8" },
+        "500": { "$type": "color", "$value": "#64748B" },
+        "800": { "$type": "color", "$value": "#1E293B" },
+        "900": { "$type": "color", "$value": "#0F172A" }
+      },
+      "feedback": {
+        "success": { "$type": "color", "$value": "#16A34A" },
+        "warning": { "$type": "color", "$value": "#D97706" },
+        "danger": { "$type": "color", "$value": "#DC2626" },
+        "info": { "$type": "color", "$value": "#0284C7" }
+      }
+    },
+    "semantic": {
+      "action": {
+        "primary": { "$type": "color", "$value": "{color.primitive.brand.blue-500}" },
+        "primary-hover": { "$type": "color", "$value": "#0958D9" },
+        "secondary": { "$type": "color", "$value": "{color.primitive.brand.dark-900}" },
+        "destructive": { "$type": "color", "$value": "{color.primitive.feedback.danger}" }
+      },
+      "surface": {
+        "canvas": { "$type": "color", "$value": "{color.primitive.neutral.50}" },
+        "card": { "$type": "color", "$value": "#FFFFFF" },
+        "muted": { "$type": "color", "$value": "{color.primitive.neutral.100}" }
+      },
+      "border": {
+        "subtle": { "$type": "color", "$value": "{color.primitive.neutral.200}" },
+        "strong": { "$type": "color", "$value": "{color.primitive.neutral.300}" },
+        "focus": { "$type": "color", "$value": "{color.primitive.brand.blue-500}" }
+      },
+      "text": {
+        "primary": { "$type": "color", "$value": "{color.primitive.neutral.900}" },
+        "secondary": { "$type": "color", "$value": "{color.primitive.neutral.800}" },
+        "muted": { "$type": "color", "$value": "{color.primitive.neutral.500}" },
+        "inverse": { "$type": "color", "$value": "#FFFFFF" }
+      },
+      "status": {
+        "completed": { "$type": "color", "$value": "{color.primitive.feedback.success}" },
+        "in-progress": { "$type": "color", "$value": "{color.primitive.brand.blue-600}" },
+        "pending": { "$type": "color", "$value": "{color.primitive.feedback.warning}" },
+        "cancelled": { "$type": "color", "$value": "{color.primitive.feedback.danger}" },
+        "scheduled": { "$type": "color", "$value": "{color.primitive.feedback.info}" }
+      }
+    }
+  },
+  "dimension": {
+    "spacing": {
+      "1": { "$type": "dimension", "$value": "4px" },
+      "2": { "$type": "dimension", "$value": "8px" },
+      "3": { "$type": "dimension", "$value": "12px" },
+      "4": { "$type": "dimension", "$value": "16px" },
+      "5": { "$type": "dimension", "$value": "20px" },
+      "6": { "$type": "dimension", "$value": "24px" },
+      "8": { "$type": "dimension", "$value": "32px" }
+    },
+    "radius": {
+      "sm": { "$type": "dimension", "$value": "4px" },
+      "md": { "$type": "dimension", "$value": "8px" },
+      "lg": { "$type": "dimension", "$value": "12px" },
+      "xl": { "$type": "dimension", "$value": "16px" },
+      "full": { "$type": "dimension", "$value": "9999px" }
+    },
+    "touch-target": {
+      "admin-control": { "$type": "dimension", "$value": "36px" },
+      "customer-control": { "$type": "dimension", "$value": "48px" },
+      "staff-control": { "$type": "dimension", "$value": "52px" }
+    }
+  },
+  "icon": {
+    "family": { "$type": "string", "$value": "Material Symbols Outlined" },
+    "weight": {
+      "regular": { "$type": "number", "$value": 400 },
+      "medium": { "$type": "number", "$value": 500 }
+    },
+    "size": {
+      "sm": { "$type": "dimension", "$value": "18px" },
+      "base": { "$type": "dimension", "$value": "20px" },
+      "md": { "$type": "dimension", "$value": "24px" },
+      "lg": { "$type": "dimension", "$value": "32px" },
+      "xl": { "$type": "dimension", "$value": "48px" }
+    }
+  }
+}

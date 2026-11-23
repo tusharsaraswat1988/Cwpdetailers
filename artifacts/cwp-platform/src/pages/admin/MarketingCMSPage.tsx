@@ -48,6 +48,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { BookingFunnelDashboard } from "@/components/admin/BookingFunnelDashboard";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { UxExperimentsDashboard } from "@/components/admin/UxExperimentsDashboard";
 
 type City = { id: number; name: string; slug: string; status?: string; isActive?: boolean };
@@ -568,10 +569,12 @@ export default function MarketingCMSPage() {
                 <SelectValue placeholder="All India (Global)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">🏢 All India (Global)</SelectItem>
+                <SelectItem value="all">
+                  <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="public" size={14} className="text-primary" />All India (Global)</span>
+                </SelectItem>
                 {cities.map((city) => (
                   <SelectItem key={city.id} value={String(city.id)}>
-                    📍 {city.name}
+                    <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="location_on" size={14} className="text-primary" />{city.name}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -597,10 +600,12 @@ export default function MarketingCMSPage() {
                 <SelectValue placeholder="All Branches" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">🏬 All Branches</SelectItem>
+                <SelectItem value="all">
+                  <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="store" size={14} className="text-indigo-500" />All Branches</span>
+                </SelectItem>
                 {filteredBranches.map((branch) => (
                   <SelectItem key={branch.id} value={String(branch.id)}>
-                    🏬 {branch.name}
+                    <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="store" size={14} className="text-indigo-500" />{branch.name}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -774,16 +779,16 @@ export default function MarketingCMSPage() {
                           {section.sectionKey}
                         </Badge>
                         {section.branchName ? (
-                          <Badge variant="secondary" className="text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                            🏬 {section.branchName}
+                          <Badge variant="secondary" className="text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 inline-flex items-center gap-1">
+                            <MaterialSymbol name="store" size={12} /> {section.branchName}
                           </Badge>
                         ) : section.cityName ? (
-                          <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                            📍 {section.cityName}
+                          <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 inline-flex items-center gap-1">
+                            <MaterialSymbol name="location_on" size={12} /> {section.cityName}
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                            🌐 Global Default
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+                            <MaterialSymbol name="public" size={12} /> Global Default
                           </Badge>
                         )}
                       </div>
@@ -941,12 +946,23 @@ export default function MarketingCMSPage() {
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border">
-                    <span>
-                      {camp.branchName
-                        ? `🏬 ${camp.branchName}`
-                        : camp.cityName
-                        ? `📍 ${camp.cityName}`
-                        : "🌐 All Cities"}
+                    <span className="inline-flex items-center gap-1">
+                      {camp.branchName ? (
+                        <>
+                          <MaterialSymbol name="store" size={12} />
+                          <span>{camp.branchName}</span>
+                        </>
+                      ) : camp.cityName ? (
+                        <>
+                          <MaterialSymbol name="location_on" size={12} />
+                          <span>{camp.cityName}</span>
+                        </>
+                      ) : (
+                        <>
+                          <MaterialSymbol name="public" size={12} />
+                          <span>All Cities</span>
+                        </>
+                      )}
                     </span>
                     <span>{camp.endDate ? `Ends ${new Date(camp.endDate).toLocaleDateString()}` : "Ongoing"}</span>
                   </div>
@@ -1169,10 +1185,12 @@ export default function MarketingCMSPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="global">🌐 All India (Global)</SelectItem>
+                    <SelectItem value="global">
+                      <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="public" size={14} className="text-primary" />All India (Global)</span>
+                    </SelectItem>
                     {cities.map((city) => (
                       <SelectItem key={city.id} value={String(city.id)}>
-                        📍 {city.name}
+                        <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="location_on" size={14} className="text-primary" />{city.name}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1203,12 +1221,14 @@ export default function MarketingCMSPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">🏬 All Branches in Scope</SelectItem>
+                    <SelectItem value="all">
+                      <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="store" size={14} className="text-indigo-500" />All Branches in Scope</span>
+                    </SelectItem>
                     {branches
                       .filter((b) => sectionForm.cityId === "global" || String(b.cityId) === sectionForm.cityId)
                       .map((branch) => (
                         <SelectItem key={branch.id} value={String(branch.id)}>
-                          🏬 {branch.name}
+                          <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="store" size={14} className="text-indigo-500" />{branch.name}</span>
                         </SelectItem>
                       ))}
                   </SelectContent>
@@ -1456,10 +1476,12 @@ export default function MarketingCMSPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="global">🌐 All India (Global)</SelectItem>
+                    <SelectItem value="global">
+                      <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="public" size={14} className="text-primary" />All India (Global)</span>
+                    </SelectItem>
                     {cities.map((city) => (
                       <SelectItem key={city.id} value={String(city.id)}>
-                        📍 {city.name}
+                        <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="location_on" size={14} className="text-primary" />{city.name}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1476,12 +1498,14 @@ export default function MarketingCMSPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">🏬 All Branches</SelectItem>
+                    <SelectItem value="all">
+                      <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="store" size={14} className="text-indigo-500" />All Branches</span>
+                    </SelectItem>
                     {branches
                       .filter((b) => campaignForm.cityId === "global" || String(b.cityId) === campaignForm.cityId)
                       .map((branch) => (
                         <SelectItem key={branch.id} value={String(branch.id)}>
-                          🏬 {branch.name}
+                          <span className="inline-flex items-center gap-1.5"><MaterialSymbol name="store" size={14} className="text-indigo-500" />{branch.name}</span>
                         </SelectItem>
                       ))}
                   </SelectContent>

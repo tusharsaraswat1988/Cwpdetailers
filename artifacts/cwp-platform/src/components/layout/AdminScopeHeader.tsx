@@ -19,6 +19,11 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
+import {
+  AdminIntelligenceDrawer,
+  openAdminIntelligencePlaybook,
+} from "@/components/admin/intelligence";
 
 type Branch = {
   id: number;
@@ -160,6 +165,18 @@ export function AdminScopeHeader() {
         <Button
           variant="outline"
           size="sm"
+          onClick={() => openAdminIntelligencePlaybook()}
+          className="h-7 px-2.5 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1.5 border-primary/30 bg-primary/5 shadow-sm"
+          title="Operations Intelligence & SOP Playbook"
+          data-testid="header-intelligence-playbook-btn"
+        >
+          <MaterialSymbol name="psychology" size={15} className="text-primary" />
+          <span className="hidden md:inline font-semibold">Playbook & SOPs</span>
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
           onClick={handleOpenSearch}
           className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1.5 border-border/80 bg-card shadow-sm"
           title="Search pages and modules (Ctrl+K or Cmd+K)"
@@ -189,6 +206,8 @@ export function AdminScopeHeader() {
           </div>
         )}
       </div>
+
+      <AdminIntelligenceDrawer />
     </header>
   );
 }

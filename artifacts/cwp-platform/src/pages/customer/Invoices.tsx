@@ -67,7 +67,7 @@ export default function CustomerInvoices() {
             subtitle={totalDue > 0 ? undefined : "Bills & payments"}
             actions={
               totalDue > 0 ? (
-                <div className="flex items-center gap-2 rounded-[var(--customer-radius-sm)] border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <div className="flex items-center gap-2 rounded-[var(--customer-radius-sm)] border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive tabular-nums">
                   <AlertCircle size={14} aria-hidden />
                   Due ₹{totalDue.toLocaleString("en-IN")}
                 </div>
@@ -120,17 +120,17 @@ export default function CustomerInvoices() {
                         </InvoicePdfButton>
                         {effectiveDue > 0 && !isPaidOrCancelled && (
                           <div className="flex items-center gap-2.5 pt-1">
-                            <p className="text-xs font-semibold text-destructive">
+                            <p className="text-xs font-semibold text-destructive tabular-nums">
                               ₹{effectiveDue.toLocaleString("en-IN")} due
                               {inv.dueDate ? ` · Due ${inv.dueDate}` : ""}
                             </p>
                             <button
                               type="button"
                               onClick={() => setSelectedInvoice({ id: inv.id!, amount: effectiveDue })}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-[11px] font-semibold transition-colors cursor-pointer shadow-2xs"
+                              className="inline-flex items-center gap-1 min-h-8 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
                               data-testid={`pay-invoice-${inv.id}`}
                             >
-                              Pay Now <ArrowRight size={11} />
+                              Pay Now <ArrowRight size={12} />
                             </button>
                           </div>
                         )}

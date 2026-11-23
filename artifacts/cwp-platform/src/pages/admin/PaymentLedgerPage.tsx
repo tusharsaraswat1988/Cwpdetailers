@@ -854,12 +854,12 @@ export default function PaymentLedgerPage() {
                         </td>
 
                         {/* 5. Invoice Total */}
-                        <td className="py-3 px-3 text-right font-medium text-muted-foreground">
+                        <td className="py-3 px-3 text-right font-medium text-muted-foreground font-mono tabular-nums">
                           ₹{tx.paymentAmount.toFixed(2)}
                         </td>
 
                         {/* 6. Final Paid Amount */}
-                        <td className="py-3 px-3 text-right font-bold text-emerald-600 font-display">
+                        <td className="py-3 px-3 text-right font-bold text-emerald-600 font-mono tabular-nums">
                           ₹{tx.amountPaid.toFixed(2)}
                         </td>
 
@@ -1074,10 +1074,10 @@ export default function PaymentLedgerPage() {
                           <p className="text-[11px] text-muted-foreground">{item.bookingRef || "No Booking"}</p>
                         </td>
                         <td className="py-3 px-3 font-mono text-[11px] text-foreground select-all">{item.orderId || "—"}</td>
-                        <td className="py-3 px-3 text-right font-medium text-foreground">
+                        <td className="py-3 px-3 text-right font-medium text-foreground font-mono tabular-nums">
                           {item.internalAmount != null ? `₹${item.internalAmount.toFixed(2)}` : "—"}
                         </td>
-                        <td className="py-3 px-3 text-right font-bold text-foreground">
+                        <td className="py-3 px-3 text-right font-bold text-foreground font-mono tabular-nums">
                           {item.gatewayAmount != null ? `₹${item.gatewayAmount.toFixed(2)}` : "—"}
                         </td>
                         <td className="py-3 px-3 whitespace-nowrap">
@@ -1273,7 +1273,7 @@ export default function PaymentLedgerPage() {
                         <p className="font-semibold text-foreground">{ref.customerName}</p>
                         <p className="text-[11px] text-muted-foreground font-mono">{ref.customerPhone}</p>
                       </td>
-                      <td className="py-3 px-3 text-right font-bold text-rose-600 font-display">
+                      <td className="py-3 px-3 text-right font-bold text-rose-600 font-mono tabular-nums">
                         ₹{parseFloat(ref.amount).toFixed(2)}
                       </td>
                       <td className="py-3 px-3 uppercase text-[11px] font-semibold text-muted-foreground">

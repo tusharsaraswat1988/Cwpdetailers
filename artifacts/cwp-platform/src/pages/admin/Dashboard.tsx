@@ -11,6 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
 import { ContextHelp } from "@/components/ui/context-help";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
+import {
+  OperationalStageTracker,
+  openAdminIntelligencePlaybook,
+} from "@/components/admin/intelligence";
 import { operationsApi, type CommandCenterData, type ImmediateAttentionItem } from "@/lib/operations/api";
 import {
   Activity,
@@ -143,7 +148,7 @@ export default function AdminDashboard() {
                   </span>
                   <Calendar size={14} className="text-primary" />
                 </div>
-                <div className="text-2xl font-bold tracking-tight text-foreground">
+                <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
                   {metrics?.totalBookingsToday ?? 0}
                 </div>
                 <p className="text-[11px] text-muted-foreground">Scheduled & in-flight</p>
@@ -163,7 +168,7 @@ export default function AdminDashboard() {
                   </span>
                   <CheckCircle2 size={14} className="text-blue-500" />
                 </div>
-                <div className="text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
+                <div className="text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400 tabular-nums">
                   {metrics?.confirmedBookingsToday ?? 0}
                 </div>
                 <p className="text-[11px] text-muted-foreground">Ready for execution</p>
@@ -183,7 +188,7 @@ export default function AdminDashboard() {
                   </span>
                   <CheckCircle2 size={14} className="text-emerald-500" />
                 </div>
-                <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 tabular-nums">
                   {metrics?.completedServicesToday ?? 0}
                 </div>
                 <p className="text-[11px] text-muted-foreground">Bookings + DCMS visits</p>
@@ -204,7 +209,7 @@ export default function AdminDashboard() {
                   </span>
                   <Clock size={14} className={(metrics?.delayedServicesToday ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground"} />
                 </div>
-                <div className={`text-2xl font-bold tracking-tight ${(metrics?.delayedServicesToday ?? 0) > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
+                <div className={`text-2xl font-bold tracking-tight ${(metrics?.delayedServicesToday ?? 0) > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"} tabular-nums`}>
                   {metrics?.delayedServicesToday ?? 0}
                 </div>
                 <p className="text-[11px] text-muted-foreground">Past scheduled slot</p>
@@ -225,7 +230,7 @@ export default function AdminDashboard() {
                   </span>
                   <UserX size={14} className={(metrics?.unassignedJobsToday ?? 0) > 0 ? "text-red-500" : "text-muted-foreground"} />
                 </div>
-                <div className={`text-2xl font-bold tracking-tight ${(metrics?.unassignedJobsToday ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-foreground"}`}>
+                <div className={`text-2xl font-bold tracking-tight ${(metrics?.unassignedJobsToday ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-foreground"} tabular-nums`}>
                   {metrics?.unassignedJobsToday ?? 0}
                 </div>
                 <p className="text-[11px] text-muted-foreground">Missing technician</p>
@@ -254,45 +259,120 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Operational Status Stepper Breakdown */}
-        {breakdown && (
-          <div className="bg-card border border-border rounded-xl p-3 sm:p-4 shadow-sm">
-            <div className="flex items-center justify-between pb-2 text-xs font-semibold text-muted-foreground">
-              <span>Operational Service Status</span>
-              <span>{metrics?.activeStaffOnField ?? 0} technicians on field</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-1 text-center">
-              <div className="bg-secondary/60 rounded-lg p-2">
-                <p className="text-xs text-muted-foreground">Scheduled</p>
-                <p className="text-base font-bold text-foreground">{breakdown.scheduled}</p>
-              </div>
-              <div className="bg-blue-500/10 text-blue-600 border border-blue-500/20 rounded-lg p-2">
-                <p className="text-xs">Assigned</p>
-                <p className="text-base font-bold">{breakdown.assigned}</p>
-              </div>
-              <div className="bg-purple-500/10 text-purple-600 border border-purple-500/20 rounded-lg p-2">
-                <p className="text-xs">En Route</p>
-                <p className="text-base font-bold">{breakdown.enRoute}</p>
-              </div>
-              <div className="bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg p-2">
-                <p className="text-xs">In Progress</p>
-                <p className="text-base font-bold">{breakdown.inProgress}</p>
-              </div>
-              <div className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded-lg p-2">
-                <p className="text-xs">Completed</p>
-                <p className="text-base font-bold">{breakdown.completed}</p>
-              </div>
-              <div className="bg-red-500/10 text-red-600 border border-red-500/20 rounded-lg p-2">
-                <p className="text-xs">Delayed</p>
-                <p className="text-base font-bold">{breakdown.delayed}</p>
-              </div>
-              <div className="bg-muted text-muted-foreground rounded-lg p-2">
-                <p className="text-xs">Cancelled</p>
-                <p className="text-base font-bold">{breakdown.cancelled}</p>
+        {/* Smart Operational Service Completion Stage Tracker */}
+        <OperationalStageTracker
+          data={ops}
+          isLoading={isLoading}
+          onOpenPlaybook={(key) => openAdminIntelligencePlaybook(key)}
+        />
+
+        {/* Manager & Admin Intelligence Playbook Quick Launcher */}
+        <div className="bg-card border border-border/80 rounded-xl p-3.5 sm:p-5 shadow-xs space-y-3" data-testid="admin-intelligence-quick-launcher">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-md bg-primary/10 text-primary">
+                <MaterialSymbol name="auto_stories" size={18} weight={600} />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  Manager & Admin Intelligence Playbook
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Standard interactive operating procedures for new administrators and branch managers
+                </p>
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openAdminIntelligencePlaybook()}
+              className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/5 self-start sm:self-auto"
+            >
+              <span>Explore All SOP Guides</span>
+              <MaterialSymbol name="arrow_forward" size={13} />
+            </Button>
           </div>
-        )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5">
+            <button
+              type="button"
+              onClick={() => openAdminIntelligencePlaybook("branch_creation")}
+              className="flex flex-col items-start p-2.5 rounded-lg border border-border/70 bg-background/50 hover:bg-muted/40 hover:border-border transition-colors text-left group"
+              data-testid="sop-btn-branch-creation"
+            >
+              <span className="p-1.5 rounded-md bg-blue-500/10 text-blue-600 mb-1.5 group-hover:scale-105 transition-transform">
+                <MaterialSymbol name="account_tree" size={16} />
+              </span>
+              <span className="text-xs font-semibold text-foreground">New Branch</span>
+              <span className="text-[10px] text-muted-foreground line-clamp-1">COCO / FOFO setup</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openAdminIntelligencePlaybook("catalog_setup")}
+              className="flex flex-col items-start p-2.5 rounded-lg border border-border/70 bg-background/50 hover:bg-muted/40 hover:border-border transition-colors text-left group"
+              data-testid="sop-btn-catalog-setup"
+            >
+              <span className="p-1.5 rounded-md bg-indigo-500/10 text-indigo-600 mb-1.5 group-hover:scale-105 transition-transform">
+                <MaterialSymbol name="inventory_2" size={16} />
+              </span>
+              <span className="text-xs font-semibold text-foreground">Products & Services</span>
+              <span className="text-[10px] text-muted-foreground line-clamp-1">Catalog & City Matrix</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openAdminIntelligencePlaybook("customer_onboarding")}
+              className="flex flex-col items-start p-2.5 rounded-lg border border-border/70 bg-background/50 hover:bg-muted/40 hover:border-border transition-colors text-left group"
+              data-testid="sop-btn-customer-onboarding"
+            >
+              <span className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-600 mb-1.5 group-hover:scale-105 transition-transform">
+                <MaterialSymbol name="person_add" size={16} />
+              </span>
+              <span className="text-xs font-semibold text-foreground">New Customer</span>
+              <span className="text-[10px] text-muted-foreground line-clamp-1">Society & Vehicles</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openAdminIntelligencePlaybook("service_assignment")}
+              className="flex flex-col items-start p-2.5 rounded-lg border border-border/70 bg-background/50 hover:bg-muted/40 hover:border-border transition-colors text-left group"
+              data-testid="sop-btn-service-assignment"
+            >
+              <span className="p-1.5 rounded-md bg-amber-500/10 text-amber-600 mb-1.5 group-hover:scale-105 transition-transform">
+                <MaterialSymbol name="assignment_ind" size={16} />
+              </span>
+              <span className="text-xs font-semibold text-foreground">Assign Service</span>
+              <span className="text-[10px] text-muted-foreground line-clamp-1">Cleaner dispatch</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openAdminIntelligencePlaybook("stage_tracking")}
+              className="flex flex-col items-start p-2.5 rounded-lg border border-border/70 bg-background/50 hover:bg-muted/40 hover:border-border transition-colors text-left group"
+              data-testid="sop-btn-stage-tracking"
+            >
+              <span className="p-1.5 rounded-md bg-purple-500/10 text-purple-600 mb-1.5 group-hover:scale-105 transition-transform">
+                <MaterialSymbol name="task_alt" size={16} />
+              </span>
+              <span className="text-xs font-semibold text-foreground">Completion Stages</span>
+              <span className="text-[10px] text-muted-foreground line-clamp-1">6-Stage progression</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openAdminIntelligencePlaybook("billing_payments")}
+              className="flex flex-col items-start p-2.5 rounded-lg border border-border/70 bg-background/50 hover:bg-muted/40 hover:border-border transition-colors text-left group"
+              data-testid="sop-btn-billing-payments"
+            >
+              <span className="p-1.5 rounded-md bg-rose-500/10 text-rose-600 mb-1.5 group-hover:scale-105 transition-transform">
+                <MaterialSymbol name="receipt_long" size={16} />
+              </span>
+              <span className="text-xs font-semibold text-foreground">Billing & Payments</span>
+              <span className="text-[10px] text-muted-foreground line-clamp-1">GST & Ledger balance</span>
+            </button>
+          </div>
+        </div>
 
         {/* 2. What requires immediate attention? — Prioritized Operational Triage */}
         <div className="space-y-3" data-testid="immediate-attention-section">

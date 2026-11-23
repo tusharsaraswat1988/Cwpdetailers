@@ -580,7 +580,7 @@ describe("Phase 18: Live Technician Tracking, GPS Reliability & Operational Appr
 
       const result = await scheduleMakeupBooking(fakeReq, {
         bookingId: 202,
-        scheduledDate: "2026-11-20",
+        scheduledDate: "2028-11-20",
         scheduledTime: "10:00 AM",
         notes: "Need makeup visit for missed wash",
       });
@@ -593,7 +593,7 @@ describe("Phase 18: Live Technician Tracking, GPS Reliability & Operational Appr
       expect(approvalReq.status).toBe("pending");
       expect(approvalReq.bookingId).toBe(202);
       expect(approvalReq.customerId).toBe(300);
-      expect(approvalReq.requestedDate).toBe("2026-11-20");
+      expect(approvalReq.requestedDate).toBe("2028-11-20");
 
       // Original booking is marked as pending_approval
       const missedBooking = mockBookings.find((b) => b.id === 202);

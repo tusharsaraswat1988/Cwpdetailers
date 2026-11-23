@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { OfflineState } from "@/components/shared/OfflineState";
@@ -287,7 +288,7 @@ export function StaffChecklist({
             )}
             aria-hidden
           >
-            {item.done ? "✓" : ""}
+            {item.done ? <MaterialSymbol name="check" size={14} weight={600} /> : null}
           </span>
           <span className={cn("flex-1 text-sm font-medium", item.done && "text-muted-foreground")}>
             {item.label}

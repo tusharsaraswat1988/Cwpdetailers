@@ -1,0 +1,18 @@
+---
+description: Universal Design System integration and design intelligence layer for CWP Detailers across Admin, Staff, and Customer surfaces
+globs: artifacts/cwp-platform/src/**/*.{tsx,ts,css}
+alwaysApply: true
+---
+
+# Universal Design System — CWP Detailers
+
+When creating, editing, styling, modernizing, or auditing any user interface in the CWP Detailers ecosystem:
+
+1. **Canonical Skill**: Always consult `.cursor/skills/universal-design-system/SKILL.md` (and `.agents/skills/universal-design-system/SKILL.md`).
+2. **Tokens Over Ad-Hoc Values**: Never introduce arbitrary hex codes, random paddings, unmeasured shadows, or ad-hoc typography. Consume semantic tokens from `@/features/admin-ds`, `@/features/staff-ds`, `@/features/customer-ds`, or the shared CWP Universal Design System foundation.
+3. **Material Design 3 Iconography (Mandatory)**: Follow official Material Design 3 icon standards (https://m3.material.io/styles/icons/overview). Use consistent Material Symbols, stroke weights, optical alignments, and sizes. No emoji as UI icons.
+4. **Role-Specific Design Adaptation**:
+   - **Admin Application**: High information density, clear operational hierarchy, data tables, quick triage.
+   - **Staff Application**: High-contrast outdoor readability, minimum 44px–48px touch targets, bilingual Hindi-first, offline resilience.
+   - **Customer Application**: Clean white surfaces, subtle micro-shadows, 16:10 visual cards, frictionless booking.
+5. **Living PRD Synchronization**: Update `docs/product/CWP_NOIDA_MULTI_CITY_PRD.md` in the same work cycle.

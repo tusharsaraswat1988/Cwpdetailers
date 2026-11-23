@@ -361,7 +361,7 @@ describe("Phase 17 — Customer Self-Service Rescheduling, Dispatch Notification
       await expect(
         scheduleMakeupBooking(req, {
           bookingId: 107,
-          scheduledDate: "2026-11-20",
+          scheduledDate: "2028-11-20",
           scheduledTime: "09:00 AM - 11:00 AM",
         }),
       ).rejects.toThrow(/not authorized/);
@@ -404,7 +404,7 @@ describe("Phase 17 — Customer Self-Service Rescheduling, Dispatch Notification
 
       const result = await scheduleMakeupBooking(req, {
         bookingId: 110,
-        scheduledDate: "2026-11-20",
+        scheduledDate: "2028-11-20",
         scheduledTime: "09:00 AM - 11:00 AM",
         notes: "Please call on arrival",
       });
@@ -439,7 +439,7 @@ describe("Phase 17 — Customer Self-Service Rescheduling, Dispatch Notification
       await expect(
         scheduleMakeupBooking(req, {
           bookingId: 111,
-          scheduledDate: "2026-11-20",
+          scheduledDate: "2028-11-20",
         }),
       ).rejects.toThrow(/already been scheduled/);
     });
@@ -461,7 +461,7 @@ describe("Phase 17 — Customer Self-Service Rescheduling, Dispatch Notification
       await expect(
         scheduleMakeupBooking(req, {
           bookingId: 112,
-          scheduledDate: "2026-11-20",
+          scheduledDate: "2028-11-20",
           scheduledTime: "OCCUPIED_SLOT",
         }),
       ).rejects.toThrow(/Requested time slot is fully booked/);

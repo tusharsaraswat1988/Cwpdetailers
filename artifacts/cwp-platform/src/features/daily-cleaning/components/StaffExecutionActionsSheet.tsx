@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import {
   Dialog,
   DialogContent,
@@ -287,7 +288,10 @@ export function StaffExecutionActionsSheet({
               <label className="text-xs font-semibold text-foreground flex items-center justify-between">
                 <span>खाली बे / साइट का फोटो (अनिवार्य प्रमाण)</span>
                 {photo ? (
-                  <span className="text-[11px] text-emerald-600 font-medium">✓ फोटो ली गई</span>
+                  <span className="text-[11px] text-emerald-600 font-medium inline-flex items-center gap-1">
+                    <MaterialSymbol name="check" size={14} weight={600} />
+                    <span>फोटो ली गई</span>
+                  </span>
                 ) : (
                   <span className="text-[11px] text-rose-600 font-medium">* फोटो जरूरी है</span>
                 )}
@@ -328,14 +332,14 @@ export function StaffExecutionActionsSheet({
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"
-                className="flex-1 h-12 text-xs"
+                className="flex-1 min-h-12 h-12 text-xs font-semibold"
                 onClick={() => setSelectedException(null)}
                 disabled={isSubmitting}
               >
                 रद्द करें
               </Button>
               <Button
-                className="flex-1 h-12 text-xs font-semibold"
+                className="flex-1 min-h-12 h-12 text-xs font-semibold"
                 onClick={() => void handleSubmitException()}
                 disabled={isSubmitting || !photo}
                 data-testid="btn-confirm-exception"
@@ -382,7 +386,7 @@ export function StaffExecutionActionsSheet({
                     key={opt.id}
                     type="button"
                     onClick={() => handleSelectOption(opt)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                    className={`w-full text-left min-h-[52px] p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
                       isPrimary
                         ? "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-950 dark:text-emerald-100"
                         : "border-border/80 bg-card hover:bg-muted/50 text-foreground"

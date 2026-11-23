@@ -847,7 +847,7 @@ export default function SocietiesPage() {
 
         {/* Resolve Exception Modal */}
         <Dialog open={Boolean(resolvingException)} onOpenChange={open => !open && setResolvingException(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md max-h-[88vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
                 <AlertTriangle className="h-5 w-5 text-amber-500" />

@@ -136,7 +136,7 @@ export function DataTable<T>({
     cn(
       "px-4 py-3 text-foreground",
       c.className,
-      c.align === "right" && "text-right",
+      c.align === "right" && "text-right font-mono tabular-nums",
       c.align === "center" && "text-center",
       c.sticky === "right" && "sticky right-0 bg-card shadow-[inset_1px_0_0_hsl(var(--border))]",
     );

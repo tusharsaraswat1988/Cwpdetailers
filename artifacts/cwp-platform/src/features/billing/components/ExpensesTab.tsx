@@ -15,6 +15,7 @@ import { queuedFetch } from "@/services/queuedApi";
 import { moduleError, queuedSuccessMessage, SERVER_CONFIRMATION_REQUIRED } from "@/lib/moduleErrors";
 import { fetchWithRetry } from "@/services/apiRetry";
 import ErrorState from "@/components/shared/ErrorState";
+import { EmptyState } from "@/lib/design-system/EmptyState";
 
 const categories = ["salary", "rent", "utilities", "materials", "marketing", "travel", "maintenance", "other"];
 
@@ -161,9 +162,12 @@ export function ExpensesTab() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/30">
                 <tr>
-                  {["Category", "Description", "Vendor", "Amount", "Date", "Paid By"].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
-                  ))}
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Category</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Description</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vendor</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Amount</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Paid By</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -176,7 +180,7 @@ export function ExpensesTab() {
                       <td className="px-4 py-3"><Badge variant="outline" className="text-xs">{e.category}</Badge></td>
                       <td className="px-4 py-3">{e.description ?? "—"}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{e.vendor ?? "—"}</td>
-                      <td className="px-4 py-3 font-semibold text-destructive">₹{Number(e.amount).toLocaleString("en-IN")}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-destructive font-mono tabular-nums">₹{Number(e.amount).toLocaleString("en-IN")}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(e.expenseDate).toLocaleDateString("en-IN")}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{e.paidBy ?? "—"}</td>
                     </tr>
@@ -184,7 +188,11 @@ export function ExpensesTab() {
               </tbody>
             </table>
             {!isLoading && (expenses?.data ?? []).length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">No expenses recorded</div>
+              <EmptyState
+                icon="receipt_long"
+                title="No expenses recorded"
+                description="Record operational expenses, vendor bills, and material supplies here."
+              />
             )}
           </>
         )}

@@ -82,7 +82,7 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
         </div>
       ),
     },
-    { key: "phone", header: "Phone", cell: c => <span className="text-muted-foreground">{c.phone}</span> },
+    { key: "phone", header: "Phone", cell: c => <span className="text-muted-foreground font-mono tabular-nums">{c.phone}</span> },
     { key: "city", header: "City", cell: c => <span className="text-muted-foreground">{c.city ?? "—"}</span> },
     {
       key: "status", header: "Status",
@@ -95,8 +95,8 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
         );
       },
     },
-    { key: "wallet", header: "Wallet", align: "right", cell: c => <span className="text-primary font-medium">₹{Number(c.walletBalance).toLocaleString("en-IN")}</span> },
-    { key: "dues", header: "Dues", align: "right", cell: c => Number(c.totalDues) > 0 ? <span className="text-red-600 dark:text-red-400 font-medium">₹{Number(c.totalDues).toLocaleString("en-IN")}</span> : <span className="text-muted-foreground">—</span> },
+    { key: "wallet", header: "Wallet", align: "right", cell: c => <span className="text-primary font-medium font-mono tabular-nums">₹{Number(c.walletBalance).toLocaleString("en-IN")}</span> },
+    { key: "dues", header: "Dues", align: "right", cell: c => Number(c.totalDues) > 0 ? <span className="text-red-600 dark:text-red-400 font-medium font-mono tabular-nums">₹{Number(c.totalDues).toLocaleString("en-IN")}</span> : <span className="text-muted-foreground font-mono tabular-nums">—</span> },
     { key: "action", header: "", align: "right", cell: c => <Link href={`${basePath}/${c.id}`} className="text-primary hover:underline text-xs font-medium" data-testid={`btn-view-customer-${c.id}`}>View</Link> },
   ];
 

@@ -281,7 +281,7 @@ export function WalletAdjustmentsTab({ customerId, prefillCustomerId }: Props) {
                           {tx.notes ? ` · ${tx.notes}` : ""}
                         </p>
                       </div>
-                      <p className={`font-semibold ${tx.type === "credit" ? "text-green-600" : "text-red-400"}`}>
+                      <p className={`font-semibold font-mono tabular-nums ${tx.type === "credit" ? "text-green-600" : "text-red-400"}`}>
                         {tx.type === "credit" ? "+" : "-"}₹{tx.amount.toLocaleString("en-IN")}
                       </p>
                     </div>

@@ -263,7 +263,7 @@ export function StaffVehicleCleanDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-5 space-y-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]">
         <DialogHeader className="text-left space-y-1">
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="text-2xl font-bold font-display tracking-tight text-foreground">

@@ -48,6 +48,28 @@ For every task under this project:
 -   Report honestly what was implemented, tested, left unverified and
     still planned.
 
+## Design System & UI/UX Intelligence Layer --- Mandatory
+
+Canonical Design Intelligence Skill: `.agents/skills/universal-design-system/SKILL.md` (mirrored in `.cursor/skills/universal-design-system/SKILL.md`)
+
+When working on any visual interface, component, page, layout, style, typography, or interaction:
+
+1. **Activate the installed skill:** Always load and adhere to the Universal Design System skill at `.agents/skills/universal-design-system/SKILL.md`.
+2. **Follow the Universal methodology:**
+   - Adhere to the token architecture (Primitives -> Semantics -> Component tokens -> Platform mappings).
+   - Enforce WCAG 2.2 AA accessibility (contrast ratio >= 4.5:1 text, >= 3:1 non-text/focus rings, keyboard operability, accessible names).
+   - Never use raw hex values, arbitrary spacing, random radii, or ad-hoc shadows. Always consume canonical design tokens.
+3. **Material Design 3 Iconography (Mandatory):**
+   - Strictly follow official Material Design 3 icon guidelines: https://m3.material.io/styles/icons/overview
+   - Use the official Material Symbols standard. Maintain consistent weight (400 regular / 500 semibold), fill, sizing (18px compact, 20px base, 24px default, 28px large), and optical alignment.
+   - Do NOT mix unrelated icon families. Do NOT use emoji as interface icons.
+4. **Role-Specific Design Adaptation (No Generic Theme Flattening):**
+   - **Admin Application:** Information-dense, operational efficiency, high discoverability, searchable comboboxes, data tables, contextual help tooltips/popovers (`ADMIN_DS` tokens).
+   - **Staff Application:** Field-ready, high-contrast outdoor readability, minimum 44px–48px touch targets, single primary action focus, bilingual Hindi-first support, reliable offline sync and GPS state indicators (`STAFF_DS` tokens).
+   - **Customer Application:** Trust, clarity, frictionless service discovery, visual 16:10 catalog cards, restrained whitespace, 4-tier mobile navigation (`CUSTOMER_DS` tokens).
+5. **Living PRD Synchronization:**
+   - Every design system enhancement, component addition, or UI polish must be synchronized with `docs/product/CWP_NOIDA_MULTI_CITY_PRD.md` under requirement IDs (`UDS-*`, `CUX-*`, `STAFF-*`, `ADMIN-*`).
+
 ## Monorepo & Environment Instructions (Preserved)
 
 This is a **pnpm monorepo** (`artifacts/*` apps, `lib/*` shared libs, `scripts`) for the **CWP Detailers / Kleansolar** platform: a React 19 + Vite frontend (`@workspace/cwp-platform`) and an Express API (`@workspace/api-server`) backed by **PostgreSQL** (Drizzle ORM). Node/pnpm are enforced (`scripts/preinstall.mjs` rejects npm/yarn). Standard commands live in root `package.json`, `lib/db/package.json`, and `scripts/package.json` — prefer those over duplicating here.

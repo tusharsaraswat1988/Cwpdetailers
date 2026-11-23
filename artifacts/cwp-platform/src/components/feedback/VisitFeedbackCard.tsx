@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { qualityApi } from "@/lib/quality/api";
 
-const positiveTags = ["Great shine ✨", "Wheels clean", "Punctual timing", "Spotless glass", "Courteous cleaner"];
+const positiveTags = ["Great shine", "Wheels clean", "Punctual timing", "Spotless glass", "Courteous cleaner"];
 const negativeTags = ["Glass streaks", "Missed lower doors", "Arrived late", "Wheels skipped", "Water spots left"];
 
 export type VisitFeedbackCardProps = {

@@ -328,9 +328,6 @@ export async function getLiveTracking(
   if (!booking) {
     throw new Error("Booking not found");
   }
-  if (["completed", "cancelled", "missed"].includes(booking.status)) {
-    throw new Error(`Booking is already ${booking.status} — cannot mark en-route`);
-  }
 
   // Customer authorization check (IDOR guard)
   if (req.user?.role === "customer" && booking.customerId !== req.user.id) {

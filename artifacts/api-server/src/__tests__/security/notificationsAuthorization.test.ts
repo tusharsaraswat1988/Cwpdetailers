@@ -11,7 +11,7 @@ describe("Notifications Route Authorization & Scoping", () => {
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/cwp";
     }
-    const { buildNotificationQueryConditions } = await import("./notifications");
+    const { buildNotificationQueryConditions } = await import("../../routes/notifications");
 
     expect(() =>
       buildNotificationQueryConditions({ user: undefined, scope: undefined }, {})
@@ -22,7 +22,7 @@ describe("Notifications Route Authorization & Scoping", () => {
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/cwp";
     }
-    const { buildNotificationQueryConditions } = await import("./notifications");
+    const { buildNotificationQueryConditions } = await import("../../routes/notifications");
 
     const customerReq = {
       user: { id: 42, role: "customer", companyId: 1, branchId: 10 } as any,
@@ -38,7 +38,7 @@ describe("Notifications Route Authorization & Scoping", () => {
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/cwp";
     }
-    const { buildNotificationQueryConditions } = await import("./notifications");
+    const { buildNotificationQueryConditions } = await import("../../routes/notifications");
 
     const rootAdminReq = {
       user: { id: 1, role: "admin", companyId: null, branchId: null } as any,
@@ -56,7 +56,7 @@ describe("Notifications Route Authorization & Scoping", () => {
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/cwp";
     }
-    const { buildNotificationQueryConditions } = await import("./notifications");
+    const { buildNotificationQueryConditions } = await import("../../routes/notifications");
 
     const branchAdminReq = {
       user: { id: 5, role: "admin", companyId: 1, branchId: 10 } as any,

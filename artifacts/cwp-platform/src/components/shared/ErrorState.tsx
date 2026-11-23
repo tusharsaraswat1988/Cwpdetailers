@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
+import React, { type ReactNode } from "react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { Button } from "@/components/ui/button";
 
 interface ErrorStateProps {
@@ -22,7 +22,7 @@ export function ErrorState({
       role="alert"
     >
       <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
-        <AlertTriangle size={18} aria-hidden />
+        <MaterialSymbol name="error" size={24} weight={400} aria-hidden />
       </div>
       <h3 className="admin-state-title font-medium text-foreground">{title}</h3>
       <p className="admin-state-desc mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>

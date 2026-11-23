@@ -7,6 +7,7 @@ import { useBranding } from "@/lib/branding";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { SyncStatusIndicator } from "@/components/connectivity/SyncStatusIndicator";
 import { MANAGER_NAV_SECTIONS } from "./managerNavConfig";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import {
   Building2,
   LogOut,
@@ -180,14 +181,18 @@ export default function BranchManagerLayout({ children }: { children: ReactNode 
                 <SelectContent>
                   {myBranches.map((b) => (
                     <SelectItem key={b.id} value={String(b.id)} className="text-xs">
-                      🏢 {b.name} ({b.city})
+                      <span className="inline-flex items-center gap-1.5">
+                        <MaterialSymbol name="business" size={14} className="text-muted-foreground" />
+                        <span>{b.name} ({b.city})</span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : selectedBranch ? (
-              <Badge variant="secondary" className="text-xs font-medium py-1 px-2.5">
-                🏢 {selectedBranch.name} ({selectedBranch.city})
+              <Badge variant="secondary" className="text-xs font-medium py-1 px-2.5 inline-flex items-center gap-1.5">
+                <MaterialSymbol name="business" size={14} className="text-muted-foreground" />
+                <span>{selectedBranch.name} ({selectedBranch.city})</span>
               </Badge>
             ) : (
               <Badge variant="outline" className="text-xs text-muted-foreground">

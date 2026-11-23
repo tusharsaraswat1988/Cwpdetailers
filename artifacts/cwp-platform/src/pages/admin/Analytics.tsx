@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { ADMIN_CHART, ADMIN_CHART_COLORS } from "@/features/admin-ds";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -153,9 +154,14 @@ export default function AdminAnalytics() {
                     : "bg-primary/10 text-primary border-primary/20"
                 }`}
               >
-                {activeBranchId
-                  ? `🏢 ${selectedBranchObj?.name ?? "Branch"}`
-                  : "Founder View (All Branches)"}
+                {activeBranchId ? (
+                  <span className="inline-flex items-center gap-1">
+                    <MaterialSymbol name="business" size={13} />
+                    <span>{selectedBranchObj?.name ?? "Branch"}</span>
+                  </span>
+                ) : (
+                  "Founder View (All Branches)"
+                )}
               </span>
             </div>
             <p className="text-muted-foreground text-sm mt-0.5">

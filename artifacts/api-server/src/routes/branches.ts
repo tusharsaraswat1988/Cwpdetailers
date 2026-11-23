@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { branchesTable } from "@workspace/db";
+import { branchesTable, usersTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { tenantFilters, tenantStamp, rowInScope } from "../middlewares/tenantScope";
 import { parseOptionalContactPhone, applyOptionalContactPhoneField } from "../lib/contactFields";
@@ -85,6 +85,19 @@ router.post("/branches", async (req, res) => {
     return res.status(201).json({ ...branch, customerCount: 0, staffCount: 0, activeSubscriptionsCount: 0 });
   } catch (err) {
     req.log.error({ err }, "Create branch error");
+    const msg = err instanceof Error ? err.message : String(err);
+    if (
+      msg.includes("Company-Owned") ||
+      msg.includes("COCO") ||
+      msg.includes("prohibited") ||
+      msg.includes("franchisee") ||
+      msg.includes("validation") ||
+      msg.includes("required") ||
+      msg.includes("already exists") ||
+      msg.includes("invalid")
+    ) {
+      return res.status(400).json({ error: msg });
+    }
     return res.status(500).json({ error: "Internal server error" });
   }
 });

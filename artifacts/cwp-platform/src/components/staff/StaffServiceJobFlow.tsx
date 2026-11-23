@@ -1,4 +1,5 @@
 import { resolveMediaUrl } from "@/lib/media-url";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import {
   MapPin,
   Phone,
@@ -164,12 +165,14 @@ function JobDetailsCard({ job, addressLine }: { job: StaffJob; addressLine: stri
       <div className="flex items-center justify-between">
         <p className="font-semibold text-foreground">Job Details</p>
         {isSolar ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
-            ☀️ Solar Cleaning
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+            <MaterialSymbol name="solar_power" size={14} />
+            <span>Solar Cleaning</span>
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
-            🚗 Car Wash &amp; Care
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+            <MaterialSymbol name="directions_car" size={14} />
+            <span>Car Wash &amp; Care</span>
           </span>
         )}
       </div>
@@ -571,7 +574,7 @@ export function StaffServiceJobFlow({
                           : "border-border text-transparent"
                       }`}
                     >
-                      ✓
+                      {isChecked ? <MaterialSymbol name="check" size={14} weight={600} /> : null}
                     </span>
                     <span className={isChecked ? "line-through text-muted-foreground" : "text-foreground"}>
                       {item.label}

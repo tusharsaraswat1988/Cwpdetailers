@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BookOpen,
   LayoutDashboard,
   Users,
   UserCog,
@@ -41,6 +42,7 @@ import {
   Star,
   Megaphone,
   Gift,
+  BookOpen,
 } from "lucide-react";
 
 export type AdminNavPermission = { resource: string; action: string };
@@ -111,6 +113,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     label: "Overview",
     entries: [
       { id: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: null },
+      { id: "playbook", href: "/admin/playbook", label: "Operations Playbook", icon: BookOpen, perm: null },
       { id: "analytics", href: "/admin/analytics", label: "Analytics & Reports", icon: BarChart3, perm: { resource: "analytics", action: "view" } },
     ],
   },
