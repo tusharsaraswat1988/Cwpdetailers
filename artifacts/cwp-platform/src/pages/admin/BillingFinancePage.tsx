@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Settings2, Receipt } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
+import { openAdminIntelligencePlaybook } from "@/components/admin/intelligence";
 import { CreateInvoiceDialog } from "@/features/billing/components/CreateInvoiceDialog";
 import { RecordPaymentDialog } from "@/features/billing/components/RecordPaymentDialog";
 import { CustomerFilterBanner } from "@/features/billing/components/CustomerFilterBanner";
@@ -83,6 +85,16 @@ export default function BillingFinancePage() {
       }}
       secondaryActions={
         <>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openAdminIntelligencePlaybook("billing_payments")}
+            className="h-9 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold gap-1.5"
+            data-testid="billing-playbook-sop-btn"
+          >
+            <MaterialSymbol name="psychology" size={16} />
+            <span>Billing SOP Guide</span>
+          </Button>
           <Link href="/admin/payments/ledger">
             <Button variant="outline" size="sm" data-testid="btn-payment-ledger">
               <Receipt size={15} className="mr-1.5" />Payment Ledger

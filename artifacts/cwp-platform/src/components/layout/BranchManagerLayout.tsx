@@ -24,6 +24,10 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AdminIntelligenceDrawer,
+  openAdminIntelligencePlaybook,
+} from "@/components/admin/intelligence";
 
 type AssignedBranch = {
   id: number;
@@ -202,6 +206,16 @@ export default function BranchManagerLayout({ children }: { children: ReactNode 
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5 hidden sm:inline-flex"
+              onClick={() => openAdminIntelligencePlaybook()}
+              data-testid="manager-header-intelligence-playbook-btn"
+            >
+              <MaterialSymbol name="psychology" size={16} weight={500} />
+              <span>Playbook &amp; SOPs</span>
+            </Button>
             <Badge variant="outline" className="text-xs border-primary/30 text-primary hidden sm:inline-flex">
               <Shield size={12} className="mr-1" /> Branch Manager Portal
             </Badge>
@@ -221,6 +235,9 @@ export default function BranchManagerLayout({ children }: { children: ReactNode 
           {children}
         </main>
       </div>
+
+      {/* Global Manager Intelligence Drawer */}
+      <AdminIntelligenceDrawer />
     </div>
   );
 }

@@ -3,6 +3,9 @@ import { useLocation } from "wouter";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useBranding } from "@/lib/branding";
 import { PageActionHeader } from "@/components/layout/PageActionHeader";
+import { Button } from "@/components/ui/button";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
+import { openAdminIntelligencePlaybook } from "@/components/admin/intelligence";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -119,6 +122,18 @@ export default function ProductsAndPlansPage() {
             href: "/admin/services?tab=wash-services",
             testId: "catalog-primary-cta",
           } : undefined}
+          secondaryActions={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openAdminIntelligencePlaybook("catalog_setup")}
+              className="h-9 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold gap-1.5"
+              data-testid="catalog-playbook-sop-btn"
+            >
+              <MaterialSymbol name="psychology" size={16} />
+              <span>Catalog SOP Guide</span>
+            </Button>
+          }
         />
 
         {isHomepage ? (

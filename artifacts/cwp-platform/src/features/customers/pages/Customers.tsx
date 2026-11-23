@@ -13,6 +13,8 @@ import { CustomerAvatar } from "@/components/shared/CustomerAvatar";
 import { QuickCreateCustomerForm } from "../components/QuickCreateCustomerForm";
 import { PageActionHeader } from "@/components/layout/PageActionHeader";
 import { CustomerHubAdminNav } from "../components/CustomerHubAdminNav";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
+import { openAdminIntelligencePlaybook } from "@/components/admin/intelligence";
 import {
   apiToFounderStatus,
   founderStatusBadgeClass,
@@ -114,13 +116,25 @@ export default function CustomersPage({ Layout, basePath }: CustomersPortalConfi
               testId: "customer-profile-primary-cta",
             }}
             secondaryActions={
-              <Can resource="customers" action="create">
-                <Button variant="outline" asChild data-testid="btn-import-customers">
-                  <Link href="/admin/customers/migration">
-                    <Upload size={15} className="mr-1.5" />Import Existing Customers
-                  </Link>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openAdminIntelligencePlaybook("customer_onboarding")}
+                  className="h-9 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold gap-1.5"
+                  data-testid="customers-playbook-sop-btn"
+                >
+                  <MaterialSymbol name="psychology" size={16} />
+                  <span>Onboarding SOP Guide</span>
                 </Button>
-              </Can>
+                <Can resource="customers" action="create">
+                  <Button variant="outline" asChild data-testid="btn-import-customers">
+                    <Link href="/admin/customers/migration">
+                      <Upload size={15} className="mr-1.5" />Import Existing Customers
+                    </Link>
+                  </Button>
+                </Can>
+              </div>
             }
           />
         ) : (

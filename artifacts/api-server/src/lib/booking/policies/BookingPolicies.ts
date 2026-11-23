@@ -27,7 +27,16 @@ export type CancellationPolicyInput = {
   reason?: string;
 };
 
-const CANCELLABLE = ["draft", "scheduled", "confirmed", "waiting_assignment", "rescheduled"];
+const CANCELLABLE = [
+  "draft",
+  "scheduled",
+  "confirmed",
+  "waiting_assignment",
+  "rescheduled",
+  "assigned",
+  "in_progress",
+  "missed",
+];
 
 export const cancellationPolicy: BookingPolicy<CancellationPolicyInput, PolicyResult> = {
   name: "CancellationPolicy",

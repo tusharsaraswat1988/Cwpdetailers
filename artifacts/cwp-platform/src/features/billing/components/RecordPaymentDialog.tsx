@@ -30,6 +30,9 @@ type OpenInvoice = {
   balanceDue: string;
   totalAmount: string;
   paidAmount: string;
+  dueDate?: string;
+  createdAt?: string;
+  issueDate?: string;
 };
 
 async function fetchOpenInvoices(customerId: number): Promise<OpenInvoice[]> {
@@ -162,15 +165,55 @@ export function RecordPaymentDialog({ open: controlledOpen, onOpenChange, prefil
           </p>
         )}
         <div>
-          <Label>Invoice ID</Label>
-          <Input
-            data-testid="input-pay-invoiceId"
-            type="number"
-            value={payForm.invoiceId}
-            onChange={e => setPayForm(f => ({ ...f, invoiceId: e.target.value }))}
-            className="mt-1"
-            placeholder={openInvoices.length ? "Auto-filled from oldest open invoice" : "Optional — links payment to invoice"}
-          />
+          <div className="flex items-center justify-between">
+            <Label>Invoice</Label>
+            {openInvoices.length > 0 && (
+              <span className="text-xs text-muted-foreground">{openInvoices.length} open invoice{openInvoices.length > 1 ? "s" : ""}</span>
+            )}
+          </div>
+          {openInvoices.length > 0 ? (
+            <Select
+              value={payForm.invoiceId ? String(payForm.invoiceId) : "none"}
+              onValueChange={v => {
+                const invId = v === "none" ? "" : v;
+                const chosen = openInvoices.find(inv => String(inv.id) === invId);
+                const due = chosen ? parseFloat(chosen.balanceDue || "0") : 0;
+                setPayForm(f => ({
+                  ...f,
+                  invoiceId: invId,
+                  amount: due > 0 ? String(due) : f.amount,
+                }));
+              }}
+            >
+              <SelectTrigger data-testid="input-pay-invoiceId" className="mt-1">
+                <SelectValue placeholder="Select an open invoice…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None — General Account Credit (Unlinked)</SelectItem>
+                {openInvoices.map(inv => {
+                  const dateStr = inv.dueDate
+                    ? new Date(inv.dueDate).toLocaleDateString("en-IN")
+                    : inv.createdAt
+                    ? new Date(inv.createdAt).toLocaleDateString("en-IN")
+                    : "";
+                  return (
+                    <SelectItem key={inv.id} value={String(inv.id)}>
+                      {inv.invoiceNumber} {dateStr ? `(${dateStr})` : ""} — Due ₹{parseFloat(inv.balanceDue || "0").toLocaleString("en-IN")}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              data-testid="input-pay-invoiceId"
+              type="number"
+              value={payForm.invoiceId}
+              onChange={e => setPayForm(f => ({ ...f, invoiceId: e.target.value }))}
+              className="mt-1"
+              placeholder={customerId ? "No open invoices found (optional custom ID)" : "Select customer first"}
+            />
+          )}
         </div>
         <div>
           <Label>External amount (₹)</Label>

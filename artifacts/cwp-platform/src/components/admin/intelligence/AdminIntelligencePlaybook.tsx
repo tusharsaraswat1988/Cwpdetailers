@@ -312,25 +312,87 @@ export interface AdminIntelligencePlaybookProps {
   onClose?: () => void;
 }
 
+const PLAYBOOK_STORAGE_KEY = "cwp_ops_playbook_completed_steps";
+
+function getStorage(): Storage | null {
+  try {
+    if (typeof window !== "undefined" && window.localStorage && typeof window.localStorage.getItem === "function") {
+      return window.localStorage;
+    }
+    if (typeof globalThis !== "undefined" && (globalThis as any).localStorage && typeof (globalThis as any).localStorage.getItem === "function") {
+      return (globalThis as any).localStorage;
+    }
+  } catch {}
+  return null;
+}
+
+function getCompletedSteps(): Record<string, number[]> {
+  try {
+    const storage = getStorage();
+    if (!storage) return {};
+    const raw = storage.getItem(PLAYBOOK_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveCompletedSteps(data: Record<string, number[]>) {
+  try {
+    const storage = getStorage();
+    if (!storage) return;
+    storage.setItem(PLAYBOOK_STORAGE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
 export function AdminIntelligencePlaybook({
   initialWorkflow = "branch_creation",
   onClose,
 }: AdminIntelligencePlaybookProps) {
   const [activeWorkflow, setActiveWorkflow] = useState<string>(initialWorkflow);
   const [searchQuery, setSearchQuery] = useState("");
+  const [completedStepsMap, setCompletedStepsMap] = useState<Record<string, number[]>>(() => getCompletedSteps());
+
+  const toggleStep = (guideId: string, stepNumber: number) => {
+    setCompletedStepsMap((prev) => {
+      const current = prev[guideId] || [];
+      const isDone = current.includes(stepNumber);
+      const updated = isDone ? current.filter((n) => n !== stepNumber) : [...current, stepNumber];
+      const nextMap = { ...prev, [guideId]: updated };
+      saveCompletedSteps(nextMap);
+      return nextMap;
+    });
+  };
+
+  const resetGuideSteps = (guideId: string) => {
+    setCompletedStepsMap((prev) => {
+      const nextMap = { ...prev, [guideId]: [] };
+      saveCompletedSteps(nextMap);
+      return nextMap;
+    });
+  };
 
   const filteredGuides = WORKFLOW_GUIDES.filter((guide) => {
     if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      guide.title.toLowerCase().includes(q) ||
-      guide.summary.toLowerCase().includes(q) ||
-      guide.category.toLowerCase().includes(q) ||
-      guide.steps.some((s) => s.title.toLowerCase().includes(q) || s.detail.toLowerCase().includes(q))
-    );
+    const tokens = searchQuery.toLowerCase().trim().split(/\s+/);
+    const haystack = [
+      guide.title,
+      guide.summary,
+      guide.category,
+      ...guide.steps.map((s) => `${s.title} ${s.detail} ${s.tip ?? ""}`),
+      ...guide.commonPitfalls,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return tokens.every((token) => haystack.includes(token));
   });
 
   const selectedGuide = WORKFLOW_GUIDES.find((g) => g.id === activeWorkflow) ?? WORKFLOW_GUIDES[0];
+  const currentDone = selectedGuide ? completedStepsMap[selectedGuide.id] || [] : [];
+  const progressPct = selectedGuide
+    ? Math.round((currentDone.length / Math.max(1, selectedGuide.steps.length)) * 100)
+    : 0;
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="admin-intelligence-playbook">
@@ -391,6 +453,9 @@ export function AdminIntelligencePlaybook({
 
           {filteredGuides.map((guide) => {
             const isSelected = guide.id === selectedGuide?.id;
+            const done = (completedStepsMap[guide.id] || []).length;
+            const isAllDone = done === guide.steps.length && guide.steps.length > 0;
+
             return (
               <button
                 key={guide.id}
@@ -405,10 +470,14 @@ export function AdminIntelligencePlaybook({
               >
                 <span
                   className={`p-1.5 rounded-lg shrink-0 ${
-                    isSelected ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
+                    isSelected
+                      ? "bg-white/20 text-white"
+                      : isAllDone
+                      ? "bg-emerald-500/10 text-emerald-600"
+                      : "bg-primary/10 text-primary"
                   }`}
                 >
-                  <MaterialSymbol name={guide.icon} size={18} />
+                  <MaterialSymbol name={isAllDone && !isSelected ? "check_circle" : guide.icon} size={18} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-1">
@@ -416,7 +485,7 @@ export function AdminIntelligencePlaybook({
                       {guide.category}
                     </span>
                     <span className="text-[10px] opacity-75 whitespace-nowrap">
-                      {guide.steps.length} steps
+                      {done > 0 ? `${done}/${guide.steps.length} done` : `${guide.steps.length} steps`}
                     </span>
                   </div>
                   <p className="text-xs font-bold truncate mt-0.5">{guide.title}</p>
@@ -455,7 +524,7 @@ export function AdminIntelligencePlaybook({
                 </p>
               </div>
 
-              <div className="shrink-0">
+              <div className="shrink-0 flex items-center gap-2">
                 <Button size="sm" className="gap-1.5 text-xs shadow-xs" asChild>
                   <Link href={selectedGuide.primaryAction.href}>
                     <span>{selectedGuide.primaryAction.label}</span>
@@ -465,52 +534,125 @@ export function AdminIntelligencePlaybook({
               </div>
             </div>
 
+            {/* Checklist Progress Bar */}
+            <div className="p-3 rounded-xl bg-card border border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex-1 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <MaterialSymbol name="task_alt" size={15} className="text-primary" />
+                    <span>Workflow Checklist Progress</span>
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {currentDone.length} of {selectedGuide.steps.length} steps completed ({progressPct}%)
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                    data-testid="playbook-progress-bar"
+                  />
+                </div>
+              </div>
+
+              {currentDone.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => resetGuideSteps(selectedGuide.id)}
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                  data-testid="playbook-reset-steps-btn"
+                >
+                  <MaterialSymbol name="restart_alt" size={14} className="mr-1" />
+                  <span>Reset Checklist</span>
+                </Button>
+              )}
+            </div>
+
             {/* Step-by-Step Flow */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <MaterialSymbol name="format_list_numbered" size={16} className="text-primary" />
-                <span>Execution Steps ({selectedGuide.steps.length})</span>
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <MaterialSymbol name="format_list_numbered" size={16} className="text-primary" />
+                  <span>Execution Steps ({selectedGuide.steps.length})</span>
+                </h4>
+                <span className="text-[11px] text-muted-foreground">
+                  Click number to check off step as you complete it
+                </span>
+              </div>
 
               <div className="space-y-3">
-                {selectedGuide.steps.map((step) => (
-                  <div
-                    key={step.number}
-                    className="p-3.5 sm:p-4 rounded-xl border border-border/80 bg-card/60 hover:bg-card transition-colors space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2.5">
-                        <span className="flex h-6 w-6 rounded-full bg-primary/10 text-primary font-bold text-xs items-center justify-center shrink-0 mt-0.5">
-                          {step.number}
-                        </span>
-                        <div>
-                          <p className="text-xs sm:text-sm font-bold text-foreground">
-                            {step.title}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                            {step.detail}
-                          </p>
+                {selectedGuide.steps.map((step) => {
+                  const isStepDone = currentDone.includes(step.number);
+
+                  return (
+                    <div
+                      key={step.number}
+                      className={`p-3.5 sm:p-4 rounded-xl border transition-all space-y-2 ${
+                        isStepDone
+                          ? "border-emerald-500/40 bg-emerald-500/5"
+                          : "border-border/80 bg-card/60 hover:bg-card"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleStep(selectedGuide.id, step.number)}
+                            className={`flex h-6 w-6 rounded-full font-bold text-xs items-center justify-center shrink-0 mt-0.5 transition-colors cursor-pointer ${
+                              isStepDone
+                                ? "bg-emerald-600 text-white shadow-xs"
+                                : "bg-primary/10 text-primary hover:bg-primary/20"
+                            }`}
+                            data-testid={`playbook-step-check-${step.number}`}
+                            title={isStepDone ? "Mark step as pending" : "Mark step as completed"}
+                          >
+                            {isStepDone ? (
+                              <MaterialSymbol name="check" size={14} weight={700} />
+                            ) : (
+                              step.number
+                            )}
+                          </button>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p
+                                className={`text-xs sm:text-sm font-bold ${
+                                  isStepDone ? "text-emerald-700 dark:text-emerald-300 line-through opacity-85" : "text-foreground"
+                                }`}
+                              >
+                                {step.title}
+                              </p>
+                              {isStepDone && (
+                                <Badge variant="outline" className="text-[10px] py-0 px-1 border-emerald-500/40 text-emerald-600">
+                                  Done
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                              {step.detail}
+                            </p>
+                          </div>
                         </div>
+
+                        {step.action && (
+                          <Button variant="outline" size="sm" className="h-7 text-[11px] shrink-0" asChild>
+                            <Link href={step.action.href}>
+                              <span>{step.action.label}</span>
+                              <MaterialSymbol name="arrow_forward" size={12} className="ml-1" />
+                            </Link>
+                          </Button>
+                        )}
                       </div>
 
-                      {step.action && (
-                        <Button variant="outline" size="sm" className="h-7 text-[11px] shrink-0" asChild>
-                          <Link href={step.action.href}>
-                            <span>{step.action.label}</span>
-                            <MaterialSymbol name="arrow_forward" size={12} className="ml-1" />
-                          </Link>
-                        </Button>
+                      {step.tip && (
+                        <div className="ml-8 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                          <MaterialSymbol name="lightbulb" size={14} className="shrink-0" />
+                          <span><strong>Tip:</strong> {step.tip}</span>
+                        </div>
                       )}
                     </div>
-
-                    {step.tip && (
-                      <div className="ml-8 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-                        <MaterialSymbol name="lightbulb" size={14} className="shrink-0" />
-                        <span><strong>Tip:</strong> {step.tip}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

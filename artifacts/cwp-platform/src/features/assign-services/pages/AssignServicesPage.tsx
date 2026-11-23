@@ -73,6 +73,8 @@ import {
 } from "@/features/assign-services/api";
 import { formatAssignmentLocation } from "@/features/assign-services/formatLocation";
 import { listServiceLocations, createServiceLocation } from "@/features/service-locations/api";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
+import { openAdminIntelligencePlaybook } from "@/components/admin/intelligence";
 import { roleSlugForTaskType, taskTypeLabel } from "@/lib/staff-ecosystem/taskTypes";
 import { roleLabelForSlug } from "@/lib/staff-ecosystem/roles";
 import { format, parseISO, isValid } from "date-fns";
@@ -1270,6 +1272,18 @@ export default function AssignServicesPage() {
         },
         testId: "assign-service-primary-cta",
       }}
+      secondaryActions={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => openAdminIntelligencePlaybook("service_assignment")}
+          className="h-9 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold gap-1.5"
+          data-testid="assign-services-playbook-sop-btn"
+        >
+          <MaterialSymbol name="psychology" size={16} />
+          <span>Assignment SOP Guide</span>
+        </Button>
+      }
       stats={<KpiRow items={kpis} columns={6} />}
       filters={
         <FilterBar

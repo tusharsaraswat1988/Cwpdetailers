@@ -34,6 +34,7 @@ import {
   bookingCapability,
   BookingCoverageError,
   BookingValidationError,
+  BookingStateMachineError,
   resolveBookingTraceId,
   BOOKING_TRANSITIONS,
 } from "../lib/booking";
@@ -1020,7 +1021,8 @@ router.post("/bookings/:id/cancel", async (req, res) => {
     await db.update(pendingServiceAssignmentsTable)
       .set({ status: "cancelled", updatedAt: new Date() })
       .where(and(
-        eq(pendingServiceAssignmentsTable.bookingId, id),
+        eq(pendingServiceAssignmentsTable.sourceSystem, "booking"),
+        eq(pendingServiceAssignmentsTable.sourceId, id),
         sql`${pendingServiceAssignmentsTable.status} != 'cancelled'`,
       ));
     await db.update(serviceAssignmentsTable)
@@ -1053,8 +1055,8 @@ router.post("/bookings/:id/cancel", async (req, res) => {
 
     return res.json(booking);
   } catch (err) {
-    if (err instanceof BookingValidationError) {
-      return res.status(400).json({ error: err.message, code: err.code });
+    if (err instanceof BookingValidationError || err instanceof BookingStateMachineError) {
+      return res.status(400).json({ error: (err as any).message, code: (err as any).code });
     }
     req.log.error({ err }, "Cancel booking error");
     return res.status(500).json({ error: "Internal server error" });

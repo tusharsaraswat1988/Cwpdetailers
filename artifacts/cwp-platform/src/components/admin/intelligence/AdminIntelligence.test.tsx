@@ -216,6 +216,60 @@ describe("Admin & Manager Intelligence System", () => {
       expect(container.querySelector("[data-testid='playbook-nav-branch_creation']")).toBeNull();
     });
 
+    it("toggles step completion and persists to localStorage", () => {
+      act(() => {
+        root.render(<AdminIntelligencePlaybook initialWorkflow="branch_creation" />);
+      });
+
+      const step1Check = container.querySelector("[data-testid='playbook-step-check-1']") as HTMLButtonElement;
+      expect(step1Check).not.toBeNull();
+
+      act(() => {
+        step1Check.click();
+      });
+
+      // Verify step 1 has checked state
+      expect(container.textContent).toContain("Done");
+
+      // Verify localStorage was updated
+      const stored = JSON.parse(localStorage.getItem("cwp_ops_playbook_completed_steps") || "{}");
+      expect(stored.branch_creation).toContain(1);
+
+      // Verify reset button appears and clears completed steps
+      const resetBtn = container.querySelector("[data-testid='playbook-reset-steps-btn']") as HTMLButtonElement;
+      expect(resetBtn).not.toBeNull();
+
+      act(() => {
+        resetBtn.click();
+      });
+
+      const updatedStored = JSON.parse(localStorage.getItem("cwp_ops_playbook_completed_steps") || "{}");
+      expect(updatedStored.branch_creation).toEqual([]);
+    });
+
+    it("adapts OperationalStageTracker links to manager scope when on /manager route", () => {
+      // Mock window location pathname
+      const originalPath = window.location.pathname;
+      try {
+        Object.defineProperty(window, "location", {
+          value: { ...window.location, pathname: "/manager/dashboard" },
+          writable: true,
+        });
+
+        act(() => {
+          root.render(<OperationalStageTracker data={mockCommandCenterData} />);
+        });
+
+        const unassignedLink = container.querySelector("[data-testid='alert-unassigned-jobs'] a");
+        expect(unassignedLink?.getAttribute("href")).toBe("/manager/assign-services");
+      } finally {
+        Object.defineProperty(window, "location", {
+          value: { ...window.location, pathname: originalPath },
+          writable: true,
+        });
+      }
+    });
+
     it("openAdminIntelligencePlaybook helper dispatches custom window event", () => {
       const listener = vi.fn();
       window.addEventListener("cwp:open-intelligence-playbook", listener);

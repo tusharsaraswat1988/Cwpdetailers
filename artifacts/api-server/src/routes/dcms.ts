@@ -50,7 +50,7 @@ import {
 } from "@workspace/db";
 import { createUnifiedPaymentOrder } from "../lib/payments/unifiedPaymentService";
 import { pauseSubscription, resumeSubscription } from "../lib/dcms/subscriptionService";
-import { eq, desc, sql, inArray } from "drizzle-orm";
+import { eq, desc, sql, inArray, and } from "drizzle-orm";
 import { OPERATIONAL_ROLE_SLUGS, staffHasOperationalRole, attachOperationalRoles } from "../lib/staffEcosystem/operationalRoles";
 
 const router = Router();

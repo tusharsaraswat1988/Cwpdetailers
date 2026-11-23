@@ -33,6 +33,9 @@ export function OperationalStageTracker({
   const assignedCount = Math.max(0, confirmedCount - unassigned - inProgressCount);
   const qualityReviewCount = Math.max(0, (metrics?.pendingQualityReviewCount ?? 0) || Math.min(2, completed > 0 ? 1 : 0));
 
+  const isManager = typeof window !== "undefined" && window.location.pathname.startsWith("/manager");
+  const baseRoute = isManager ? "/manager" : "/admin";
+
   const stages = [
     {
       id: "waiting_assignment",
@@ -44,7 +47,7 @@ export function OperationalStageTracker({
       tone: unassigned > 0 ? ("warning" as const) : ("neutral" as const),
       description: "Bookings & recurring visits lacking cleaner allocation",
       actionLabel: "Assign Now",
-      actionHref: "/admin/assign-services",
+      actionHref: `${baseRoute}/assign-services`,
       sopKey: "service_assignment",
     },
     {
@@ -56,8 +59,8 @@ export function OperationalStageTracker({
       icon: "assignment_ind",
       tone: "neutral" as const,
       description: "Route prepared on Staff App, awaiting dispatch",
-      actionLabel: "Job Board",
-      actionHref: "/admin/jobs",
+      actionLabel: isManager ? "Staff Assignments" : "Job Board",
+      actionHref: isManager ? "/manager/daily-cleaning/assignments" : "/admin/jobs",
       sopKey: "service_assignment",
     },
     {
@@ -70,7 +73,7 @@ export function OperationalStageTracker({
       tone: delayed > 0 ? ("danger" as const) : ("neutral" as const),
       description: "Technician traveling with live GPS telemetry",
       actionLabel: delayed > 0 ? "Triage Delayed" : "Live Route",
-      actionHref: "/admin/daily-cleaning",
+      actionHref: isManager ? "/manager/daily-cleaning" : "/admin/daily-cleaning",
       sopKey: "stage_tracking",
     },
     {
@@ -82,8 +85,8 @@ export function OperationalStageTracker({
       icon: "cleaning_services",
       tone: "primary" as const,
       description: "Doorstep detailing or car wash actively underway",
-      actionLabel: "Operations Wall",
-      actionHref: "/admin/service-updates",
+      actionLabel: isManager ? "Wash History" : "Operations Wall",
+      actionHref: isManager ? "/manager/daily-cleaning/history" : "/admin/service-updates",
       sopKey: "stage_tracking",
     },
     {
@@ -95,8 +98,8 @@ export function OperationalStageTracker({
       icon: "photo_camera",
       tone: qualityReviewCount > 0 ? ("info" as const) : ("neutral" as const),
       description: "Before/After shutter proofs pending sign-off",
-      actionLabel: "Review Proofs",
-      actionHref: "/admin/approvals",
+      actionLabel: isManager ? "Quality Hub" : "Review Proofs",
+      actionHref: isManager ? "/manager/quality" : "/admin/approvals",
       sopKey: "stage_tracking",
     },
     {
@@ -108,8 +111,8 @@ export function OperationalStageTracker({
       icon: "verified",
       tone: "success" as const,
       description: "Successfully executed and logged in ledger",
-      actionLabel: "Invoices & Ledger",
-      actionHref: "/admin/billing",
+      actionLabel: isManager ? "Branch Reports" : "Invoices & Ledger",
+      actionHref: isManager ? "/manager/reports" : "/admin/billing",
       sopKey: "billing_payments",
     },
   ];
@@ -176,7 +179,7 @@ export function OperationalStageTracker({
                   </span>
                 </div>
                 <Button size="sm" variant="ghost" className="h-6 px-2 text-xs font-semibold text-red-700 dark:text-red-300 hover:bg-red-500/20" asChild>
-                  <Link href="/admin/assign-services">Assign Now →</Link>
+                  <Link href={`${baseRoute}/assign-services`}>Assign Now →</Link>
                 </Button>
               </div>
             )}
@@ -193,7 +196,7 @@ export function OperationalStageTracker({
                   </span>
                 </div>
                 <Button size="sm" variant="ghost" className="h-6 px-2 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/20" asChild>
-                  <Link href="/admin/daily-cleaning">Triage →</Link>
+                  <Link href={isManager ? "/manager/daily-cleaning" : "/admin/daily-cleaning"}>Triage →</Link>
                 </Button>
               </div>
             )}
