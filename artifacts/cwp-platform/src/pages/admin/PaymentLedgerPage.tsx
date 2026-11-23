@@ -48,7 +48,11 @@ import {
   BarChart3,
   Layers,
   ArrowUpRight,
+  MapPin,
 } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
+import { openAdminIntelligencePlaybook } from "@/components/admin/intelligence";
 import {
   TransactionDetailsDrawer,
   type LedgerRowData,
@@ -429,6 +433,17 @@ export default function PaymentLedgerPage() {
       breadcrumbs={[{ label: "Commercial" }, { label: "Financial Command Center" }]}
       secondaryActions={
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openAdminIntelligencePlaybook("billing_payments")}
+            data-testid="ledger-playbook-sop-btn"
+            className="flex items-center gap-1.5 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/5"
+          >
+            <MaterialSymbol name="psychology" size={16} />
+            <span>Payments SOP</span>
+          </Button>
+
           {/* Refresh Interval Selector */}
           <div className="flex items-center gap-1.5 bg-muted/50 border border-border px-2 py-1 rounded-md text-xs text-muted-foreground">
             <Clock size={12} />

@@ -9,6 +9,9 @@ export type OperationsMetrics = {
   openComplaintsCount: number;
   failedPaymentsCount: number;
   activeStaffOnField: number;
+  pendingQualityReviewCount?: number;
+  todayRevenueInr?: number;
+  inProgressServicesToday?: number;
 };
 
 export type ImmediateAttentionItem = {

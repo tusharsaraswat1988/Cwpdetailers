@@ -43,10 +43,13 @@ import {
   BookOpen,
   ArrowUpRight,
   HelpCircle,
+  Loader2,
 } from "lucide-react";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { useMasterList, type City } from "@/features/master-data/api";
 import { BranchSetupGuidelinesModal } from "@/components/admin/BranchSetupGuidelinesModal";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
+import { openAdminIntelligencePlaybook } from "@/components/admin/intelligence";
 
 type BranchAssignmentItem = {
   id: number;
@@ -235,6 +238,7 @@ export default function BranchesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<BranchForm>(emptyForm());
   const [createPhoneError, setCreatePhoneError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [editingBranch, setEditingBranch] = useState<BranchItem | null>(null);
   const [editForm, setEditForm] = useState<BranchForm>(emptyForm());
@@ -268,6 +272,24 @@ export default function BranchesPage() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["branches"] });
     qc.invalidateQueries({ queryKey: ["analytics"] });
+  };
+
+  const openEdit = (b: BranchItem) => {
+    setEditingBranch(b);
+    setEditForm({
+      name: b.name,
+      code: b.code || "",
+      city: b.city,
+      cityId: b.cityId ? String(b.cityId) : "",
+      address: b.address || "",
+      phone: b.phone || "",
+      managerName: b.managerName || "",
+      isCompanyOperated: b.isCompanyOperated,
+      franchiseeId: b.franchiseeId ? String(b.franchiseeId) : "",
+      legalEntityId: b.legalEntityId ? String(b.legalEntityId) : "",
+      operationalNotes: b.operationalNotes || "",
+      isActive: b.isActive,
+    });
   };
 
   const openAssignments = async (b: BranchItem) => {
@@ -382,6 +404,11 @@ export default function BranchesPage() {
       toast({ title: "Branch name and city are required", variant: "destructive" });
       return;
     }
+    if (createPhoneError) {
+      toast({ title: "Invalid Phone Number", description: createPhoneError, variant: "destructive" });
+      return;
+    }
+    setIsSubmitting(true);
     try {
       const res = await fetch("/api/branches", {
         method: "POST",
@@ -411,6 +438,8 @@ export default function BranchesPage() {
       toast({ title: "Branch created successfully" });
     } catch (err: any) {
       toast({ title: "Failed to create branch", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -673,23 +702,8 @@ export default function BranchesPage() {
                         size="sm"
                         variant="outline"
                         className="text-xs h-8 px-2"
-                        onClick={() => {
-                          setEditingBranch(b);
-                          setEditForm({
-                            name: b.name,
-                            code: b.code || "",
-                            city: b.city,
-                            cityId: b.cityId ? String(b.cityId) : "",
-                            address: b.address || "",
-                            phone: b.phone || "",
-                            managerName: b.managerName || "",
-                            isCompanyOperated: b.isCompanyOperated,
-                            franchiseeId: b.franchiseeId ? String(b.franchiseeId) : "",
-                            legalEntityId: b.legalEntityId ? String(b.legalEntityId) : "",
-                            operationalNotes: b.operationalNotes || "",
-                            isActive: b.isActive,
-                          });
-                        }}
+                        onClick={() => openEdit(b)}
+                        title="Edit Branch"
                       >
                         <Pencil className="h-3 w-3" />
                       </Button>
@@ -1315,10 +1329,13 @@ export default function BranchesPage() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate}>Save Branch</Button>
+              <Button onClick={handleCreate} disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Branch
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -16,6 +16,9 @@ import { EmptyState as SharedEmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { OfflineState } from "@/components/shared/OfflineState";
 import { PermissionDeniedState } from "@/components/shared/PermissionDeniedState";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Toast, ToastClose, ToastProvider, ToastViewport } from "@/components/ui/toast";
 
 // Polyfills for jsdom
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -262,5 +265,64 @@ describe("CWP Universal Design System — Components", () => {
     expect(container.querySelector("[data-testid='error-state'] [data-m3-symbol='error']")).toBeTruthy();
     expect(container.querySelector("[data-testid='offline-state'] [data-m3-symbol='wifi_off']")).toBeTruthy();
     expect(container.querySelector("[data-testid='permission-denied-state'] [data-m3-symbol='shield']")).toBeTruthy();
+  });
+
+  it("Dialog and Sheet close buttons render canonical M3 Material Symbols with close icon", () => {
+    act(() => {
+      root.render(
+        <div>
+          <Dialog open={true}>
+            <DialogContent data-testid="test-dialog">
+              <DialogTitle>Dialog Title</DialogTitle>
+              <DialogDescription>Dialog Description</DialogDescription>
+              <p>Dialog Body</p>
+            </DialogContent>
+          </Dialog>
+        </div>
+      );
+    });
+
+    const dialogContent = document.body.querySelector("[data-testid='test-dialog']");
+    expect(dialogContent).toBeTruthy();
+    const closeBtn = dialogContent?.querySelector("button:has([data-m3-symbol='close'])");
+    expect(closeBtn).toBeTruthy();
+    expect(closeBtn?.className).toContain("z-20");
+
+    act(() => {
+      root.render(
+        <div>
+          <Sheet open={true}>
+            <SheetContent data-testid="test-sheet">
+              <SheetTitle>Sheet Title</SheetTitle>
+              <SheetDescription>Sheet Description</SheetDescription>
+              <p>Sheet Body</p>
+            </SheetContent>
+          </Sheet>
+        </div>
+      );
+    });
+
+    const sheetContent = document.body.querySelector("[data-testid='test-sheet']");
+    expect(sheetContent).toBeTruthy();
+    const sheetCloseBtn = sheetContent?.querySelector("button:has([data-m3-symbol='close'])");
+    expect(sheetCloseBtn).toBeTruthy();
+  });
+
+  it("ToastClose renders canonical Material Symbol close icon", () => {
+    act(() => {
+      root.render(
+        <ToastProvider>
+          <Toast open={true}>
+            <span>Toast Message</span>
+            <ToastClose data-testid="toast-close-btn" />
+          </Toast>
+          <ToastViewport />
+        </ToastProvider>
+      );
+    });
+
+    const toastClose = document.body.querySelector("[data-testid='toast-close-btn']");
+    expect(toastClose).toBeTruthy();
+    expect(toastClose?.querySelector("[data-m3-symbol='close']")).toBeTruthy();
   });
 });

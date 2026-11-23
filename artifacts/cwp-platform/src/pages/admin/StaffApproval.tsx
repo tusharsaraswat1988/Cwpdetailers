@@ -53,7 +53,7 @@ export default function AdminStaffApproval() {
     mutationFn: ({ id, action, notes }: { id: number; action: string; notes?: string }) => verifyStaff(id, action, notes),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["staff-approval"] });
-      toast({ title: vars.action === "verified" ? "Staff verified ✓" : "Staff rejected" });
+      toast({ title: vars.action === "verified" ? "Staff verified" : "Staff rejected" });
       setNoteFor(null); setNoteText("");
     },
     onError: () => toast({ title: "Action failed", variant: "destructive" }),

@@ -33,6 +33,7 @@ import {
   authMutedLinkClass,
 } from "@/components/auth/authStyles";
 import { ArrowLeft, Loader2, Mail, Smartphone } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { cn } from "@/lib/utils";
 
 type AuthPortal = "customer" | "staff" | "admin";
@@ -319,15 +320,14 @@ export default function ForgotPasswordPage({ portal: portalProp }: ForgotPasswor
                 : "bg-primary/15",
             )}
           >
-            <span
+            <MaterialSymbol
+              name="check"
+              size={28}
+              weight={500}
               className={cn(
-                "text-2xl",
                 chromeTone === "light" ? "text-[color:var(--landing-accent)]" : "text-primary",
               )}
-              aria-hidden
-            >
-              ✓
-            </span>
+            />
           </div>
           <p className="text-muted-foreground text-sm">Your password has been updated successfully.</p>
           <SubmitButton onClick={() => setLocation(loginPath)} className="w-full" {...(portal === "customer" ? { size: "lg" as const } : {})}>

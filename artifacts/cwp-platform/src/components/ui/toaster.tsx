@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Info } from "lucide-react"
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol"
 import { cn } from "@/lib/utils"
 import { useToast, DEFAULT_TOAST_DURATION } from "@/hooks/use-toast"
 import {
@@ -10,10 +10,10 @@ import {
   ToastViewport,
 } from "@/components/ui/toast"
 
-const VARIANT_ICON = {
-  destructive: AlertCircle,
-  success: CheckCircle2,
-  default: Info,
+const VARIANT_ICON_NAMES = {
+  destructive: "error",
+  success: "check_circle",
+  default: "info",
 } as const
 
 export function Toaster() {
@@ -22,18 +22,19 @@ export function Toaster() {
   return (
     <ToastProvider duration={DEFAULT_TOAST_DURATION}>
       {toasts.map(function ({ id, title, description, action, variant, ...props }) {
-        const Icon = VARIANT_ICON[(variant as keyof typeof VARIANT_ICON) ?? "default"]
+        const iconName = VARIANT_ICON_NAMES[(variant as keyof typeof VARIANT_ICON_NAMES) ?? "default"]
         return (
           <Toast key={id} variant={variant} {...props}>
-            <Icon
+            <MaterialSymbol
+              name={iconName}
               size={18}
+              weight={500}
               className={cn(
                 "shrink-0 mt-0.5",
                 variant === "destructive" && "text-destructive",
                 variant === "success" && "text-emerald-500",
                 (!variant || variant === "default") && "text-muted-foreground",
               )}
-              aria-hidden
             />
             <div className="grid gap-0.5 flex-1 min-w-0">
               {title && <ToastTitle>{title}</ToastTitle>}

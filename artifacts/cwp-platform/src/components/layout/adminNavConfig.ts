@@ -1,6 +1,5 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  BookOpen,
   LayoutDashboard,
   Users,
   UserCog,

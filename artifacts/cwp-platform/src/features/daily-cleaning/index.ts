@@ -1,5 +1,4 @@
 export { default as DcmsDashboardPage } from "./pages/DcmsDashboardPage";
-export { default as DcmsPlansPage } from "./pages/DcmsPlansPage";
 export { default as DcmsSubscriptionsPage } from "./pages/DcmsSubscriptionsPage";
 export { default as DcmsAssignmentsPage } from "./pages/DcmsAssignmentsPage";
 export { default as DcmsServiceHistoryPage } from "./pages/DcmsServiceHistoryPage";

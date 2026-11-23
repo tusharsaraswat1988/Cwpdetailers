@@ -70,6 +70,7 @@ export interface LedgerRowData {
   cfOrderId: string | null;
   cfPaymentId: string | null;
   internalReference: string;
+  invoiceNumber?: string | null;
   status:
     | "initiated"
     | "pending"

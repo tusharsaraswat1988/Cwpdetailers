@@ -117,6 +117,7 @@ import {
   DcmsDashboardPage, DcmsSubscriptionsPage, DcmsAssignmentsPage, DcmsServiceHistoryPage, DcmsStaffPerformancePage,
   CustomerDailyCleaningPage, CustomerDcmsHistoryPage, CustomerDcmsGalleryPage,
 } from "@/features/daily-cleaning";
+import { EmptyState } from "@/components/shared/EmptyState";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -350,12 +351,15 @@ function Router() {
       <Route path="/franchisee/staff" component={() => <ProtectedRoute component={FranchiseeStaff} roles={["franchisee"]} />} />
       <Route path="/franchisee/churned" component={() => <ProtectedRoute component={FranchiseeChurned} roles={["franchisee"]} />} />
       <Route path="/franchisee/leads" component={() => <ProtectedRoute component={FranchiseeLeads} roles={["franchisee"]} permission={{ resource: "leads", action: "view" }} />} />
-      {/* QW-11: Fix broken franchisee notifications route */}
+      {/* Franchisee notifications empty state */}
       <Route path="/franchisee/notifications" component={() => <ProtectedRoute component={() => (
         <div className="min-h-screen flex items-center justify-center bg-background p-6">
-          <div className="text-center max-w-sm">
-            <p className="font-display font-bold text-lg mb-2">Notifications</p>
-            <p className="text-muted-foreground text-sm">Push notifications for franchisees are coming soon.</p>
+          <div className="w-full max-w-md">
+            <EmptyState
+              title="No notifications yet"
+              description="You are all caught up! Updates regarding branch bookings, staff dispatch, and settlements will appear here."
+              hint="Check back later for real-time notifications."
+            />
           </div>
         </div>
       )} roles={["franchisee"]} />} />

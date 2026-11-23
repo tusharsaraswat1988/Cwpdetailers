@@ -109,7 +109,7 @@ export default function QualityHub() {
       <div className="p-6 space-y-6">
         <PageActionHeader
           title="Service Quality & SLA Governance"
-          description={`Customer rating: ${rt?.average ?? 5.0}★ · SLA Compliance: ${op?.slaComplianceRate ?? 100}% · Completion Rate: ${op?.completionRate ?? 0}%`}
+          description={`Customer rating: ${rt?.average ?? 5.0}/5.0 · SLA Compliance: ${op?.slaComplianceRate ?? 100}% · Completion Rate: ${op?.completionRate ?? 0}%`}
           primaryAction={{
             label: "Configure SLA Policies",
             onClick: () => setNewPolicyOpen(true),
@@ -214,7 +214,7 @@ export default function QualityHub() {
               <div className="bg-card border rounded-xl p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold text-sm flex items-center gap-1.5">
-                    <AlertTriangle size={15} className="text-amber-500" /> Recent Quality Alerts (≤ 2★)
+                    <MaterialSymbol name="warning" size={16} className="text-amber-500" /> Recent Quality Alerts (≤ 2 stars)
                   </h4>
                   <Badge variant="outline" className="text-xs">
                     {supervisorHub?.lowRatingVisits?.length ?? 0} alerts
@@ -380,7 +380,7 @@ export default function QualityHub() {
                         <td className="p-2.5">
                           {s.avgRating != null ? (
                             <span className="flex items-center gap-1 font-semibold text-amber-600">
-                              ★ {s.avgRating} <span className="text-muted-foreground font-normal">({s.feedbackCount})</span>
+                              <MaterialSymbol name="star" size={14} className="text-amber-500" fill /> {s.avgRating} <span className="text-muted-foreground font-normal">({s.feedbackCount})</span>
                             </span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
@@ -493,7 +493,15 @@ export default function QualityHub() {
                         <td className="p-2.5">{p.resolutionTargetMinutes} mins ({Math.round(p.resolutionTargetMinutes / 60)}h)</td>
                         <td className="p-2.5">{p.escalationLevel1Minutes ? `${p.escalationLevel1Minutes} mins` : "—"}</td>
                         <td className="p-2.5">{p.escalationLevel2Minutes ? `${p.escalationLevel2Minutes} mins` : "—"}</td>
-                        <td className="p-2.5">{p.pauseOnCustomerResponse ? "✓ Yes" : "No"}</td>
+                        <td className="p-2.5">
+                          {p.pauseOnCustomerResponse ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                              <MaterialSymbol name="check" size={14} /> Yes
+                            </span>
+                          ) : (
+                            "No"
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -198,7 +198,10 @@ export function DataTable<T>({
                   {c.sortable && sort ? (
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                      className={cn(
+                        "inline-flex items-center gap-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded",
+                        c.align === "right" && "w-full justify-end"
+                      )}
                       onClick={() => sort.onSortChange(c.key, sort.key === c.key && sort.direction === "asc" ? "desc" : "asc")}
                       data-testid={`sort-${c.key}`}
                     >

@@ -1,6 +1,7 @@
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, MapPin, IndianRupee } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import {
   MarketingPageShell,
   MarketingSection,
@@ -127,11 +128,9 @@ export default function CityServicePage() {
             <h2 className="mb-3 font-display text-lg font-semibold">Benefits</h2>
             <ul className="space-y-2">
               {benefits.map((b, i) => (
-                <li key={i} className="flex gap-2 text-sm text-muted-foreground">
-                  <span className="text-[color:var(--landing-accent)]" aria-hidden>
-                    ✓
-                  </span>
-                  {b}
+                <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MaterialSymbol name="check" size={16} className="text-[color:var(--landing-accent)] shrink-0" />
+                  <span>{b}</span>
                 </li>
               ))}
             </ul>

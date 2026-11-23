@@ -4,6 +4,7 @@ import { useListBranches, getListBranchesQueryKey, type Branch } from "@workspac
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -98,6 +99,7 @@ export function QuickCreateCustomerForm({
   const [form, setForm] = useState(emptyForm());
   const [errors, setErrors] = useState<{ phone?: string | null; email?: string | null }>({});
   const [creating, setCreating] = useState(false);
+  const [skipMapPin, setSkipMapPin] = useState(false);
   const [duplicateExisting, setDuplicateExisting] = useState<{ id: number; name?: string } | null>(null);
   const [showB2BBilling, setShowB2BBilling] = useState(false);
   const { data: branches } = useListBranches({ query: { queryKey: getListBranchesQueryKey() } });
@@ -151,11 +153,11 @@ export function QuickCreateCustomerForm({
       toast({ title: "Portal password must be at least 6 characters", variant: "destructive" });
       return;
     }
-    if (mapsEnabled) {
+    if (mapsEnabled && !skipMapPin) {
       if (!form.latitude.trim() || !form.longitude.trim()) {
         toast({
           title: "Pick a map location",
-          description: "Search a place or drop a pin so we have coordinates for dispatch.",
+          description: "Search a place or drop a pin so we have coordinates for dispatch, or toggle 'Skip map coordinates' for telephone onboarding.",
           variant: "destructive",
         });
         return;
@@ -205,8 +207,8 @@ export function QuickCreateCustomerForm({
 
     setCreating(true);
     try {
-      const lat = form.latitude.trim() ? parseFloat(form.latitude) : undefined;
-      const lng = form.longitude.trim() ? parseFloat(form.longitude) : undefined;
+      const lat = (!skipMapPin && form.latitude.trim()) ? parseFloat(form.latitude) : undefined;
+      const lng = (!skipMapPin && form.longitude.trim()) ? parseFloat(form.longitude) : undefined;
       const result = await createCustomerRequest({
         name: form.name,
         phone: phoneResult.value,
@@ -340,6 +342,20 @@ export function QuickCreateCustomerForm({
             )}
           </div>
         )
+      )}
+      {mapsEnabled && (
+        <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/40 text-xs">
+          <div className="space-y-0.5 pr-2">
+            <span className="font-medium text-foreground">Skip map coordinates / Telephone onboarding</span>
+            <p className="text-muted-foreground text-[11px]">Allow creating customer with manual address only (for phone bookings or offline maps).</p>
+          </div>
+          <Switch
+            id={`${idPrefix}-skip-map`}
+            checked={skipMapPin}
+            onCheckedChange={setSkipMapPin}
+            data-testid={`${idPrefix}-skip-map`}
+          />
+        </div>
       )}
       <CustomerServiceAddressSection
         idPrefix={idPrefix}

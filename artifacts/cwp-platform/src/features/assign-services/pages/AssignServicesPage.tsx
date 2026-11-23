@@ -72,7 +72,7 @@ import {
   type ServiceTaskType,
 } from "@/features/assign-services/api";
 import { formatAssignmentLocation } from "@/features/assign-services/formatLocation";
-import { listServiceLocations } from "@/features/service-locations/api";
+import { listServiceLocations, createServiceLocation } from "@/features/service-locations/api";
 import { roleSlugForTaskType, taskTypeLabel } from "@/lib/staff-ecosystem/taskTypes";
 import { roleLabelForSlug } from "@/lib/staff-ecosystem/roles";
 import { format, parseISO, isValid } from "date-fns";
@@ -763,6 +763,39 @@ export default function AssignServicesPage() {
 
   const effectiveLocationId = overrideLocationId ? parseInt(overrideLocationId, 10) : drawerPending?.serviceLocationId;
 
+  const [showQuickLocation, setShowQuickLocation] = useState(false);
+  const [quickLocationAddress, setQuickLocationAddress] = useState("");
+  const [quickLocationLabel, setQuickLocationLabel] = useState("Home");
+  const [savingLocation, setSavingLocation] = useState(false);
+
+  const handleQuickAddLocation = async () => {
+    if (!drawerPending?.customerId) return;
+    if (!quickLocationAddress.trim()) {
+      toast({ title: "Address is required", variant: "destructive" });
+      return;
+    }
+    setSavingLocation(true);
+    try {
+      const loc = await createServiceLocation({
+        customerId: drawerPending.customerId,
+        label: quickLocationLabel.trim() || "Service Address",
+        address: quickLocationAddress.trim(),
+        city: drawerPending.serviceLocationCity || undefined,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["service-locations", "customer-assign", drawerPending.customerId],
+      });
+      setOverrideLocationId(String(loc.id));
+      setShowQuickLocation(false);
+      setQuickLocationAddress("");
+      toast({ title: "Service location added & selected for this job" });
+    } catch (err: any) {
+      toast({ title: "Failed to add location", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
   const canAssign = useMemo(() => {
     if (!effectiveLocationId || unassignedTasks.length === 0) return false;
     return unassignedTasks.every(t => Boolean(taskStaff[t.taskType]?.trim()));
@@ -773,6 +806,9 @@ export default function AssignServicesPage() {
     setTaskStaff({});
     setAssignNotes("");
     setOverrideLocationId(row.serviceLocationId ? String(row.serviceLocationId) : "");
+    setShowQuickLocation(false);
+    setQuickLocationAddress("");
+    setQuickLocationLabel("Home");
   };
 
   const assignMutation = useMutation({
