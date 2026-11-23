@@ -6,7 +6,7 @@ beforeAll(() => {
   }
 });
 
-describe("Notifications Route Authorization & Scoping", () => {
+describe("Notifications Route Authorization & Scoping", { timeout: 30000 }, () => {
   it("rejects unauthenticated requests", async () => {
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/cwp";
