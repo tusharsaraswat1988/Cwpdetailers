@@ -554,6 +554,16 @@ export default function BranchesPage() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
+              size="sm"
+              onClick={() => openAdminIntelligencePlaybook("branch_creation")}
+              data-testid="branch-playbook-sop-btn"
+              className="h-9 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold gap-1.5"
+            >
+              <MaterialSymbol name="psychology" size={16} />
+              <span>Branch SOP Guide</span>
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setShowGuidelines(true)}
               className="h-9 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold gap-1.5"
             >
@@ -935,7 +945,7 @@ export default function BranchesPage() {
                       {/* Interactive Action Button to fix failing item */}
                       {!item.passed && (
                         <Button
-                          size="xs"
+                          size="sm"
                           variant="outline"
                           className="h-6 px-2 text-[10px] shrink-0 font-medium ml-1 border-primary/40 text-primary hover:bg-primary/10 gap-0.5"
                           onClick={() => {

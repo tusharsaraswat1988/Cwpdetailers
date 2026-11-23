@@ -1553,9 +1553,20 @@ export default function AssignServicesPage() {
                   label: "Assignment",
                   content: drawerPending ? (
                     <div className="space-y-4">
-                      {customerLocations.length > 0 && (
+                      {customerLocations.length > 0 && !showQuickLocation ? (
                         <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1.5">
-                          <Label className="text-xs font-semibold text-primary">Service location for this job</Label>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-semibold text-primary">Service location for this job</Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-1.5 text-[11px] text-primary hover:underline"
+                              onClick={() => setShowQuickLocation(true)}
+                            >
+                              + Quick Add Location
+                            </Button>
+                          </div>
                           <Select
                             value={effectiveLocationId ? String(effectiveLocationId) : ""}
                             onValueChange={setOverrideLocationId}
@@ -1571,6 +1582,63 @@ export default function AssignServicesPage() {
                               ))}
                             </SelectContent>
                           </Select>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                              <MapPin className="h-3.5 w-3.5" />
+                              {customerLocations.length > 0 ? "Quick Add Service Location" : "Service Location Required"}
+                            </div>
+                            {customerLocations.length > 0 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => setShowQuickLocation(false)}
+                              >
+                                Cancel
+                              </Button>
+                            )}
+                          </div>
+                          {!effectiveLocationId && (
+                            <p className="text-xs text-muted-foreground">
+                              This customer has no service location on file. Add an address below to enable task assignment.
+                            </p>
+                          )}
+                          <div className="space-y-2 pt-1">
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-1">
+                                <Label className="text-[11px]">Label</Label>
+                                <Input
+                                  value={quickLocationLabel}
+                                  onChange={e => setQuickLocationLabel(e.target.value)}
+                                  placeholder="Home"
+                                  className="h-8 text-xs bg-background"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <Label className="text-[11px]">Address / Society / Landmark</Label>
+                                <Input
+                                  value={quickLocationAddress}
+                                  onChange={e => setQuickLocationAddress(e.target.value)}
+                                  placeholder="Flat / Society / Area"
+                                  className="h-8 text-xs bg-background"
+                                />
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="w-full h-8 text-xs"
+                              onClick={handleQuickAddLocation}
+                              disabled={savingLocation || !quickLocationAddress.trim()}
+                            >
+                              {savingLocation && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                              Save & Select Location
+                            </Button>
+                          </div>
                         </div>
                       )}
                       <CustomerPlanAssignmentSection
