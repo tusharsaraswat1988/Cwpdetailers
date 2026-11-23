@@ -43,8 +43,39 @@ const mockCommandCenterData: CommandCenterData = {
 describe("Admin & Manager Intelligence System", () => {
   let container: HTMLDivElement;
   let root: Root;
+  let storageMap: Map<string, string>;
 
   beforeEach(() => {
+    storageMap = new Map<string, string>();
+    const mockStorage = {
+      getItem: (key: string) => storageMap.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storageMap.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        storageMap.delete(key);
+      },
+      clear: () => {
+        storageMap.clear();
+      },
+      get length() {
+        return storageMap.size;
+      },
+      key: (i: number) => Array.from(storageMap.keys())[i] ?? null,
+    };
+    try {
+      Object.defineProperty(window, "localStorage", {
+        value: mockStorage,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(globalThis, "localStorage", {
+        value: mockStorage,
+        writable: true,
+        configurable: true,
+      });
+    } catch {}
+
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -232,7 +263,7 @@ describe("Admin & Manager Intelligence System", () => {
       expect(container.textContent).toContain("Done");
 
       // Verify localStorage was updated
-      const stored = JSON.parse(localStorage.getItem("cwp_ops_playbook_completed_steps") || "{}");
+      const stored = JSON.parse(storageMap.get("cwp_ops_playbook_completed_steps") || "{}");
       expect(stored.branch_creation).toContain(1);
 
       // Verify reset button appears and clears completed steps
@@ -243,7 +274,7 @@ describe("Admin & Manager Intelligence System", () => {
         resetBtn.click();
       });
 
-      const updatedStored = JSON.parse(localStorage.getItem("cwp_ops_playbook_completed_steps") || "{}");
+      const updatedStored = JSON.parse(storageMap.get("cwp_ops_playbook_completed_steps") || "{}");
       expect(updatedStored.branch_creation).toEqual([]);
     });
 
