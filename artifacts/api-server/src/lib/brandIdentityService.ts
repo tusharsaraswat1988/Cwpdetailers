@@ -289,32 +289,94 @@ export function invalidateBrandingCache() {
   publicCache = null;
 }
 
+export const FALLBACK_PLATFORM_BRANDING: PlatformBranding = {
+  id: 1,
+  isActive: true,
+  companyName: "CWP Detailers + Kleansolar",
+  brandName: "CWP Detailers",
+  tagline: "Premium Car Care & Solar Cleaning",
+  shortDescription: "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
+  website: "https://cwpdetailers.in",
+  supportEmail: "support@cwpdetailers.in",
+  supportPhone: "8707488250",
+  gstNumber: null,
+  address: "Varanasi / Noida, India",
+  primaryColor: "#00cccc",
+  secondaryColor: "#212529",
+  accentColor: "#e0ffff",
+  backgroundColor: "#f5f6f8",
+  textColor: "#212529",
+  fullLogoUrl: null,
+  navbarLogoUrl: null,
+  mobileLogoUrl: null,
+  lightLogoUrl: null,
+  darkLogoUrl: null,
+  loginLogoUrl: null,
+  logoWhiteUrl: null,
+  logoTransparentUrl: null,
+  logoSquareUrl: null,
+  logoIconUrl: null,
+  faviconUrl: null,
+  faviconIcoUrl: null,
+  pwaIconUrl: null,
+  appleTouchIconUrl: null,
+  emailLogoUrl: null,
+  invoiceLogoUrl: null,
+  pdfLogoUrl: null,
+  splashLogoUrl: null,
+  loaderAnimationUrl: null,
+  loaderBackgroundColor: null,
+  loaderText: "Loading…",
+  ogImageUrl: null,
+  twitterImageUrl: null,
+  seoKeywords: "car detailing, car wash, solar panel cleaning",
+  seoAuthor: "CWP Detailers",
+  metaTitleTemplate: "{brand} | {tagline}",
+  metaDescriptionTemplate: "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
+  ogTitle: "CWP Detailers",
+  ogDescription: "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
+  twitterCardType: "summary_large_image",
+  twitterTitle: "CWP Detailers",
+  twitterDescription: "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
+  socialLinks: {},
+  schemaOrg: null,
+  generatedAssets: null,
+  version: 1,
+  updatedBy: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
 export async function getActiveBrandingRow(): Promise<PlatformBranding> {
-  const [row] = await db
-    .select()
-    .from(platformBrandingTable)
-    .where(eq(platformBrandingTable.isActive, true))
-    .limit(1);
+  try {
+    const [row] = await db
+      .select()
+      .from(platformBrandingTable)
+      .where(eq(platformBrandingTable.isActive, true))
+      .limit(1);
 
-  if (row) return row;
+    if (row) return row;
 
-  const [created] = await db
-    .insert(platformBrandingTable)
-    .values({
-      companyName: "CWP Detailers + Kleansolar",
-      brandName: "CWP Detailers",
-      tagline: "Premium Car Care & Solar Cleaning",
-      primaryColor: "#00cccc",
-      secondaryColor: "#212529",
-      accentColor: "#e0ffff",
-      backgroundColor: "#f5f6f8",
-      textColor: "#212529",
-      metaDescriptionTemplate:
-        "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
-    })
-    .returning();
+    const [created] = await db
+      .insert(platformBrandingTable)
+      .values({
+        companyName: "CWP Detailers + Kleansolar",
+        brandName: "CWP Detailers",
+        tagline: "Premium Car Care & Solar Cleaning",
+        primaryColor: "#00cccc",
+        secondaryColor: "#212529",
+        accentColor: "#e0ffff",
+        backgroundColor: "#f5f6f8",
+        textColor: "#212529",
+        metaDescriptionTemplate:
+          "Premium car detailing, daily wash subscriptions, and solar panel cleaning services.",
+      })
+      .returning();
 
-  return created;
+    return created || FALLBACK_PLATFORM_BRANDING;
+  } catch (err) {
+    return FALLBACK_PLATFORM_BRANDING;
+  }
 }
 
 export async function getPublicBranding(force = false): Promise<PublicBranding> {

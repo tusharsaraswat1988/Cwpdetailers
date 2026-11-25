@@ -1,5 +1,11 @@
-/** Ordered SQL files applied by `pnpm migrate:pending` (005+). */
+/** Ordered SQL files applied by `pnpm migrate:pending` (000+). */
 export const PENDING_MIGRATIONS = [
+  "000_baseline_schema.sql",
+  "001_comm_phase1_enhancement.sql",
+  "002_comm_phase2_enterprise.sql",
+  "003_comm_phase3_conversational_crm.sql",
+  "003_platform_branding.sql",
+  "004_comm_sprint1_mvp.sql",
   "005_legal_cms.sql",
   "006_master_data.sql",
   "007_staff_ecosystem.sql",
@@ -147,6 +153,26 @@ async function hasColumn(db: Queryable, table: string, column: string): Promise<
  */
 export async function isMigrationAlreadyApplied(db: Queryable, filename: string): Promise<boolean> {
   switch (filename) {
+    case "000_baseline_schema.sql":
+      return hasTable(db, "users");
+    case "001_comm_phase1_enhancement.sql":
+      return hasTable(db, "comm_events");
+    case "002_comm_phase2_enterprise.sql":
+      return hasTable(db, "comm_conversations");
+    case "003_comm_phase3_conversational_crm.sql":
+      return hasTable(db, "comm_knowledge_base");
+    case "003_platform_branding.sql":
+      return hasTable(db, "platform_branding");
+    case "004_comm_sprint1_mvp.sql":
+      return hasTable(db, "comm_providers");
+    case "005_legal_cms.sql":
+      return hasTable(db, "legal_pages");
+    case "006_master_data.sql":
+      return hasTable(db, "vehicle_brands");
+    case "007_staff_ecosystem.sql":
+      return hasTable(db, "staff");
+    case "008_service_catalog.sql":
+      return hasTable(db, "services");
     case "010_dcms.sql":
       return hasTable(db, "dcms_visits");
     case "024_remove_legacy_daily_wash.sql":

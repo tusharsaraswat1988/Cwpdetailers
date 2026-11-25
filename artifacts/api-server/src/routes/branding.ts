@@ -9,7 +9,9 @@ import {
   sanitizeSvgContent,
   updateBranding,
   validateUpload,
+  FALLBACK_PLATFORM_BRANDING,
   type BrandAssetSlot,
+  type PublicBranding,
 } from "../lib/brandIdentityService";
 
 const router: IRouter = Router();
@@ -24,8 +26,8 @@ router.get("/branding", async (req: Request, res: Response) => {
     res.set("ETag", `"branding-v${branding.version}"`);
     res.json(branding);
   } catch (err) {
-    req.log.error({ err }, "Failed to load branding");
-    res.status(500).json({ error: "Failed to load branding" });
+    req.log.warn({ err }, "Failed to load branding, using fallback");
+    res.json(FALLBACK_PLATFORM_BRANDING);
   }
 });
 
@@ -37,8 +39,8 @@ router.get("/branding/public", async (req: Request, res: Response) => {
     res.set("ETag", `"branding-v${branding.version}"`);
     res.json(branding);
   } catch (err) {
-    req.log.error({ err }, "Failed to load public branding");
-    res.status(500).json({ error: "Failed to load branding" });
+    req.log.warn({ err }, "Failed to load public branding, using fallback");
+    res.json(FALLBACK_PLATFORM_BRANDING);
   }
 });
 
