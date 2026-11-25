@@ -1,6 +1,6 @@
 import type { ScheduleDateOption } from "@/lib/schedule-slots";
 import { cn } from "@/lib/utils";
-import { Calendar } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 
 interface ScheduleDateStepProps {
   dates: ScheduleDateOption[];
@@ -12,7 +12,7 @@ export function ScheduleDateStep({ dates, selected, onSelect }: ScheduleDateStep
   return (
     <div className="space-y-3" data-testid="schedule-step-date">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Calendar size={14} className="text-primary" />
+        <MaterialSymbol name="calendar_today" size={15} className="text-primary" />
         <span>Select an available service date</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3">
@@ -37,7 +37,7 @@ export function ScheduleDateStep({ dates, selected, onSelect }: ScheduleDateStep
               <p className={cn("font-bold text-sm", isSelected ? "text-white" : "text-foreground")}>
                 {d.label}
               </p>
-              <p className={cn("text-xs mt-0.5 font-medium", isSelected ? "text-blue-100" : "text-muted-foreground")}>
+              <p className={cn("text-xs mt-0.5 font-medium tabular-nums font-mono", isSelected ? "text-blue-100" : "text-muted-foreground")}>
                 {d.date}
               </p>
               {d.disabled && d.reason && (

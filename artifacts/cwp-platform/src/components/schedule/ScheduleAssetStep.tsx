@@ -1,4 +1,4 @@
-import { Car, Sun, CheckCircle2, Plus } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { Button } from "@/components/ui/button";
 import type { ScheduleAsset } from "@/lib/schedule-journey";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ export function ScheduleAssetStep({
           data-testid="schedule-empty-solar"
         >
           <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 mx-auto flex items-center justify-center">
-            <Sun size={24} />
+            <MaterialSymbol name="wb_sunny" size={24} />
           </div>
           <p className="font-display font-bold text-base text-foreground">No solar site added yet.</p>
           <p className="text-xs text-muted-foreground max-w-xs mx-auto">
@@ -39,10 +39,10 @@ export function ScheduleAssetStep({
             <Button
               type="button"
               onClick={onAddAsset}
-              className="mt-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+              className="mt-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold cursor-pointer gap-1.5"
               data-testid="schedule-add-solar-btn"
             >
-              <Plus size={16} className="mr-1.5" />
+              <MaterialSymbol name="add" size={16} />
               Add Solar Site
             </Button>
           ) : null}
@@ -55,7 +55,7 @@ export function ScheduleAssetStep({
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Sun size={14} className="text-amber-600" />
+              <MaterialSymbol name="wb_sunny" size={15} className="text-amber-600" />
               Select Solar Site
             </p>
             {onAddAsset && (
@@ -64,10 +64,10 @@ export function ScheduleAssetStep({
                 variant="ghost"
                 size="sm"
                 onClick={onAddAsset}
-                className="h-8 text-xs text-amber-700 hover:text-amber-800 hover:bg-amber-50 gap-1 px-2"
+                className="h-8 text-xs text-amber-700 hover:text-amber-800 hover:bg-amber-50 gap-1 px-2 cursor-pointer"
                 data-testid="schedule-add-another-solar"
               >
-                <Plus size={14} />
+                <MaterialSymbol name="add" size={14} />
                 Add New Site
               </Button>
             )}
@@ -102,14 +102,14 @@ export function ScheduleAssetStep({
                         isSelected ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-600",
                       )}
                     >
-                      <Sun size={20} />
+                      <MaterialSymbol name="wb_sunny" size={20} />
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-sm text-foreground truncate">{asset.name}</p>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{asset.subtitle}</p>
                     </div>
                   </div>
-                  {isSelected && <CheckCircle2 size={18} className="text-amber-600 shrink-0" />}
+                  {isSelected && <MaterialSymbol name="check_circle" size={18} className="text-amber-600 shrink-0" />}
                 </button>
               );
             })}
@@ -128,7 +128,7 @@ export function ScheduleAssetStep({
           data-testid="schedule-empty-vehicle"
         >
           <div className="w-12 h-12 rounded-full bg-blue-50 text-primary mx-auto flex items-center justify-center">
-            <Car size={24} />
+            <MaterialSymbol name="directions_car" size={24} />
           </div>
           <p className="font-display font-bold text-base text-foreground">No vehicles added yet.</p>
           <p className="text-xs text-muted-foreground max-w-xs mx-auto">
@@ -138,10 +138,10 @@ export function ScheduleAssetStep({
             <Button
               type="button"
               onClick={onAddAsset}
-              className="mt-2 rounded-xl"
+              className="mt-2 rounded-xl cursor-pointer gap-1.5"
               data-testid="schedule-add-vehicle-btn"
             >
-              <Plus size={16} className="mr-1.5" />
+              <MaterialSymbol name="add" size={16} />
               Add Vehicle
             </Button>
           ) : null}
@@ -154,7 +154,7 @@ export function ScheduleAssetStep({
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Car size={14} className="text-primary" />
+              <MaterialSymbol name="directions_car" size={15} className="text-primary" />
               Vehicles
             </p>
             {onAddAsset && (
@@ -163,10 +163,10 @@ export function ScheduleAssetStep({
                 variant="ghost"
                 size="sm"
                 onClick={onAddAsset}
-                className="h-8 text-xs text-primary hover:text-primary hover:bg-blue-50 gap-1 px-2"
+                className="h-8 text-xs text-primary hover:text-primary hover:bg-blue-50 gap-1 px-2 cursor-pointer"
                 data-testid="schedule-add-another-vehicle"
               >
-                <Plus size={14} />
+                <MaterialSymbol name="add" size={14} />
                 Add New Car
               </Button>
             )}
@@ -201,7 +201,7 @@ export function ScheduleAssetStep({
                         isSelected ? "bg-primary text-white" : "bg-blue-50 text-primary",
                       )}
                     >
-                      <Car size={20} />
+                      <MaterialSymbol name="directions_car" size={20} />
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-sm text-foreground truncate">{asset.name}</p>
@@ -212,7 +212,7 @@ export function ScheduleAssetStep({
                       )}
                     </div>
                   </div>
-                  {isSelected && <CheckCircle2 size={18} className="text-primary shrink-0" />}
+                  {isSelected && <MaterialSymbol name="check_circle" size={18} className="text-primary shrink-0" />}
                 </button>
               );
             })}
@@ -230,15 +230,15 @@ export function ScheduleAssetStep({
         data-testid="schedule-error-no-asset"
       >
         <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
-          <Car size={24} />
+          <MaterialSymbol name="directions_car" size={24} />
         </div>
         <p className="font-display font-bold text-base text-foreground">No vehicles or solar sites yet</p>
         <p className="text-xs text-muted-foreground max-w-xs mx-auto">
           Add an asset so CWP knows what to service.
         </p>
         {onAddAsset ? (
-          <Button type="button" onClick={onAddAsset} className="mt-2 rounded-xl">
-            <Plus size={16} className="mr-1.5" />
+          <Button type="button" onClick={onAddAsset} className="mt-2 rounded-xl cursor-pointer gap-1.5">
+            <MaterialSymbol name="add" size={16} />
             Add Vehicle or Solar Site
           </Button>
         ) : null}
@@ -251,7 +251,7 @@ export function ScheduleAssetStep({
       {vehicles.length > 0 && (
         <div className="space-y-2.5">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Car size={14} className="text-primary" />
+            <MaterialSymbol name="directions_car" size={15} className="text-primary" />
             Vehicles
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -284,7 +284,7 @@ export function ScheduleAssetStep({
                         isSelected ? "bg-primary text-white" : "bg-blue-50 text-primary",
                       )}
                     >
-                      <Car size={20} />
+                      <MaterialSymbol name="directions_car" size={20} />
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-sm text-foreground truncate">{asset.name}</p>
@@ -295,7 +295,7 @@ export function ScheduleAssetStep({
                       )}
                     </div>
                   </div>
-                  {isSelected && <CheckCircle2 size={18} className="text-primary shrink-0" />}
+                  {isSelected && <MaterialSymbol name="check_circle" size={18} className="text-primary shrink-0" />}
                 </button>
               );
             })}
@@ -306,7 +306,7 @@ export function ScheduleAssetStep({
       {solarSites.length > 0 && (
         <div className="space-y-2.5 pt-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Sun size={14} className="text-amber-600" />
+            <MaterialSymbol name="wb_sunny" size={15} className="text-amber-600" />
             Solar Sites
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -339,14 +339,14 @@ export function ScheduleAssetStep({
                         isSelected ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-600",
                       )}
                     >
-                      <Sun size={20} />
+                      <MaterialSymbol name="wb_sunny" size={20} />
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-sm text-foreground truncate">{asset.name}</p>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{asset.subtitle}</p>
                     </div>
                   </div>
-                  {isSelected && <CheckCircle2 size={18} className="text-primary shrink-0" />}
+                  {isSelected && <MaterialSymbol name="check_circle" size={18} className="text-primary shrink-0" />}
                 </button>
               );
             })}

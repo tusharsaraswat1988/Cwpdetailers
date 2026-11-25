@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { type CustomerPlan } from "@/lib/customer-plans";
 import { planEligibleForSchedule } from "@/lib/schedule-entry";
-import { ArrowRight, Calendar, Car, RefreshCw, AlertCircle, Sun } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { Link } from "wouter";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { cn } from "@/lib/utils";
@@ -48,7 +48,6 @@ export function PlanSummaryCard({
   })();
 
   const isSolar = plan.type.includes("solar") || Boolean(plan.solarSiteId);
-
   const isInactive = plan.status === "EXPIRED" || plan.status === "COMPLETED" || (hasProgress && plan.totalRemaining === 0);
 
   const cardContent = (
@@ -64,11 +63,11 @@ export function PlanSummaryCard({
 
           {plan.vehicleOrSite && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-              {isSolar ? (
-                <Sun size={13} className="text-amber-600 shrink-0" />
-              ) : (
-                <Car size={13} className="text-primary shrink-0" />
-              )}
+              <MaterialSymbol
+                name={isSolar ? "wb_sunny" : "directions_car"}
+                size={14}
+                className={isSolar ? "text-amber-600 shrink-0" : "text-primary shrink-0"}
+              />
               <span className="truncate font-medium">{plan.vehicleOrSite}</span>
             </div>
           )}
@@ -89,7 +88,7 @@ export function PlanSummaryCard({
                 Visits Remaining
               </span>
             </div>
-            <span className="text-xs font-medium text-muted-foreground tabular-nums">
+            <span className="text-xs font-medium text-muted-foreground tabular-nums font-mono">
               {plan.totalUsed} Used · {plan.totalAllocated} Total
             </span>
           </div>
@@ -125,19 +124,19 @@ export function PlanSummaryCard({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground pt-1 border-t border-slate-100">
         {plan.expiryDate && (
           <span className="flex items-center gap-1">
-            <Calendar size={12} className="text-muted-foreground" />
+            <MaterialSymbol name="calendar_today" size={13} className="text-muted-foreground" />
             Valid till <strong className="font-semibold text-foreground">{plan.expiryDate}</strong>
           </span>
         )}
         {plan.nextVisitDate && (
           <span className="flex items-center gap-1">
-            <Calendar size={12} className="text-muted-foreground" />
+            <MaterialSymbol name="event_available" size={13} className="text-muted-foreground" />
             Next visit: <strong className="font-semibold text-foreground">{plan.nextVisitDate}</strong>
           </span>
         )}
         {plan.dueAmount > 0 && (
           <span className="inline-flex items-center gap-1 text-destructive font-semibold">
-            <AlertCircle size={12} />
+            <MaterialSymbol name="warning" size={13} />
             ₹{plan.dueAmount.toLocaleString("en-IN")} due
           </span>
         )}
@@ -153,12 +152,12 @@ export function PlanSummaryCard({
                 className="w-full min-h-11 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs cursor-pointer gap-1.5"
                 data-testid={`btn-complete-payment-${plan.id}`}
               >
-                <AlertCircle size={14} /> Complete Payment to Activate
+                <MaterialSymbol name="warning" size={15} /> Complete Payment to Activate
               </Button>
             </Link>
           ) : onSelect ? (
-            <Button size="sm" className="flex-1 min-h-11 rounded-xl cursor-pointer" onClick={() => onSelect(plan)}>
-              Use Plan <ArrowRight size={14} className="ml-1" />
+            <Button size="sm" className="flex-1 min-h-11 rounded-xl cursor-pointer gap-1" onClick={() => onSelect(plan)}>
+              Use Plan <MaterialSymbol name="arrow_forward" size={15} />
             </Button>
           ) : (
             <>
@@ -169,10 +168,10 @@ export function PlanSummaryCard({
                 >
                   <Button
                     size="sm"
-                    className="w-full min-h-11 rounded-xl bg-primary hover:bg-[#1264db] text-white font-semibold text-xs shadow-xs cursor-pointer"
+                    className="w-full min-h-11 rounded-xl bg-primary hover:bg-[#1264db] text-white font-semibold text-xs shadow-xs cursor-pointer gap-1"
                     data-testid={`btn-schedule-plan-${plan.id}`}
                   >
-                    Schedule Next Visit <ArrowRight size={14} className="ml-1" />
+                    Schedule Next Visit <MaterialSymbol name="arrow_forward" size={15} />
                   </Button>
                 </Link>
               )}
@@ -183,10 +182,10 @@ export function PlanSummaryCard({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="w-full min-h-11 rounded-xl border-slate-200 hover:bg-slate-50 font-semibold text-xs text-foreground cursor-pointer"
+                  className="w-full min-h-11 rounded-xl border-slate-200 hover:bg-slate-50 font-semibold text-xs text-foreground cursor-pointer gap-1"
                   data-testid={`btn-open-plan-${plan.id}`}
                 >
-                  View Details <ArrowRight size={14} className="ml-1" />
+                  View Details <MaterialSymbol name="arrow_forward" size={15} />
                 </Button>
               </Link>
             </>
@@ -195,7 +194,7 @@ export function PlanSummaryCard({
           {showRenew && plan.canRenew && (
             <Link href={CUSTOMER_ROUTES.support} className="cursor-pointer">
               <Button size="sm" variant="ghost" className="min-h-11 rounded-xl gap-1 text-muted-foreground hover:text-foreground text-xs cursor-pointer">
-                <RefreshCw size={13} /> Renew
+                <MaterialSymbol name="refresh" size={14} /> Renew
               </Button>
             </Link>
           )}

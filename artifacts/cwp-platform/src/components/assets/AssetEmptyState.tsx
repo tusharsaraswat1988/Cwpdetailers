@@ -1,4 +1,4 @@
-import { Car, Sun, Plus } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { Button } from "@/components/ui/button";
 
 interface AssetEmptyStateProps {
@@ -15,7 +15,7 @@ export function AssetEmptyState({ tab = "all", onAddVehicle, onAddSolar }: Asset
         data-testid="assets-empty-state-vehicle"
       >
         <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 text-primary border border-blue-100 flex items-center justify-center">
-          <Car size={26} aria-hidden />
+          <MaterialSymbol name="directions_car" size={28} />
         </div>
 
         <div className="max-w-sm mx-auto">
@@ -31,7 +31,7 @@ export function AssetEmptyState({ tab = "all", onAddVehicle, onAddSolar }: Asset
             onClick={onAddVehicle}
             data-testid="empty-add-vehicle"
           >
-            <Plus size={16} aria-hidden />
+            <MaterialSymbol name="add" size={16} />
             Add Vehicle (Car)
           </Button>
         </div>
@@ -46,7 +46,7 @@ export function AssetEmptyState({ tab = "all", onAddVehicle, onAddSolar }: Asset
         data-testid="assets-empty-state-solar"
       >
         <div className="mx-auto w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center">
-          <Sun size={26} aria-hidden />
+          <MaterialSymbol name="wb_sunny" size={28} />
         </div>
 
         <div className="max-w-sm mx-auto">
@@ -62,7 +62,7 @@ export function AssetEmptyState({ tab = "all", onAddVehicle, onAddSolar }: Asset
             onClick={onAddSolar}
             data-testid="empty-add-solar"
           >
-            <Plus size={16} aria-hidden />
+            <MaterialSymbol name="add" size={16} />
             Add Solar Rooftop
           </Button>
         </div>
@@ -77,10 +77,10 @@ export function AssetEmptyState({ tab = "all", onAddVehicle, onAddSolar }: Asset
     >
       <div className="mx-auto flex items-center justify-center gap-2">
         <div className="w-12 h-12 rounded-xl bg-blue-50 text-primary border border-blue-100 flex items-center justify-center">
-          <Car size={22} aria-hidden />
+          <MaterialSymbol name="directions_car" size={24} />
         </div>
         <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center">
-          <Sun size={22} aria-hidden />
+          <MaterialSymbol name="wb_sunny" size={24} />
         </div>
       </div>
 
@@ -97,7 +97,7 @@ export function AssetEmptyState({ tab = "all", onAddVehicle, onAddSolar }: Asset
           onClick={onAddVehicle}
           data-testid="empty-add-vehicle"
         >
-          <Plus size={16} aria-hidden />
+          <MaterialSymbol name="add" size={16} />
           Add Vehicle
         </Button>
         <Button
@@ -106,7 +106,7 @@ export function AssetEmptyState({ tab = "all", onAddVehicle, onAddSolar }: Asset
           onClick={onAddSolar}
           data-testid="empty-add-solar"
         >
-          <Sun size={16} className="text-amber-600" aria-hidden />
+          <MaterialSymbol name="wb_sunny" size={16} className="text-amber-600" />
           Add Solar Site
         </Button>
       </div>

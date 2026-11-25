@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Link } from "wouter";
-import { Phone, Headphones } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
 import { useBranding } from "@/lib/branding";
 import type { SupervisorContactInfo } from "@/components/shared/SupervisorContactCard";
@@ -23,7 +23,7 @@ export const SupportSection = memo(function SupportSection({ supervisor }: Props
       <div className="p-3 mx-4 my-1.5 rounded-xl bg-blue-50/70 border border-blue-100 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
-            <Headphones size={15} />
+            <MaterialSymbol name="support_agent" size={17} />
           </div>
           <div className="min-w-0">
             <p className="text-xs font-semibold text-foreground truncate">Customer Support</p>
@@ -39,7 +39,7 @@ export const SupportSection = memo(function SupportSection({ supervisor }: Props
           data-testid="btn-call-support"
           aria-label={`Call Support ${phone}`}
         >
-          <Phone size={12} />
+          <MaterialSymbol name="call" size={14} />
           Call Support
         </a>
       </div>

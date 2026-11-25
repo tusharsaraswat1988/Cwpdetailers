@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Link } from "wouter";
 import { CUSTOMER_ROUTES } from "@/lib/customer-routes";
-import { CheckCircle2, AlertCircle, ArrowRight, Receipt, Gift } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { AccountSection } from "./AccountSection";
 
 type Props = {
@@ -22,7 +22,7 @@ export const BillingSection = memo(function BillingSection({ totalDues }: Props)
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-amber-300 bg-amber-50/70" data-testid="account-billing-pay">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                <AlertCircle size={20} />
+                <MaterialSymbol name="warning" size={20} />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
@@ -44,14 +44,14 @@ export const BillingSection = memo(function BillingSection({ totalDues }: Props)
               href={CUSTOMER_ROUTES.invoices}
               className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs min-h-11 transition-colors shrink-0 cursor-pointer"
             >
-              Pay Now <ArrowRight size={14} />
+              Pay Now <MaterialSymbol name="arrow_forward" size={14} />
             </Link>
           </div>
         ) : (
           <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50" data-testid="account-billing-clear">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                <CheckCircle2 size={20} />
+                <MaterialSymbol name="check_circle" size={20} />
               </div>
               <div>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800">
@@ -67,15 +67,15 @@ export const BillingSection = memo(function BillingSection({ totalDues }: Props)
         <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <Link
             href={CUSTOMER_ROUTES.invoices}
-            className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+            className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1 cursor-pointer"
           >
-            <Receipt size={14} /> View Invoices
+            <MaterialSymbol name="receipt_long" size={15} /> View Invoices
           </Link>
           <Link
             href={CUSTOMER_ROUTES.loyalty}
-            className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+            className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1 cursor-pointer"
           >
-            <Gift size={14} /> Rewards & Referrals
+            <MaterialSymbol name="featured_seasonal_and_gifts" size={15} /> Rewards & Referrals
           </Link>
         </div>
       </div>

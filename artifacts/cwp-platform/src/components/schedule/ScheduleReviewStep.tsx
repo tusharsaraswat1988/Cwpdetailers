@@ -8,7 +8,8 @@ import type { LocationValue } from "@/features/master-data/api";
 import type { CustomerPlan } from "@/lib/customer-plans";
 import type { ScheduleAsset, PlanMode } from "@/lib/schedule-journey";
 import { formatDateLabel } from "@/lib/schedule-slots";
-import { CheckCircle2, Tag, Check, X, Loader2, Gift } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { useToast } from "@/hooks/use-toast";
 
 export interface AppliedCouponInfo {
@@ -224,22 +225,22 @@ export function ScheduleReviewStep({
       {estimatedPrice != null && !coveredByPlan && !siteVisitRequired && (
         <div className="rounded-xl border border-slate-200 bg-card p-3.5 shadow-2xs space-y-2">
           <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-            <Tag size={13} className="text-primary" /> Have a Promo / Coupon Code?
+            <MaterialSymbol name="sell" size={15} className="text-primary" /> Have a Promo / Coupon Code?
           </Label>
 
           {appliedCoupon ? (
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs">
               <div className="flex items-center gap-2">
-                <Check size={14} className="text-emerald-700" />
+                <MaterialSymbol name="check" size={15} className="text-emerald-700" />
                 <span className="font-mono font-bold text-emerald-800">{appliedCoupon.code}</span>
-                <span className="text-emerald-700">(-₹{appliedCoupon.discountAmount} saved)</span>
+                <span className="text-emerald-700 font-mono">(-₹{appliedCoupon.discountAmount} saved)</span>
               </div>
               <button
                 type="button"
                 onClick={handleRemoveCoupon}
                 className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 cursor-pointer"
               >
-                <X size={13} /> Remove
+                <MaterialSymbol name="close" size={14} /> Remove
               </button>
             </div>
           ) : (
@@ -254,7 +255,7 @@ export function ScheduleReviewStep({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs px-3 font-semibold shrink-0"
+                className="h-8 text-xs px-3 font-semibold shrink-0 cursor-pointer"
                 disabled={validating || !couponInput.trim()}
                 onClick={handleApplyCoupon}
               >
@@ -270,9 +271,9 @@ export function ScheduleReviewStep({
         <div className="rounded-xl border border-slate-200 bg-card p-3.5 shadow-2xs space-y-2">
           <div className="flex items-center justify-between">
             <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <Gift size={13} className="text-amber-500" /> Redeem Loyalty Points
+              <MaterialSymbol name="featured_seasonal_and_gifts" size={15} className="text-amber-500" /> Redeem Loyalty Points
             </Label>
-            <Badge variant="outline" className="text-[11px] font-semibold text-amber-700 bg-amber-50 border-amber-200">
+            <Badge variant="outline" className="text-[11px] font-semibold text-amber-700 bg-amber-50 border-amber-200 font-mono tabular-nums">
               {availablePoints} pts available (₹{availablePoints})
             </Badge>
           </div>
@@ -280,16 +281,16 @@ export function ScheduleReviewStep({
           {appliedLoyaltyPoints ? (
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs">
               <div className="flex items-center gap-2">
-                <Check size={14} className="text-amber-700" />
-                <span className="font-bold text-amber-900">{appliedLoyaltyPoints.points} Points Applied</span>
-                <span className="text-amber-700">(-₹{appliedLoyaltyPoints.discountAmount} discount)</span>
+                <MaterialSymbol name="check" size={15} className="text-amber-700" />
+                <span className="font-bold text-amber-900 font-mono">{appliedLoyaltyPoints.points} Points Applied</span>
+                <span className="text-amber-700 font-mono">(-₹{appliedLoyaltyPoints.discountAmount} discount)</span>
               </div>
               <button
                 type="button"
                 onClick={handleRemovePoints}
                 className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 cursor-pointer"
               >
-                <X size={13} /> Remove
+                <MaterialSymbol name="close" size={14} /> Remove
               </button>
             </div>
           ) : (
@@ -307,7 +308,7 @@ export function ScheduleReviewStep({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs px-3 font-semibold shrink-0"
+                className="h-8 text-xs px-3 font-semibold shrink-0 cursor-pointer"
                 disabled={redeemingPoints || !pointsInput.trim()}
                 onClick={handleApplyPoints}
               >
@@ -320,29 +321,29 @@ export function ScheduleReviewStep({
 
       {/* Price Summary Breakdown */}
       {estimatedPrice != null && !coveredByPlan && !siteVisitRequired && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm space-y-1.5 shadow-2xs">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm space-y-1.5 shadow-2xs font-mono">
           <div className="flex justify-between items-center text-xs text-muted-foreground">
-            <span>Service Base Price</span>
-            <span>₹{estimatedPrice.toLocaleString("en-IN")}</span>
+            <span className="font-sans">Service Base Price</span>
+            <span className="tabular-nums">₹{estimatedPrice.toLocaleString("en-IN")}</span>
           </div>
 
           {appliedCoupon && (
             <div className="flex justify-between items-center text-xs text-emerald-700 font-semibold">
-              <span>Coupon Discount ({appliedCoupon.code})</span>
-              <span>-₹{appliedCoupon.discountAmount.toLocaleString("en-IN")}</span>
+              <span className="font-sans">Coupon Discount ({appliedCoupon.code})</span>
+              <span className="tabular-nums">-₹{appliedCoupon.discountAmount.toLocaleString("en-IN")}</span>
             </div>
           )}
 
           {appliedLoyaltyPoints && (
             <div className="flex justify-between items-center text-xs text-amber-700 font-semibold">
-              <span>Loyalty Points Discount ({appliedLoyaltyPoints.points} pts)</span>
-              <span>-₹{appliedLoyaltyPoints.discountAmount.toLocaleString("en-IN")}</span>
+              <span className="font-sans">Loyalty Points Discount ({appliedLoyaltyPoints.points} pts)</span>
+              <span className="tabular-nums">-₹{appliedLoyaltyPoints.discountAmount.toLocaleString("en-IN")}</span>
             </div>
           )}
 
           <div className="pt-2 border-t border-slate-200 flex justify-between items-center font-bold">
-            <span className="text-foreground">Estimated Total{gstExtra ? " (+ GST)" : ""}</span>
-            <span className="font-display text-lg text-primary">
+            <span className="text-foreground font-sans">Estimated Total{gstExtra ? " (+ GST)" : ""}</span>
+            <span className="font-display text-lg text-primary tabular-nums">
               ₹{(finalPrice || 0).toLocaleString("en-IN")}
             </span>
           </div>
@@ -351,7 +352,7 @@ export function ScheduleReviewStep({
 
       {coveredByPlan && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-2 text-xs font-semibold text-emerald-800">
-          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          <MaterialSymbol name="check_circle" size={17} className="text-emerald-600 shrink-0" />
           <span>Service covered by your active plan membership visits</span>
         </div>
       )}

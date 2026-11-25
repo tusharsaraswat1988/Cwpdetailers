@@ -729,6 +729,7 @@ export default function BookService() {
             error={coverageError}
             onRetry={() => { void refetchServices(); void refetchCoverage(); }}
             coveredByPlan={coveredByPlan}
+            onChangeLocation={() => setAddressSheetOpen(true)}
           />
         )}
 

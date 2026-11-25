@@ -1,7 +1,13 @@
 import { memo } from "react";
 import { Link } from "wouter";
-import { Car, Sun, MapPin, Calendar, History, Pencil } from "lucide-react";
+import { MaterialSymbol } from "@/lib/design-system/MaterialSymbol";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { resolveMediaUrl } from "@/lib/media-url";
 import type { AssetCardModel } from "@/lib/asset-dashboard";
 import { cn } from "@/lib/utils";
@@ -55,11 +61,11 @@ export const AssetCard = memo(function AssetCard({ asset, onEdit, className }: A
               />
             ) : isVehicle ? (
               <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 text-primary">
-                <Car size={24} />
+                <MaterialSymbol name="directions_car" size={24} />
               </div>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-amber-50 text-amber-600">
-                <Sun size={24} />
+                <MaterialSymbol name="wb_sunny" size={24} />
               </div>
             )}
           </div>
@@ -78,7 +84,7 @@ export const AssetCard = memo(function AssetCard({ asset, onEdit, className }: A
 
               <span
                 className={cn(
-                  "text-[10px] font-bold px-2.5 py-0.5 rounded-full border shrink-0 tracking-wide",
+                  "text-[10px] font-bold px-2.5 py-0.5 rounded-full border shrink-0 tracking-wide font-mono",
                   health.bg,
                   health.text,
                   health.border,
@@ -97,7 +103,7 @@ export const AssetCard = memo(function AssetCard({ asset, onEdit, className }: A
                     {asset.subtitle}
                   </span>
                 ) : (
-                  <span className="inline-block px-2 py-0.5 rounded-md bg-amber-50/80 text-amber-800 text-xs font-medium border border-amber-200/60">
+                  <span className="inline-block px-2 py-0.5 rounded-md bg-amber-50/80 text-amber-800 text-xs font-medium border border-amber-200/60 font-mono">
                     {asset.subtitle}
                   </span>
                 )}
@@ -123,7 +129,7 @@ export const AssetCard = memo(function AssetCard({ asset, onEdit, className }: A
           {/* Address (Service Address for vehicle, Installation Address for solar) */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-1.5 min-w-0 flex-1">
-              <MapPin size={13} className="shrink-0 text-primary mt-0.5" />
+              <MaterialSymbol name="location_on" size={14} className="shrink-0 text-primary mt-0.5" />
               <div className="min-w-0">
                 <span className="text-[10px] font-medium text-muted-foreground block">
                   {isVehicle ? "Service Address" : "Installation Address"}
@@ -149,7 +155,7 @@ export const AssetCard = memo(function AssetCard({ asset, onEdit, className }: A
             <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground border-t border-slate-50">
               {asset.nextServiceLabel && (
                 <span className="flex items-center gap-1 truncate">
-                  <Calendar size={11} className="text-primary" />
+                  <MaterialSymbol name="calendar_today" size={12} className="text-primary" />
                   {isVehicle ? "Next Service: " : "Next Cleaning: "}
                   <strong className="text-foreground font-medium">{asset.nextServiceLabel}</strong>
                 </span>
@@ -164,37 +170,72 @@ export const AssetCard = memo(function AssetCard({ asset, onEdit, className }: A
         </div>
       </div>
 
-      {/* Action Footer */}
-      <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Link href={asset.scheduleHref} className="cursor-pointer">
-            <Button
-              size="sm"
-              className="h-11 min-h-[44px] px-3.5 sm:px-4 rounded-xl bg-primary hover:bg-[#1264db] text-white font-semibold text-xs shadow-xs gap-1.5 cursor-pointer flex items-center"
-              data-testid={`asset-schedule-${asset.id}`}
-            >
-              <Calendar size={14} /> Schedule
-            </Button>
-          </Link>
+      {/* Action Footer: 1 Dominant Primary CTA ("Schedule Service") + Secondary Actions */}
+      <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2.5">
+        <Link href={asset.scheduleHref} className="flex-1 cursor-pointer">
           <Button
-            type="button"
-            variant="outline"
             size="sm"
-            className="h-11 min-h-[44px] px-3.5 sm:px-4 rounded-xl border-slate-200 hover:bg-white font-semibold text-xs text-foreground gap-1.5 cursor-pointer flex items-center"
-            onClick={() => onEdit(asset)}
-            data-testid={`asset-edit-${asset.id}`}
+            className="w-full h-11 min-h-[44px] px-4 rounded-xl bg-primary hover:bg-[#1264db] text-white font-semibold text-xs shadow-xs gap-1.5 cursor-pointer flex items-center justify-center transition-all duration-150"
+            data-testid={`asset-schedule-${asset.id}`}
           >
-            <Pencil size={13} /> Edit
+            <MaterialSymbol name="calendar_month" size={16} /> Schedule Service
           </Button>
-        </div>
-
-        <Link
-          href={asset.historyHref}
-          className="min-h-[44px] inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary px-2 cursor-pointer"
-          data-testid={`asset-history-${asset.id}`}
-        >
-          <History size={13} /> History
         </Link>
+
+        {/* Secondary 1-tap Edit Action */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-11 min-h-[44px] px-3.5 rounded-xl border-slate-200 hover:bg-white font-semibold text-xs text-foreground gap-1.5 cursor-pointer flex items-center shrink-0"
+          onClick={() => onEdit(asset)}
+          data-testid={`asset-edit-${asset.id}`}
+          aria-label={`Edit ${asset.name}`}
+        >
+          <MaterialSymbol name="edit" size={14} />
+          <span className="hidden sm:inline">Edit</span>
+        </Button>
+
+        {/* Secondary Actions Overflow Menu (⋮) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-xl border-slate-200 hover:bg-white text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-center shrink-0"
+              aria-label={`More actions for ${asset.name}`}
+              data-testid={`asset-more-${asset.id}`}
+            >
+              <MaterialSymbol name="more_vert" size={18} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52 rounded-xl shadow-lg border-slate-200 p-1.5">
+            <DropdownMenuItem asChild className="gap-2 cursor-pointer rounded-lg text-xs font-medium py-2.5">
+              <Link
+                href={asset.historyHref}
+                className="w-full flex items-center gap-2"
+                data-testid={`asset-history-${asset.id}`}
+              >
+                <MaterialSymbol name="history" size={16} className="text-muted-foreground" />
+                <span>Service History</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2 cursor-pointer rounded-lg text-xs font-medium py-2.5"
+              onClick={() => onEdit(asset)}
+            >
+              <MaterialSymbol name="edit_location" size={16} className="text-primary" />
+              <span>Change Address</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="gap-2 cursor-pointer rounded-lg text-xs font-medium py-2.5">
+              <Link href={asset.planHref} className="w-full flex items-center gap-2">
+                <MaterialSymbol name="assignment" size={16} className="text-primary" />
+                <span>{asset.plan ? "Manage Plan" : isVehicle ? "Purchase Plan" : "Purchase AMC"}</span>
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </article>
   );
