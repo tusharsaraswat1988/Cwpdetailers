@@ -41,6 +41,8 @@
     "update:brand-logo": "tsx ./src/update-brand-logo.ts",
     "verify:m1-adversarial": "tsx ./src/verify-m1-adversarial.ts",
     "verify:staging-schema": "tsx ./src/verify-staging-schema.ts",
+    "inspect:prod": "tsx ./src/inspect-prod-db.ts",
+    "db:reset-fresh": "tsx ./src/reset-production-db.ts",
     "test:staging-e2e": "tsx ./src/staging-e2e-verification.ts",
     "seed:phase24": "tsx ./src/seed-phase24-demo-route.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

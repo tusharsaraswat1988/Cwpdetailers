@@ -22,4 +22,4 @@ pool.on("connect", (client) => {
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
-export { schema };
+export { schema, pg };
