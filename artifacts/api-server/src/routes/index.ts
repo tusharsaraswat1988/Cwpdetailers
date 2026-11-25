@@ -65,6 +65,7 @@ import operationalCalendarRouter from "./operational-calendar";
 import zonesRouter from "./zones";
 import locationPricingRouter from "./location-pricing";
 import locationResolutionRouter from "./location-resolution";
+import configRouter from "./config";
 import { guardResource, guardMasterDataRoutes, guardCatalogRoutes, guardWalkInRoutes, WALK_IN_PATH_PREFIX, EXTRA_SERVICE_STAFF_PATH_PREFIX } from "../middlewares/permissions";
 
 const router: IRouter = Router();
@@ -322,6 +323,7 @@ router.use(operationalCalendarRouter);
 router.use(locationResolutionRouter);
 router.use(zonesRouter);
 router.use(locationPricingRouter);
+router.use(configRouter);
 router.use(guardMasterDataRoutes(), masterDataRouter);
 router.use(guardCatalogRoutes(), serviceCatalogRouter);
 

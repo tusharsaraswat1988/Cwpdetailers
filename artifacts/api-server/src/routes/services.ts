@@ -8,6 +8,10 @@ import {
   citiesTable,
 } from "@workspace/db";
 import { eq, and, asc, sql } from "drizzle-orm";
+import {
+  getServiceWorkflowDefinition,
+  listAllServiceWorkflowDefinitions,
+} from "../lib/services/serviceWorkflowEngine";
 
 const router = Router();
 
@@ -239,6 +243,43 @@ router.patch("/services/:id", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Update service error");
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/services/workflows", async (_req, res) => {
+  try {
+    const workflows = listAllServiceWorkflowDefinitions();
+    return res.json(workflows);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to list service workflows" });
+  }
+});
+
+router.get("/services/workflows/:serviceType", async (req, res) => {
+  try {
+    const workflow = getServiceWorkflowDefinition(req.params.serviceType);
+    return res.json(workflow);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to get service workflow" });
+  }
+});
+
+router.get("/services/:id/workflow", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [service] = await db
+      .select()
+      .from(servicesTable)
+      .where(eq(servicesTable.id, id))
+      .limit(1);
+
+    if (!service) return res.status(404).json({ error: "Service not found" });
+
+    const key = service.serviceType || service.category || service.slug || service.name;
+    const workflow = getServiceWorkflowDefinition(key);
+    return res.json(workflow);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to get service workflow" });
   }
 });
 

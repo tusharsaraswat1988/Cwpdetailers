@@ -14,6 +14,7 @@ import {
 import {
   listDcmsPackageWashes, assignDcmsPackageWash,
 } from "../lib/dcms/washAssignmentService";
+import { autoAssignSocietyClusters } from "../lib/dcms/societyAutoAssignmentService";
 import {
   createOperationalException, listOperationalExceptions, resolveOperationalException,
 } from "../lib/dcms/exceptionService";
@@ -405,6 +406,73 @@ router.post(
       });
 
       return res.status(200).json({ ok: true, assignment });
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.post(
+  "/daily-cleaning/assignments/auto-assign",
+  requireAuth,
+  requirePermission("daily_cleaning", "manage_subscriptions"),
+  async (req, res) => {
+    try {
+      const branchId = resolveEffectiveBranchId(req, req.body.branchId);
+      if (!branchId) {
+        return res.status(400).json({ error: "branchId is required for auto-assignment" });
+      }
+
+      const societyId = req.body.societyId ? Number(req.body.societyId) : undefined;
+      const zoneId = req.body.zoneId ? Number(req.body.zoneId) : undefined;
+      const maxCarsPerCleaner = req.body.maxCarsPerCleaner ? Number(req.body.maxCarsPerCleaner) : undefined;
+      const forceRebalance = req.body.forceRebalance === true;
+      const dryRun = req.body.dryRun === true;
+
+      const result = await autoAssignSocietyClusters({
+        branchId,
+        societyId,
+        zoneId,
+        maxCarsPerCleaner,
+        forceRebalance,
+        dryRun,
+        assignedBy: req.user!.id,
+      });
+
+      return res.status(200).json({ ok: true, ...result });
+    } catch (err) {
+      return handleError(req, res, err);
+    }
+  },
+);
+
+router.get(
+  "/daily-cleaning/assignments/auto-assign/preview",
+  requireAuth,
+  requirePermission("daily_cleaning", "view"),
+  async (req, res) => {
+    try {
+      const branchId = resolveEffectiveBranchId(req, req.query.branchId as string);
+      if (!branchId) {
+        return res.status(400).json({ error: "branchId is required for auto-assignment preview" });
+      }
+
+      const societyId = req.query.societyId ? Number(req.query.societyId) : undefined;
+      const zoneId = req.query.zoneId ? Number(req.query.zoneId) : undefined;
+      const maxCarsPerCleaner = req.query.maxCarsPerCleaner ? Number(req.query.maxCarsPerCleaner) : undefined;
+      const forceRebalance = req.query.forceRebalance === "true";
+
+      const result = await autoAssignSocietyClusters({
+        branchId,
+        societyId,
+        zoneId,
+        maxCarsPerCleaner,
+        forceRebalance,
+        dryRun: true,
+        assignedBy: req.user!.id,
+      });
+
+      return res.status(200).json(result);
     } catch (err) {
       return handleError(req, res, err);
     }
