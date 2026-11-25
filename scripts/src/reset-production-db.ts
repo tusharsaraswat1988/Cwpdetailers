@@ -2,10 +2,102 @@ import "./load-env.js";
 import { pg } from "@workspace/db";
 import argon2 from "argon2";
 
-const targetUrl =
-  process.env.TARGET_DATABASE_URL ||
-  process.argv[2] ||
-  "postgresql://neondb_owner:npg_WXJ8KqZO9Aud@ep-flat-meadow-aozck6dv-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
+export type PurgeConfigValidation = {
+  valid: boolean;
+  error?: string;
+  targetDisplay?: string;
+};
+
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+function isLocalHostname(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  return LOCAL_HOSTNAMES.has(lower) || lower.endsWith(".local");
+}
+
+function isKnownProductionTarget(hostname: string, targetUrl: string, env: Record<string, string | undefined>): boolean {
+  const urlLower = targetUrl.toLowerCase();
+  const hostLower = hostname.toLowerCase();
+  const nodeEnv = (env.NODE_ENV ?? "").toLowerCase();
+
+  if (nodeEnv === "production") return true;
+  if (hostLower.includes("ep-flat-meadow-aozck6dv")) return true;
+  if (hostLower.includes("prod") || hostLower.includes("production")) return true;
+  if (urlLower.includes("/cwp_prod") || urlLower.includes("/production")) return true;
+  return false;
+}
+
+/**
+ * Validates database purge safety rules without connecting to any database.
+ * Default-deny architecture:
+ * 1. TARGET_DATABASE_URL must be explicitly provided and parseable (no default fallback).
+ * 2. ALLOW_DATABASE_PURGE=I_CONFIRM_DESTRUCTIVE_PURGE must be explicitly set.
+ * 3. NODE_ENV must not be 'production' and target must not match production identifiers.
+ * 4. Default-deny: all non-local / remote hosts (including raw IPs, Supabase, cloud hosts) are blocked by default.
+ * 5. Permitting any remote target requires BOTH ALLOW_UNSAFE_REMOTE_PURGE=CONFIRM_REMOTE_PURGE AND explicit ALLOWED_REMOTE_PURGE_HOST=<host>.
+ */
+export function validatePurgeConfiguration(
+  targetUrl?: string | null,
+  env: Record<string, string | undefined> = process.env,
+): PurgeConfigValidation {
+  if (!targetUrl || !targetUrl.trim()) {
+    return {
+      valid: false,
+      error: "Refusing to run: TARGET_DATABASE_URL environment variable or target argument is required. No fallback is permitted.",
+    };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return {
+      valid: false,
+      error: "Refusing to run: TARGET_DATABASE_URL must be a valid parseable database URL.",
+    };
+  }
+
+  if (env.ALLOW_DATABASE_PURGE !== "I_CONFIRM_DESTRUCTIVE_PURGE") {
+    return {
+      valid: false,
+      error: "Refusing to run: Explicit confirmation required. Set ALLOW_DATABASE_PURGE=I_CONFIRM_DESTRUCTIVE_PURGE.",
+    };
+  }
+
+  if (isKnownProductionTarget(parsed.hostname, targetUrl, env)) {
+    return {
+      valid: false,
+      error: "FATAL: Database reset script cannot be executed against PRODUCTION environments or targets.",
+    };
+  }
+
+  const isLocal = isLocalHostname(parsed.hostname);
+  if (!isLocal) {
+    if (env.ALLOW_UNSAFE_REMOTE_PURGE !== "CONFIRM_REMOTE_PURGE") {
+      return {
+        valid: false,
+        error: `BLOCKED: Target host '${parsed.hostname}' is a non-local/remote database. Remote database purge is disabled by default.`,
+      };
+    }
+
+    const allowedRemoteHost = (env.ALLOWED_REMOTE_PURGE_HOST ?? "").toLowerCase().trim();
+    if (!allowedRemoteHost || allowedRemoteHost !== parsed.hostname.toLowerCase()) {
+      return {
+        valid: false,
+        error: `BLOCKED: Remote target host '${parsed.hostname}' is not explicitly allowlisted in ALLOWED_REMOTE_PURGE_HOST. Set ALLOWED_REMOTE_PURGE_HOST=${parsed.hostname.toLowerCase()} to confirm this specific target.`,
+      };
+    }
+  }
+
+  const targetDisplay = `Host: ${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}, Database: ${parsed.pathname.replace(/^\//, "")}`;
+
+  return {
+    valid: true,
+    targetDisplay,
+  };
+}
+
+const targetUrl = process.env.TARGET_DATABASE_URL || process.argv[2];
 
 // Operational and business data tables to truncate
 const DATA_TABLES_TO_TRUNCATE = [
@@ -105,14 +197,22 @@ const DATA_TABLES_TO_TRUNCATE = [
 ];
 
 async function main() {
-  const maskedUrl = targetUrl.replace(/:[^:@]+@/, ":****@");
+  const validation = validatePurgeConfiguration(targetUrl);
+  if (!validation.valid) {
+    console.error("==================================================================");
+    console.error("❌ SAFETY CHECK FAILED — DATABASE PURGE ABORTED");
+    console.error("==================================================================");
+    console.error(validation.error);
+    process.exit(1);
+  }
+
   console.log("==================================================================");
-  console.log("CWP DETAILERS — PRODUCTION DATABASE PURGE & FRESH STAGE BOOTSTRAP");
+  console.log("CWP DETAILERS — DATABASE PURGE & FRESH STAGE BOOTSTRAP");
   console.log("==================================================================");
-  console.log(`Target Database: ${maskedUrl}`);
+  console.log(`Target: ${validation.targetDisplay}`);
 
   const client = new pg.Client({
-    connectionString: targetUrl,
+    connectionString: targetUrl!,
     ssl: { rejectUnauthorized: false },
   });
 
@@ -158,32 +258,37 @@ async function main() {
 
     // 3. Seed / Bootstrap Default Super Admin in users table
     if (existingTableNames.has("users")) {
-      const adminPhone = process.env.ADMIN_PHONE || "9999999999";
-      const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
-      const adminName = process.env.ADMIN_NAME || "Super Admin";
-      const adminEmail = process.env.ADMIN_EMAIL || "admin@cwpdetailers.in";
+      const adminPhone = process.env.ADMIN_PHONE;
+      const adminPassword = process.env.ADMIN_PASSWORD;
 
-      const passwordHash = await argon2.hash(adminPassword);
-      const now = new Date();
+      if (!adminPhone || !adminPassword) {
+        console.log("\n↷ Skipped Super Admin bootstrap: ADMIN_PHONE and ADMIN_PASSWORD environment variables not provided.");
+      } else {
+        const adminName = process.env.ADMIN_NAME || "Super Admin";
+        const adminEmail = process.env.ADMIN_EMAIL || "admin@cwpdetailers.in";
 
-      await client.query(
-        `
-        INSERT INTO users (phone, password_hash, name, email, role, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, 'super_admin', true, $5, $6)
-        ON CONFLICT (phone) DO UPDATE SET
-          password_hash = EXCLUDED.password_hash,
-          role = 'super_admin',
-          is_active = true,
-          updated_at = EXCLUDED.updated_at;
-      `,
-        [adminPhone, passwordHash, adminName, adminEmail, now, now],
-      );
+        const passwordHash = await argon2.hash(adminPassword);
+        const now = new Date();
 
-      console.log(`\n✓ Bootstrapped Super Admin login:`);
-      console.log(`  - Portal: Admin (/admin/login)`);
-      console.log(`  - Phone: ${adminPhone}`);
-      console.log(`  - Password: ${adminPassword}`);
-      console.log(`  - Role: super_admin`);
+        await client.query(
+          `
+          INSERT INTO users (phone, password_hash, name, email, role, is_active, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, 'super_admin', true, $5, $6)
+          ON CONFLICT (phone) DO UPDATE SET
+            password_hash = EXCLUDED.password_hash,
+            role = 'super_admin',
+            is_active = true,
+            updated_at = EXCLUDED.updated_at;
+        `,
+          [adminPhone, passwordHash, adminName, adminEmail, now, now],
+        );
+
+        console.log(`\n✓ Bootstrapped Super Admin login:`);
+        console.log(`  - Portal: Admin (/admin/login)`);
+        console.log(`  - Phone: ${adminPhone}`);
+        console.log(`  - Password: [SET FROM ENVIRONMENT]`);
+        console.log(`  - Role: super_admin`);
+      }
     }
 
     console.log("\n==================================================================");
@@ -197,7 +302,13 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+const isDirectRun =
+  import.meta.url === `file://${process.argv[1]?.replace(/\\/g, "/")}` ||
+  (process.argv[1] ? process.argv[1].replace(/\\/g, "/").includes("reset-production-db") : false);
+
+if (isDirectRun && process.env.NODE_ENV !== "test") {
+  main().catch((err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
+}

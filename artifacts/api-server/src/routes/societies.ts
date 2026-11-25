@@ -9,9 +9,15 @@ import {
   type SocietyTower,
 } from "@workspace/db";
 import { eq, and, ilike, or, sql, asc, desc } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requirePermission } from "../middlewares/auth";
+import { assertBranchAccess } from "../middlewares/tenantScope";
 
 const router = Router();
+
+function isSuperOrCentralAdmin(req: import("express").Request): boolean {
+  const role = req.user?.role;
+  return role === "superadmin" || role === "central_admin" || (role === "admin" && !req.user?.branchId);
+}
 
 function slugifyCode(text: string): string {
   return text
@@ -186,58 +192,76 @@ router.get("/societies/:id", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Create Society (Admin / Manager)
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/societies", requireAuth, async (req, res) => {
-  try {
-    const {
-      name,
-      code,
-      cityId,
-      serviceAreaId,
-      address,
-      pincode,
-      latitude,
-      longitude,
-      gateSecurityNotes,
-      totalTowers,
-      totalFlats,
-      towers,
-    } = req.body;
+router.post(
+  "/societies",
+  requireAuth,
+  requirePermission("branches", "edit"),
+  async (req, res) => {
+    try {
+      const {
+        name,
+        code,
+        cityId,
+        serviceAreaId,
+        address,
+        pincode,
+        latitude,
+        longitude,
+        gateSecurityNotes,
+        totalTowers,
+        totalFlats,
+        towers,
+      } = req.body;
 
-    if (!name || typeof name !== "string" || !name.trim()) {
-      return res.status(400).json({ error: "Society name is required" });
-    }
-    if (!cityId || Number.isNaN(Number(cityId))) {
-      return res.status(400).json({ error: "Valid cityId is required" });
-    }
-    if (!address || typeof address !== "string" || !address.trim()) {
-      return res.status(400).json({ error: "Address is required" });
-    }
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ error: "Society name is required" });
+      }
+      if (!cityId || Number.isNaN(Number(cityId))) {
+        return res.status(400).json({ error: "Valid cityId is required" });
+      }
+      if (!address || typeof address !== "string" || !address.trim()) {
+        return res.status(400).json({ error: "Address is required" });
+      }
 
-    const societyCode = (code && typeof code === "string" && code.trim())
-      ? slugifyCode(code)
-      : slugifyCode(name);
+      const parsedCityId = Number(cityId);
 
-    const initialTowers = Array.isArray(towers) ? towers : [];
-    const calculatedTotalTowers = Number(totalTowers) || initialTowers.length || 0;
+      // Organizational scope validation: missing branch/city assignment must NEVER mean unrestricted access
+      if (!isSuperOrCentralAdmin(req)) {
+        if (req.user?.role === "city_admin" && req.user.cityId && parsedCityId !== req.user.cityId) {
+          return res.status(403).json({ error: "Access denied to create society outside assigned city" });
+        }
+        if (req.user?.branchId) {
+          assertBranchAccess(req, req.user.branchId);
+        } else if (req.user?.role !== "city_admin") {
+          return res.status(403).json({ error: "Access denied: branch or city assignment required to manage societies" });
+        }
+      }
 
-    const [society] = await db
-      .insert(residentialSocietiesTable)
-      .values({
-        name: name.trim(),
-        code: societyCode,
-        cityId: Number(cityId),
-        serviceAreaId: serviceAreaId ? Number(serviceAreaId) : null,
-        address: address.trim(),
-        pincode: pincode ? String(pincode).trim() : null,
-        latitude: latitude != null ? Number(latitude) : null,
-        longitude: longitude != null ? Number(longitude) : null,
-        gateSecurityNotes: gateSecurityNotes ? String(gateSecurityNotes).trim() : null,
-        totalTowers: calculatedTotalTowers,
-        totalFlats: totalFlats ? Number(totalFlats) : 0,
-        companyId: req.user?.companyId ?? null,
-        branchId: req.user?.branchId ?? null,
-      })
-      .returning();
+      const societyCode = (code && typeof code === "string" && code.trim())
+        ? slugifyCode(code)
+        : slugifyCode(name);
+
+      const initialTowers = Array.isArray(towers) ? towers : [];
+      const calculatedTotalTowers = Number(totalTowers) || initialTowers.length || 0;
+
+      const [society] = await db
+        .insert(residentialSocietiesTable)
+        .values({
+          name: name.trim(),
+          code: societyCode,
+          cityId: parsedCityId,
+          serviceAreaId: serviceAreaId ? Number(serviceAreaId) : null,
+          address: address.trim(),
+          pincode: pincode ? String(pincode).trim() : null,
+          latitude: latitude != null ? Number(latitude) : null,
+          longitude: longitude != null ? Number(longitude) : null,
+          gateSecurityNotes: gateSecurityNotes ? String(gateSecurityNotes).trim() : null,
+          totalTowers: calculatedTotalTowers,
+          totalFlats: totalFlats ? Number(totalFlats) : 0,
+          companyId: req.user?.companyId ?? null,
+          branchId: req.user?.branchId ?? null,
+        })
+        .returning();
 
     const createdTowers: SocietyTower[] = [];
     if (initialTowers.length > 0) {
@@ -272,50 +296,76 @@ router.post("/societies", requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. Update Society
 // ─────────────────────────────────────────────────────────────────────────────
-router.patch("/societies/:id", requireAuth, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid society id" });
+router.patch(
+  "/societies/:id",
+  requireAuth,
+  requirePermission("branches", "edit"),
+  async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid society id" });
 
-    const allowedFields = [
-      "name",
-      "code",
-      "address",
-      "pincode",
-      "latitude",
-      "longitude",
-      "gateSecurityNotes",
-      "totalTowers",
-      "totalFlats",
-      "isActive",
-      "serviceAreaId",
-    ];
+      const [existing] = await db
+        .select()
+        .from(residentialSocietiesTable)
+        .where(eq(residentialSocietiesTable.id, id))
+        .limit(1);
 
-    const patch: Record<string, unknown> = { updatedAt: new Date() };
-    for (const key of allowedFields) {
-      if (req.body[key] !== undefined) {
-        if (key === "code" && typeof req.body[key] === "string") {
-          patch[key] = slugifyCode(req.body[key]);
-        } else {
-          patch[key] = req.body[key];
+      if (!existing) return res.status(404).json({ error: "Society not found" });
+
+      // Organizational scope validation: missing branch/city assignment must NEVER mean unrestricted access
+      if (!isSuperOrCentralAdmin(req)) {
+        if (req.user?.role === "city_admin" && req.user.cityId && existing.cityId !== req.user.cityId) {
+          return res.status(403).json({ error: "Access denied to update society outside assigned city" });
+        }
+        if (req.user?.branchId) {
+          if (existing.branchId && existing.branchId !== req.user.branchId) {
+            return res.status(403).json({ error: "Access denied to update society outside assigned branch" });
+          }
+          assertBranchAccess(req, req.user.branchId);
+        } else if (req.user?.role !== "city_admin") {
+          return res.status(403).json({ error: "Access denied: branch or city assignment required to manage societies" });
         }
       }
+
+      const allowedFields = [
+        "name",
+        "code",
+        "address",
+        "pincode",
+        "latitude",
+        "longitude",
+        "gateSecurityNotes",
+        "totalTowers",
+        "totalFlats",
+        "isActive",
+        "serviceAreaId",
+      ];
+
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      for (const key of allowedFields) {
+        if (req.body[key] !== undefined) {
+          if (key === "code" && typeof req.body[key] === "string") {
+            patch[key] = slugifyCode(req.body[key]);
+          } else {
+            patch[key] = req.body[key];
+          }
+        }
+      }
+
+      const [updated] = await db
+        .update(residentialSocietiesTable)
+        .set(patch)
+        .where(eq(residentialSocietiesTable.id, id))
+        .returning();
+
+      return res.json(updated);
+    } catch (err) {
+      req.log.error({ err }, "Error updating residential society");
+      return res.status(500).json({ error: "Failed to update society" });
     }
-
-    const [updated] = await db
-      .update(residentialSocietiesTable)
-      .set(patch)
-      .where(eq(residentialSocietiesTable.id, id))
-      .returning();
-
-    if (!updated) return res.status(404).json({ error: "Society not found" });
-
-    return res.json(updated);
-  } catch (err) {
-    req.log.error({ err }, "Error updating residential society");
-    return res.status(500).json({ error: "Failed to update society" });
-  }
-});
+  },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. List Towers for Society
@@ -341,54 +391,74 @@ router.get("/societies/:id/towers", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. Add Tower to Society
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/societies/:id/towers", requireAuth, async (req, res) => {
-  try {
-    const societyId = parseInt(req.params.id, 10);
-    if (Number.isNaN(societyId)) return res.status(400).json({ error: "Invalid society id" });
+router.post(
+  "/societies/:id/towers",
+  requireAuth,
+  requirePermission("branches", "edit"),
+  async (req, res) => {
+    try {
+      const societyId = parseInt(req.params.id, 10);
+      if (Number.isNaN(societyId)) return res.status(400).json({ error: "Invalid society id" });
 
-    const [society] = await db
-      .select()
-      .from(residentialSocietiesTable)
-      .where(eq(residentialSocietiesTable.id, societyId))
-      .limit(1);
+      const [society] = await db
+        .select()
+        .from(residentialSocietiesTable)
+        .where(eq(residentialSocietiesTable.id, societyId))
+        .limit(1);
 
-    if (!society) return res.status(404).json({ error: "Society not found" });
+      if (!society) return res.status(404).json({ error: "Society not found" });
 
-    const { name, code, totalFloors, totalFlats, parkingLevels } = req.body;
-    if (!name || typeof name !== "string" || !name.trim()) {
-      return res.status(400).json({ error: "Tower name is required" });
+      // Organizational scope validation: missing branch/city assignment must NEVER mean unrestricted access
+      if (!isSuperOrCentralAdmin(req)) {
+        if (req.user?.role === "city_admin" && req.user.cityId && society.cityId !== req.user.cityId) {
+          return res.status(403).json({ error: "Access denied to add tower to society outside assigned city" });
+        }
+        if (req.user?.branchId) {
+          if (society.branchId && society.branchId !== req.user.branchId) {
+            return res.status(403).json({ error: "Access denied to add tower to society outside assigned branch" });
+          }
+          assertBranchAccess(req, req.user.branchId);
+        } else if (req.user?.role !== "city_admin") {
+          return res.status(403).json({ error: "Access denied: branch or city assignment required to manage societies" });
+        }
+      }
+
+      const { name, code, totalFloors, totalFlats, parkingLevels } = req.body;
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ error: "Tower name is required" });
+      }
+
+      const towerCode = (code && typeof code === "string" && code.trim())
+        ? slugifyCode(code)
+        : slugifyCode(name);
+
+      const [tower] = await db
+        .insert(societyTowersTable)
+        .values({
+          societyId,
+          name: name.trim(),
+          code: towerCode,
+          totalFloors: totalFloors ? Number(totalFloors) : null,
+          totalFlats: totalFlats ? Number(totalFlats) : null,
+          parkingLevels: parkingLevels ? String(parkingLevels).trim() : null,
+        })
+        .returning();
+
+      // Increment totalTowers counter
+      await db
+        .update(residentialSocietiesTable)
+        .set({
+          totalTowers: sql`${residentialSocietiesTable.totalTowers} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(residentialSocietiesTable.id, societyId));
+
+      return res.status(201).json(tower);
+    } catch (err) {
+      req.log.error({ err }, "Error creating society tower");
+      return res.status(500).json({ error: "Failed to create tower" });
     }
-
-    const towerCode = (code && typeof code === "string" && code.trim())
-      ? slugifyCode(code)
-      : slugifyCode(name);
-
-    const [tower] = await db
-      .insert(societyTowersTable)
-      .values({
-        societyId,
-        name: name.trim(),
-        code: towerCode,
-        totalFloors: totalFloors ? Number(totalFloors) : null,
-        totalFlats: totalFlats ? Number(totalFlats) : null,
-        parkingLevels: parkingLevels ? String(parkingLevels).trim() : null,
-      })
-      .returning();
-
-    // Increment totalTowers counter
-    await db
-      .update(residentialSocietiesTable)
-      .set({
-        totalTowers: sql`${residentialSocietiesTable.totalTowers} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(residentialSocietiesTable.id, societyId));
-
-    return res.status(201).json(tower);
-  } catch (err) {
-    req.log.error({ err }, "Error creating society tower");
-    return res.status(500).json({ error: "Failed to create tower" });
-  }
-});
+  },
+);
 
 export default router;

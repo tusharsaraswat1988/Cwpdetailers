@@ -10,14 +10,20 @@ import {
   residentialSocietiesTable,
 } from "@workspace/db";
 import { eq, and, desc, asc } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requirePermission } from "../middlewares/auth";
+import { assertBranchAccess } from "../middlewares/tenantScope";
 import { locationPricingEngine } from "../lib/location-intelligence/pricing/LocationPricingEngine";
 
 const router = Router();
 
 function isSuperOrCentralAdmin(req: Request): boolean {
   const role = req.user?.role;
-  return role === "superadmin" || role === "central_admin" || (role === "admin" && !req.user?.branchId);
+  return (
+    role === "superadmin" ||
+    role === "super_admin" ||
+    role === "central_admin" ||
+    (role === "admin" && !req.user?.branchId)
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,36 +120,47 @@ router.get("/location-pricing", async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. Create Location-Based Pricing Rule
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/location-pricing", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const {
-      serviceId,
-      packageId,
-      cityId,
-      branchId,
-      zoneId,
-      societyId,
-      locationType,
-      vehicleCategoryId,
-      basePrice,
-      gstRate,
-      pricingType,
-      effectiveFrom,
-      effectiveUntil,
-      status,
-      priority,
-      notes,
-    } = req.body;
+router.post(
+  "/location-pricing",
+  requireAuth,
+  requirePermission("services", "edit"),
+  async (req: Request, res: Response) => {
+    try {
+      const {
+        serviceId,
+        packageId,
+        cityId,
+        branchId,
+        zoneId,
+        societyId,
+        locationType,
+        vehicleCategoryId,
+        basePrice,
+        gstRate,
+        pricingType,
+        effectiveFrom,
+        effectiveUntil,
+        status,
+        priority,
+        notes,
+      } = req.body;
 
-    if (!serviceId || !cityId || basePrice == null || parseFloat(basePrice) <= 0) {
-      return res.status(400).json({ error: "serviceId, cityId, and a valid basePrice (> 0) are required" });
-    }
+      if (!serviceId || !cityId || basePrice == null || parseFloat(basePrice) <= 0) {
+        return res.status(400).json({ error: "serviceId, cityId, and a valid basePrice (> 0) are required" });
+      }
 
-    // Branch Admin authorization check
-    let effectiveBranchId = branchId ? parseInt(branchId, 10) : null;
-    if (!isSuperOrCentralAdmin(req) && req.user?.branchId) {
-      effectiveBranchId = req.user.branchId;
-    }
+      // Branch authorization check: non-central admins must have an assigned branch
+      let effectiveBranchId = branchId ? parseInt(branchId, 10) : null;
+      if (!isSuperOrCentralAdmin(req)) {
+        if (!req.user?.branchId) {
+          return res.status(403).json({ error: "Access denied: branch assignment required to configure location pricing" });
+        }
+        effectiveBranchId = req.user.branchId;
+      }
+
+      if (effectiveBranchId != null) {
+        assertBranchAccess(req, effectiveBranchId);
+      }
 
     // Calculate priority if not explicitly provided:
     // Level 1: societyId (priority 50)
@@ -207,91 +224,118 @@ router.post("/location-pricing", requireAuth, async (req: Request, res: Response
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Update Location-Based Pricing Rule
 // ─────────────────────────────────────────────────────────────────────────────
-router.patch("/location-pricing/:id", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    const [existing] = await db.select().from(locationPricingRulesTable).where(eq(locationPricingRulesTable.id, id)).limit(1);
-    if (!existing) return res.status(404).json({ error: "Pricing rule not found" });
+router.patch(
+  "/location-pricing/:id",
+  requireAuth,
+  requirePermission("services", "edit"),
+  async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid pricing rule ID" });
 
-    // Branch Admin check
-    if (!isSuperOrCentralAdmin(req) && req.user?.branchId && existing.branchId !== req.user.branchId) {
-      return res.status(403).json({ error: "Access denied to pricing rule outside assigned branch" });
-    }
+      const [existing] = await db.select().from(locationPricingRulesTable).where(eq(locationPricingRulesTable.id, id)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Pricing rule not found" });
 
-    const updateData: Record<string, unknown> = { updatedAt: new Date() };
-    if (req.body.basePrice != null) {
-      if (parseFloat(req.body.basePrice) <= 0) return res.status(400).json({ error: "basePrice must be > 0" });
-      updateData.basePrice = String(req.body.basePrice);
-    }
-    if (req.body.gstRate !== undefined) updateData.gstRate = String(req.body.gstRate);
-    if (req.body.pricingType !== undefined) updateData.pricingType = req.body.pricingType;
-    if (req.body.status !== undefined) updateData.status = req.body.status;
-    if (req.body.isActive !== undefined) updateData.isActive = Boolean(req.body.isActive);
-    if (req.body.effectiveFrom !== undefined) updateData.effectiveFrom = req.body.effectiveFrom ? new Date(req.body.effectiveFrom) : new Date();
-    if (req.body.effectiveUntil !== undefined) updateData.effectiveUntil = req.body.effectiveUntil ? new Date(req.body.effectiveUntil) : null;
-    if (req.body.notes !== undefined) updateData.notes = req.body.notes?.trim() || null;
-    if (req.body.priority !== undefined) updateData.priority = parseInt(req.body.priority, 10);
+      // Branch authorization check: non-central admins can only modify their assigned branch
+      if (!isSuperOrCentralAdmin(req)) {
+        if (!req.user?.branchId || existing.branchId !== req.user.branchId) {
+          return res.status(403).json({ error: "Access denied to pricing rule outside assigned branch" });
+        }
+        if (existing.branchId != null) {
+          assertBranchAccess(req, existing.branchId);
+        }
+        if (req.body.branchId !== undefined && req.body.branchId !== existing.branchId) {
+          return res.status(403).json({ error: "Access denied: cannot reassign pricing rule branch" });
+        }
+      }
 
-    const updated = await db.transaction(async (tx) => {
-      const [res] = await tx
-        .update(locationPricingRulesTable)
-        .set(updateData)
-        .where(eq(locationPricingRulesTable.id, id))
-        .returning();
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+      if (req.body.basePrice != null) {
+        if (parseFloat(req.body.basePrice) <= 0) return res.status(400).json({ error: "basePrice must be > 0" });
+        updateData.basePrice = String(req.body.basePrice);
+      }
+      if (req.body.gstRate !== undefined) updateData.gstRate = String(req.body.gstRate);
+      if (req.body.pricingType !== undefined) updateData.pricingType = req.body.pricingType;
+      if (req.body.status !== undefined) updateData.status = req.body.status;
+      if (req.body.isActive !== undefined) updateData.isActive = Boolean(req.body.isActive);
+      if (req.body.effectiveFrom !== undefined) updateData.effectiveFrom = req.body.effectiveFrom ? new Date(req.body.effectiveFrom) : new Date();
+      if (req.body.effectiveUntil !== undefined) updateData.effectiveUntil = req.body.effectiveUntil ? new Date(req.body.effectiveUntil) : null;
+      if (req.body.notes !== undefined) updateData.notes = req.body.notes?.trim() || null;
+      if (req.body.priority !== undefined) updateData.priority = parseInt(req.body.priority, 10);
 
-      await tx.insert(pricingRuleAuditTable).values({
-        ruleId: id,
-        action: req.body.basePrice != null ? "price_changed" : "updated",
-        oldValues: existing as unknown as Record<string, unknown>,
-        newValues: res as unknown as Record<string, unknown>,
-        changedBy: req.user?.id ?? null,
+      const updated = await db.transaction(async (tx) => {
+        const [res] = await tx
+          .update(locationPricingRulesTable)
+          .set(updateData)
+          .where(eq(locationPricingRulesTable.id, id))
+          .returning();
+
+        await tx.insert(pricingRuleAuditTable).values({
+          ruleId: id,
+          action: req.body.basePrice != null ? "price_changed" : "updated",
+          oldValues: existing as unknown as Record<string, unknown>,
+          newValues: res as unknown as Record<string, unknown>,
+          changedBy: req.user?.id ?? null,
+        });
+
+        return res;
       });
 
-      return res;
-    });
-
-    return res.json(updated);
-  } catch (err) {
-    req.log.error({ err }, "Error updating location pricing rule");
-    return res.status(500).json({ error: "Failed to update location pricing rule" });
-  }
-});
+      return res.json(updated);
+    } catch (err) {
+      req.log.error({ err }, "Error updating location pricing rule");
+      return res.status(500).json({ error: "Failed to update location pricing rule" });
+    }
+  },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. Deactivate Location Pricing Rule
 // ─────────────────────────────────────────────────────────────────────────────
-router.delete("/location-pricing/:id", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    const [existing] = await db.select().from(locationPricingRulesTable).where(eq(locationPricingRulesTable.id, id)).limit(1);
-    if (!existing) return res.status(404).json({ error: "Pricing rule not found" });
+router.delete(
+  "/location-pricing/:id",
+  requireAuth,
+  requirePermission("services", "edit"),
+  async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid pricing rule ID" });
 
-    if (!isSuperOrCentralAdmin(req) && req.user?.branchId && existing.branchId !== req.user.branchId) {
-      return res.status(403).json({ error: "Access denied to pricing rule outside assigned branch" });
-    }
+      const [existing] = await db.select().from(locationPricingRulesTable).where(eq(locationPricingRulesTable.id, id)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Pricing rule not found" });
 
-    await db.transaction(async (tx) => {
-      const [res] = await tx
-        .update(locationPricingRulesTable)
-        .set({ isActive: false, status: "archived", updatedAt: new Date() })
-        .where(eq(locationPricingRulesTable.id, id))
-        .returning();
+      if (!isSuperOrCentralAdmin(req)) {
+        if (!req.user?.branchId || existing.branchId !== req.user.branchId) {
+          return res.status(403).json({ error: "Access denied to pricing rule outside assigned branch" });
+        }
+        if (existing.branchId != null) {
+          assertBranchAccess(req, existing.branchId);
+        }
+      }
 
-      await tx.insert(pricingRuleAuditTable).values({
-        ruleId: id,
-        action: "deactivated",
-        oldValues: existing as unknown as Record<string, unknown>,
-        newValues: res as unknown as Record<string, unknown>,
-        changedBy: req.user?.id ?? null,
+      await db.transaction(async (tx) => {
+        const [res] = await tx
+          .update(locationPricingRulesTable)
+          .set({ isActive: false, status: "archived", updatedAt: new Date() })
+          .where(eq(locationPricingRulesTable.id, id))
+          .returning();
+
+        await tx.insert(pricingRuleAuditTable).values({
+          ruleId: id,
+          action: "deactivated",
+          oldValues: existing as unknown as Record<string, unknown>,
+          newValues: res as unknown as Record<string, unknown>,
+          changedBy: req.user?.id ?? null,
+        });
       });
-    });
 
-    return res.status(204).send();
-  } catch (err) {
-    req.log.error({ err }, "Error deactivating location pricing rule");
-    return res.status(500).json({ error: "Failed to deactivate location pricing rule" });
-  }
-});
+      return res.status(204).send();
+    } catch (err) {
+      req.log.error({ err }, "Error deactivating location pricing rule");
+      return res.status(500).json({ error: "Failed to deactivate location pricing rule" });
+    }
+  },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. Resolve Applicable Location Price
@@ -347,20 +391,55 @@ router.post("/location-pricing/resolve", async (req: Request, res: Response) => 
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. Audit Trail for Pricing Rule
 // ─────────────────────────────────────────────────────────────────────────────
-router.get("/location-pricing/:id/audit", requireAuth, async (req: Request, res: Response) => {
-  try {
-    const ruleId = parseInt(req.params.id, 10);
-    const logs = await db
-      .select()
-      .from(pricingRuleAuditTable)
-      .where(eq(pricingRuleAuditTable.ruleId, ruleId))
-      .orderBy(desc(pricingRuleAuditTable.createdAt));
+router.get(
+  "/location-pricing/:id/audit",
+  requireAuth,
+  requirePermission("pricing", "view"),
+  async (req: Request, res: Response) => {
+    try {
+      const ruleId = parseInt(req.params.id as string, 10);
+      if (isNaN(ruleId)) return res.status(400).json({ error: "Invalid pricing rule ID" });
 
-    return res.json(logs);
-  } catch (err) {
-    req.log.error({ err }, "Error fetching pricing rule audit logs");
-    return res.status(500).json({ error: "Failed to fetch pricing rule audit logs" });
-  }
-});
+      const [rule] = await db
+        .select()
+        .from(locationPricingRulesTable)
+        .where(eq(locationPricingRulesTable.id, ruleId))
+        .limit(1);
+
+      if (!rule) {
+        return res.status(404).json({ error: "Pricing rule not found" });
+      }
+
+      // Branch and city authorization check: non-central admins are restricted to their scope
+      if (!isSuperOrCentralAdmin(req)) {
+        if (!req.user?.branchId) {
+          return res.status(403).json({ error: "Access denied: branch assignment required to view pricing audit logs" });
+        }
+
+        // Return 404 to avoid leaking existence of cross-branch pricing rules
+        if (rule.branchId == null || rule.branchId !== req.user.branchId) {
+          return res.status(404).json({ error: "Pricing rule not found" });
+        }
+
+        if (req.user?.cityId && rule.cityId !== req.user.cityId) {
+          return res.status(404).json({ error: "Pricing rule not found" });
+        }
+
+        assertBranchAccess(req, req.user.branchId);
+      }
+
+      const logs = await db
+        .select()
+        .from(pricingRuleAuditTable)
+        .where(eq(pricingRuleAuditTable.ruleId, ruleId))
+        .orderBy(desc(pricingRuleAuditTable.createdAt));
+
+      return res.json(logs);
+    } catch (err) {
+      req.log.error({ err }, "Error fetching pricing rule audit logs");
+      return res.status(500).json({ error: "Failed to fetch pricing rule audit logs" });
+    }
+  },
+);
 
 export default router;

@@ -1,6 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { pool } from "@workspace/db";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requirePermission } from "../middlewares/auth";
 import {
   getActivePaymentGateway,
   cleanEnvVar,
@@ -31,101 +30,66 @@ router.get("/payments/gateway-info", (req: Request, res: Response) => {
 
 /**
  * GET /api/payments/gateway-diagnostics
- * Safe operational diagnostic endpoint reporting gateway readiness, credentials presence,
- * environment mode, and server build identifier without exposing any secrets or keys.
+ * Safe operational diagnostic endpoint reporting gateway readiness and credentials presence.
+ * Requires authentication and administrative settings view permissions.
  */
-router.get("/payments/gateway-diagnostics", (_req: Request, res: Response) => {
-  const activeGateway = getActivePaymentGateway();
-  const rzpKeyId = cleanEnvVar(process.env.RAZORPAY_KEY_ID);
-  const rzpKeySecret = cleanEnvVar(process.env.RAZORPAY_KEY_SECRET);
-  const rzpWebhookSecret = cleanEnvVar(process.env.RAZORPAY_WEBHOOK_SECRET);
+router.get(
+  "/payments/gateway-diagnostics",
+  requireAuth,
+  requirePermission("settings", "view"),
+  (_req: Request, res: Response) => {
+    const activeGateway = getActivePaymentGateway();
+    const rzpKeyId = cleanEnvVar(process.env.RAZORPAY_KEY_ID);
+    const rzpKeySecret = cleanEnvVar(process.env.RAZORPAY_KEY_SECRET);
+    const rzpWebhookSecret = cleanEnvVar(process.env.RAZORPAY_WEBHOOK_SECRET);
 
-  const cfAppId = cleanEnvVar(process.env.CASHFREE_APP_ID);
-  const cfSecretKey = cleanEnvVar(process.env.CASHFREE_SECRET_KEY);
-  const cfEnv = cleanEnvVar(process.env.CASHFREE_ENV);
+    const cfAppId = cleanEnvVar(process.env.CASHFREE_APP_ID);
+    const cfSecretKey = cleanEnvVar(process.env.CASHFREE_SECRET_KEY);
+    const cfEnv = cleanEnvVar(process.env.CASHFREE_ENV);
 
-  let keyPrefix = "none";
-  let keyEnvironment: "production" | "sandbox" | "unconfigured" = "unconfigured";
-  if (rzpKeyId) {
-    if (rzpKeyId.startsWith("rzp_live_")) {
-      keyPrefix = "rzp_live_";
-      keyEnvironment = "production";
-    } else if (rzpKeyId.startsWith("rzp_test_")) {
-      keyPrefix = "rzp_test_";
-      keyEnvironment = "sandbox";
-    } else {
-      keyPrefix = "custom";
-      keyEnvironment = "sandbox";
+    let keyPrefix = "none";
+    let keyEnvironment: "production" | "sandbox" | "unconfigured" = "unconfigured";
+    if (rzpKeyId) {
+      if (rzpKeyId.startsWith("rzp_live_")) {
+        keyPrefix = "rzp_live_";
+        keyEnvironment = "production";
+      } else if (rzpKeyId.startsWith("rzp_test_")) {
+        keyPrefix = "rzp_test_";
+        keyEnvironment = "sandbox";
+      } else {
+        keyPrefix = "custom";
+        keyEnvironment = "sandbox";
+      }
     }
-  }
 
-  let razorpayBaseHost = "api.razorpay.com";
-  try {
-    const url = new URL(getRazorpayBaseUrl());
-    razorpayBaseHost = url.hostname;
-  } catch {
-    // fallback
-  }
-
-  return res.status(200).json({
-    status: "ok",
-    activeGateway,
-    supportedGateways: ["razorpay", "cashfree"],
-    razorpay: {
-      hasKeyId: Boolean(rzpKeyId),
-      hasKeySecret: Boolean(rzpKeySecret),
-      hasWebhookSecret: Boolean(rzpWebhookSecret),
-      keyEnvironment,
-      keyPrefix,
-      apiBaseUrlHost: razorpayBaseHost,
-    },
-    cashfree: {
-      hasAppId: Boolean(cfAppId),
-      hasSecretKey: Boolean(cfSecretKey),
-      environment: cfEnv || "sandbox",
-    },
-    server: {
-      buildId: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.COMMIT_SHA || "local-dev",
-      nodeVersion: process.version,
-      timestamp: new Date().toISOString(),
-    },
-  });
-});
-
-/**
- * GET /api/payments/schema-repair
- * Ensures non-breaking additive columns for dcms_subscriptions, bookings, subscriptions,
- * staff, and addresses exist in the connected database.
- */
-router.get("/payments/schema-repair", async (_req: Request, res: Response) => {
-  const steps: Record<string, string> = {};
-  const queries = [
-    { name: "sub_pricing_rule_id", sql: "ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER" },
-    { name: "sub_price_snapshot", sql: "ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB" },
-    { name: "sub_zone_id", sql: "ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER" },
-    { name: "sub_property_type", sql: "ALTER TABLE dcms_subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT" },
-    { name: "bookings_pricing_rule_id", sql: "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER" },
-    { name: "bookings_price_snapshot", sql: "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price_snapshot JSONB" },
-    { name: "bookings_zone_id", sql: "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS zone_id INTEGER" },
-    { name: "bookings_property_type", sql: "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS property_type TEXT" },
-    { name: "subscriptions_pricing_rule_id", sql: "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pricing_rule_id INTEGER" },
-    { name: "subscriptions_price_snapshot", sql: "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS price_snapshot JSONB" },
-    { name: "subscriptions_zone_id", sql: "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS zone_id INTEGER" },
-    { name: "subscriptions_property_type", sql: "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS property_type TEXT" },
-    { name: "staff_assigned_zone_id", sql: "ALTER TABLE staff ADD COLUMN IF NOT EXISTS assigned_zone_id INTEGER" },
-    { name: "addr_property_type", sql: "ALTER TABLE addresses ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'OTHER'" },
-    { name: "addr_zone_id", sql: "ALTER TABLE addresses ADD COLUMN IF NOT EXISTS zone_id INTEGER" },
-  ];
-  for (const q of queries) {
+    let razorpayBaseHost = "api.razorpay.com";
     try {
-      await pool.query(q.sql);
-      steps[q.name] = "OK";
-    } catch (e: any) {
-      steps[q.name] = "ERROR: " + (e?.message || String(e));
+      const url = new URL(getRazorpayBaseUrl());
+      razorpayBaseHost = url.hostname;
+    } catch {
+      // fallback
     }
-  }
-  return res.json({ status: "done", steps });
-});
+
+    return res.status(200).json({
+      status: "ok",
+      activeGateway,
+      supportedGateways: ["razorpay", "cashfree"],
+      razorpay: {
+        hasKeyId: Boolean(rzpKeyId),
+        hasKeySecret: Boolean(rzpKeySecret),
+        hasWebhookSecret: Boolean(rzpWebhookSecret),
+        keyEnvironment,
+        keyPrefix,
+        apiBaseUrlHost: razorpayBaseHost,
+      },
+      cashfree: {
+        hasAppId: Boolean(cfAppId),
+        hasSecretKey: Boolean(cfSecretKey),
+        environment: cfEnv || "sandbox",
+      },
+    });
+  },
+);
 
 /**
  * POST /api/payments/create-order

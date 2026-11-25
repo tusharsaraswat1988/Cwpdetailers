@@ -1,13 +1,22 @@
-const targetUrl =
-  process.env.DATABASE_URL ||
-  process.env.TARGET_DATABASE_URL ||
-  "postgresql://neondb_owner:npg_WXJ8KqZO9Aud@ep-flat-meadow-aozck6dv-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
+import "./load-env.js";
+import { pg } from "@workspace/db";
 
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = targetUrl;
+const targetUrl = process.env.DATABASE_URL || process.env.TARGET_DATABASE_URL || process.argv[2];
+
+if (!targetUrl || !targetUrl.trim()) {
+  console.error("❌ Refusing to run: DATABASE_URL or TARGET_DATABASE_URL environment variable is required. No fallback is permitted.");
+  console.error("Usage: DATABASE_URL=<url> tsx ./src/inspect-prod-db.ts");
+  process.exit(1);
 }
 
-import { pg } from "@workspace/db";
+function getSafeTargetDisplay(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    return `Host: ${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}, Database: ${parsed.pathname.replace(/^\//, "")}`;
+  } catch {
+    return "Target: [Unparseable URL format]";
+  }
+}
 
 const connectionString = targetUrl;
 
@@ -17,7 +26,7 @@ const client = new pg.Client({
 });
 
 async function main() {
-  console.log("Connecting to target database:", connectionString.replace(/:[^:@]+@/, ":****@"));
+  console.log("Connecting to target database:", getSafeTargetDisplay(connectionString));
   await client.connect();
   console.log("Connection successful!");
 
@@ -95,7 +104,13 @@ async function main() {
   await client.end();
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+const isDirectRun =
+  import.meta.url === `file://${process.argv[1]?.replace(/\\/g, "/")}` ||
+  (process.argv[1] ? process.argv[1].replace(/\\/g, "/").includes("inspect-prod-db") : false);
+
+if (isDirectRun && process.env.NODE_ENV !== "test") {
+  main().catch((err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
+}
