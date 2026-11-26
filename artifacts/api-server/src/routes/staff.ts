@@ -670,9 +670,11 @@ router.get("/staff/:id/attendance", async (req, res) => {
   }
 });
 
-router.post("/staff/:id/attendance", async (req, res) => {
+async function handleStaffAttendance(req: Request, res: Response) {
   try {
     const staffId = parseInt(req.params.id);
+    if (isNaN(staffId)) return res.status(400).json({ error: "Invalid staff ID" });
+
     const staff = await loadStaffInScope(req, staffId);
     if (!staff) return res.status(404).json({ error: "Staff not found" });
 
@@ -691,6 +693,7 @@ router.post("/staff/:id/attendance", async (req, res) => {
         code: "STAFF_NOT_VERIFIED",
       });
     }
+
     const { date, status, checkInTime, checkOutTime, notes, imageBase64, exif, capturedAt } = req.body as {
       date?: string;
       status?: string;
@@ -701,24 +704,119 @@ router.post("/staff/:id/attendance", async (req, res) => {
       exif?: ExifPayload | null;
       capturedAt?: string;
     };
-    if (!date || !status) return res.status(400).json({ error: "date and status are required" });
 
+    if (!date) {
+      return res.status(400).json({ error: "date is required" });
+    }
+
+    // Status is required for check-in; for punch-out without status, it can default to existing status
+    if (!status && !checkOutTime) {
+      return res.status(400).json({ error: "date and status are required" });
+    }
+
+    const VALID_STATUSES = ["present", "absent", "late", "half_day"] as const;
+    if (status && !VALID_STATUSES.includes(status as any)) {
+      return res.status(400).json({
+        error: `Invalid attendance status. Expected one of: ${VALID_STATUSES.join(", ")}`,
+        code: "INVALID_STATUS",
+      });
+    }
+
+    const [already] = await db.select().from(attendanceTable)
+      .where(and(eq(attendanceTable.staffId, staffId), eq(attendanceTable.date, date)))
+      .limit(1);
+
+    // Punch-out / Update branch (SEC-P1-04)
+    if (checkOutTime) {
+      if (!already) {
+        // Field staff cannot punch out without an existing check-in for the day
+        if (req.user?.role === "staff") {
+          return res.status(400).json({
+            error: "Cannot punch out without prior check-in for this date",
+            code: "PUNCH_OUT_WITHOUT_CHECK_IN",
+          });
+        }
+        // Admin or supervisor creating full day record falls through to insert
+      } else {
+        // Attendance record exists - validate punch-out status transition
+        const ALLOWED_PUNCH_OUT_FROM = ["present", "half_day", "late"];
+        if (!ALLOWED_PUNCH_OUT_FROM.includes(already.status)) {
+          return res.status(400).json({
+            error: `Cannot punch out: staff attendance status is ${already.status}`,
+            code: "INVALID_PUNCHOUT_STATUS",
+          });
+        }
+
+        // Validate target status if status is specified in request
+        const targetStatus = (status ?? already.status) as "present" | "absent" | "late" | "half_day";
+        if (targetStatus === "absent") {
+          return res.status(400).json({
+            error: "Cannot transition status to absent during punch-out",
+            code: "INVALID_PUNCHOUT_STATUS",
+          });
+        }
+
+        // Idempotency check: if checkOutTime and status match existing, return existing
+        if (already.checkOutTime === checkOutTime && (!status || status === already.status)) {
+          return res.status(200).json(already);
+        }
+
+        const [updated] = await db.update(attendanceTable)
+          .set({
+            checkOutTime,
+            status: targetStatus as any,
+            notes: notes !== undefined ? (already.notes ? `${already.notes}; ${notes}` : notes) : already.notes,
+          })
+          .where(eq(attendanceTable.id, already.id))
+          .returning();
+
+        // Optionally record punch-out location if provided
+        try {
+          const location = parseStaffLocation(req.body as Record<string, unknown>, { required: false });
+          if (location) {
+            await recordStaffLocation({
+              staffId,
+              action: "attendance",
+              latitude: location.latitude,
+              longitude: location.longitude,
+              accuracy: location.accuracy,
+              metadata: { status: targetStatus, date, checkOutTime, event: "punch_out" },
+            });
+          }
+        } catch {
+          // Location is non-blocking on punch-out
+        }
+
+        return res.status(200).json(updated);
+      }
+    } else if (already) {
+      // No checkOutTime provided, but record already exists
+      // Check if admin/manager is updating status
+      if (status && status !== already.status && req.user?.role !== "staff") {
+        const [updated] = await db.update(attendanceTable)
+          .set({
+            status: status as any,
+            checkInTime: checkInTime ?? already.checkInTime,
+            notes: notes !== undefined ? notes : already.notes,
+          })
+          .where(eq(attendanceTable.id, already.id))
+          .returning();
+        return res.status(200).json(updated);
+      }
+
+      // Idempotent check-in retry
+      return res.status(200).json(already);
+    }
+
+    const effectiveStatus = (status ?? "present") as "present" | "absent" | "late" | "half_day";
     const roles = await getStaffOperationalRoles(staffId);
     const proofRequired = selfCheckInProofRequired({
       actorRole: req.user?.role,
       actorStaffId: req.user?.staffId ?? null,
       targetStaffId: staffId,
-      status,
+      status: effectiveStatus,
       roleSlugs: roles.map(r => r.roleSlug),
     });
-
-    const [already] = await db.select().from(attendanceTable)
-      .where(and(eq(attendanceTable.staffId, staffId), eq(attendanceTable.date, date)))
-      .limit(1);
-    if (already) {
-      // Idempotent: return existing attendance record instead of 409 conflict
-      return res.json(already);
-    }
 
     let selfiePhotoUrl: string | null = null;
 
@@ -744,7 +842,7 @@ router.post("/staff/:id/attendance", async (req, res) => {
           latitude: location!.latitude,
           longitude: location!.longitude,
           accuracy: location!.accuracy,
-          metadata: { status, date, selfiePhotoUrl },
+          metadata: { status: effectiveStatus, date, selfiePhotoUrl },
         });
       } catch (checkInErr) {
         if (checkInErr instanceof AttendanceSelfieError) {
@@ -763,14 +861,23 @@ router.post("/staff/:id/attendance", async (req, res) => {
     }
 
     const [attendance] = await db.insert(attendanceTable).values({
-      staffId, date, status, checkInTime, checkOutTime, notes, selfiePhotoUrl,
+      staffId,
+      date,
+      status: effectiveStatus as any,
+      checkInTime,
+      checkOutTime,
+      notes,
+      selfiePhotoUrl,
     }).returning();
     return res.status(201).json(attendance);
   } catch (err) {
     req.log.error({ err }, "Mark attendance error");
     return res.status(500).json({ error: "Internal server error" });
   }
-});
+}
+
+router.post("/staff/:id/attendance", handleStaffAttendance);
+router.patch("/staff/:id/attendance", handleStaffAttendance);
 
 router.post("/staff/:id/test-job-alert", async (req, res) => {
   try {

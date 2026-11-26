@@ -1423,8 +1423,37 @@ paths:
             schema:
               $ref: "#/components/schemas/MarkAttendanceBody"
       responses:
+        "200":
+          description: Attendance updated or idempotent check-in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
         "201":
           description: Attendance marked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
+    patch:
+      operationId: updateStaffAttendance
+      tags: [staff]
+      summary: Update attendance or punch out
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAttendanceBody"
+      responses:
+        "200":
+          description: Attendance updated
           content:
             application/json:
               schema:

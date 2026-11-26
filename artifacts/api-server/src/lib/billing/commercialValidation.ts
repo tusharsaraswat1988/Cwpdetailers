@@ -24,7 +24,15 @@ export class CommercialValidationError extends Error {
 }
 
 export function assertAdminBillingActor(role: string | undefined | null): void {
-  const allowed = new Set(["admin", "superadmin", "manager", "franchisee"]);
+  const allowed = new Set([
+    "admin",
+    "superadmin",
+    "central_admin",
+    "city_admin",
+    "branch_manager",
+    "manager",
+    "franchisee",
+  ]);
   if (!role || !allowed.has(role)) {
     throw new CommercialValidationError("Billing actions require admin or manager role", "UNAUTHORIZED");
   }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { bookingsTable, customersTable, subscriptionsTable, staffTable, invoicesTable, complaintsTable, paymentsTable } from "@workspace/db";
+import { bookingsTable, customersTable, subscriptionsTable, staffTable, invoicesTable, complaintsTable, paymentsTable, franchiseesTable } from "@workspace/db";
 import { eq, sql, and, inArray } from "drizzle-orm";
 import { tenantFilters, sqlTenant } from "../middlewares/tenantScope";
 import { countActiveContractsForTenant } from "../lib/contracts/contractRegistry";
@@ -35,31 +35,31 @@ router.get("/analytics/dashboard", async (req, res) => {
           .where(and(eq(subscriptionsTable.status, "active"), ...tenantFilters(req, { companyCol: subscriptionsTable.companyId, branchCol: subscriptionsTable.branchId })));
         return Number(row?.count ?? 0);
       }),
-      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId }))),
-      db.execute(sql`SELECT COUNT(*) as count FROM customers WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "customers.company_id", b: "customers.branch_id" })}`),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId, franchiseeCol: customersTable.franchiseeId }))),
+      db.execute(sql`SELECT COUNT(*) as count FROM customers WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "customers.company_id", b: "customers.branch_id", f: "customers.franchisee_id" })}`),
       db.execute(sql`SELECT COALESCE(SUM(due_amount::numeric), 0) as total FROM invoices WHERE status IN ('sent', 'overdue') AND ${t(req, { c: "invoices.company_id", b: "invoices.branch_id" })}`),
       // Phase 5.2: in_progress/completed are execution-owned — count active schedule statuses
-      db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(and(inArray(bookingsTable.status, ["scheduled", "confirmed", "waiting_assignment"]), ...tenantFilters(req, { companyCol: bookingsTable.companyId, branchCol: bookingsTable.branchId }))),
+      db.select({ count: sql<number>`count(*)` }).from(bookingsTable).where(and(inArray(bookingsTable.status, ["scheduled", "confirmed", "waiting_assignment"]), ...tenantFilters(req, { companyCol: bookingsTable.companyId, branchCol: bookingsTable.branchId, franchiseeCol: bookingsTable.franchiseeId }))),
       db.execute(sql`SELECT COUNT(*) as count FROM service_executions WHERE status = 'completed' AND DATE(scheduled_date) = CURRENT_DATE`),
       db.select({ count: sql<number>`count(*)` }).from(complaintsTable).where(and(eq(complaintsTable.status, "open"), ...tenantFilters(req, { companyCol: complaintsTable.companyId, branchCol: complaintsTable.branchId }))),
       // Phase 5.2: bookings.amount removed — category revenue stubbed via invoice lines later
       db.execute(sql`
         SELECT s.category, 0::numeric as amount
         FROM bookings b LEFT JOIN services s ON b.service_id = s.id
-        WHERE b.status <> 'cancelled' AND ${t(req, { c: "b.company_id", b: "b.branch_id" })}
+        WHERE b.status <> 'cancelled' AND ${t(req, { c: "b.company_id", b: "b.branch_id", f: "b.franchisee_id" })}
         GROUP BY s.category
       `),
       db.execute(sql`
         SELECT c.city, COUNT(DISTINCT c.id) as customers, COALESCE(SUM(p.amount::numeric), 0) as revenue
         FROM customers c
         LEFT JOIN payments p ON p.customer_id = c.id AND ${t(req, { c: "p.company_id", b: "p.branch_id" })}
-        WHERE c.city IS NOT NULL AND ${t(req, { c: "c.company_id", b: "c.branch_id" })}
+        WHERE c.city IS NOT NULL AND ${t(req, { c: "c.company_id", b: "c.branch_id", f: "c.franchisee_id" })}
         GROUP BY c.city
         ORDER BY revenue DESC
         LIMIT 10
       `),
       db.execute(sql`
-        SELECT type, COUNT(*) as count FROM subscriptions WHERE status = 'active' AND ${t(req, { c: "subscriptions.company_id", b: "subscriptions.branch_id" })}
+        SELECT type, COUNT(*) as count FROM subscriptions WHERE status = 'active' AND ${t(req, { c: "subscriptions.company_id", b: "subscriptions.branch_id", f: "subscriptions.franchisee_id" })}
         GROUP BY type
       `),
     ]);
@@ -67,7 +67,7 @@ router.get("/analytics/dashboard", async (req, res) => {
     const totalCustomerCount = Number(totalCustomers[0]?.count ?? 0);
     const repeatResult = await db.execute(sql`
       SELECT customer_id FROM bookings
-      WHERE status <> 'cancelled' AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id" })}
+      WHERE status <> 'cancelled' AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id", f: "bookings.franchisee_id" })}
       GROUP BY customer_id
       HAVING COUNT(*) > 1
     `);
@@ -159,21 +159,21 @@ router.get("/analytics/customers", async (req, res) => {
   try {
     const t = sqlTenant;
     const [totalResult, activeResult, newResult, cityResult, growthResult, repeatResult] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId }))),
-      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(eq(customersTable.status, "active"), ...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId }))),
-      db.execute(sql`SELECT COUNT(*) as count FROM customers WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "customers.company_id", b: "customers.branch_id" })}`),
-      db.execute(sql`SELECT city, COUNT(*) as count FROM customers WHERE city IS NOT NULL AND ${t(req, { c: "customers.company_id", b: "customers.branch_id" })} GROUP BY city ORDER BY count DESC LIMIT 10`),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId, franchiseeCol: customersTable.franchiseeId }))),
+      db.select({ count: sql<number>`count(*)` }).from(customersTable).where(and(eq(customersTable.status, "active"), ...tenantFilters(req, { companyCol: customersTable.companyId, branchCol: customersTable.branchId, franchiseeCol: customersTable.franchiseeId }))),
+      db.execute(sql`SELECT COUNT(*) as count FROM customers WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND ${t(req, { c: "customers.company_id", b: "customers.branch_id", f: "customers.franchisee_id" })}`),
+      db.execute(sql`SELECT city, COUNT(*) as count FROM customers WHERE city IS NOT NULL AND ${t(req, { c: "customers.company_id", b: "customers.branch_id", f: "customers.franchisee_id" })} GROUP BY city ORDER BY count DESC LIMIT 10`),
       db.execute(sql`
         SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YYYY') as month,
         COUNT(*) as count
         FROM customers
-        WHERE ${t(req, { c: "customers.company_id", b: "customers.branch_id" })}
+        WHERE ${t(req, { c: "customers.company_id", b: "customers.branch_id", f: "customers.franchisee_id" })}
         GROUP BY DATE_TRUNC('month', created_at)
         ORDER BY DATE_TRUNC('month', created_at) ASC LIMIT 12
       `),
       db.execute(sql`
         SELECT customer_id FROM bookings
-        WHERE status <> 'cancelled' AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id" })}
+        WHERE status <> 'cancelled' AND ${t(req, { c: "bookings.company_id", b: "bookings.branch_id", f: "bookings.franchisee_id" })}
         GROUP BY customer_id
         HAVING COUNT(*) > 1
       `),
@@ -321,9 +321,39 @@ router.get("/analytics/multi-city", async (req, res) => {
     }
 
     const cityId = req.query.cityId ? Number(req.query.cityId) : undefined;
-    const franchiseeId = req.query.franchiseeId
-      ? Number(req.query.franchiseeId)
-      : (req.scope?.franchiseeId ?? undefined);
+    let franchiseeId: number | undefined;
+
+    // SEC-P1-03: Franchisee tenant isolation & anti-spoofing defense on analytics
+    if (userScope?.isSuperAdmin) {
+      franchiseeId = req.query.franchiseeId ? Number(req.query.franchiseeId) : undefined;
+    } else if (userScope?.franchiseeId != null) {
+      // Scoped franchisee role: strictly restricted to their own assigned franchisee
+      if (req.query.franchiseeId && Number(req.query.franchiseeId) !== userScope.franchiseeId) {
+        return res.status(403).json({
+          error: "Access denied. Cannot query analytics for an unauthorized franchisee.",
+        });
+      }
+      franchiseeId = userScope.franchiseeId;
+    } else if (req.query.franchiseeId) {
+      // Scoped branch/city managers: can only query franchisees in their assigned scope
+      const requestedFid = Number(req.query.franchiseeId);
+      const [targetFr] = await db
+        .select({ id: franchiseesTable.id, branchId: franchiseesTable.branchId })
+        .from(franchiseesTable)
+        .where(eq(franchiseesTable.id, requestedFid))
+        .limit(1);
+
+      if (!targetFr) {
+        return res.status(404).json({ error: "Franchisee not found." });
+      }
+
+      if (userScope?.branchIds && targetFr.branchId && !userScope.branchIds.includes(targetFr.branchId)) {
+        return res.status(403).json({ error: "Access denied. Franchisee outside assigned branch scope." });
+      }
+
+      franchiseeId = requestedFid;
+    }
+
     const companyId = req.scope?.companyId ?? undefined;
 
     const analytics = await getUnifiedPlatformAnalytics({

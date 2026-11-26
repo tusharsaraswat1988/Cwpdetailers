@@ -169,7 +169,36 @@ vi.mock("@workspace/db", async (importOriginal) => {
           }),
           execute: () => {
             if (queryState.table === actual.branchesTable) {
-              return memoryStore.branches.map((b) => ({
+              let rows = memoryStore.branches;
+              function findFranchiseeId(cond: any): number | null {
+                if (!cond) return null;
+                if (Array.isArray(cond.queryChunks)) {
+                  let hasFranchiseeCol = false;
+                  let foundValue: number | null = null;
+                  for (const chunk of cond.queryChunks) {
+                    if (chunk && chunk.name === "franchisee_id") {
+                      hasFranchiseeCol = true;
+                    }
+                    if (chunk && typeof chunk.value === "number") {
+                      foundValue = chunk.value;
+                    }
+                    const nested = findFranchiseeId(chunk);
+                    if (nested !== null) return nested;
+                  }
+                  if (hasFranchiseeCol && foundValue !== null) {
+                    return foundValue;
+                  }
+                }
+                return null;
+              }
+              for (const c of queryState.conditions) {
+                const targetFid = findFranchiseeId(c);
+                if (targetFid !== null) {
+                  rows = rows.filter((b) => b.franchiseeId === targetFid);
+                  break;
+                }
+              }
+              return rows.map((b) => ({
                 ...b,
                 branchId: b.id,
                 branchName: b.name,
@@ -418,6 +447,16 @@ describe("CWP Multi-City — Franchise, Branch & Media Retention Architecture", 
       const fofoBranch = analytics.branchBreakdown.find((b) => b.branchId === 2);
       expect(fofoBranch?.isCompanyOperated).toBe(false);
       expect(fofoBranch?.franchiseeName).toBe("Amit Sharma");
+    });
+
+    it("SEC-P1-03: scopes platform analytics strictly to franchisee tenant without cross-tenant leak", async () => {
+      const analytics = await getUnifiedPlatformAnalytics({ franchiseeId: 10 });
+
+      expect(analytics.branchBreakdown.length).toBe(1);
+      expect(analytics.branchBreakdown[0].branchId).toBe(2);
+      expect(analytics.branchBreakdown[0].franchiseeName).toBe("Amit Sharma");
+      expect(analytics.operational).toBeDefined();
+      expect(analytics.retention).toBeDefined();
     });
   });
 

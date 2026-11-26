@@ -95,6 +95,7 @@ export async function getUnifiedPlatformAnalytics(
   const custConditions = [];
   if (filters?.cityId) custConditions.push(eq(customersTable.cityId, filters.cityId));
   if (filters?.branchId) custConditions.push(eq(customersTable.branchId, filters.branchId));
+  if (filters?.franchiseeId) custConditions.push(eq(customersTable.franchiseeId, filters.franchiseeId));
   if (filters?.companyId) custConditions.push(eq(customersTable.companyId, filters.companyId));
 
   const [custResult] = await db
@@ -112,14 +113,32 @@ export async function getUnifiedPlatformAnalytics(
     eq(dcmsVisitsTable.visitType, "cleaning"),
   ];
 
-  const todayVisits = await db
-    .select({
-      status: dcmsVisitsTable.status,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(dcmsVisitsTable)
-    .where(and(...visitConditions))
-    .groupBy(dcmsVisitsTable.status);
+  let todayVisits;
+  if (filters?.branchId || filters?.franchiseeId || filters?.cityId) {
+    const visitSubConditions = [];
+    if (filters?.branchId) visitSubConditions.push(eq(dcmsSubscriptionsTable.branchId, filters.branchId));
+    if (filters?.franchiseeId) visitSubConditions.push(eq(dcmsSubscriptionsTable.franchiseeId, filters.franchiseeId));
+    if (filters?.cityId) visitSubConditions.push(eq(dcmsSubscriptionsTable.cityId, filters.cityId));
+
+    todayVisits = await db
+      .select({
+        status: dcmsVisitsTable.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(dcmsVisitsTable)
+      .innerJoin(dcmsSubscriptionsTable, eq(dcmsVisitsTable.subscriptionId, dcmsSubscriptionsTable.id))
+      .where(and(...visitConditions, ...visitSubConditions))
+      .groupBy(dcmsVisitsTable.status);
+  } else {
+    todayVisits = await db
+      .select({
+        status: dcmsVisitsTable.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(dcmsVisitsTable)
+      .where(and(...visitConditions))
+      .groupBy(dcmsVisitsTable.status);
+  }
 
   let todayCompleted = 0;
   let todayCna = 0;
@@ -137,6 +156,8 @@ export async function getUnifiedPlatformAnalytics(
   // 4. Operational Exceptions
   const excConditions = [];
   if (filters?.cityId) excConditions.push(eq(dcmsOperationalExceptionsTable.cityId, filters.cityId));
+  if (filters?.branchId) excConditions.push(eq(dcmsOperationalExceptionsTable.branchId, filters.branchId));
+  if (filters?.companyId) excConditions.push(eq(dcmsOperationalExceptionsTable.companyId, filters.companyId));
 
   const exceptionCounts = await db
     .select({
@@ -155,8 +176,20 @@ export async function getUnifiedPlatformAnalytics(
   }
 
   // 5. Financial KPIs
+  let effectiveBranchId = filters?.branchId;
+  if (!effectiveBranchId && filters?.franchiseeId) {
+    const [fr] = await db
+      .select({ branchId: franchiseesTable.branchId })
+      .from(franchiseesTable)
+      .where(eq(franchiseesTable.id, filters.franchiseeId))
+      .limit(1);
+    if (fr?.branchId) {
+      effectiveBranchId = fr.branchId;
+    }
+  }
+
   const invoiceConditions = [sql`status <> 'cancelled'`];
-  if (filters?.branchId) invoiceConditions.push(eq(invoicesTable.branchId, filters.branchId));
+  if (effectiveBranchId) invoiceConditions.push(eq(invoicesTable.branchId, effectiveBranchId));
   if (filters?.companyId) invoiceConditions.push(eq(invoicesTable.companyId, filters.companyId));
 
   const [invResult] = await db
@@ -168,7 +201,7 @@ export async function getUnifiedPlatformAnalytics(
     .where(and(...invoiceConditions));
 
   const paymentConditions = [eq(paymentsTable.status, "completed")];
-  if (filters?.branchId) paymentConditions.push(eq(paymentsTable.branchId, filters.branchId));
+  if (effectiveBranchId) paymentConditions.push(eq(paymentsTable.branchId, effectiveBranchId));
   if (filters?.companyId) paymentConditions.push(eq(paymentsTable.companyId, filters.companyId));
 
   const [payResult] = await db
@@ -228,6 +261,11 @@ export async function getUnifiedPlatformAnalytics(
   }
 
   // 7. Branch Breakdown
+  const branchConditions = [eq(branchesTable.isActive, true)];
+  if (filters?.branchId) branchConditions.push(eq(branchesTable.id, filters.branchId));
+  if (filters?.franchiseeId) branchConditions.push(eq(branchesTable.franchiseeId, filters.franchiseeId));
+  if (filters?.cityId) branchConditions.push(eq(branchesTable.cityId, filters.cityId));
+
   const branches = await db
     .select({
       branchId: branchesTable.id,
@@ -244,7 +282,7 @@ export async function getUnifiedPlatformAnalytics(
     .from(branchesTable)
     .leftJoin(citiesTable, eq(branchesTable.cityId, citiesTable.id))
     .leftJoin(franchiseesTable, eq(branchesTable.franchiseeId, franchiseesTable.id))
-    .where(eq(branchesTable.isActive, true));
+    .where(and(...branchConditions));
 
   const branchBreakdown = branches.map((b) => {
     const collected = Math.round(b.collectedRevenue * 100) / 100;
@@ -272,30 +310,44 @@ export async function getUnifiedPlatformAnalytics(
   });
 
   // 8. Retention & Lifecycle Metrics
+  const newCustConditions = [sql`DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())`];
+  if (filters?.cityId) newCustConditions.push(eq(customersTable.cityId, filters.cityId));
+  if (filters?.branchId) newCustConditions.push(eq(customersTable.branchId, filters.branchId));
+  if (filters?.franchiseeId) newCustConditions.push(eq(customersTable.franchiseeId, filters.franchiseeId));
+  if (filters?.companyId) newCustConditions.push(eq(customersTable.companyId, filters.companyId));
+
   const [newCust] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(customersTable)
-    .where(sql`DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())`);
+    .where(and(...newCustConditions));
+
+  const renewalConditions = [
+    eq(dcmsSubscriptionsTable.status, "active"),
+    sql`remaining_cleanings <= 3`,
+  ];
+  if (filters?.cityId) renewalConditions.push(eq(dcmsSubscriptionsTable.cityId, filters.cityId));
+  if (filters?.branchId) renewalConditions.push(eq(dcmsSubscriptionsTable.branchId, filters.branchId));
+  if (filters?.franchiseeId) renewalConditions.push(eq(dcmsSubscriptionsTable.franchiseeId, filters.franchiseeId));
+  if (filters?.companyId) renewalConditions.push(eq(dcmsSubscriptionsTable.companyId, filters.companyId));
 
   const [renewalsDue] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(dcmsSubscriptionsTable)
-    .where(
-      and(
-        eq(dcmsSubscriptionsTable.status, "active"),
-        sql`remaining_cleanings <= 3`,
-      ),
-    );
+    .where(and(...renewalConditions));
+
+  const cancelConditions = [
+    eq(dcmsSubscriptionsTable.status, "cancelled"),
+    sql`DATE_TRUNC('month', updated_at) = DATE_TRUNC('month', NOW())`,
+  ];
+  if (filters?.cityId) cancelConditions.push(eq(dcmsSubscriptionsTable.cityId, filters.cityId));
+  if (filters?.branchId) cancelConditions.push(eq(dcmsSubscriptionsTable.branchId, filters.branchId));
+  if (filters?.franchiseeId) cancelConditions.push(eq(dcmsSubscriptionsTable.franchiseeId, filters.franchiseeId));
+  if (filters?.companyId) cancelConditions.push(eq(dcmsSubscriptionsTable.companyId, filters.companyId));
 
   const [cancelledSubs] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(dcmsSubscriptionsTable)
-    .where(
-      and(
-        eq(dcmsSubscriptionsTable.status, "cancelled"),
-        sql`DATE_TRUNC('month', updated_at) = DATE_TRUNC('month', NOW())`,
-      ),
-    );
+    .where(and(...cancelConditions));
 
   return {
     operational: {

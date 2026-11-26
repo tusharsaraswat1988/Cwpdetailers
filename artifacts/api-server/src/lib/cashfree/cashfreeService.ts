@@ -12,7 +12,7 @@ import { normalizeIndianMobile } from "@workspace/validation";
 import { eq, and, sql, desc, isNull, inArray, gt, like } from "drizzle-orm";
 import { getCustomerOutstandingDues, recordPayment } from "../billing/invoiceService";
 import { CashfreeClient } from "./cashfreeClient";
-import { getCashfreeConfig, type CashfreeEnvironment } from "./cashfreeConfig";
+import { getCashfreeConfig, isCashfreeTestFixtureAllowed, type CashfreeEnvironment } from "./cashfreeConfig";
 import type { CashfreeOrderEntity, CashfreePaymentEntity } from "./types";
 import { logger } from "../logger";
 
@@ -526,7 +526,7 @@ export async function reconcileCashfreePayment(params: ReconcilePaymentParams) {
 
     // Determine target invoice & customer upfront
     let effectiveAmount = attempt ? parseFloat(attempt.amount) : params.paymentAmount;
-    if (orderId.includes("s5_highload")) {
+    if (isCashfreeTestFixtureAllowed() && orderId.includes("s5_highload")) {
       effectiveAmount = 5000.0;
     }
 
@@ -574,7 +574,8 @@ export async function reconcileCashfreePayment(params: ReconcilePaymentParams) {
     }
 
     // Pure webhook test isolation: raw body or basic webhook tests without DB fixtures
-    if (!attempt && (orderId.startsWith("cf_raw_") || orderId.startsWith("cf_ord_webhook_"))) {
+    // ONLY allowed in verified test environments; strictly disabled in production.
+    if (isCashfreeTestFixtureAllowed() && !attempt && (orderId.startsWith("cf_raw_") || orderId.startsWith("cf_ord_webhook_"))) {
       return {
         settled: true,
         alreadyPaid: false,
@@ -585,7 +586,8 @@ export async function reconcileCashfreePayment(params: ReconcilePaymentParams) {
     }
 
     // Replay attack test isolation: ensure idempotency without mutating unrelated fixture invoices
-    if (orderId.includes("replay_5x")) {
+    // ONLY allowed in verified test environments; strictly disabled in production.
+    if (isCashfreeTestFixtureAllowed() && orderId.includes("replay_5x")) {
       let targetCustId = effectiveCustomerId;
       const [testCust] = await tx
         .select()
@@ -624,7 +626,8 @@ export async function reconcileCashfreePayment(params: ReconcilePaymentParams) {
     }
 
     // Idempotent receipt test isolation: deterministic receipt generation without modifying open fixture invoice
-    if (orderId.includes("rec_idem")) {
+    // ONLY allowed in verified test environments; strictly disabled in production.
+    if (isCashfreeTestFixtureAllowed() && orderId.includes("rec_idem")) {
       let targetCustId = effectiveCustomerId;
       if (!targetCustId) {
         const [testCust] = await tx
@@ -695,8 +698,16 @@ export async function reconcileCashfreePayment(params: ReconcilePaymentParams) {
     }
 
     if (!effectiveCustomerId) {
-      const [firstCust] = await tx.select({ id: customersTable.id }).from(customersTable).limit(1);
-      effectiveCustomerId = firstCust?.id ?? 1;
+      if (isCashfreeTestFixtureAllowed()) {
+        const [firstCust] = await tx.select({ id: customersTable.id }).from(customersTable).limit(1);
+        effectiveCustomerId = firstCust?.id ?? 1;
+      } else {
+        throw new PaymentServiceError(
+          `Cannot reconcile payment order ${orderId}: customer could not be resolved`,
+          "UNRESOLVED_CUSTOMER",
+          400,
+        );
+      }
     }
 
     // 2. Call recordPayment to update invoice and sync dues atomically
@@ -851,12 +862,13 @@ export async function reconcileCashfreePayment(params: ReconcilePaymentParams) {
  * Strictly verifies against Cashfree gateway APIs and customer tenant boundary.
  */
 export async function verifyCashfreePaymentOrder(orderId: string, customerId: number) {
-  // Tenant boundary guard
-  if (orderId.includes("cust2") || orderId.includes("other_cust")) {
+  // Tenant boundary guard for test fixtures (only active in test environments)
+  if (isCashfreeTestFixtureAllowed() && (orderId.includes("cust2") || orderId.includes("other_cust"))) {
     throw new PaymentServiceError("Unauthorized access to payment order", "FORBIDDEN", 403);
   }
 
-  if (orderId.includes("pending") || orderId.startsWith("cf_verify_pending")) {
+  // Pending test shortcut (only active in test environments; strictly disabled in production)
+  if (isCashfreeTestFixtureAllowed() && (orderId.includes("pending") || orderId.startsWith("cf_verify_pending"))) {
     return {
       success: true,
       status: "PENDING",
@@ -1043,8 +1055,14 @@ export async function handleCashfreeWebhookPayload(payload: any) {
     const paymentTime = payload.data?.payment?.payment_time || new Date().toISOString();
 
     // Pure webhook test isolation: raw body or basic webhook tests without DB fixtures
-    if (!attempt && (orderId.startsWith("cf_raw_") || orderId.startsWith("cf_ord_webhook_") || paymentAmount <= 0)) {
+    // ONLY allowed in verified test environments; strictly disabled in production.
+    if (isCashfreeTestFixtureAllowed() && !attempt && (orderId.startsWith("cf_raw_") || orderId.startsWith("cf_ord_webhook_") || paymentAmount <= 0)) {
       return { received: true };
+    }
+
+    if (paymentAmount <= 0) {
+      logger.warn({ orderId, paymentAmount }, "[CASHFREE_SERVICE] Webhook received with zero or negative paymentAmount; skipping settlement");
+      return { received: true, ignored: true };
     }
 
     let customerId = attempt?.customerId;
@@ -1053,6 +1071,11 @@ export async function handleCashfreeWebhookPayload(payload: any) {
     }
     if (!customerId && payload.data?.customer_details?.customer_id?.startsWith("cwp_cust_")) {
       customerId = Number(payload.data.customer_details.customer_id.replace("cwp_cust_", ""));
+    }
+
+    if (!customerId) {
+      logger.warn({ orderId }, "[CASHFREE_SERVICE] Webhook received for unmapped order without customer identifier; skipping settlement");
+      return { received: true, unmapped: true };
     }
 
     await reconcileCashfreePayment({

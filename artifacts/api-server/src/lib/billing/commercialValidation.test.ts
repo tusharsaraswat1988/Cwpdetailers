@@ -200,9 +200,22 @@ describe("Phase 5.6 commercial validation", () => {
   });
 
   it("authorizes admin billing actors only", () => {
+    // Authorized roles
     expect(() => assertAdminBillingActor("admin")).not.toThrow();
+    expect(() => assertAdminBillingActor("superadmin")).not.toThrow();
+    expect(() => assertAdminBillingActor("central_admin")).not.toThrow();
+    expect(() => assertAdminBillingActor("city_admin")).not.toThrow();
+    expect(() => assertAdminBillingActor("branch_manager")).not.toThrow();
     expect(() => assertAdminBillingActor("manager")).not.toThrow();
-    expect(() => assertAdminBillingActor("staff")).toThrow(/admin/i);
+    expect(() => assertAdminBillingActor("franchisee")).not.toThrow();
+
+    // Unauthorized roles
+    expect(() => assertAdminBillingActor("staff")).toThrow(CommercialValidationError);
+    expect(() => assertAdminBillingActor("customer")).toThrow(CommercialValidationError);
+    expect(() => assertAdminBillingActor("supervisor")).toThrow(CommercialValidationError);
+    expect(() => assertAdminBillingActor("unknown")).toThrow(CommercialValidationError);
+    expect(() => assertAdminBillingActor(null)).toThrow(CommercialValidationError);
+    expect(() => assertAdminBillingActor(undefined)).toThrow(CommercialValidationError);
   });
 
   it("classifies subscription vs one-time modes", () => {

@@ -1,7 +1,12 @@
 import { CommercialValidationError } from "./commercialValidation";
+import { BranchAccessDeniedError } from "../../middlewares/tenantScope";
 
 /** Map billing/invoice failures to safe client messages — never leak raw SQL. */
-export function mapBillingError(err: unknown): { status: number; message: string } {
+export function mapBillingError(err: unknown): { status: number; message: string; code?: string } {
+  if (err instanceof BranchAccessDeniedError) {
+    return { status: err.statusCode, message: err.message, code: err.code };
+  }
+
   if (err instanceof CommercialValidationError) {
     const statusByCode: Record<CommercialValidationError["code"], number> = {
       NOT_READY: 400,

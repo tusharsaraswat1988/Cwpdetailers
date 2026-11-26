@@ -204,6 +204,7 @@ router.use(
     { match: /\/reset-password$/, method: "POST", action: "approve" },
     { match: /\/test-job-alert$/, method: "POST", action: "approve" },
     { match: /\/attendance$/, method: "POST", action: "edit" },
+    { match: /\/attendance$/, method: "PATCH", action: "edit" },
     { match: /\/verification-status$/, method: "POST", action: "approve" },
     { match: /\/ecosystem$/, method: "PATCH", action: "edit" },
     { match: /\/roles$/, method: "PUT", action: "edit" },
@@ -248,15 +249,16 @@ router.use(
 );
 router.use(guardResource("invoices"), quotationsRouter);
 router.use(guardResource("invoices"), expensesRouter);
-router.use(guardResource("invoices"), billingRouter);
+const billingOverrides = [
+  { match: /\/billing\/jobs\/\d+\/generate$/, method: "POST", action: "create" },
+  { match: /\/billing\/invoices\/\d+\/issue$/, method: "POST", action: "edit" },
+  { match: /\/billing\/invoices\/\d+\/mark-paid$/, method: "POST", action: "edit" },
+  { match: /\/billing\/invoices\/\d+\/void$/, method: "POST", action: "edit" },
+  { match: /\/billing\/invoices\/\d+\/credit-note$/, method: "POST", action: "create" },
+];
 router.use(
-  guardResource("invoices", [
-    { match: /\/billing\/jobs\/\d+\/generate$/, method: "POST", action: "create" },
-    { match: /\/billing\/invoices\/\d+\/issue$/, method: "POST", action: "edit" },
-    { match: /\/billing\/invoices\/\d+\/mark-paid$/, method: "POST", action: "edit" },
-    { match: /\/billing\/invoices\/\d+\/void$/, method: "POST", action: "edit" },
-    { match: /\/billing\/invoices\/\d+\/credit-note$/, method: "POST", action: "create" },
-  ]),
+  guardResource("invoices", billingOverrides, [], "/billing"),
+  billingRouter,
   commercialBillingRouter,
 );
 router.use(

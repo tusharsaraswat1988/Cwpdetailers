@@ -52,11 +52,18 @@ export function resolveCashfreeEnvironment(
   rawEnv?: string,
 ): CashfreeEnvironment {
   const configured = rawEnv?.trim().toLowerCase();
+  const nodeEnv = (process.env.NODE_ENV || "").trim().toLowerCase();
   const isExplicitTestKey =
     appId.startsWith("TEST") ||
     secretKey.startsWith("cfsk_ma_test_");
 
   if (isExplicitTestKey) {
+    if (nodeEnv === "production") {
+      throw new CashfreeConfigError(
+        "Production environment detected with sandbox/test Cashfree credentials. Production requires live Cashfree credentials.",
+        "INVALID_PRODUCTION_CREDENTIALS",
+      );
+    }
     return "sandbox";
   }
 
@@ -65,24 +72,63 @@ export function resolveCashfreeEnvironment(
     return "production";
   }
 
-  return configured === "production" ? "production" : "sandbox";
+  return configured === "production" || nodeEnv === "production" ? "production" : "sandbox";
 }
 
 /**
  * Resolves Cashfree Gateway Base URL.
  * Priority:
- * 1. CASHFREE_BASE_URL environment variable (used by mock test harness)
+ * 1. CASHFREE_BASE_URL environment variable (used by mock test harness in non-production)
  * 2. Production URL: https://api.cashfree.com/pg
  * 3. Sandbox URL: https://sandbox.cashfree.com/pg
+ *
+ * In production (NODE_ENV === "production"), custom CASHFREE_BASE_URL overrides
+ * are strictly ignored to prevent rogue gateway redirection.
  */
 export function getCashfreeBaseUrl(env: CashfreeEnvironment = "sandbox"): string {
+  const nodeEnv = (process.env.NODE_ENV || "").trim().toLowerCase();
   const override = cleanEnvVar(process.env.CASHFREE_BASE_URL);
-  if (override) {
+  if (nodeEnv !== "production" && override) {
     return override.replace(/\/+$/, "");
   }
   return env === "production"
     ? "https://api.cashfree.com/pg"
     : "https://sandbox.cashfree.com/pg";
+}
+
+/**
+ * Strict environment gate for Cashfree test fixtures and mock bypasses.
+ *
+ * Rules:
+ * 1. Under NO circumstances are test fixtures, mock shortcuts, or fake payment records
+ *    permitted when NODE_ENV === "production" or when running in a production deployment.
+ * 2. In non-production environments:
+ *    - Allowed if NODE_ENV === "test" (for automated CI/test runners).
+ *    - Allowed in development ONLY IF explicitly enabled by server-side env var
+ *      CWP_ALLOW_TEST_PAYMENT_FIXTURES === "true".
+ * 3. Ambiguous, missing, or unknown environment states FAIL CLOSED (returns false).
+ * 4. Client requests CANNOT enable or influence this behavior.
+ */
+export function isCashfreeTestFixtureAllowed(): boolean {
+  const nodeEnv = (process.env.NODE_ENV || "").trim().toLowerCase();
+
+  // Production MUST fail closed: zero test fixtures allowed
+  if (nodeEnv === "production") {
+    return false;
+  }
+
+  // Explicit test runner environment
+  if (nodeEnv === "test") {
+    return true;
+  }
+
+  // Development environment only with explicit server configuration flag
+  if (nodeEnv === "development" && process.env.CWP_ALLOW_TEST_PAYMENT_FIXTURES === "true") {
+    return true;
+  }
+
+  // All other states (staging, undefined, ambiguous) fail closed
+  return false;
 }
 
 /**
