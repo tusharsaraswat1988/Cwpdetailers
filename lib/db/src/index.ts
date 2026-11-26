@@ -10,7 +10,18 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const poolMax = process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : 30;
+const idleTimeoutMillis = process.env.DB_IDLE_TIMEOUT_MS ? parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10) : 30000;
+const connectionTimeoutMillis = process.env.DB_CONNECTION_TIMEOUT_MS ? parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10) : 5000;
+const statementTimeout = process.env.DB_STATEMENT_TIMEOUT_MS ? parseInt(process.env.DB_STATEMENT_TIMEOUT_MS, 10) : 10000;
+
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: poolMax,
+  idleTimeoutMillis,
+  connectionTimeoutMillis,
+  statement_timeout: statementTimeout,
+});
 pool.on("error", (err) => {
   console.warn("Unexpected idle client error in PostgreSQL pool:", err?.message || err);
 });

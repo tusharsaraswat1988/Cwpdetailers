@@ -89,7 +89,7 @@ router.use(
   customersRouter,
 );
 router.use(guardResource("customers"), assetsRouter);
-router.use(guardResource("customers"), addressesRouter);
+router.use(guardResource("customers", [], [], "/addresses"), addressesRouter);
 router.use(guardResource("customers"), serviceLocationsRouter);
 router.use(
   guardResource("customers", [

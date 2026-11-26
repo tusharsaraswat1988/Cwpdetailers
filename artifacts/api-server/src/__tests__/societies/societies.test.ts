@@ -347,6 +347,14 @@ vi.mock("@workspace/db", () => {
     serviceCityAvailabilityTable: serviceCityAvailabilityTableMock,
     dcmsPlansTable: dcmsPlansTableMock,
     dcmsSubscriptionsTable: dcmsSubscriptionsTableMock,
+    permissionOverridesTable: { _name: "permission_overrides" },
+    permissionsTable: { _name: "permissions" },
+    usersTable: { _name: "users" },
+    sessionsTable: { _name: "sessions" },
+    branchesTable: { _name: "branches" },
+    customersTable: { _name: "customers" },
+    staffTable: { _name: "staff" },
+    franchiseesTable: { _name: "franchisees" },
   };
 });
 
@@ -366,7 +374,7 @@ describe("Residential Societies & Multi-City Service Catalog Suite", () => {
     // Inject authenticated user and logger
     app.use((req, res, next) => {
       req.log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
-      req.user = { id: 1, role: "admin", companyId: 1, branchId: 2 } as any;
+      req.user = { id: 1, role: "superadmin", companyId: 1, branchId: null } as any;
       req.scope = {
         isSuperAdmin: true,
         companyId: 1,

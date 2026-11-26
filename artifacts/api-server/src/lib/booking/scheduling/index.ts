@@ -44,7 +44,7 @@ export class SchedulingDomainService {
     return resolveTimeWindow(input);
   }
 
-  async validate(input: ValidateScheduleInput): Promise<ValidateScheduleResult> {
+  async validate(input: ValidateScheduleInput, tx?: any): Promise<ValidateScheduleResult> {
     if (!input.scheduledDate && !input.scheduledStartAt) {
       return { valid: false, error: "scheduledDate or scheduledStartAt is required" };
     }
@@ -102,7 +102,7 @@ export class SchedulingDomainService {
         scheduledEndAt: window.scheduledEndAt,
         durationMinutes: window.durationMinutes,
         excludeBookingId: input.excludeBookingId,
-      });
+      }, tx);
     } catch (err) {
       return { valid: false, error: err instanceof Error ? err.message : "Duplicate booking" };
     }
@@ -129,7 +129,8 @@ export class SchedulingDomainService {
 
     if (input.branchId != null) {
       const occupying = [...SLOT_OCCUPYING_STATUSES] as BookingStatus[];
-      const dayRows = await db
+      const executor = tx ?? db;
+      const dayRows = await executor
         .select({
           id: bookingsTable.id,
           scheduledDate: bookingsTable.scheduledDate,

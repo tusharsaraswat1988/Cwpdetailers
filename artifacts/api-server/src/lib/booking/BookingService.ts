@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
-import type { Booking, BookingStatus } from "@workspace/db";
+import { db, type Booking, type BookingStatus } from "@workspace/db";
+import { sql } from "drizzle-orm";
 import { bookingRepository } from "./repositories/BookingRepository";
 import { bookingValidationPolicy } from "./policies/BookingValidationPolicy";
 import { bookingCreationPolicy } from "./policies/BookingCreationPolicy";
@@ -56,146 +57,197 @@ export class BookingService {
       if (!r.success) throw new BookingValidationError(r.error ?? "Scheduling validation failed");
     });
 
-    const scheduleCheck = await schedulingDomainService.validate({
-      scheduledDate: input.scheduledDate,
-      scheduledTime: input.scheduledTime,
-      scheduledStartAt: input.scheduledStartAt,
-      scheduledEndAt: input.scheduledEndAt,
-      durationMinutes: input.durationMinutes,
-      customerId: input.customerId,
-      assetId: input.assetId,
-      vehicleId: input.vehicleId,
-      serviceLocationId: input.serviceLocationId,
-      branchId: input.branchId,
-      cityId: input.cityId,
-    });
-    if (!scheduleCheck.valid || !scheduleCheck.window) {
-      throw new BookingValidationError(scheduleCheck.error ?? "Schedule validation failed", "SCHEDULE_CONFLICT");
-    }
-    const window = scheduleCheck.window;
+    const lockKey = `booking_lock_${input.customerId}_${input.vehicleId ?? input.assetId ?? input.solarSiteId ?? 0}_${input.scheduledDate}`;
+    const branchSlotLockKey = input.branchId != null
+      ? `branch_slot_${input.branchId}_${input.scheduledDate}_${input.scheduledTime ?? ""}`
+      : null;
 
-    let effectiveServiceId = input.serviceId;
-    if (!effectiveServiceId && input.serviceType) {
-      const resolved = await resolveAuthoritativeService({ serviceType: input.serviceType });
-      if (resolved.success) {
-        effectiveServiceId = resolved.serviceId;
-      }
-    }
+    const runInTx = typeof db.transaction === "function"
+      ? (cb: (tx: any) => Promise<any>) => db.transaction(cb)
+      : (cb: (tx: any) => Promise<any>) => cb(db);
 
-    let coverage: CoverageResult | undefined;
-    const hasCoords = input.locationLat != null && input.locationLng != null
-      && Number.isFinite(input.locationLat) && Number.isFinite(input.locationLng)
-      && !(input.locationLat === 0 && input.locationLng === 0);
-    const hasPlace = Boolean(
-      input.address?.trim()
-      || input.postalCode?.trim()
-      || input.cityId != null
-      || input.cityName?.trim()
-      || input.citySlug?.trim(),
-    );
-    if (!input.skipCoverageValidation) {
-      if (!hasCoords && !hasPlace) {
-        throw new BookingValidationError("A service address is required", "INVALID_ADDRESS");
+    const {
+      booking,
+      window,
+      coverage,
+      effectiveServiceId,
+      resolvedCityId,
+      initialStatus,
+    } = await runInTx(async (tx) => {
+      try {
+        if (typeof tx?.execute === "function") {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+          if (branchSlotLockKey) {
+            await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${branchSlotLockKey}))`);
+          }
+        }
+      } catch {
+        // Fallback gracefully in test/mock environments without advisory lock support
       }
-      const validationResult = await bookingValidationPolicy.execute(
+
+      const scheduleCheck = await schedulingDomainService.validate({
+        scheduledDate: input.scheduledDate,
+        scheduledTime: input.scheduledTime,
+        scheduledStartAt: input.scheduledStartAt,
+        scheduledEndAt: input.scheduledEndAt,
+        durationMinutes: input.durationMinutes,
+        customerId: input.customerId,
+        assetId: input.assetId,
+        vehicleId: input.vehicleId,
+        serviceLocationId: input.serviceLocationId,
+        branchId: input.branchId,
+        cityId: input.cityId,
+      }, tx);
+      if (!scheduleCheck.valid || !scheduleCheck.window) {
+        throw new BookingValidationError(scheduleCheck.error ?? "Schedule validation failed", "SCHEDULE_CONFLICT");
+      }
+      const window = scheduleCheck.window;
+
+      let effectiveServiceId = input.serviceId;
+      if (!effectiveServiceId && input.serviceType) {
+        const resolved = await resolveAuthoritativeService({ serviceType: input.serviceType });
+        if (resolved.success) {
+          effectiveServiceId = resolved.serviceId;
+        }
+      }
+
+      let coverage: CoverageResult | undefined;
+      const hasCoords = input.locationLat != null && input.locationLng != null
+        && Number.isFinite(input.locationLat) && Number.isFinite(input.locationLng)
+        && !(input.locationLat === 0 && input.locationLng === 0);
+      const hasPlace = Boolean(
+        input.address?.trim()
+        || input.postalCode?.trim()
+        || input.cityId != null
+        || input.cityName?.trim()
+        || input.citySlug?.trim(),
+      );
+      if (!input.skipCoverageValidation) {
+        if (!hasCoords && !hasPlace) {
+          throw new BookingValidationError("A service address is required", "INVALID_ADDRESS");
+        }
+        const validationResult = await bookingValidationPolicy.execute(
+          {
+            customerId: input.customerId,
+            serviceId: effectiveServiceId,
+            address: input.address,
+            locationLat: input.locationLat,
+            locationLng: input.locationLng,
+            placeId: input.placeId,
+            cityId: input.cityId,
+            citySlug: hasCoords ? undefined : input.citySlug,
+            cityName: input.cityName ?? input.area,
+            addressComponents: input.addressComponents,
+            postalCode: input.postalCode,
+            requestSource: opts?.requestSource ?? "booking_create",
+          },
+          { trace, logger: opts?.logger },
+        );
+        if (!validationResult.success || !validationResult.data) {
+          emitBookingMetrics(opts?.logger, buildBookingMetrics("create", trace, {
+            success: false,
+            durationMs: Date.now() - started,
+            coverageFailure: true,
+            failureReason: validationResult.error,
+          }));
+          throw new BookingCoverageError(
+            validationResult.error ?? "Coverage validation failed",
+            validationResult.data ?? {
+              success: false,
+              status: "INVALID_ADDRESS",
+              legacyStatus: "INVALID_ADDRESS",
+              message: validationResult.error ?? "Coverage validation failed",
+              coverageStatus: "INVALID",
+              correlation: {
+                coverageValidationId: trace.bookingOperationId,
+                requestId: trace.requestId,
+                traceId: trace.traceId,
+              },
+            },
+          );
+        }
+        coverage = validationResult.data;
+        trace.coverageValidationId = coverage?.correlation.coverageValidationId;
+      }
+
+      const coverageStatus = coverage?.coverageStatus ?? coverage?.locationContext?.coverageStatus;
+      const creationResult = await bookingCreationPolicy.execute(
         {
-          customerId: input.customerId,
+          ...input,
           serviceId: effectiveServiceId,
-          address: input.address,
-          locationLat: input.locationLat,
-          locationLng: input.locationLng,
-          placeId: input.placeId,
-          cityId: input.cityId,
-          citySlug: hasCoords ? undefined : input.citySlug,
-          cityName: input.cityName ?? input.area,
-          addressComponents: input.addressComponents,
-          postalCode: input.postalCode,
-          requestSource: opts?.requestSource ?? "booking_create",
+          coverageStatus: typeof coverageStatus === "string" ? coverageStatus : undefined,
         },
         { trace, logger: opts?.logger },
       );
-      if (!validationResult.success || !validationResult.data) {
+      if (!creationResult.success) {
         emitBookingMetrics(opts?.logger, buildBookingMetrics("create", trace, {
           success: false,
           durationMs: Date.now() - started,
-          coverageFailure: true,
-          failureReason: validationResult.error,
+          businessRuleFailure: true,
+          failureReason: creationResult.error,
         }));
-        throw new BookingCoverageError(
-          validationResult.error ?? "Coverage validation failed",
-          validationResult.data ?? {
-            success: false,
-            status: "INVALID_ADDRESS",
-            legacyStatus: "INVALID_ADDRESS",
-            message: validationResult.error ?? "Coverage validation failed",
-            coverageStatus: "INVALID",
-            correlation: {
-              coverageValidationId: trace.bookingOperationId,
-              requestId: trace.requestId,
-              traceId: trace.traceId,
-            },
-          },
+        throw new BookingValidationError(
+          creationResult.error ?? "Booking creation rules failed",
+          "BUSINESS_RULE_FAILED",
+          creationResult.metadata,
         );
       }
-      coverage = validationResult.data;
-      trace.coverageValidationId = coverage?.correlation.coverageValidationId;
-    }
 
-    const coverageStatus = coverage?.coverageStatus ?? coverage?.locationContext?.coverageStatus;
-    const creationResult = await bookingCreationPolicy.execute(
-      {
-        ...input,
-        serviceId: effectiveServiceId,
-        coverageStatus: typeof coverageStatus === "string" ? coverageStatus : undefined,
-      },
-      { trace, logger: opts?.logger },
-    );
-    if (!creationResult.success) {
-      emitBookingMetrics(opts?.logger, buildBookingMetrics("create", trace, {
-        success: false,
-        durationMs: Date.now() - started,
-        businessRuleFailure: true,
-        failureReason: creationResult.error,
-      }));
-      throw new BookingValidationError(
-        creationResult.error ?? "Booking creation rules failed",
-        "BUSINESS_RULE_FAILED",
-        creationResult.metadata,
-      );
-    }
+      const initialStatus: BookingStatus = input.status ?? "scheduled";
+      const resolvedCityId = input.cityId ?? coverage?.resolvedCityId ?? null;
 
-    const initialStatus: BookingStatus = input.status ?? "scheduled";
-    const resolvedCityId = input.cityId ?? coverage?.resolvedCityId ?? null;
+      try {
+        const createdBooking = await bookingRepository.create({
+          customerId: input.customerId,
+          contractRegistryId: input.contractRegistryId ?? null,
+          serviceLocationId: input.serviceLocationId ?? null,
+          assetId: input.assetId ?? null,
+          vehicleId: input.vehicleId ?? null,
+          solarSiteId: input.solarSiteId ?? null,
+          serviceId: effectiveServiceId ?? input.serviceId ?? null,
+          branchId: input.branchId ?? null,
+          companyId: input.companyId ?? null,
+          franchiseeId: input.franchiseeId ?? null,
+          bookingType: input.bookingType ?? "one_time",
+          scheduledDate: window.scheduledDate,
+          scheduledTime: window.scheduledTime,
+          scheduledStartAt: window.scheduledStartAt,
+          scheduledEndAt: window.scheduledEndAt,
+          durationMinutes: window.durationMinutes,
+          serviceType: input.serviceType as never,
+          address: input.address ?? null,
+          area: input.area ?? null,
+          locationLat: input.locationLat ?? null,
+          locationLng: input.locationLng ?? null,
+          placeId: input.placeId ?? null,
+          savedLocationId: input.savedLocationId ?? null,
+          addressId: input.addressId ?? null,
+          notes: input.notes ?? null,
+          cityId: resolvedCityId,
+          status: initialStatus,
+        }, tx);
 
-    const booking = await bookingRepository.create({
-      customerId: input.customerId,
-      contractRegistryId: input.contractRegistryId ?? null,
-      serviceLocationId: input.serviceLocationId ?? null,
-      assetId: input.assetId ?? null,
-      vehicleId: input.vehicleId ?? null,
-      solarSiteId: input.solarSiteId ?? null,
-      serviceId: effectiveServiceId ?? input.serviceId ?? null,
-      branchId: input.branchId ?? null,
-      companyId: input.companyId ?? null,
-      franchiseeId: input.franchiseeId ?? null,
-      bookingType: input.bookingType ?? "one_time",
-      scheduledDate: window.scheduledDate,
-      scheduledTime: window.scheduledTime,
-      scheduledStartAt: window.scheduledStartAt,
-      scheduledEndAt: window.scheduledEndAt,
-      durationMinutes: window.durationMinutes,
-      serviceType: input.serviceType as never,
-      address: input.address ?? null,
-      area: input.area ?? null,
-      locationLat: input.locationLat ?? null,
-      locationLng: input.locationLng ?? null,
-      placeId: input.placeId ?? null,
-      savedLocationId: input.savedLocationId ?? null,
-      addressId: input.addressId ?? null,
-      notes: input.notes ?? null,
-      cityId: resolvedCityId,
-      status: initialStatus,
+        return {
+          booking: createdBooking,
+          window,
+          coverage,
+          effectiveServiceId,
+          resolvedCityId,
+          initialStatus,
+        };
+      } catch (insertErr: any) {
+        if (
+          insertErr?.code === "23505" ||
+          insertErr?.message?.includes("unique") ||
+          insertErr?.message?.includes("duplicate") ||
+          insertErr?.message?.includes("bookings_customer_")
+        ) {
+          throw new BookingValidationError("A booking already exists for this slot", "DUPLICATE_BOOKING");
+        }
+        throw insertErr;
+      }
     });
+
     trace.bookingId = booking.id;
 
     let addressSnapshotId: number | undefined;
@@ -243,7 +295,10 @@ export class BookingService {
         bookingId: booking.id,
         eventType: "COVERAGE_VALIDATED",
         trace,
-        metadata: { coverageStatus, validationId: coverage.correlation.coverageValidationId },
+        metadata: {
+          coverageStatus: coverage.coverageStatus ?? coverage.locationContext?.coverageStatus,
+          validationId: coverage.correlation.coverageValidationId,
+        },
       }, opts?.logger);
     }
 

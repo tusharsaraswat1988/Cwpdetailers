@@ -4,20 +4,42 @@ import { AddressDuplicateError, AddressValidationError } from "../lib/address/Ad
 import { addressSnapshotService } from "../lib/address/AddressSnapshotService";
 import { legacyAddressMigrator } from "../lib/address/migration/LegacyAddressMigrator";
 import { resolveAddressTraceId } from "../lib/address/correlation/AddressTraceContext";
-import type { AddressType, AddressSource, AddressVerificationStatus } from "@workspace/db";
+import { db, customersTable, type AddressType, type AddressSource, type AddressVerificationStatus } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { requireAuth } from "../middlewares/auth";
+import { loadIfInScope } from "../middlewares/tenantScope";
 
 const router = Router();
+router.use("/addresses", requireAuth);
 
 function parseCustomerId(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-function assertCustomerAccess(req: import("express").Request, customerId: number) {
-  if (req.user?.role === "customer" && req.scope?.customerId && req.scope.customerId !== customerId) {
+async function assertCustomerAccess(req: import("express").Request, customerId: number): Promise<boolean> {
+  if (!req.user) return false;
+  if (req.user.role === "customer") {
+    const userCustId = req.user.customerId ?? req.scope?.customerId;
+    return userCustId != null && userCustId === customerId;
+  }
+  if (req.scope?.customerId && req.scope.customerId !== customerId) {
     return false;
   }
-  return true;
+  if (req.scope?.isSuperAdmin && !req.scope?.companyId) {
+    return true;
+  }
+  const customer = await loadIfInScope(req, async () => {
+    const [row] = await db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1);
+    return row;
+  }, r => ({
+    companyId: r.companyId,
+    branchId: r.branchId,
+    franchiseeId: r.franchiseeId,
+    cityId: r.cityId,
+    customerId: r.id,
+  }));
+  return customer !== null;
 }
 
 function capabilityOpts(req: import("express").Request) {
@@ -76,7 +98,7 @@ router.post("/addresses", async (req, res) => {
     const body = req.body as Record<string, unknown>;
     const customerId = parseCustomerId(body.customerId);
     if (!customerId) return res.status(400).json({ error: "customerId is required" });
-    if (!assertCustomerAccess(req, customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, customerId)) return res.status(403).json({ error: "Forbidden" });
 
     const result = await addressCapability.createAddress(bodyToCreateInput(body, customerId), capabilityOpts(req));
     return res.status(201).json(result);
@@ -96,7 +118,7 @@ router.get("/addresses", async (req, res) => {
   try {
     const customerId = parseCustomerId(req.query.customerId);
     if (!customerId) return res.status(400).json({ error: "customerId is required" });
-    if (!assertCustomerAccess(req, customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, customerId)) return res.status(403).json({ error: "Forbidden" });
 
     const data = await addressCapability.listAddresses(customerId, {
       ...capabilityOpts(req),
@@ -115,7 +137,7 @@ router.get("/addresses/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const result = await addressCapability.getAddress(id, capabilityOpts(req));
     if (!result) return res.status(404).json({ error: "Not found" });
-    if (!assertCustomerAccess(req, result.customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, result.customerId)) return res.status(403).json({ error: "Forbidden" });
     return res.json(result);
   } catch (err) {
     req.log.error({ err }, "Get address error");
@@ -128,7 +150,7 @@ router.patch("/addresses/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await addressCapability.getAddress(id, capabilityOpts(req));
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (!assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
 
     const body = req.body as Record<string, unknown>;
     const result = await addressCapability.updateAddress(id, {
@@ -150,7 +172,7 @@ router.delete("/addresses/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await addressCapability.getAddress(id, capabilityOpts(req));
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (!assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
     await addressCapability.deleteAddress(id, capabilityOpts(req));
     return res.status(204).send();
   } catch (err) {
@@ -164,7 +186,7 @@ router.post("/addresses/:id/restore", async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await addressCapability.getAddress(id, capabilityOpts(req));
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (!assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
     const address = await addressCapability.restoreAddress(id, capabilityOpts(req));
     return res.json(address);
   } catch (err) {
@@ -178,7 +200,7 @@ router.post("/addresses/:id/default", async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await addressCapability.getAddress(id, capabilityOpts(req));
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (!assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
     const result = await addressCapability.setDefaultAddress(id, capabilityOpts(req));
     return res.json(result);
   } catch (err) {
@@ -191,6 +213,9 @@ router.post("/addresses/validate", async (req, res) => {
   try {
     const body = req.body as Record<string, unknown>;
     const customerId = parseCustomerId(body.customerId) ?? 0;
+    if (customerId && !await assertCustomerAccess(req, customerId)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const result = await addressCapability.validateAddress(bodyToCreateInput(body, customerId), capabilityOpts(req));
     return res.json(result);
   } catch (err) {
@@ -203,6 +228,9 @@ router.post("/addresses/normalize", async (req, res) => {
   try {
     const body = req.body as Record<string, unknown>;
     const customerId = parseCustomerId(body.customerId) ?? 0;
+    if (customerId && !await assertCustomerAccess(req, customerId)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const preview = addressCapability.normalizeAddress(bodyToCreateInput(body, customerId), capabilityOpts(req));
     return res.json(preview);
   } catch (err) {
@@ -228,6 +256,7 @@ router.post("/addresses/check-duplicates", async (req, res) => {
     const body = req.body as Record<string, unknown>;
     const customerId = parseCustomerId(body.customerId);
     if (!customerId) return res.status(400).json({ error: "customerId is required" });
+    if (!await assertCustomerAccess(req, customerId)) return res.status(403).json({ error: "Forbidden" });
     const result = await addressCapability.checkDuplicates(bodyToCreateInput(body, customerId), capabilityOpts(req));
     return res.json(result);
   } catch (err) {
@@ -246,7 +275,7 @@ router.post("/addresses/merge-duplicates", async (req, res) => {
     if (!customerId || !keepIdentityId || !mergeIdentityIds?.length) {
       return res.status(400).json({ error: "customerId, keepIdentityId, mergeIdentityIds required" });
     }
-    if (!assertCustomerAccess(req, customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, customerId)) return res.status(403).json({ error: "Forbidden" });
     const result = await addressCapability.mergeAddresses({ customerId, keepIdentityId, mergeIdentityIds }, capabilityOpts(req));
     return res.json(result);
   } catch (err) {
@@ -260,7 +289,7 @@ router.get("/addresses/:id/history", async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await addressCapability.getAddress(id, capabilityOpts(req));
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (!assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
     const history = await addressCapability.getAddressHistory(id);
     return res.json(history);
   } catch (err) {
@@ -274,7 +303,7 @@ router.post("/addresses/:id/snapshot", async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await addressCapability.getAddress(id, capabilityOpts(req));
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (!assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
+    if (!await assertCustomerAccess(req, existing.customerId)) return res.status(403).json({ error: "Forbidden" });
     const snapshot = await addressSnapshotService.createFromAddressId(id, "MANUAL", req.log);
     return res.status(201).json(snapshot.snapshot);
   } catch (err) {

@@ -1,6 +1,7 @@
 import {
-  pgTable, serial, integer, text, date, timestamp, pgEnum, doublePrecision, boolean, index, jsonb,
+  pgTable, serial, integer, text, date, timestamp, pgEnum, doublePrecision, boolean, index, jsonb, uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -111,6 +112,12 @@ export const bookingsTable = pgTable("bookings", {
   index("bookings_type_idx").on(table.bookingType),
   index("bookings_rescheduled_from_idx").on(table.rescheduledFromBookingId),
   index("bookings_rescheduled_to_idx").on(table.rescheduledToBookingId),
+  uniqueIndex("bookings_customer_vehicle_date_time_unique")
+    .on(table.customerId, table.vehicleId, table.scheduledDate, table.scheduledTime)
+    .where(sql`${table.status} NOT IN ('cancelled', 'missed') AND ${table.vehicleId} IS NOT NULL AND ${table.scheduledTime} IS NOT NULL`),
+  uniqueIndex("bookings_customer_asset_date_time_unique")
+    .on(table.customerId, table.assetId, table.scheduledDate, table.scheduledTime)
+    .where(sql`${table.status} NOT IN ('cancelled', 'missed') AND ${table.assetId} IS NOT NULL AND ${table.scheduledTime} IS NOT NULL`),
 ]);
 
 export const insertBookingSchema = createInsertSchema(bookingsTable).omit({ id: true, createdAt: true, updatedAt: true });

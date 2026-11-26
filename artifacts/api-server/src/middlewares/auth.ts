@@ -100,6 +100,12 @@ function isCustomerSelfService(req: Request): boolean {
     return true;
   }
 
+  // Address operations: customer may manage their own addresses.
+  // Downstream handler strictly enforces customerId === user.customerId.
+  if (path === "/addresses" || path.startsWith("/addresses/")) {
+    return true;
+  }
+
   // Self-service cancel/reschedule of their own booking. Ownership itself is
   // still enforced downstream by rowInScope() against the loaded booking row,
   // so this only widens *which* customers reach that check, not what they can touch.

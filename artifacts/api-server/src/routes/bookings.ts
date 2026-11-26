@@ -678,7 +678,8 @@ router.post("/bookings", async (req, res) => {
         return res.status(SERVICEABILITY_HTTP_STATUS).json(serviceabilityHttpBody(err.coverage));
       }
       if (err instanceof BookingValidationError) {
-        return res.status(400).json({ error: err.message, code: err.code, details: err.details });
+        const isConflict = err.code === "DUPLICATE_BOOKING" || err.code === "SCHEDULE_CONFLICT";
+        return res.status(isConflict ? 409 : 400).json({ error: err.message, code: err.code, details: err.details });
       }
       throw err;
     }

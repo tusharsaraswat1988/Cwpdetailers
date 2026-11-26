@@ -19,7 +19,7 @@ export type DuplicateCheckInput = {
 /**
  * Prevents duplicate active bookings for the same customer + asset overlapping window.
  */
-export async function assertNoDuplicateBooking(input: DuplicateCheckInput): Promise<void> {
+export async function assertNoDuplicateBooking(input: DuplicateCheckInput, tx: any = db): Promise<void> {
   const window = resolveTimeWindow(input);
   const occupying = [...SLOT_OCCUPYING_STATUSES] as BookingStatus[];
 
@@ -40,7 +40,8 @@ export async function assertNoDuplicateBooking(input: DuplicateCheckInput): Prom
     conditions.push(ne(bookingsTable.id, input.excludeBookingId));
   }
 
-  const rows = await db
+  const executor = tx ?? db;
+  const rows = await executor
     .select({
       id: bookingsTable.id,
       scheduledDate: bookingsTable.scheduledDate,

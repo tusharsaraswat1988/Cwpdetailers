@@ -1,5 +1,17 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import type { Server } from "http";
+
+vi.mock("@workspace/db", async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    pool: {
+      ...actual.pool,
+      query: vi.fn().mockResolvedValue({ rows: [{ "?column?": 1 }] }),
+    },
+  };
+});
+
 import app from "../../app";
 import { resolveStoredMediaUrl } from "../../lib/cloudinaryStorage";
 import { cookieOptions } from "../../lib/sessionCookie";

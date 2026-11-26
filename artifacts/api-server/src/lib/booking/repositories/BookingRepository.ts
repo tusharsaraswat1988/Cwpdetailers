@@ -3,8 +3,9 @@ import { db, bookingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 export class BookingRepository {
-  async create(values: InsertBooking): Promise<Booking> {
-    const [booking] = await db.insert(bookingsTable).values(values).returning();
+  async create(values: InsertBooking, tx: any = db): Promise<Booking> {
+    const executor = tx ?? db;
+    const [booking] = await executor.insert(bookingsTable).values(values).returning();
     return booking;
   }
 
