@@ -50,7 +50,7 @@ async function requestPresign(file: File): Promise<CloudinaryUploadSignatureResp
     }),
   });
   if (!res.ok) {
-    throw new Error("Presign failed");
+    throw new Error(`Presign failed: HTTP ${res.status}`);
   }
   return res.json() as Promise<CloudinaryUploadSignatureResponse>;
 }
@@ -76,7 +76,7 @@ async function patchBookingPhotos(payload: StaffPhotoQueuePayload, secureUrl: st
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error("Failed to save photo on booking");
+  if (!res.ok) throw new Error(`Failed to save photo on booking: HTTP ${res.status}`);
 }
 
 export async function processStaffPhotoQueueItem(item: QueueItem): Promise<void> {

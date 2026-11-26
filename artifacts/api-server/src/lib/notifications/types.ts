@@ -9,7 +9,7 @@ export type SmsSendResult = {
 export interface SmsChannelAdapter {
   readonly name: string;
   isConfigured(): boolean;
-  sendSms(phone: string, message: string): Promise<SmsSendResult>;
+  sendSms(phone: string, message: string, options?: Record<string, unknown>): Promise<SmsSendResult>;
 }
 
 export interface EmailChannelAdapter {

@@ -42,9 +42,10 @@ class DbSmsProvider implements CommChannelProvider {
 
   async send(opts: SendOptions): Promise<SmsSendResult> {
     if (!opts.phone) return { success: false, error: "No phone number" };
-    if (opts.dltTemplateId) process.env.FAST2SMS_TEMPLATE_ID = opts.dltTemplateId;
-    if (opts.senderId) process.env.FAST2SMS_SENDER_ID = opts.senderId;
-    return this.adapter.sendSms(opts.phone, opts.message);
+    return this.adapter.sendSms(opts.phone, opts.message, {
+      dltTemplateId: opts.dltTemplateId,
+      senderId: opts.senderId,
+    });
   }
 }
 
@@ -171,15 +172,19 @@ function adapterFromDbRow(row: CommProvider): CommChannelProvider | null {
 
   switch (row.providerType) {
     case "fast2sms": {
-      if (config.apiKey) process.env.FAST2SMS_API_KEY = config.apiKey;
-      if (config.senderId) process.env.FAST2SMS_SENDER_ID = config.senderId;
-      if (config.templateId) process.env.FAST2SMS_TEMPLATE_ID = config.templateId;
-      return new DbSmsProvider(row.name, new Fast2SmsAdapter(), config);
+      const adapter = new Fast2SmsAdapter({
+        apiKey: config.apiKey,
+        senderId: config.senderId,
+        templateId: config.templateId,
+      });
+      return new DbSmsProvider(row.name, adapter, config);
     }
     case "msg91": {
-      if (config.authKey) process.env.MSG91_AUTH_KEY = config.authKey;
-      if (config.senderId) process.env.MSG91_SENDER_ID = config.senderId;
-      return new DbSmsProvider(row.name, new Msg91Adapter(), config);
+      const adapter = new Msg91Adapter({
+        authKey: config.authKey,
+        senderId: config.senderId,
+      });
+      return new DbSmsProvider(row.name, adapter, config);
     }
     case "resend":
       return new StubEmailProvider(row.name, config);

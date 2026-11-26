@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, type ReactNode 
 import { setBaseUrl as setApiClientBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 import { getApiBaseUrl, isNativeApp, isTrustedApiUrl, resolveApiUrl } from "./apiConfig";
 import { useAppStore } from "./store";
+import { clearQueryCache } from "./queryClient";
 import {
   authPortalHeaders,
   migrateLegacySession,
@@ -60,6 +61,7 @@ function isSuperAdmin(role?: UserRole | null) {
 function clearStoredSession(portal: AuthPortal) {
   localStorage.removeItem(tokenStorageKey(portal));
   localStorage.removeItem(userStorageKey(portal));
+  clearQueryCache();
 }
 
 function sleep(ms: number) {
@@ -297,6 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setPermissions([]);
           setScope(null);
           setSessionReady(false);
+          clearQueryCache();
         } else {
           // Another tab logged in or refreshed user profile
           setUser(reloaded.user);
@@ -370,6 +373,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [sessionReady, user]);
 
   const login = (u: AuthUser, t: string, intendedPortal?: AuthPortal) => {
+    clearQueryCache();
     const portal = intendedPortal ?? resolveAuthPortal();
     portalRef.current = portal;
     bootstrapGeneration.current += 1;
@@ -397,6 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionReady(false);
     clearStoredSession(portal);
     useAppStore.getState().clearScope();
+    clearQueryCache();
   };
 
   const hasPermission = (resource: string, action: string) => {

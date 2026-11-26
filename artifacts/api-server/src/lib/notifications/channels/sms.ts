@@ -2,21 +2,36 @@ import type { SmsChannelAdapter, SmsSendResult } from "../types";
 
 const FAST2SMS_URL = "https://www.fast2sms.com/dev/bulkV2";
 
+export type Fast2SmsConfig = {
+  apiKey?: string;
+  senderId?: string;
+  templateId?: string;
+};
+
 export class Fast2SmsAdapter implements SmsChannelAdapter {
   readonly name = "fast2sms";
+  private config: Fast2SmsConfig;
 
-  isConfigured(): boolean {
-    return Boolean(process.env.FAST2SMS_API_KEY);
+  constructor(config: Fast2SmsConfig = {}) {
+    this.config = { ...config };
   }
 
-  async sendSms(phone: string, message: string): Promise<SmsSendResult> {
-    const apiKey = process.env.FAST2SMS_API_KEY;
+  isConfigured(): boolean {
+    return Boolean(this.config.apiKey ?? process.env.FAST2SMS_API_KEY);
+  }
+
+  async sendSms(
+    phone: string,
+    message: string,
+    options?: { senderId?: string; templateId?: string; dltTemplateId?: string },
+  ): Promise<SmsSendResult> {
+    const apiKey = this.config.apiKey ?? process.env.FAST2SMS_API_KEY;
     if (!apiKey) {
       return { success: false, error: "FAST2SMS_API_KEY not configured" };
     }
 
-    const senderId = process.env.FAST2SMS_SENDER_ID;
-    const templateId = process.env.FAST2SMS_TEMPLATE_ID;
+    const senderId = options?.senderId ?? this.config.senderId ?? process.env.FAST2SMS_SENDER_ID;
+    const templateId = options?.templateId ?? options?.dltTemplateId ?? this.config.templateId ?? process.env.FAST2SMS_TEMPLATE_ID;
 
     try {
       const body: Record<string, string> = {
@@ -50,17 +65,31 @@ export class Fast2SmsAdapter implements SmsChannelAdapter {
   }
 }
 
+export type Msg91Config = {
+  authKey?: string;
+  senderId?: string;
+};
+
 /** Optional MSG91 adapter for future / dual-provider setups. */
 export class Msg91Adapter implements SmsChannelAdapter {
   readonly name = "msg91";
+  private config: Msg91Config;
 
-  isConfigured(): boolean {
-    return Boolean(process.env.MSG91_AUTH_KEY);
+  constructor(config: Msg91Config = {}) {
+    this.config = { ...config };
   }
 
-  async sendSms(phone: string, message: string): Promise<SmsSendResult> {
-    const authKey = process.env.MSG91_AUTH_KEY;
-    const senderId = process.env.MSG91_SENDER_ID ?? "CWPCLN";
+  isConfigured(): boolean {
+    return Boolean(this.config.authKey ?? process.env.MSG91_AUTH_KEY);
+  }
+
+  async sendSms(
+    phone: string,
+    message: string,
+    options?: { senderId?: string },
+  ): Promise<SmsSendResult> {
+    const authKey = this.config.authKey ?? process.env.MSG91_AUTH_KEY;
+    const senderId = options?.senderId ?? this.config.senderId ?? process.env.MSG91_SENDER_ID ?? "CWPCLN";
     if (!authKey) return { success: false, error: "MSG91_AUTH_KEY not configured" };
 
     try {

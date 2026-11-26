@@ -226,5 +226,12 @@ export function isRootScreenForPortal(portal: NativePortalType, pathname: string
     );
   }
 
-  return clean === "/";
+  return (
+    clean === "/" ||
+    clean === "/login" ||
+    clean === "/admin/login" ||
+    clean === "/staff/login" ||
+    clean === "/admin" ||
+    clean === "/admin/dashboard"
+  );
 }

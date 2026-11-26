@@ -112,5 +112,19 @@ describe("portalNative isolation logic", () => {
       expect(isPortalAllowedPath("none", "/staff/dashboard")).toBe(true);
       expect(isPortalAllowedPath("none", "/customer/dashboard")).toBe(true);
     });
+
+    it("UX-P0-05: identifies root screens for hardware back button minimization", () => {
+      expect(isRootScreenForPortal("none", "/")).toBe(true);
+      expect(isRootScreenForPortal("none", "/login")).toBe(true);
+      expect(isRootScreenForPortal("none", "/admin/login")).toBe(true);
+      expect(isRootScreenForPortal("none", "/staff/login")).toBe(true);
+      expect(isRootScreenForPortal("none", "/admin")).toBe(true);
+      expect(isRootScreenForPortal("none", "/admin/dashboard")).toBe(true);
+
+      // Child screens must return false so back button navigates back
+      expect(isRootScreenForPortal("none", "/admin/customers/5")).toBe(false);
+      expect(isRootScreenForPortal("none", "/admin/invoices/10")).toBe(false);
+      expect(isRootScreenForPortal("none", "/admin/bookings/detail")).toBe(false);
+    });
   });
 });
